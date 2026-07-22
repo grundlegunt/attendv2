@@ -1,0 +1,83 @@
+import jwt from "jsonwebtoken";
+
+/**
+ * JWT issuance/verification for both staff and customer sessions. Uses the
+ * standard `jsonwebtoken` library (HS256) rather than any custom scheme —
+ * per /docs/SECURITY.md §1, no home-grown cryptography.
+ *
+ * Access tokens are short-lived and carry the actor's permission set so the
+ * API's RBAC guard can authorize a request without a database round trip on
+ * every call. Refresh tokens are long-lived, carry only identity plus a
+ * `tokenVersion`, and are checked against the stored `refreshTokenVersion`
+ * on the corresponding auth-account row — bumping that column invalidates
+ * every outstanding refresh token at once (logout-everywhere / compromised
+ * session response).
+ */
+
+export type ActorType = "EMPLOYEE" | "CUSTOMER";
+
+export interface AccessTokenPayload {
+  sub: string; // Employee.id or Customer.id
+  actorType: ActorType;
+  locationId?: string; // present for employee tokens
+  permissions: string[]; // flattened Permission keys, empty for customers
+}
+
+export interface RefreshTokenPayload {
+  sub: string;
+  actorType: ActorType;
+  tokenVersion: number;
+}
+
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
+
+interface SignOptions {
+  accessSecret: string;
+  refreshSecret: string;
+  accessTtlSeconds: number;
+  refreshTtlSeconds: number;
+}
+
+export function signTokenPair(
+  accessPayload: AccessTokenPayload,
+  refreshPayload: RefreshTokenPayload,
+  options: SignOptions,
+): TokenPair {
+  const accessToken = jwt.sign(accessPayload, options.accessSecret, {
+    expiresIn: options.accessTtlSeconds,
+    issuer: "cinema-platform",
+  });
+  const refreshToken = jwt.sign(refreshPayload, options.refreshSecret, {
+    expiresIn: options.refreshTtlSeconds,
+    issuer: "cinema-platform",
+  });
+  return { accessToken, refreshToken };
+}
+
+export class InvalidTokenError extends Error {
+  constructor(reason: string) {
+    super(`Invalid token: ${reason}`);
+    this.name = "InvalidTokenError";
+  }
+}
+
+export function verifyAccessToken(token: string, secret: string): AccessTokenPayload {
+  try {
+    const decoded = jwt.verify(token, secret, { issuer: "cinema-platform" });
+    return decoded as unknown as AccessTokenPayload;
+  } catch (err) {
+    throw new InvalidTokenError(err instanceof Error ? err.message : "unknown");
+  }
+}
+
+export function verifyRefreshToken(token: string, secret: string): RefreshTokenPayload {
+  try {
+    const decoded = jwt.verify(token, secret, { issuer: "cinema-platform" });
+    return decoded as unknown as RefreshTokenPayload;
+  } catch (err) {
+    throw new InvalidTokenError(err instanceof Error ? err.message : "unknown");
+  }
+}

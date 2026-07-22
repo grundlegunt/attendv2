@@ -1,0 +1,67 @@
+import { z } from "zod";
+
+/**
+ * Environment variable schema for the API service.
+ *
+ * Per SECURITY.md §6 and AGENTS.md §6: the application must fail fast at boot
+ * if a required secret/config value is missing, rather than run in a
+ * degraded or insecure state. This is the single source of truth for what
+ * "required configuration" means — do not read `process.env` directly
+ * anywhere else in the codebase.
+ */
+const envSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(4000),
+
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+
+  REDIS_URL: z.string().min(1, "REDIS_URL is required"),
+
+  // JWT signing secrets. Must never be reused between access and refresh
+  // tokens, and must never be committed — see AGENTS.md §4 / SECURITY.md §6.
+  JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
+  JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900), // 15 minutes
+  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(1209600), // 14 days
+
+  // Stripe — test/sandbox keys only outside production, per PAYMENT_FLOW.md.
+  // Optional at Milestone 0 since no payment code exists yet; required from
+  // Milestone 3 onward (enforced by a stricter schema at that point, not here).
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+
+  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+let cachedEnv: Env | undefined;
+
+/**
+ * Validates and returns process.env against the schema above. Throws with a
+ * clear, actionable error (not a generic crash) if anything required is
+ * missing or malformed. Call this once at boot; the result is cached.
+ */
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  if (cachedEnv) return cachedEnv;
+
+  const result = envSchema.safeParse(source);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
+      .join("\n");
+    throw new Error(
+      `Invalid or missing environment configuration. Refusing to start.\n${issues}\n\n` +
+        `See .env.example for the full list of required variables.`,
+    );
+  }
+
+  cachedEnv = result.data;
+  return cachedEnv;
+}
+
+/** Test-only helper to reset the cache between test files. */
+export function __resetEnvCacheForTests(): void {
+  cachedEnv = undefined;
+}
