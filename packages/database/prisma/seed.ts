@@ -19,6 +19,26 @@ export interface SeedResult {
   customerId: string;
 }
 
+function buildPairedSeats(rows: number, seatsPerRow: number) {
+  return Array.from({ length: rows }, (_, rowIndex) => {
+    const rowLabel = String.fromCharCode(65 + rowIndex);
+    return Array.from({ length: seatsPerRow }, (_, seatIndex) => {
+      const number = seatIndex + 1;
+      const isAccessiblePair = rowIndex === rows - 1 && seatIndex < 2;
+      return {
+        label: `${rowLabel}${number}`,
+        rowLabel,
+        number,
+        x: seatIndex,
+        y: rowIndex,
+        type: isAccessiblePair ? (seatIndex === 0 ? "ADA" as const : "COMPANION" as const) : "STANDARD" as const,
+        tableGroupId: `${rowLabel}-${Math.floor(seatIndex / 2) + 1}`,
+        tablePosition: (seatIndex % 2 === 0 ? "LEFT" : "RIGHT") as const,
+      };
+    });
+  }).flat();
+}
+
 export async function seedDatabase(
   prisma: PrismaClient,
   options: { silent?: boolean; emailSuffix?: string } = {},
@@ -32,9 +52,9 @@ export async function seedDatabase(
     update: {},
     create: {
       id: "00000000-0000-0000-0000-000000000001",
-      name: "Ridgeline Cinema Co.",
-      legalName: "Ridgeline Cinema Co. LLC",
-      timezone: "America/New_York",
+      name: "Meridian Cinema Co.",
+      legalName: "Meridian Cinema Co. LLC",
+      timezone: "America/Chicago",
     },
   });
 
@@ -44,9 +64,9 @@ export async function seedDatabase(
     create: {
       id: "00000000-0000-0000-0000-000000000002",
       organizationId: org.id,
-      name: "Ridgeline Dine-In Cinema",
-      address: "123 Main St, Ridgeline",
-      timezone: "America/New_York",
+      name: "Meridian Cinema",
+      address: "Nashville, TN",
+      timezone: "America/Chicago",
       currency: "USD",
       cleaningBufferMinutes: 15,
       preShowBufferMinutes: 30,
@@ -144,6 +164,115 @@ export async function seedDatabase(
       authAccount: { create: { passwordHash, emailVerifiedAt: new Date() } },
     },
   });
+
+  log("Seeding Milestone 1 auditoriums and paired seat layouts...");
+  const auditoriumConfigs = [
+    { id: "10000000-0000-0000-0000-000000000001", name: "Theater 1", rows: 8, seatsPerRow: 12 },
+    { id: "10000000-0000-0000-0000-000000000002", name: "Theater 2", rows: 6, seatsPerRow: 10 },
+    { id: "10000000-0000-0000-0000-000000000003", name: "Theater 3", rows: 4, seatsPerRow: 8 },
+  ];
+  for (const config of auditoriumConfigs) {
+    const seats = buildPairedSeats(config.rows, config.seatsPerRow);
+    await prisma.auditorium.upsert({
+      where: { id: config.id },
+      update: { name: config.name, capacity: seats.length, active: true },
+      create: {
+        id: config.id,
+        locationId: location.id,
+        name: config.name,
+        capacity: seats.length,
+        seatMap: {
+          create: {
+            name: `${config.name} paired seating`,
+            seats: { create: seats },
+          },
+        },
+      },
+    });
+  }
+
+  log("Seeding Milestone 1 movies and showtimes...");
+  const movies = [
+    {
+      id: "20000000-0000-0000-0000-000000000001",
+      title: "F1",
+      runtimeMinutes: 155,
+      rating: "PG-13",
+      synopsis: "A former driver returns to the grid for one last shot.",
+    },
+    {
+      id: "20000000-0000-0000-0000-000000000002",
+      title: "Eddington",
+      runtimeMinutes: 148,
+      rating: "R",
+      synopsis: "A small town standoff spirals into a modern American reckoning.",
+    },
+    {
+      id: "20000000-0000-0000-0000-000000000003",
+      title: "Materialists",
+      runtimeMinutes: 117,
+      rating: "R",
+      synopsis: "A New York matchmaker is caught between a perfect match and her past.",
+    },
+  ];
+  for (const movie of movies) {
+    await prisma.movie.upsert({
+      where: { id: movie.id },
+      update: movie,
+      create: { ...movie, organizationId: org.id },
+    });
+  }
+
+  const standardPrice = await prisma.priceTier.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: "Standard" } },
+    update: { ticketPriceMinor: 1700, feeMinor: 200, currency: "USD", appliesOnWeekdays: [] },
+    create: {
+      organizationId: org.id,
+      name: "Standard",
+      ticketPriceMinor: 1700,
+      feeMinor: 200,
+      currency: "USD",
+      appliesOnWeekdays: [],
+    },
+  });
+  await prisma.priceTier.upsert({
+    where: { organizationId_name: { organizationId: org.id, name: "Tuesday" } },
+    update: { ticketPriceMinor: 800, feeMinor: 200, currency: "USD", appliesOnWeekdays: [2] },
+    create: {
+      organizationId: org.id,
+      name: "Tuesday",
+      ticketPriceMinor: 800,
+      feeMinor: 200,
+      currency: "USD",
+      appliesOnWeekdays: [2],
+    },
+  });
+
+  const base = new Date();
+  base.setUTCDate(base.getUTCDate() + 1);
+  base.setUTCHours(16, 0, 0, 0);
+  for (let index = 0; index < movies.length; index += 1) {
+    const movie = movies[index]!;
+    const startsAt = new Date(base.getTime() + index * 45 * 60000);
+    const featureStartsAt = new Date(startsAt.getTime() + location.preShowBufferMinutes * 60000);
+    const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60000);
+    const roomReadyAt = new Date(endsAt.getTime() + location.cleaningBufferMinutes * 60000);
+    await prisma.showtime.upsert({
+      where: { id: `30000000-0000-0000-0000-00000000000${index + 1}` },
+      update: { startsAt, featureStartsAt, endsAt, roomReadyAt, onSale: true },
+      create: {
+        id: `30000000-0000-0000-0000-00000000000${index + 1}`,
+        movieId: movie.id,
+        auditoriumId: auditoriumConfigs[index]!.id,
+        priceTierId: standardPrice.id,
+        startsAt,
+        featureStartsAt,
+        endsAt,
+        roomReadyAt,
+        onSale: true,
+      },
+    });
+  }
 
   return {
     organizationId: org.id,
