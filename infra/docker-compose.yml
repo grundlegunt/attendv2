@@ -1,0 +1,35 @@
+version: "3.9"
+
+# Local development only. Per ARCHITECTURE.md §7 — production topology is
+# decided in Milestone 11 and will not simply be "this file in prod."
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cinema
+      POSTGRES_PASSWORD: cinema_dev_password
+      POSTGRES_DB: cinema_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - cinema_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinema -d cinema_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  cinema_postgres_data:
