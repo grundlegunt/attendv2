@@ -1,0 +1,257 @@
+// Milestone 0 schema.
+// Scope: Organization/Location, staff identity + RBAC, customer identity, audit log.
+// Ticketing, seating, payments, and restaurant entities are added starting
+// in Milestone 1 per /docs/IMPLEMENTATION_PLAN.md — do not add them here
+// ahead of schedule (see AGENTS.md §1: build in vertical slices).
+//
+// Conventions (see /docs/DATA_MODEL.md):
+//  - UUID primary keys.
+//  - createdAt/updatedAt on every model.
+//  - Money fields (none yet in this milestone) are always integer cents.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Organization & Location
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  legalName String?
+  timezone  String   @default("America/New_York")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  locations Location[]
+  roles     Role[]
+
+  @@map("organizations")
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  name      String
+  address   String?
+  timezone  String   @default("America/New_York")
+  currency  String   @default("USD")
+
+  // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
+  // & turnover". Used from Milestone 1 onward; defined here now since it's a
+  // Location-level setting.
+  cleaningBufferMinutes Int @default(15)
+  preShowBufferMinutes  Int @default(30)
+
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees    Employee[]
+  employeeRoles EmployeeRole[]
+  auditEvents  AuditEvent[]
+
+  @@map("locations")
+}
+
+// ---------------------------------------------------------------------------
+// Staff identity, roles, permissions
+// ---------------------------------------------------------------------------
+
+model Employee {
+  id         String   @id @default(uuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  name       String
+  email      String   @unique
+  active     Boolean  @default(true)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  authAccount   StaffAuthAccount?
+  employeeRoles EmployeeRole[]
+
+  @@map("employees")
+}
+
+model StaffAuthAccount {
+  id       String @id @default(uuid())
+
+  employeeId String   @unique
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  // argon2id hash — never a plaintext password, never reversible.
+  // See /docs/SECURITY.md §1.
+  passwordHash String
+
+  mfaEnabled        Boolean @default(false)
+  // Encrypted TOTP secret at rest. Required for OWNER / GENERAL_MANAGER /
+  // ACCOUNTING roles per /docs/SECURITY.md §1 — enforcement of "required"
+  // happens in application logic (Milestone 0 auth module), not the schema.
+  mfaSecretEncrypted String?
+
+  refreshTokenVersion Int @default(0) // bump to invalidate all outstanding refresh tokens (logout-everywhere)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("staff_auth_accounts")
+}
+
+// Roles are organization-defined (an org could rename/reorganize roles over
+// time) but the *permissions* a role can be granted are a fixed, code-defined
+// catalog (see @cinema/auth) — never user-editable. This is a deliberate
+// anti-privilege-escalation choice; see /docs/OPEN_QUESTIONS.md §5 (risks).
+model Role {
+  id             String   @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // One of the fixed role keys in @cinema/auth's RoleKey enum
+  // (OWNER, GENERAL_MANAGER, CINEMA_MANAGER, RESTAURANT_MANAGER, BOX_OFFICE,
+  // SERVER, BARTENDER, KITCHEN, RUNNER, DOOR, ACCOUNTING, SUPPORT).
+  key  String
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+  employeeRoles   EmployeeRole[]
+
+  @@unique([organizationId, key])
+  @@map("roles")
+}
+
+model Permission {
+  id  String @id @default(uuid())
+  // e.g. "ticket.refund", "menu.edit", "employee.permissions.edit" — matches
+  // the Permission enum in @cinema/auth exactly. Seeded from that catalog,
+  // never created ad hoc through any admin UI.
+  key String @unique
+
+  description String
+
+  createdAt DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model EmployeeRole {
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  // Roles are assignable per location (multi-location future, see
+  // /docs/ARCHITECTURE.md and /docs/OPEN_QUESTIONS.md §1).
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([employeeId, roleId, locationId])
+  @@map("employee_roles")
+}
+
+// ---------------------------------------------------------------------------
+// Customer identity
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id    String  @id @default(uuid())
+  email String? @unique
+  phone String?
+  name  String?
+
+  isGuest Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  authAccount CustomerAuthAccount?
+
+  @@map("customers")
+}
+
+model CustomerAuthAccount {
+  id String @id @default(uuid())
+
+  customerId String   @unique
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  // Nullable: an OAuth-only account (Milestone 0 supports password auth;
+  // OAuth providers are a later addition per /docs/SECURITY.md §1) has no
+  // local password hash.
+  passwordHash String?
+
+  emailVerifiedAt DateTime?
+  mfaEnabled      Boolean   @default(false)
+
+  refreshTokenVersion Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("customer_auth_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+enum AuditActorType {
+  EMPLOYEE
+  CUSTOMER
+  SYSTEM
+}
+
+model AuditEvent {
+  id String @id @default(uuid())
+
+  actorType AuditActorType
+  // Employee.id, Customer.id, or null for actorType = SYSTEM.
+  actorId   String?
+
+  action     String // e.g. "employee.login", "ticket.refunded"
+  entityType String // e.g. "Employee", "Ticket"
+  entityId   String
+
+  locationId String?
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  // Never contains payment credentials — see /docs/SECURITY.md §9.
+  beforeState Json?
+  afterState  Json?
+
+  occurredAt DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([locationId, occurredAt])
+  @@map("audit_events")
+}
