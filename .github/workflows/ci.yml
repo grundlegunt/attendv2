@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  # Test-only values. Never real secrets — see AGENTS.md §4.
+  NODE_ENV: test
+  DATABASE_URL: postgresql://cinema:cinema_test_password@localhost:5432/cinema_test
+  REDIS_URL: redis://localhost:6379
+  JWT_ACCESS_SECRET: ci-test-access-secret-at-least-32-characters-long
+  JWT_REFRESH_SECRET: ci-test-refresh-secret-at-least-32-characters-long
+
+jobs:
+  lint-typecheck-unit:
+    name: Lint, typecheck, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm turbo run typecheck
+
+      - name: Lint
+        run: pnpm turbo run lint
+
+      - name: Unit tests
+        run: pnpm turbo run test
+
+  integration:
+    name: Integration tests (real Postgres)
+    runs-on: ubuntu-latest
+    # No Postgres service container needed here: apps/api/test/test-db.ts
+    # boots its own real, ephemeral Postgres instance per run (via
+    # embedded-postgres) so these tests are self-contained on any runner —
+    # see AGENTS.md §7 for why they run against real Postgres either way,
+    # never a mock.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run integration tests
+        run: pnpm --filter @cinema/api test:integration
+
+  migrations:
+    name: Migrations apply cleanly to a fresh database
+    runs-on: ubuntu-latest
+    # This job intentionally uses a real service container (distinct from
+    # the embedded-postgres instance in the `integration` job) because its
+    # whole purpose is proving the *committed migration files* apply
+    # cleanly — not exercising application code.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cinema
+          POSTGRES_PASSWORD: cinema_test_password
+          POSTGRES_DB: cinema_migrations_check
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema -d cinema_migrations_check"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://cinema:cinema_test_password@localhost:5432/cinema_migrations_check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply committed migrations
+        run: pnpm --filter @cinema/database exec prisma migrate deploy
