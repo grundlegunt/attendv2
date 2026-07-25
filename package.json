@@ -1,0 +1,29 @@
+{
+  "name": "dine-in-cinema-platform",
+  "private": true,
+  "version": "0.1.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "postinstall": "pnpm --filter @cinema/database run generate",
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:integration": "turbo run test:integration",
+    "db:migrate": "pnpm --filter @cinema/database migrate:dev",
+    "db:seed": "pnpm --filter @cinema/database seed",
+    "db:generate": "pnpm --filter @cinema/database generate"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.6.3",
+    "prettier": "^3.3.3",
+    "eslint": "^8.57.1",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@typescript-eslint/eslint-plugin": "^7.18.0"
+  }
+}
