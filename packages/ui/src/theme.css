@@ -1,0 +1,85 @@
+/*
+ * Shared design tokens. Two themes, per ARCHITECTURE.md's repo structure
+ * notes and PRODUCT_SPEC.md §8:
+ *   - default (":root"): cinematic, dark, minimal — customer-web.
+ *   - "[data-theme='pos']": high-contrast, large-touch-target — staff-pos,
+ *     kds, admin.
+ *
+ * Seat map tokens match the operator-provided reference convention
+ * (PRODUCT_SPEC.md §8 / DATA_MODEL.md's tableGroupId/tablePosition):
+ * thin gold outline = available, solid gold = selected, solid grey =
+ * unavailable.
+ */
+
+:root {
+  --color-bg: #0b0b0d;
+  --color-bg-elevated: #16161a;
+  --color-text-primary: #f5f3ee;
+  --color-text-secondary: #a8a49c;
+  --color-accent: #d4af37; /* gold */
+  --color-accent-muted: #8a7326;
+  --color-border: #2a2a2e;
+  --color-danger: #d64545;
+  --color-success: #4caf7d;
+
+  --seat-available: transparent;
+  --seat-available-border: var(--color-accent);
+  --seat-selected: var(--color-accent);
+  --seat-selected-border: var(--color-accent);
+  --seat-unavailable: #4a4a4e;
+  --seat-unavailable-border: #4a4a4e;
+
+  --font-family-display: "Playfair Display", Georgia, serif;
+  --font-family-body: "Inter", system-ui, -apple-system, sans-serif;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+
+  color-scheme: dark;
+}
+
+/*
+ * POS theme: staff-pos / kds / admin. Optimized for speed and legibility
+ * from a distance (per PRODUCT_SPEC.md's design requirements), not
+ * cinematic atmosphere — larger touch targets, higher contrast, fewer
+ * decorative elements. Applied via <html data-theme="pos"> in each app's
+ * root layout.
+ */
+[data-theme="pos"] {
+  --color-bg: #000000;
+  --color-bg-elevated: #1a1a1a;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #cccccc;
+  --color-accent: #ffb800;
+  --color-border: #333333;
+  --color-danger: #ff3b30;
+  --color-success: #34c759;
+
+  --font-family-display: var(--font-family-body);
+
+  --space-1: 6px;
+  --space-2: 12px;
+  --space-3: 20px;
+  --space-4: 32px;
+  --space-5: 40px;
+
+  --tap-target-min: 56px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  margin: 0;
+}
