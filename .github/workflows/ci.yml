@@ -42,11 +42,20 @@ jobs:
   integration:
     name: Integration tests (real Postgres)
     runs-on: ubuntu-latest
-    # No Postgres service container needed here: apps/api/test/test-db.ts
-    # boots its own real, ephemeral Postgres instance per run (via
-    # embedded-postgres) so these tests are self-contained on any runner —
-    # see AGENTS.md §7 for why they run against real Postgres either way,
-    # never a mock.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cinema
+          POSTGRES_PASSWORD: cinema_test_password
+          POSTGRES_DB: cinema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema -d cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
