@@ -9,7 +9,7 @@ const nextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: workspaceRoot,
   outputFileTracingIncludes: {
-    "/api/v1/cinema/now-playing": [
+    "/api/v1/cinema/*": [
       "../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*",
     ],
   },
