@@ -33,7 +33,7 @@ function buildPairedSeats(rows: number, seatsPerRow: number) {
         y: rowIndex,
         type: isAccessiblePair ? (seatIndex === 0 ? "ADA" as const : "COMPANION" as const) : "STANDARD" as const,
         tableGroupId: `${rowLabel}-${Math.floor(seatIndex / 2) + 1}`,
-        tablePosition: (seatIndex % 2 === 0 ? "LEFT" : "RIGHT") as const,
+        tablePosition: seatIndex % 2 === 0 ? ("LEFT" as const) : ("RIGHT" as const),
       };
     });
   }).flat();
