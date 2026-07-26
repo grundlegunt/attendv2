@@ -12,6 +12,9 @@ const nextConfig = {
     "/api/v1/cinema/*": [
       "../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*",
     ],
+    "/api/v1/ticketing/*": [
+      "../../node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/**/*",
+    ],
   },
 };
 
