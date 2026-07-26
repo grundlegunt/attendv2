@@ -3,8 +3,6 @@ import { execSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const EmbeddedPostgres = require("embedded-postgres").default;
 
 /**
  * Boots a real, ephemeral PostgreSQL instance for integration tests — not a
@@ -26,6 +24,16 @@ export interface TestDatabase {
 const PORT = 55490;
 
 export async function startTestDatabase(): Promise<TestDatabase> {
+  if (process.env.CI && process.env.DATABASE_URL) {
+    const schemaPath = join(__dirname, "../../../packages/database/prisma/schema.prisma");
+    execSync(`pnpm exec prisma db push --schema="${schemaPath}" --skip-generate --accept-data-loss`, {
+      env: process.env,
+      stdio: "pipe",
+    });
+    return { databaseUrl: process.env.DATABASE_URL, stop: async () => {} };
+  }
+
+  const { default: EmbeddedPostgres } = await import("embedded-postgres");
   const dataDir = mkdtempSync(join(tmpdir(), "cinema-test-pg-"));
   const dbName = `cinema_test_${randomUUID().replace(/-/g, "")}`;
 
