@@ -139,6 +139,9 @@ importers:
 
   apps/customer-web:
     dependencies:
+      '@cinema/database':
+        specifier: workspace:*
+        version: link:../../packages/database
       '@cinema/shared':
         specifier: workspace:*
         version: link:../../packages/shared
