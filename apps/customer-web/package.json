@@ -4,12 +4,13 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev -p 3000",
-    "build": "next build",
+    "build": "pnpm --filter @cinema/database generate && next build",
     "start": "next start -p 3000",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint app --ext .ts,.tsx"
   },
   "dependencies": {
+    "@cinema/database": "workspace:*",
     "@cinema/shared": "workspace:*",
     "@cinema/ui": "workspace:*",
     "next": "^15.1.4",
