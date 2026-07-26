@@ -26,7 +26,7 @@ const PORT = 55490;
 export async function startTestDatabase(): Promise<TestDatabase> {
   if (process.env.CI && process.env.DATABASE_URL) {
     const schemaPath = join(__dirname, "../../../packages/database/prisma/schema.prisma");
-    execSync(`pnpm exec prisma db push --schema="${schemaPath}" --skip-generate --accept-data-loss`, {
+    execSync(`pnpm --filter @cinema/database exec prisma db push --schema="${schemaPath}" --skip-generate --accept-data-loss`, {
       env: process.env,
       stdio: "pipe",
     });

@@ -59,7 +59,7 @@ afterAll(async () => {
   const { prisma } = await import("@cinema/database");
   await app?.close();
   await prisma.$disconnect();
-  await testDb.stop();
+  await testDb?.stop();
 });
 
 describe("GET /api/v1/health", () => {
