@@ -30,9 +30,9 @@ function buildSeats(rows: number, seatsPerRow: number): SeatInput[] {
       const accessible = rowIndex === rows - 1 && seatIndex < 2;
       return {
         label: `${rowLabel}${number}`, rowLabel, number, x: seatIndex, y: rowIndex,
-        type: accessible ? (seatIndex === 0 ? "ADA" : "COMPANION") : "STANDARD",
+        type: accessible ? (seatIndex === 0 ? "ADA" as const : "COMPANION" as const) : "STANDARD" as const,
         tableGroupId: `${rowLabel}-${Math.floor(seatIndex / 2) + 1}`,
-        tablePosition: seatIndex % 2 === 0 ? "LEFT" : "RIGHT",
+        tablePosition: (seatIndex % 2 === 0 ? "LEFT" : "RIGHT") as const,
       };
     });
   }).flat();
