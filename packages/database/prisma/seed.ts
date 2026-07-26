@@ -299,17 +299,22 @@ export async function seedDatabase(
     { movie: "Eddington", room: "Theater 3", time: "20:35" },
   ];
 
-  // Remove the three simplified Milestone 1 demo showtimes. All subsequent
-  // seeds use the stable weekly-program IDs below.
+  // Replace all demo program rows so schedule changes do not leave stale
+  // showtimes behind in preview databases.
   await prisma.showtime.deleteMany({
     where: {
-      id: {
-        in: [
-          "30000000-0000-0000-0000-000000000001",
-          "30000000-0000-0000-0000-000000000002",
-          "30000000-0000-0000-0000-000000000003",
-        ],
-      },
+      OR: [
+        {
+          id: {
+            in: [
+              "30000000-0000-0000-0000-000000000001",
+              "30000000-0000-0000-0000-000000000002",
+              "30000000-0000-0000-0000-000000000003",
+            ],
+          },
+        },
+        { id: { startsWith: "31000000-" } },
+      ],
     },
   });
 
