@@ -266,6 +266,21 @@ export async function seedDatabase(
       appliesOnWeekdays: [2],
     },
   });
+  await prisma.ticketType.upsert({
+    where: {
+      locationId_name: {
+        locationId: location.id,
+        name: "Standard",
+      },
+    },
+    update: { active: true },
+    create: {
+      id: "23000000-0000-0000-0000-000000000001",
+      locationId: location.id,
+      name: "Standard",
+      active: true,
+    },
+  });
 
   const movieByTitle = new Map(movies.map((movie) => [movie.title, movie]));
   const auditoriumByName = new Map(auditoriumConfigs.map((auditorium) => [auditorium.name, auditorium]));
@@ -299,22 +314,18 @@ export async function seedDatabase(
     { movie: "Eddington", room: "Theater 3", time: "20:35" },
   ];
 
-  // Replace all demo program rows so schedule changes do not leave stale
-  // showtimes behind in preview databases.
+  // Remove the three simplified Milestone 1 demo showtimes. Weekly program
+  // rows are stable and are never deleted here: they can acquire financial
+  // history once Milestone 3 checkout is enabled.
   await prisma.showtime.deleteMany({
     where: {
-      OR: [
-        {
-          id: {
-            in: [
-              "30000000-0000-0000-0000-000000000001",
-              "30000000-0000-0000-0000-000000000002",
-              "30000000-0000-0000-0000-000000000003",
-            ],
-          },
-        },
-        { id: { startsWith: "31000000-" } },
-      ],
+      id: {
+        in: [
+          "30000000-0000-0000-0000-000000000001",
+          "30000000-0000-0000-0000-000000000002",
+          "30000000-0000-0000-0000-000000000003",
+        ],
+      },
     },
   });
 
