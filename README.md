@@ -4,7 +4,7 @@ Cinema ticketing and seat-linked restaurant POS for an independent dine-in
 theater. Start with `/docs/PRODUCT_SPEC.md` and `AGENTS.md` before touching
 code — they're the source of truth this repo is built against.
 
-Current status: **Milestone 1 in validation** (movies, auditoriums, paired-seat
+Current status: **Milestone 1 complete** (movies, auditoriums, paired-seat
 layouts, price tiers, and conflict-safe showtimes) per
 `/docs/IMPLEMENTATION_PLAN.md`. Milestone 2 seat holds have not begun.
 
@@ -120,4 +120,5 @@ See `/docs/OPEN_QUESTIONS.md` for the full list of assumptions and pending decis
 - [x] Conflict-safe showtime creation and editing. A room is occupied for the 30-minute pre-show, feature runtime, and 15-minute cleaning window.
 - [x] Admin configuration and showtime editor plus a database-backed public Now Playing page.
 - [x] Shared paired-seat rendering and unit/integration coverage for layout and turnover rules.
-- [ ] Dependency lock regeneration and full CI verification. This environment cannot currently reach the package registry, so the migration has not been applied to the connected Neon database and no production deployment has been changed.
+- [x] Dependency lock regenerated and the Milestone 1 pull request passed all GitHub Actions checks before merge.
+- [x] Migrations and demo seed applied to the connected Neon database; the Vercel production deployment serves the database-backed Now Playing page.
