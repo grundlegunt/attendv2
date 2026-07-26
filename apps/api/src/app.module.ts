@@ -4,9 +4,10 @@ import { AuthModule } from "./auth/auth.module";
 import { AuditModule } from "./audit/audit.module";
 import { RequestIdMiddleware } from "./common/request-id.middleware";
 import { CinemaModule } from "./cinema/cinema.module";
+import { TicketingModule } from "./ticketing/ticketing.module";
 
 @Module({
-  imports: [HealthModule, AuthModule, AuditModule, CinemaModule],
+  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
