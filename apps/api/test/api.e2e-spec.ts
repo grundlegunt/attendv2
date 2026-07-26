@@ -300,6 +300,76 @@ describe("Milestone 1 cinema configuration", () => {
   });
 });
 
+describe("Milestone 2 concurrency-safe seat holds", () => {
+  const showtimeId = "30000000-0000-0000-0000-000000000001";
+
+  it("creates one authoritative inventory row per seat", async () => {
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    expect(res.status).toBe(200);
+    expect(res.body.seats).toHaveLength(96);
+    expect(res.body.seats.every((seat: { state: string }) => seat.state === "AVAILABLE")).toBe(true);
+  });
+
+  it("allows exactly one winner when twelve guests hold the same seat concurrently", async () => {
+    const availability = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    const seatId = availability.body.seats[0].id as string;
+    const attempts = await Promise.all(
+      Array.from({ length: 12 }, (_, index) =>
+        request(app.getHttpServer())
+          .post(`/api/v1/cinema/showtimes/${showtimeId}/holds`)
+          .send({
+            seatIds: [seatId],
+            holderKey: `concurrent-holder-${index.toString().padStart(3, "0")}`,
+          }),
+      ),
+    );
+    expect(attempts.filter((attempt) => attempt.status === 201)).toHaveLength(1);
+    expect(attempts.filter((attempt) => attempt.status === 409)).toHaveLength(11);
+  });
+
+  it("returns all-or-nothing when a multi-seat hold includes an unavailable seat", async () => {
+    const availability = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    const heldSeat = availability.body.seats.find((seat: { state: string }) => seat.state === "HELD");
+    const availableSeat = availability.body.seats.find((seat: { state: string }) => seat.state === "AVAILABLE");
+    const result = await request(app.getHttpServer())
+      .post(`/api/v1/cinema/showtimes/${showtimeId}/holds`)
+      .send({
+        seatIds: [heldSeat.id, availableSeat.id],
+        holderKey: "atomic-multi-seat-holder",
+      });
+    expect(result.status).toBe(409);
+
+    const after = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    expect(after.body.seats.find((seat: { id: string }) => seat.id === availableSeat.id).state)
+      .toBe("AVAILABLE");
+  });
+
+  it("expires an abandoned hold and makes the seat available again", async () => {
+    const { prisma } = await import("@cinema/database");
+    const activeHold = await prisma.seatHold.findFirstOrThrow({
+      where: { showtimeSeat: { showtimeId }, releasedAt: null },
+    });
+    await prisma.seatHold.update({
+      where: { id: activeHold.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const afterExpiry = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    const inventory = await prisma.showtimeSeat.findUniqueOrThrow({
+      where: { id: activeHold.showtimeSeatId },
+    });
+    expect(afterExpiry.body.seats.find((seat: { inventoryId: string }) => seat.inventoryId === inventory.id).state)
+      .toBe("AVAILABLE");
+    expect((await prisma.seatHold.findUniqueOrThrow({ where: { id: activeHold.id } })).releasedAt)
+      .not.toBeNull();
+  });
+});
+
 describe("Customer authentication", () => {
   const email = "new-customer@m0test.local";
 
