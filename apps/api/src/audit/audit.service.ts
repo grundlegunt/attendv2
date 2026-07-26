@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AuditActorType, prisma } from "@cinema/database";
+import { AuditActorType, Prisma, prisma } from "@cinema/database";
 
 export interface RecordAuditEventInput {
   actorType: AuditActorType;
@@ -30,8 +30,8 @@ export class AuditService {
         entityType: input.entityType,
         entityId: input.entityId,
         locationId: input.locationId,
-        beforeState: input.beforeState,
-        afterState: input.afterState,
+        beforeState: input.beforeState as Prisma.InputJsonValue | undefined,
+        afterState: input.afterState as Prisma.InputJsonValue | undefined,
       },
     });
   }
