@@ -37,6 +37,7 @@ beforeAll(async () => {
   process.env.REDIS_URL = "redis://127.0.0.1:6379"; // unused in Milestone 0, required by env schema
   process.env.JWT_ACCESS_SECRET = "test-access-secret-32-characters-min";
   process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32-characters-min";
+  process.env.PAYMENT_PROVIDER = "test";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
@@ -49,7 +50,10 @@ beforeAll(async () => {
   const { AppModule } = await import("../src/app.module");
   const { GlobalExceptionFilter } = await import("../src/common/http-exception.filter");
 
-  const nestApp = await NestFactory.create(AppModule, { logger: false });
+  const nestApp = await NestFactory.create(AppModule, {
+    logger: false,
+    rawBody: true,
+  });
   nestApp.useGlobalFilters(new GlobalExceptionFilter());
   nestApp.setGlobalPrefix("api/v1");
   await nestApp.init();
@@ -369,6 +373,211 @@ describe("Milestone 2 concurrency-safe seat holds", () => {
       .toBe("AVAILABLE");
     expect((await prisma.seatHold.findUniqueOrThrow({ where: { id: activeHold.id } })).releasedAt)
       .not.toBeNull();
+  });
+});
+
+describe("Milestone 3 ticket checkout and payment recovery", () => {
+  const showtimeId = "31000000-0000-0000-0002-000000000002";
+
+  async function holdAvailableSeat(holderKey: string) {
+    const availability = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    const seat = availability.body.seats.find(
+      (candidate: { state: string }) => candidate.state === "AVAILABLE",
+    );
+    expect(seat).toBeDefined();
+    const hold = await request(app.getHttpServer())
+      .post(`/api/v1/cinema/showtimes/${showtimeId}/holds`)
+      .send({ seatIds: [seat.id], holderKey });
+    expect(hold.status).toBe(201);
+    return { seat, hold: hold.body[0] as { holdToken: string } };
+  }
+
+  async function createCheckout(holderKey: string, holdToken: string) {
+    const config = await request(app.getHttpServer()).get(
+      `/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`,
+    );
+    expect(config.status).toBe(200);
+    const result = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        diningAuthorizationRequested: true,
+      });
+    expect(result.status).toBe(201);
+    expect(result.body.subtotalCents).toBe(1700);
+    expect(result.body.feesCents).toBe(200);
+    expect(result.body.taxCents).toBe(0);
+    return result.body as {
+      orderId: string;
+      orderNumber: string;
+      payment: { providerPaymentId: string };
+    };
+  }
+
+  it("issues one ticket after a verified successful payment and is idempotent", async () => {
+    const holderKey = "ticket-happy-holder-0001";
+    const { seat, hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+
+    const first = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    const replay = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(first.body.status).toBe("PAID");
+    expect(first.body.tickets).toHaveLength(1);
+    expect(replay.body.tickets[0].id).toBe(first.body.tickets[0].id);
+
+    const after = await request(app.getHttpServer()).get(
+      `/api/v1/cinema/showtimes/${showtimeId}/seats`,
+    );
+    expect(
+      after.body.seats.find(
+        (candidate: { id: string }) => candidate.id === seat.id,
+      ).state,
+    ).toBe("SOLD");
+  });
+
+  it("recovers a successful payment through a replay-safe webhook", async () => {
+    const holderKey = "ticket-webhook-holder-0002";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    const raw = Buffer.from(
+      JSON.stringify({
+        id: "evt_test_ticket_success_0002",
+        type: "payment_intent.succeeded",
+        paymentIntentId: checkout.payment.providerPaymentId,
+      }),
+    );
+    const signature = provider.signWebhook(raw);
+
+    const first = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/webhooks/stripe")
+      .set("Stripe-Signature", signature)
+      .set("Content-Type", "application/json")
+      .send(raw);
+    const duplicate = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/webhooks/stripe")
+      .set("Stripe-Signature", signature)
+      .set("Content-Type", "application/json")
+      .send(raw);
+    expect(first.status).toBe(201);
+    expect(first.body.duplicate).toBe(false);
+    expect(duplicate.status).toBe(201);
+    expect(duplicate.body.duplicate).toBe(true);
+
+    const { prisma } = await import("@cinema/database");
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+  });
+
+  it("allows a declined payment intent to be retried without losing the held seat", async () => {
+    const holderKey = "ticket-retry-holder-0003";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "FAILED");
+    const declined = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(declined.status).toBe(402);
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    const retried = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(retried.status).toBe(201);
+    expect(retried.body.status).toBe("PAID");
+  });
+
+  it("automatically refunds a successful payment when its seat hold has expired", async () => {
+    const holderKey = "ticket-expired-holder-0004";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, PaymentStatus } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setRefundFailure(null);
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const result = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(result.status).toBe(409);
+    const payment = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(payment.status).toBe(PaymentStatus.REFUNDED);
+    expect(payment.refunds).toHaveLength(1);
+    expect(payment.refunds[0].status).toBe("SUCCEEDED");
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(0);
+  });
+
+  it("records an operational alert when an automatic refund fails", async () => {
+    const holderKey = "ticket-refund-alert-0005";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setRefundFailure("simulated processor outage");
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const result = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(result.status).toBe(409);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: "payment.refund_attention_required",
+          entityType: "Refund",
+        },
+      }),
+    ).toBeGreaterThan(0);
+    provider.setRefundFailure(null);
   });
 });
 
