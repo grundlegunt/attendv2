@@ -22,12 +22,18 @@ export async function getSeatAvailability(showtimeId: string, holderKey?: string
     include: {
       movie: true,
       auditorium: true,
+      priceTier: true,
       showtimeSeats: {
         include: {
           seat: true,
           holds: {
             where: { releasedAt: null, expiresAt: { gt: now } },
             orderBy: { createdAt: "desc" },
+            take: 1,
+          },
+          tickets: {
+            where: { status: { notIn: ["REFUNDED", "CANCELED"] } },
+            select: { id: true },
             take: 1,
           },
         },
@@ -44,6 +50,11 @@ export async function getSeatAvailability(showtimeId: string, holderKey?: string
         id: showtime.auditorium.id,
         name: showtime.auditorium.name,
         capacity: showtime.auditorium.capacity,
+      },
+      priceTier: {
+        ticketPriceMinor: showtime.priceTier.ticketPriceMinor,
+        feeMinor: showtime.priceTier.feeMinor,
+        currency: showtime.priceTier.currency,
       },
     },
     serverTime: now.toISOString(),
@@ -64,7 +75,13 @@ export async function getSeatAvailability(showtimeId: string, holderKey?: string
           type: inventory.seat.type,
           tableGroupId: inventory.seat.tableGroupId,
           tablePosition: inventory.seat.tablePosition,
-          state: inventory.blockedAt ? "BLOCKED" : hold ? "HELD" : "AVAILABLE",
+          state: inventory.blockedAt
+            ? "BLOCKED"
+            : inventory.tickets.length
+              ? "SOLD"
+              : hold
+                ? "HELD"
+                : "AVAILABLE",
           heldByMe,
           holdToken: heldByMe ? hold?.holdToken : undefined,
           expiresAt: heldByMe ? hold?.expiresAt.toISOString() : undefined,
@@ -109,6 +126,19 @@ export async function holdSeats(showtimeId: string, seatIds: string[], holderKey
 
       const now = new Date();
       const inventoryIds = inventory.map((seat) => seat.id);
+      const sold = await tx.ticket.findFirst({
+        where: {
+          showtimeSeatId: { in: inventoryIds },
+          status: { notIn: ["REFUNDED", "CANCELED"] },
+        },
+      });
+      if (sold) {
+        throw new SeatHoldError(
+          "One or more seats have already been sold.",
+          409,
+          "SEAT_UNAVAILABLE",
+        );
+      }
       await tx.seatHold.updateMany({
         where: { showtimeSeatId: { in: inventoryIds }, releasedAt: null, expiresAt: { lte: now } },
         data: { releasedAt: now },
