@@ -9,7 +9,15 @@ export interface SeatMapSeat {
   state?: "available" | "selected" | "unavailable";
 }
 
-export function SeatMap({ seats, label = "Auditorium seat map" }: { seats: SeatMapSeat[]; label?: string }) {
+export function SeatMap({
+  seats,
+  label = "Auditorium seat map",
+  onSeatClick,
+}: {
+  seats: SeatMapSeat[];
+  label?: string;
+  onSeatClick?: (seat: SeatMapSeat) => void;
+}) {
   const columns = Math.max(1, ...seats.map((seat) => seat.x + 1));
   const rows = Math.max(1, ...seats.map((seat) => seat.y + 1));
   return (
@@ -24,17 +32,21 @@ export function SeatMap({ seats, label = "Auditorium seat map" }: { seats: SeatM
         }}
       >
         {seats.map((seat) => (
-          <div
+          <button
             key={seat.id ?? seat.label}
+            type="button"
             className={`seat seat--${seat.state ?? "available"} ${
               seat.tablePosition ? `seat--${seat.tablePosition.toLowerCase()}` : ""
             }`}
             style={{ gridColumn: seat.x + 1, gridRow: seat.y + 1 }}
             title={`${seat.label}${seat.type !== "STANDARD" ? ` · ${seat.type}` : ""}`}
             aria-label={`${seat.label}, ${seat.type.toLowerCase()}`}
+            aria-pressed={seat.state === "selected"}
+            disabled={!onSeatClick || seat.state === "unavailable"}
+            onClick={onSeatClick ? () => onSeatClick(seat) : undefined}
           >
             <span>{seat.type === "ADA" ? "♿" : seat.type === "COMPANION" ? "C" : seat.label}</span>
-          </div>
+          </button>
         ))}
       </div>
       <div className="seat-map__orientation">BACK OF THEATER</div>
