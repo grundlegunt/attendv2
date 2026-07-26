@@ -257,7 +257,7 @@ export async function seedDatabase(
     const featureStartsAt = new Date(startsAt.getTime() + location.preShowBufferMinutes * 60000);
     const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60000);
     const roomReadyAt = new Date(endsAt.getTime() + location.cleaningBufferMinutes * 60000);
-    await prisma.showtime.upsert({
+    const showtime = await prisma.showtime.upsert({
       where: { id: `30000000-0000-0000-0000-00000000000${index + 1}` },
       update: { startsAt, featureStartsAt, endsAt, roomReadyAt, onSale: true },
       create: {
@@ -271,6 +271,14 @@ export async function seedDatabase(
         roomReadyAt,
         onSale: true,
       },
+    });
+    const seats = await prisma.seat.findMany({
+      where: { seatMap: { auditoriumId: auditoriumConfigs[index]!.id }, active: true },
+      select: { id: true },
+    });
+    await prisma.showtimeSeat.createMany({
+      data: seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })),
+      skipDuplicates: true,
     });
   }
 
