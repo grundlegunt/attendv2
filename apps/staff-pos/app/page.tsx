@@ -1,21 +1,62 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import type { AuthenticatedEmployee, AuthTokenResponse } from "@cinema/shared";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import type { AuthenticatedEmployee, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
+import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
-/**
- * Milestone 0 scope: staff login against the live API, proving the
- * RBAC-carrying access token round-trips correctly. The auditorium seat
- * grid and ordering UI (per RESTAURANT_WORKFLOW.md §3) arrive starting
- * Milestone 6/9.
- */
+interface NowPlayingResponse {
+  location: { id: string; name: string; timezone: string };
+  movies: NowPlayingMovie[];
+}
+
+interface AvailabilitySeat extends Omit<SeatMapSeat, "state"> {
+  id: string;
+  state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED";
+}
+
+interface SeatAvailabilityResponse {
+  showtimeId: string;
+  seats: AvailabilitySeat[];
+  counts: { available: number; held: number; sold: number; blocked: number };
+}
+
 export default function StaffLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [employee, setEmployee] = useState<AuthenticatedEmployee | null>(null);
+  const [program, setProgram] = useState<NowPlayingResponse | null>(null);
+  const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
+  const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
+
+  const loadAvailability = useCallback(async () => {
+    if (!selectedShowtimeId) return;
+    try {
+      setAvailability(await apiFetch<SeatAvailabilityResponse>(`/cinema/showtimes/${selectedShowtimeId}/seats`));
+    } catch {
+      setError("The live seat map is temporarily unavailable.");
+    }
+  }, [selectedShowtimeId]);
+
+  useEffect(() => {
+    if (!employee) return;
+    apiFetch<NowPlayingResponse>("/cinema/now-playing")
+      .then((response) => {
+        setProgram(response);
+        const firstShowtime = response.movies.flatMap((movie) => movie.showtimes)[0];
+        if (firstShowtime) setSelectedShowtimeId(firstShowtime.id);
+      })
+      .catch(() => setError("Showtimes are temporarily unavailable."));
+  }, [employee]);
+
+  useEffect(() => {
+    if (!selectedShowtimeId) return;
+    void loadAvailability();
+    const timer = window.setInterval(() => void loadAvailability(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [loadAvailability, selectedShowtimeId]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -35,21 +76,43 @@ export default function StaffLoginPage() {
   }
 
   if (employee) {
+    const seatMapSeats = availability?.seats.map((seat) => ({
+      ...seat,
+      state: seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const,
+    })) ?? [];
+
     return (
-      <main className="auth-shell">
-        <div className="auth-card profile-card">
-          <h1>Welcome, {employee.name}</h1>
-          <p className="subtitle">
-            Roles: {employee.roles.join(", ")} · Location: {employee.locationId}
-          </p>
-          <div>
-            {employee.permissions.map((p) => (
-              <span key={p} className="permission-chip">
-                {p}
-              </span>
-            ))}
-          </div>
-        </div>
+      <main className="staff-shell">
+        <header className="staff-header">
+          <div><span className="eyebrow">ATTEND STAFF</span><h1>Live seats</h1></div>
+          <p>{employee.name} · {employee.roles.join(", ")}</p>
+        </header>
+
+        {error && <div className="error-banner">{error}</div>}
+
+        <section className="showtime-toolbar" aria-label="Select a showtime">
+          <label htmlFor="showtime">Showtime</label>
+          <select id="showtime" value={selectedShowtimeId} onChange={(event) => setSelectedShowtimeId(event.target.value)}>
+            {program?.movies.flatMap((movie) =>
+              movie.showtimes.map((showtime) => (
+                <option key={showtime.id} value={showtime.id}>
+                  {movie.title} · {new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {showtime.auditorium.name}
+                </option>
+              )),
+            )}
+          </select>
+          {availability && (
+            <div className="seat-counts" aria-live="polite">
+              <strong>{availability.counts.available} available</strong>
+              <span>{availability.counts.held} held</span>
+              <span>{availability.counts.sold} sold</span>
+              <span>{availability.counts.blocked} blocked</span>
+            </div>
+          )}
+        </section>
+
+        {selectedShowtimeId && !availability && <p>Loading live seats…</p>}
+        {availability && <SeatMap seats={seatMapSeats} label="Read-only live auditorium seat map" />}
       </main>
     );
   }
