@@ -26,10 +26,10 @@ Each milestone must produce something testable and end with a demo-able state. N
 ## Milestone 2 — Concurrency-safe seat availability and holds
 
 - **DB:** `ShowtimeSeat` (generated per showtime from its seat map on showtime creation), `SeatHold`, partial unique index on active tickets (added now even though `Ticket` doesn't exist yet — the index is created against a placeholder to be finalized in Milestone 3, or deferred one milestone; documented choice: defer the partial index to Milestone 3 when `Ticket` exists, add the `ShowtimeSeat(showtimeId, seatId)` unique constraint now).
-- **API:** `POST /showtimes/:id/seats/:seatId/hold`, `DELETE` (release), hold-expiry sweep job, Redis integration for TTL/pub/sub, WebSocket gateway with `showtime:{id}` room emitting `SEAT_HELD`/`SEAT_RELEASED`.
-- **UI:** `customer-web` interactive seat map (SCREEN + rows/seats grid, rendered per the shared-table/ADA/companion visual convention established in Milestone 1) with live color states and a countdown timer on the customer's own held seat; `staff-pos`/box-office seat map view (read-only at this milestone) showing the same live state.
+- **API:** `GET /cinema/showtimes/:id/seats`, atomic multi-seat `POST /cinema/showtimes/:id/holds`, `DELETE` release, and a hold-expiry sweep job. PostgreSQL is authoritative. The initial production transport uses a two-second live poll; Redis pub/sub and WebSockets are deferred as an optional fanout optimization because they do not change the correctness boundary.
+- **UI:** `customer-web` interactive seat map (SCREEN + rows/seats grid, rendered per the shared-table/ADA/companion visual convention established in Milestone 1) with live color states and a countdown timer on the customer's own held seats; `staff-pos`/box-office seat map view (read-only at this milestone) showing the same live state and aggregate counts.
 - **Tests:** the full concurrency test suite from SEAT_RESERVATION_DESIGN.md §8 (N-simultaneous-hold, hold-expires-mid-flow) — these must pass against a real Postgres instance with real concurrent connections, not mocks; this is a hard gate, not a nice-to-have.
-- **Completion criteria:** two browser sessions clicking the same seat simultaneously deterministically produces one HELD and one rejected; an unattended hold expires and the seat becomes available again without manual intervention, visible in real time on a second open tab.
+- **Completion criteria:** two browser sessions clicking the same seat simultaneously deterministically produces one HELD and one rejected; an unattended hold expires and the seat becomes available again without manual intervention, visible within the live-refresh interval on a second open tab.
 
 ## Milestone 3 — Ticket checkout and test payments
 
