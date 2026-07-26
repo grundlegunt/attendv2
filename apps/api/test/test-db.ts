@@ -33,7 +33,8 @@ export async function startTestDatabase(): Promise<TestDatabase> {
     return { databaseUrl: process.env.DATABASE_URL, stop: async () => {} };
   }
 
-  const { default: EmbeddedPostgres } = await import("embedded-postgres");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const EmbeddedPostgres = require("embedded-postgres").default;
   const dataDir = mkdtempSync(join(tmpdir(), "cinema-test-pg-"));
   const dbName = `cinema_test_${randomUUID().replace(/-/g, "")}`;
 
