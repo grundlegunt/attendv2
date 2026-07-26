@@ -301,7 +301,7 @@ describe("Milestone 1 cinema configuration", () => {
 });
 
 describe("Milestone 2 concurrency-safe seat holds", () => {
-  const showtimeId = "30000000-0000-0000-0000-000000000001";
+  const showtimeId = "31000000-0000-0000-0001-000000000001";
 
   it("creates one authoritative inventory row per seat", async () => {
     const res = await request(app.getHttpServer())
