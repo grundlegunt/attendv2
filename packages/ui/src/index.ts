@@ -7,3 +7,5 @@ export const APP_THEME: Record<string, ThemeName> = {
   kds: "pos",
   admin: "pos",
 };
+
+export * from "./seat-map";
