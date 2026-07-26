@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { AuthenticatedCustomer, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { SeatPicker } from "./components/seat-picker";
 
 type Mode = "login" | "register";
 interface NowPlayingResponse {
@@ -21,6 +22,7 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<AuthenticatedCustomer | null>(null);
+  const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
@@ -84,6 +86,10 @@ export default function HomePage() {
         <h2>Showtimes</h2>
       </section>
 
+      {selectedShowtimeId ? (
+        <SeatPicker showtimeId={selectedShowtimeId} onClose={() => setSelectedShowtimeId(null)} />
+      ) : (
+        <>
       {programError && <div className="error-banner">{programError}</div>}
       {!program && !programError && <p className="loading-copy">Loading the program…</p>}
       {program && program.movies.length === 0 && <p className="loading-copy">No showtimes are on sale yet.</p>}
@@ -100,7 +106,7 @@ export default function HomePage() {
               {movie.synopsis && <p>{movie.synopsis}</p>}
               <div className="showtime-list">
                 {movie.showtimes.map((showtime) => (
-                  <button key={showtime.id} disabled title="Interactive seat selection is Milestone 2">
+                  <button key={showtime.id} onClick={() => setSelectedShowtimeId(showtime.id)}>
                     <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
                     <span>{showtime.auditorium.name}</span>
                     <span>
@@ -115,6 +121,8 @@ export default function HomePage() {
           </article>
         ))}
       </section>
+        </>
+      )}
     </main>
   );
 }
