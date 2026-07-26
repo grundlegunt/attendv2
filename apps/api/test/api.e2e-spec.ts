@@ -37,11 +37,11 @@ beforeAll(async () => {
   process.env.JWT_ACCESS_SECRET = "test-access-secret-32-characters-min";
   process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32-characters-min";
 
-  const { __resetEnvCacheForTests } = await import("@cinema/config/env");
+  const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
 
   const { prisma } = await import("@cinema/database");
-  const { seedDatabase } = await import("@cinema/database/seed");
+  const { seedDatabase } = await import("../../../packages/database/prisma/seed");
   await seedDatabase(prisma, { silent: true, emailSuffix: SEED_SUFFIX });
 
   const { NestFactory } = await import("@nestjs/core");
