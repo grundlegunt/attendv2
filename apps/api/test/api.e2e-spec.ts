@@ -29,6 +29,7 @@ const SEED_SUFFIX = "m0test.local";
 const SEED_PASSWORD = "DevPassword123!";
 
 beforeAll(async () => {
+  try {
   testDb = await startTestDatabase();
 
   process.env.NODE_ENV = "test";
@@ -53,6 +54,13 @@ beforeAll(async () => {
   nestApp.setGlobalPrefix("api/v1");
   await nestApp.init();
   app = nestApp;
+  } catch (error) {
+    // Preserve setup diagnostics in CI; Jest can otherwise collapse a shared
+    // beforeAll failure into blank output for every test in the file.
+    // eslint-disable-next-line no-console
+    console.error("Integration test setup failed", error);
+    throw error;
+  }
 }, 60000);
 
 afterAll(async () => {
