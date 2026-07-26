@@ -167,7 +167,6 @@ export class CinemaService {
         const conflict = await tx.showtime.findFirst({
           where: {
             auditoriumId: auditorium.id,
-            priceTierId: priceTier.id,
             startsAt: { lt: roomReadyAt },
             roomReadyAt: { gt: startsAt },
           },
@@ -184,6 +183,7 @@ export class CinemaService {
           data: {
             movieId: movie.id,
             auditoriumId: auditorium.id,
+            priceTierId: priceTier.id,
             startsAt,
             featureStartsAt,
             endsAt,
