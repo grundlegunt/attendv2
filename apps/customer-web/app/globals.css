@@ -7,6 +7,13 @@
 .account-panel { max-width: 420px; margin: 20px 0 0 auto; padding: 20px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .program-heading { padding: 64px 0 28px; }
 .program-heading h2 { font-size: clamp(2.4rem, 7vw, 5rem); }
+.date-bar { display: grid; grid-template-columns: repeat(7, minmax(92px, 1fr)); margin: 0 0 28px; border: 1px solid var(--color-border); overflow-x: auto; }
+.date-bar button { min-height: 76px; padding: 10px 14px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); cursor: pointer; }
+.date-bar button:last-child { border-right: 0; }
+.date-bar button.active { background: var(--color-accent); color: #130d11; }
+.date-bar span, .date-bar strong { display: block; }
+.date-bar span { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; }
+.date-bar strong { margin-top: 5px; font: 1.05rem var(--font-family-display); }
 .program-heading p, .movie-copy > p, .loading-copy { color: var(--color-text-secondary); }
 .movie-grid { display: grid; gap: 28px; }
 .movie-card { display: grid; grid-template-columns: minmax(180px, 30%) 1fr; min-height: 360px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
