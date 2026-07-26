@@ -12,3 +12,5 @@ export async function GET(request: Request) {
   });
   return NextResponse.json({ location: { id: location.id, name: location.name, timezone: location.timezone }, movies: movies.map((movie) => ({ ...movie, showtimes: movie.showtimes.map((showtime) => ({ ...showtime, startsAt: showtime.startsAt.toISOString() })) })) });
 }
+
+// Production route for the Milestone 1 customer program.
