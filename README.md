@@ -4,9 +4,9 @@ Cinema ticketing and seat-linked restaurant POS for an independent dine-in
 theater. Start with `/docs/PRODUCT_SPEC.md` and `AGENTS.md` before touching
 code — they're the source of truth this repo is built against.
 
-Current status: **Milestone 1 complete** (movies, auditoriums, paired-seat
-layouts, price tiers, and conflict-safe showtimes) per
-`/docs/IMPLEMENTATION_PLAN.md`. Milestone 2 seat holds have not begun.
+Current status: **Milestone 2 complete** (authoritative per-showtime seat
+inventory, concurrency-safe multi-seat holds, automatic expiry, and live
+customer/staff seat maps) per `/docs/IMPLEMENTATION_PLAN.md`.
 
 ## Repository layout
 
@@ -122,3 +122,19 @@ See `/docs/OPEN_QUESTIONS.md` for the full list of assumptions and pending decis
 - [x] Shared paired-seat rendering and unit/integration coverage for layout and turnover rules.
 - [x] Dependency lock regenerated and the Milestone 1 pull request passed all GitHub Actions checks before merge.
 - [x] Migrations and demo seed applied to the connected Neon database; the Vercel production deployment serves the database-backed Now Playing page.
+
+## Milestone 2 implementation status
+
+- [x] One PostgreSQL-authoritative `ShowtimeSeat` inventory row per seat and showtime, generated when a showtime is created.
+- [x] Atomic, all-or-nothing multi-seat holds using sorted `FOR UPDATE` row locks; one holder wins every simultaneous race for the same seat.
+- [x] Five-minute server-timestamped holds, explicit release, lazy expiry during reads/commands, and a 15-second API sweep.
+- [x] Interactive customer seat map with paired/ADA/companion rendering, held-seat countdown, and a two-second live refresh.
+- [x] Read-only staff seat map with showtime selection and live available/held/sold/blocked counts.
+- [x] Real-PostgreSQL integration coverage for inventory creation, simultaneous same-seat races, atomic multi-seat failure, and expiry/reavailability.
+- [x] GitHub Actions verified green: lint/typecheck/unit tests, integration tests, and clean migration application.
+- [x] Preview verified in two independent browser sessions: holding A1 in one session disabled it in the other; releasing it made it selectable again.
+
+The deployed Next.js customer experience uses a two-second PostgreSQL-backed
+poll for live fanout. Redis pub/sub and a WebSocket transport remain an
+optional latency/scale optimization; neither is authoritative and neither is
+required for seat correctness.

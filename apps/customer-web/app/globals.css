@@ -22,4 +22,16 @@
 button.primary { width: 100%; padding: 13px; border: 0; background: var(--color-accent); font-weight: 800; }
 button.link { padding: 14px 0 0; border: 0; background: none; color: var(--color-accent); }
 .error-banner { margin: 16px 0; padding: 12px; border: 1px solid var(--color-danger); color: #ffb3b3; }
+.seat-picker { display: grid; gap: 24px; }
+.seat-picker__header { display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--color-border); }
+.seat-picker__header h2 { margin: 4px 0; font: clamp(2rem, 5vw, 4rem) var(--font-family-display); }
+.seat-picker__header p { margin: 0; color: var(--color-text-secondary); }
+.hold-clock { min-width: 118px; padding: 14px 18px; border: 1px solid var(--color-accent); text-align: center; }
+.hold-clock span, .hold-clock strong { display: block; }
+.hold-clock span { color: var(--color-text-secondary); font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; }
+.hold-clock strong { margin-top: 4px; color: var(--color-accent); font-size: 1.5rem; }
+.seat-picker__summary { position: sticky; bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 18px 22px; border: 1px solid var(--color-border); background: rgba(19, 13, 17, .96); backdrop-filter: blur(12px); }
+.seat-picker__summary strong { display: block; margin-top: 4px; }
+.seat-picker__summary .primary { width: auto; min-width: 190px; }
 @media (max-width: 700px) { .movie-card { grid-template-columns: 1fr; } .poster-frame { min-height: 300px; } }
+@media (max-width: 700px) { .seat-picker__header { grid-template-columns: 1fr; } .seat-picker__summary { align-items: stretch; flex-direction: column; } .seat-picker__summary .primary { width: 100%; } }

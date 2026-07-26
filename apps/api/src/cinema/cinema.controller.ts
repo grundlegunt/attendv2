@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
 import {
   createAuditoriumRequestSchema,
@@ -21,6 +21,27 @@ export class CinemaController {
   @Get("now-playing")
   nowPlaying(@Query("locationId") locationId?: string) {
     return this.cinemaService.nowPlaying(locationId);
+  }
+
+  @Get("showtimes/:id/seats")
+  seatAvailability(@Param("id") id: string, @Query("holderKey") holderKey?: string) {
+    return this.cinemaService.seatAvailability(id, holderKey);
+  }
+
+  @Post("showtimes/:id/holds")
+  holdSeats(
+    @Param("id") id: string,
+    @Body() body: { seatIds?: string[]; holderKey?: string },
+  ) {
+    return this.cinemaService.holdSeats(id, body.seatIds ?? [], body.holderKey ?? "");
+  }
+
+  @Delete("showtimes/:id/holds/:holdToken")
+  releaseSeatHold(
+    @Param("holdToken") holdToken: string,
+    @Body() body: { holderKey?: string },
+  ) {
+    return this.cinemaService.releaseSeatHold(holdToken, body.holderKey ?? "");
   }
 
   @Get("admin/bootstrap")

@@ -125,8 +125,12 @@ body {
   color: var(--color-text-primary);
   font-size: 0.65rem;
   font-style: normal;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
+.seat:disabled { cursor: not-allowed; opacity: 1; }
 .seat--right { border-radius: 3px 12px 12px 3px; }
 .seat--selected { background: var(--seat-selected); border-color: var(--seat-selected-border); color: #000; }
 .seat--unavailable { background: var(--seat-unavailable); border-color: var(--seat-unavailable-border); }

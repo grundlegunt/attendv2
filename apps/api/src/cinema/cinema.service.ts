@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { AuditActorType, Prisma, prisma } from "@cinema/database";
 import {
   createAuditoriumRequestSchema,
@@ -16,7 +17,17 @@ type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
 
 @Injectable()
-export class CinemaService {
+export class CinemaService implements OnModuleInit, OnModuleDestroy {
+  private expiryTimer?: ReturnType<typeof setInterval>;
+
+  onModuleInit() {
+    this.expiryTimer = setInterval(() => void this.expireSeatHolds(), 15_000);
+    this.expiryTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.expiryTimer) clearInterval(this.expiryTimer);
+  }
   private requireLocation(actor: RequestActor): string {
     if (!actor.locationId) throw AppError.forbidden("A location-scoped staff session is required.");
     return actor.locationId;
@@ -192,6 +203,14 @@ export class CinemaService {
           },
           include: { movie: true, auditorium: true },
         });
+        const seats = await tx.seat.findMany({
+          where: { seatMap: { auditoriumId: auditorium.id }, active: true },
+          select: { id: true },
+        });
+        await tx.showtimeSeat.createMany({
+          data: seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })),
+          skipDuplicates: true,
+        });
         await tx.auditEvent.create({
           data: {
             actorType: AuditActorType.EMPLOYEE,
@@ -283,6 +302,26 @@ export class CinemaService {
           },
           include: { movie: true, auditorium: true },
         });
+        if (auditoriumId !== existing.auditoriumId) {
+          const activeHolds = await tx.seatHold.count({
+            where: {
+              showtimeSeat: { showtimeId: id },
+              releasedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          });
+          if (activeHolds) {
+            throw AppError.conflict("A showtime with active seat holds cannot be moved to another room.");
+          }
+          await tx.showtimeSeat.deleteMany({ where: { showtimeId: id } });
+          const seats = await tx.seat.findMany({
+            where: { seatMap: { auditoriumId }, active: true },
+            select: { id: true },
+          });
+          await tx.showtimeSeat.createMany({
+            data: seats.map((seat) => ({ showtimeId: id, seatId: seat.id })),
+          });
+        }
         await tx.auditEvent.create({
           data: {
             actorType: AuditActorType.EMPLOYEE,
@@ -358,6 +397,149 @@ export class CinemaService {
         })),
       })),
     };
+  }
+
+  async seatAvailability(showtimeId: string, holderKey?: string) {
+    const now = new Date();
+    await prisma.seatHold.updateMany({
+      where: { releasedAt: null, expiresAt: { lte: now }, showtimeSeat: { showtimeId } },
+      data: { releasedAt: now },
+    });
+    const showtime = await prisma.showtime.findFirst({
+      where: { id: showtimeId, onSale: true },
+      include: {
+        movie: true,
+        auditorium: true,
+        showtimeSeats: {
+          include: {
+            seat: true,
+            holds: {
+              where: { releasedAt: null, expiresAt: { gt: now } },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+    if (!showtime) throw AppError.notFound("Showtime not found.");
+    return {
+      showtime: {
+        id: showtime.id,
+        startsAt: showtime.startsAt.toISOString(),
+        movie: { id: showtime.movie.id, title: showtime.movie.title },
+        auditorium: {
+          id: showtime.auditorium.id,
+          name: showtime.auditorium.name,
+          capacity: showtime.auditorium.capacity,
+        },
+      },
+      serverTime: now.toISOString(),
+      holdDurationSeconds: 300,
+      seats: showtime.showtimeSeats
+        .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
+        .map((inventory) => {
+          const hold = inventory.holds[0];
+          return {
+            id: inventory.seat.id,
+            inventoryId: inventory.id,
+            label: inventory.seat.label,
+            rowLabel: inventory.seat.rowLabel,
+            number: inventory.seat.number,
+            x: inventory.seat.x,
+            y: inventory.seat.y,
+            type: inventory.seat.type,
+            tableGroupId: inventory.seat.tableGroupId,
+            tablePosition: inventory.seat.tablePosition,
+            state: inventory.blockedAt ? "BLOCKED" : hold ? "HELD" : "AVAILABLE",
+            heldByMe: Boolean(hold && holderKey && hold.holderKey === holderKey),
+            holdToken: hold && holderKey && hold.holderKey === holderKey ? hold.holdToken : undefined,
+            expiresAt: hold && holderKey && hold.holderKey === holderKey
+              ? hold.expiresAt.toISOString()
+              : undefined,
+          };
+        }),
+    };
+  }
+
+  async holdSeats(showtimeId: string, seatIds: string[], holderKey: string) {
+    const uniqueSeatIds = [...new Set(seatIds)].sort();
+    if (!holderKey || holderKey.length < 16 || holderKey.length > 200) {
+      throw AppError.validationFailed("A valid checkout session is required.");
+    }
+    if (!uniqueSeatIds.length || uniqueSeatIds.length > 10) {
+      throw AppError.validationFailed("Select between 1 and 10 seats.");
+    }
+    return prisma.$transaction(
+      async (tx) => {
+        const showtime = await tx.showtime.findFirst({
+          where: { id: showtimeId, onSale: true, startsAt: { gt: new Date() } },
+          select: { id: true },
+        });
+        if (!showtime) throw AppError.notFound("Showtime is not available.");
+
+        const rows = await tx.$queryRaw<Array<{ id: string; seatId: string; blockedAt: Date | null }>>(
+          Prisma.sql`
+            SELECT "id", "seatId", "blockedAt"
+            FROM "showtime_seats"
+            WHERE "showtimeId" = ${showtimeId}
+              AND "seatId" IN (${Prisma.join(uniqueSeatIds)})
+            ORDER BY "seatId"
+            FOR UPDATE
+          `,
+        );
+        if (rows.length !== uniqueSeatIds.length) throw AppError.notFound("One or more seats do not exist.");
+        if (rows.some((row) => row.blockedAt)) throw AppError.conflict("One or more seats are blocked.");
+
+        const now = new Date();
+        const inventoryIds = rows.map((row) => row.id);
+        await tx.seatHold.updateMany({
+          where: { showtimeSeatId: { in: inventoryIds }, releasedAt: null, expiresAt: { lte: now } },
+          data: { releasedAt: now },
+        });
+        const active = await tx.seatHold.findMany({
+          where: { showtimeSeatId: { in: inventoryIds }, releasedAt: null, expiresAt: { gt: now } },
+        });
+        const mine = active.filter((hold) => hold.holderKey === holderKey);
+        if (active.length && mine.length !== uniqueSeatIds.length) {
+          throw AppError.conflict("One or more seats were just held by another guest.");
+        }
+        if (mine.length === uniqueSeatIds.length) return mine;
+
+        const expiresAt = new Date(now.getTime() + 5 * 60_000);
+        await tx.seatHold.createMany({
+          data: inventoryIds.map((showtimeSeatId) => ({
+            showtimeSeatId,
+            holderKey,
+            holdToken: randomUUID(),
+            expiresAt,
+          })),
+        });
+        return tx.seatHold.findMany({
+          where: { showtimeSeatId: { in: inventoryIds }, holderKey, releasedAt: null, expiresAt },
+          orderBy: { createdAt: "asc" },
+        });
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
+    );
+  }
+
+  async releaseSeatHold(holdToken: string, holderKey: string) {
+    const result = await prisma.seatHold.updateMany({
+      where: { holdToken, holderKey, releasedAt: null },
+      data: { releasedAt: new Date() },
+    });
+    if (!result.count) throw AppError.notFound("Active seat hold not found.");
+    return { released: true };
+  }
+
+  async expireSeatHolds() {
+    const now = new Date();
+    const result = await prisma.seatHold.updateMany({
+      where: { releasedAt: null, expiresAt: { lte: now } },
+      data: { releasedAt: now },
+    });
+    return { expired: result.count };
   }
 
   private async resolvePriceTier(

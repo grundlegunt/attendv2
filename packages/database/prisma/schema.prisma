@@ -130,6 +130,7 @@ model Seat {
   active        Boolean @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  showtimeSeats ShowtimeSeat[]
 
   @@unique([seatMapId, label])
   @@unique([seatMapId, x, y])
@@ -198,10 +199,42 @@ model Showtime {
   onSale          Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  showtimeSeats   ShowtimeSeat[]
 
   @@index([auditoriumId, startsAt])
   @@index([movieId, startsAt])
   @@map("showtimes")
+}
+
+model ShowtimeSeat {
+  id         String   @id @default(uuid())
+  showtimeId String
+  showtime   Showtime @relation(fields: [showtimeId], references: [id], onDelete: Cascade)
+  seatId     String
+  seat       Seat     @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  blockedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  holds      SeatHold[]
+
+  @@unique([showtimeId, seatId])
+  @@index([showtimeId, blockedAt])
+  @@map("showtime_seats")
+}
+
+model SeatHold {
+  id             String       @id @default(uuid())
+  showtimeSeatId String
+  showtimeSeat   ShowtimeSeat @relation(fields: [showtimeSeatId], references: [id], onDelete: Cascade)
+  holdToken      String       @unique
+  holderKey      String
+  expiresAt      DateTime
+  releasedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([showtimeSeatId, expiresAt, releasedAt])
+  @@index([holderKey, expiresAt])
+  @@map("seat_holds")
 }
 
 // ---------------------------------------------------------------------------
