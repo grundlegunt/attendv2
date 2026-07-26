@@ -1,8 +1,6 @@
-// Milestone 0 schema.
-// Scope: Organization/Location, staff identity + RBAC, customer identity, audit log.
-// Ticketing, seating, payments, and restaurant entities are added starting
-// in Milestone 1 per /docs/IMPLEMENTATION_PLAN.md — do not add them here
-// ahead of schedule (see AGENTS.md §1: build in vertical slices).
+// Milestone 1 schema.
+// Scope: Milestone 0 identity/RBAC plus movies, auditoriums, structured
+// seat layouts, and conflict-safe showtime scheduling.
 //
 // Conventions (see /docs/DATA_MODEL.md):
 //  - UUID primary keys.
@@ -32,6 +30,8 @@ model Organization {
 
   locations Location[]
   roles     Role[]
+  movies    Movie[]
+  priceTiers PriceTier[]
 
   @@map("organizations")
 }
@@ -59,8 +59,149 @@ model Location {
   employees    Employee[]
   employeeRoles EmployeeRole[]
   auditEvents  AuditEvent[]
+  auditoriums  Auditorium[]
 
   @@map("locations")
+}
+
+// ---------------------------------------------------------------------------
+// Cinema configuration (Milestone 1)
+// ---------------------------------------------------------------------------
+
+enum SeatType {
+  STANDARD
+  ADA
+  COMPANION
+}
+
+enum TablePosition {
+  LEFT
+  RIGHT
+}
+
+model Auditorium {
+  id         String   @id @default(uuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+
+  name       String
+  capacity   Int
+  active     Boolean @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  seatMap   SeatMap?
+  showtimes Showtime[]
+
+  @@unique([locationId, name])
+  @@index([locationId, active])
+  @@map("auditoriums")
+}
+
+model SeatMap {
+  id           String     @id @default(uuid())
+  auditoriumId String     @unique
+  auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
+
+  name      String
+  version   Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  seats Seat[]
+
+  @@map("seat_maps")
+}
+
+model Seat {
+  id        String  @id @default(uuid())
+  seatMapId String
+  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  label    String
+  rowLabel String
+  number   Int
+  x        Int
+  y        Int
+  type     SeatType @default(STANDARD)
+
+  tableGroupId  String?
+  tablePosition TablePosition?
+  active        Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([seatMapId, label])
+  @@unique([seatMapId, x, y])
+  @@index([seatMapId, rowLabel, number])
+  @@map("seats")
+}
+
+model Movie {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  title          String
+  synopsis       String?
+  runtimeMinutes Int
+  rating         String?
+  posterUrl      String?
+  active         Boolean @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  showtimes Showtime[]
+
+  @@index([organizationId, active])
+  @@map("movies")
+}
+
+model PriceTier {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  name             String
+  ticketPriceMinor Int
+  feeMinor         Int
+  currency         String @default("USD")
+  // JavaScript weekday numbers: Sunday 0 through Saturday 6.
+  // Empty means the default tier.
+  appliesOnWeekdays Int[]
+  active            Boolean @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  showtimes Showtime[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+  @@map("price_tiers")
+}
+
+model Showtime {
+  id           String     @id @default(uuid())
+  movieId      String
+  movie        Movie      @relation(fields: [movieId], references: [id], onDelete: Restrict)
+  auditoriumId String
+  auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Restrict)
+  priceTierId  String
+  priceTier    PriceTier  @relation(fields: [priceTierId], references: [id], onDelete: Restrict)
+
+  // startsAt is the advertised customer start. The feature begins after
+  // Location.preShowBufferMinutes.
+  startsAt        DateTime
+  featureStartsAt DateTime
+  endsAt          DateTime
+  roomReadyAt     DateTime
+  onSale          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([auditoriumId, startsAt])
+  @@index([movieId, startsAt])
+  @@map("showtimes")
 }
 
 // ---------------------------------------------------------------------------

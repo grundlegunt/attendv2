@@ -9,10 +9,10 @@ import { ConsoleLogger, Injectable, Scope } from "@nestjs/common";
  */
 @Injectable({ scope: Scope.TRANSIENT })
 export class StructuredLogger extends ConsoleLogger {
-  private context: Record<string, unknown> = {};
+  private fields: Record<string, unknown> = {};
 
   withContext(context: Record<string, unknown>): this {
-    this.context = { ...this.context, ...context };
+    this.fields = { ...this.fields, ...context };
     return this;
   }
 
@@ -21,7 +21,7 @@ export class StructuredLogger extends ConsoleLogger {
       level,
       time: new Date().toISOString(),
       message,
-      ...this.context,
+      ...this.fields,
       ...extra,
     };
     // eslint-disable-next-line no-console

@@ -29,6 +29,7 @@ const SEED_SUFFIX = "m0test.local";
 const SEED_PASSWORD = "DevPassword123!";
 
 beforeAll(async () => {
+  try {
   testDb = await startTestDatabase();
 
   process.env.NODE_ENV = "test";
@@ -37,11 +38,11 @@ beforeAll(async () => {
   process.env.JWT_ACCESS_SECRET = "test-access-secret-32-characters-min";
   process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32-characters-min";
 
-  const { __resetEnvCacheForTests } = await import("@cinema/config/env");
+  const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
 
   const { prisma } = await import("@cinema/database");
-  const { seedDatabase } = await import("@cinema/database/seed");
+  const { seedDatabase } = await import("../../../packages/database/prisma/seed");
   await seedDatabase(prisma, { silent: true, emailSuffix: SEED_SUFFIX });
 
   const { NestFactory } = await import("@nestjs/core");
@@ -53,13 +54,20 @@ beforeAll(async () => {
   nestApp.setGlobalPrefix("api/v1");
   await nestApp.init();
   app = nestApp;
+  } catch (error) {
+    // Preserve setup diagnostics in CI; Jest can otherwise collapse a shared
+    // beforeAll failure into blank output for every test in the file.
+    // eslint-disable-next-line no-console
+    console.error("Integration test setup failed", error);
+    throw error;
+  }
 }, 60000);
 
 afterAll(async () => {
   const { prisma } = await import("@cinema/database");
   await app?.close();
   await prisma.$disconnect();
-  await testDb.stop();
+  await testDb?.stop();
 });
 
 describe("GET /api/v1/health", () => {
@@ -182,6 +190,113 @@ describe("RBAC permission enforcement", () => {
 
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("FORBIDDEN");
+  });
+});
+
+describe("Milestone 1 cinema configuration", () => {
+  let auditoriumId: string;
+  let movieId: string;
+  let secondShowtimeId: string;
+
+  it("creates an auditorium with a validated paired seat map", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/auditoriums")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        name: "Integration Theater",
+        seatMapName: "Integration paired layout",
+        seats: [
+          { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", tableGroupId: "A-1", tablePosition: "LEFT" },
+          { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD", tableGroupId: "A-1", tablePosition: "RIGHT" },
+        ],
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.capacity).toBe(2);
+    expect(res.body.seatMap.seats).toHaveLength(2);
+    auditoriumId = res.body.id;
+  });
+
+  it("rejects a duplicate seat label before writing the auditorium", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/auditoriums")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        name: "Invalid Theater",
+        seatMapName: "Invalid",
+        seats: [
+          { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD" },
+          { label: "a1", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD" },
+        ],
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("creates a movie", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Integration Feature", runtimeMinutes: 120, rating: "PG-13" });
+    expect(res.status).toBe(201);
+    expect(res.body.runtimeMinutes).toBe(120);
+    movieId = res.body.id;
+  });
+
+  it("creates a showtime and computes pre-show, film end, and room-ready times", async () => {
+    const startsAt = "2030-01-01T18:00:00.000Z";
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId, auditoriumId, startsAt, onSale: true });
+    expect(res.status).toBe(201);
+    expect(res.body.featureStartsAt).toBe("2030-01-01T18:30:00.000Z");
+    expect(res.body.endsAt).toBe("2030-01-01T20:30:00.000Z");
+    expect(res.body.roomReadyAt).toBe("2030-01-01T20:45:00.000Z");
+  });
+
+  it("rejects a showtime before the 15-minute cleaning window has passed", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId, auditoriumId, startsAt: "2030-01-01T20:44:00.000Z", onSale: false });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("CONFLICT");
+  });
+
+  it("accepts a showtime starting exactly when the room is ready", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId, auditoriumId, startsAt: "2030-01-01T20:45:00.000Z", onSale: true });
+    expect(res.status).toBe(201);
+    secondShowtimeId = res.body.id;
+  });
+
+  it("moves a showtime while preserving computed turnover timing", async () => {
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ startsAt: "2030-01-02T18:00:00.000Z" });
+    expect(res.status).toBe(200);
+    expect(res.body.featureStartsAt).toBe("2030-01-02T18:30:00.000Z");
+    expect(res.body.roomReadyAt).toBe("2030-01-02T20:45:00.000Z");
+  });
+
+  it("lists real on-sale showtimes publicly", async () => {
+    const res = await request(app.getHttpServer()).get("/api/v1/cinema/now-playing");
+    expect(res.status).toBe(200);
+    expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
+  });
+
+  it("rejects a server role from creating a movie", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `server@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${login.body.accessToken}`)
+      .send({ title: "Unauthorized", runtimeMinutes: 90 });
+    expect(res.status).toBe(403);
   });
 });
 

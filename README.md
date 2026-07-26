@@ -4,8 +4,9 @@ Cinema ticketing and seat-linked restaurant POS for an independent dine-in
 theater. Start with `/docs/PRODUCT_SPEC.md` and `AGENTS.md` before touching
 code — they're the source of truth this repo is built against.
 
-Current status: **Milestone 0** (repository, environments, auth, CI
-foundations) per `/docs/IMPLEMENTATION_PLAN.md`.
+Current status: **Milestone 1 in validation** (movies, auditoriums, paired-seat
+layouts, price tiers, and conflict-safe showtimes) per
+`/docs/IMPLEMENTATION_PLAN.md`. Milestone 2 seat holds have not begun.
 
 ## Repository layout
 
@@ -110,3 +111,13 @@ Per `/docs/IMPLEMENTATION_PLAN.md`'s Milestone 0 completion criteria:
 - [ ] **Full local live-boot verification.** The sandbox this repository was built in blocks outbound access to Prisma's engine CDN (`binaries.prisma.sh`) at the network-proxy level, which prevented `prisma generate` from completing here. Everything that doesn't depend on the generated Prisma client (packages/config, packages/shared, packages/auth, and their tests) was verified directly. `packages/database` and `apps/api` were verified by careful review and by confirming the *only* failure was the expected "Prisma client not generated" error — not a code defect. On a normal developer machine or in CI, `pnpm install && pnpm db:migrate && pnpm db:seed` followed by the integration test suite should complete this verification for real.
 
 See `/docs/OPEN_QUESTIONS.md` for the full list of assumptions and pending decisions.
+
+## Milestone 1 implementation status
+
+- [x] Migration and Prisma models for auditoriums, structured seat maps, seats, movies, price tiers, and showtimes.
+- [x] Seed data for Meridian Cinema in Nashville: 96-, 60-, and 32-seat paired layouts; F1, Eddington, and Materialists; standard and Tuesday ticket prices.
+- [x] Permission-gated auditorium, movie, and showtime commands with same-transaction audit records.
+- [x] Conflict-safe showtime creation and editing. A room is occupied for the 30-minute pre-show, feature runtime, and 15-minute cleaning window.
+- [x] Admin configuration and showtime editor plus a database-backed public Now Playing page.
+- [x] Shared paired-seat rendering and unit/integration coverage for layout and turnover rules.
+- [ ] Dependency lock regeneration and full CI verification. This environment cannot currently reach the package registry, so the migration has not been applied to the connected Neon database and no production deployment has been changed.

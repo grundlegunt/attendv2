@@ -1,0 +1,109 @@
+import { z } from "zod";
+
+export const seatTypeSchema = z.enum(["STANDARD", "ADA", "COMPANION"]);
+export const tablePositionSchema = z.enum(["LEFT", "RIGHT"]);
+
+export const seatInputSchema = z.object({
+  label: z.string().trim().min(1).max(12),
+  rowLabel: z.string().trim().min(1).max(8),
+  number: z.number().int().positive(),
+  x: z.number().int().nonnegative(),
+  y: z.number().int().nonnegative(),
+  type: seatTypeSchema.default("STANDARD"),
+  tableGroupId: z.string().trim().min(1).max(40).nullable().optional(),
+  tablePosition: tablePositionSchema.nullable().optional(),
+});
+
+export type SeatInput = z.infer<typeof seatInputSchema>;
+
+export const createAuditoriumRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  seatMapName: z.string().trim().min(1).max(80),
+  seats: z.array(seatInputSchema).min(1).max(500),
+});
+
+export const createMovieRequestSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  synopsis: z.string().trim().max(2000).nullable().optional(),
+  runtimeMinutes: z.number().int().min(1).max(600),
+  rating: z.string().trim().max(20).nullable().optional(),
+  posterUrl: z.string().url().nullable().optional(),
+});
+
+export const createShowtimeRequestSchema = z.object({
+  movieId: z.string().uuid(),
+  auditoriumId: z.string().uuid(),
+  priceTierId: z.string().uuid().optional(),
+  startsAt: z.string().datetime({ offset: true }),
+  onSale: z.boolean().default(false),
+});
+
+export const updateMovieRequestSchema = createMovieRequestSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  "At least one movie field is required.",
+);
+
+export const updateShowtimeRequestSchema = createShowtimeRequestSchema.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  "At least one showtime field is required.",
+);
+
+export function validateSeatLayout(seats: SeatInput[]): string[] {
+  const errors: string[] = [];
+  const labels = new Set<string>();
+  const coordinates = new Set<string>();
+  const tables = new Map<string, SeatInput[]>();
+
+  for (const seat of seats) {
+    const normalizedLabel = seat.label.toUpperCase();
+    if (labels.has(normalizedLabel)) errors.push(`Duplicate seat label: ${seat.label}.`);
+    labels.add(normalizedLabel);
+
+    const coordinate = `${seat.x}:${seat.y}`;
+    if (coordinates.has(coordinate)) errors.push(`Duplicate seat coordinate: ${coordinate}.`);
+    coordinates.add(coordinate);
+
+    if (Boolean(seat.tableGroupId) !== Boolean(seat.tablePosition)) {
+      errors.push(`Seat ${seat.label} must specify both tableGroupId and tablePosition.`);
+    }
+    if (seat.tableGroupId) {
+      const group = tables.get(seat.tableGroupId) ?? [];
+      group.push(seat);
+      tables.set(seat.tableGroupId, group);
+    }
+  }
+
+  for (const [groupId, group] of tables) {
+    const positions = new Set(group.map((seat) => seat.tablePosition));
+    if (group.length !== 2 || !positions.has("LEFT") || !positions.has("RIGHT")) {
+      errors.push(`Table group ${groupId} must contain exactly one LEFT and one RIGHT seat.`);
+    }
+  }
+  return errors;
+}
+
+export interface ShowtimeWindow {
+  startsAt: Date;
+  roomReadyAt: Date;
+}
+
+export function showtimeWindowsOverlap(a: ShowtimeWindow, b: ShowtimeWindow): boolean {
+  return a.startsAt < b.roomReadyAt && b.startsAt < a.roomReadyAt;
+}
+
+export interface PublicShowtime {
+  id: string;
+  startsAt: string;
+  auditorium: { id: string; name: string; capacity: number };
+  priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
+}
+
+export interface NowPlayingMovie {
+  id: string;
+  title: string;
+  synopsis: string | null;
+  runtimeMinutes: number;
+  rating: string | null;
+  posterUrl: string | null;
+  showtimes: PublicShowtime[];
+}

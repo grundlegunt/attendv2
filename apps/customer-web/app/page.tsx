@@ -1,18 +1,19 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import type { AuthenticatedCustomer, AuthTokenResponse } from "@cinema/shared";
+import { FormEvent, useEffect, useState } from "react";
+import type { AuthenticatedCustomer, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Mode = "login" | "register";
+interface NowPlayingResponse {
+  location: { id: string; name: string; timezone: string };
+  movies: NowPlayingMovie[];
+}
 
-/**
- * Milestone 0 scope: a real, working login/register screen against the
- * live API — proving the customer-auth flow end to end. The full "Now
- * Playing" homepage, seat maps, etc. arrive in later milestones per
- * IMPLEMENTATION_PLAN.md.
- */
 export default function HomePage() {
+  const [program, setProgram] = useState<NowPlayingResponse | null>(null);
+  const [programError, setProgramError] = useState<string | null>(null);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,81 +22,99 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<AuthenticatedCustomer | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    apiFetch<NowPlayingResponse>("/cinema/now-playing")
+      .then(setProgram)
+      .catch((err) =>
+        setProgramError(err instanceof ApiRequestError ? err.body.message : "Showtimes are unavailable."),
+      );
+  }, []);
+
+  async function handleSubmit(event: FormEvent) {
+    event.preventDefault();
     setError(null);
     setLoading(true);
     try {
       const path = mode === "login" ? "/auth/customers/login" : "/auth/customers/register";
       const body = mode === "login" ? { email, password } : { email, password, name: name || undefined };
-      const res = await apiFetch<AuthTokenResponse & { customer: AuthenticatedCustomer }>(path, {
+      const response = await apiFetch<AuthTokenResponse & { customer: AuthenticatedCustomer }>(path, {
         method: "POST",
         body: JSON.stringify(body),
       });
-      setCustomer(res.customer);
+      setCustomer(response.customer);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
+      setError(err instanceof ApiRequestError ? err.body.message : "Please try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  if (customer) {
-    return (
-      <main className="auth-shell">
-        <div className="auth-card">
-          <h1>Welcome, {customer.name ?? customer.email}</h1>
-          <div className="success-banner">You&apos;re signed in. Showtimes and seat selection arrive in Milestone 1–2.</div>
-        </div>
-      </main>
-    );
-  }
-
   return (
-    <main className="auth-shell">
-      <div className="auth-card">
-        <h1>Ridgeline Dine-In Cinema</h1>
-        <p className="subtitle">{mode === "login" ? "Sign in to your account" : "Create an account"}</p>
-
-        {error && <div className="error-banner">{error}</div>}
-
-        <form onSubmit={handleSubmit}>
-          {mode === "register" && (
-            <div className="field">
-              <label htmlFor="name">Name</label>
-              <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-            </div>
-          )}
-          <div className="field">
-            <label htmlFor="email">Email</label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              required
-              minLength={mode === "register" ? 8 : undefined}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          <button className="primary" type="submit" disabled={loading}>
-            {loading ? "Please wait..." : mode === "login" ? "Sign in" : "Create account"}
-          </button>
-        </form>
-
-        <button className="link" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-          {mode === "login" ? "Need an account? Register" : "Already have an account? Sign in"}
+    <main className="cinema-shell">
+      <header className="site-header">
+        <div>
+          <span className="eyebrow">ATTEND</span>
+          <h1>{program?.location.name ?? "Meridian Cinema"}</h1>
+        </div>
+        <button className="account-button" onClick={() => setAccountOpen((open) => !open)}>
+          {customer ? customer.name ?? customer.email : "Account"}
         </button>
-      </div>
+      </header>
+
+      {accountOpen && !customer && (
+        <section className="account-panel" aria-label="Customer account">
+          <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
+          {error && <div className="error-banner">{error}</div>}
+          <form onSubmit={handleSubmit}>
+            {mode === "register" && (
+              <div className="field"><label htmlFor="name">Name</label><input id="name" value={name} onChange={(e) => setName(e.target.value)} /></div>
+            )}
+            <div className="field"><label htmlFor="email">Email</label><input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div className="field"><label htmlFor="password">Password</label><input id="password" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} /></div>
+            <button className="primary" type="submit" disabled={loading}>{loading ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}</button>
+          </form>
+          <button className="link" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+            {mode === "login" ? "Need an account? Register" : "Already registered? Sign in"}
+          </button>
+        </section>
+      )}
+
+      <section className="program-heading">
+        <span className="eyebrow">NOW PLAYING</span>
+        <h2>Showtimes</h2>
+      </section>
+
+      {programError && <div className="error-banner">{programError}</div>}
+      {!program && !programError && <p className="loading-copy">Loading the program…</p>}
+      {program && program.movies.length === 0 && <p className="loading-copy">No showtimes are on sale yet.</p>}
+
+      <section className="movie-grid">
+        {program?.movies.map((movie) => (
+          <article className="movie-card" key={movie.id}>
+            <div className="poster-frame">
+              {movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}
+            </div>
+            <div className="movie-copy">
+              <p className="movie-meta">{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</p>
+              <h3>{movie.title}</h3>
+              {movie.synopsis && <p>{movie.synopsis}</p>}
+              <div className="showtime-list">
+                {movie.showtimes.map((showtime) => (
+                  <button key={showtime.id} disabled title="Interactive seat selection is Milestone 2">
+                    <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
+                    <span>{showtime.auditorium.name}</span>
+                    <span>
+                      ${(showtime.priceTier.ticketPriceMinor / 100).toFixed(0)}
+                      {" + $"}
+                      {(showtime.priceTier.feeMinor / 100).toFixed(0)} fee
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </article>
+        ))}
+      </section>
     </main>
   );
 }
