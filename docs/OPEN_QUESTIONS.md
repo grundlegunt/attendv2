@@ -34,6 +34,13 @@ These are genuinely undecided and don't block early milestones (they matter star
 
 ## 2. Recommendations (pending your confirmation, not blocking current work)
 
+- **Nashville ticket-tax configuration before real sales.** Milestone 3 stores a
+  location-specific ticket tax rate and shows tax as a separate checkout line.
+  The development seed deliberately uses 0% rather than inventing a legal/tax
+  answer. Meridian's applicable admissions tax treatment and rate must be
+  confirmed by the operator's qualified Tennessee tax adviser before enabling
+  production payments.
+
 - **Hosting.** Recommended: Vercel for the four Next.js frontends, and Railway (or Render as a close second) for the NestJS API, PostgreSQL, and Redis. Reasoning: minimal operational burden for a small team, inexpensive to start, both are Docker-compatible so a later move to AWS/GCP — relevant if the multi-location/SaaS ambition above materializes — is a re-platform, not a rewrite. This doesn't need to be locked in until Milestone 11.
 - **Email provider.** Recommended: Postmark — strong transactional deliverability, simple API, good for receipts/confirmations. Sits behind the existing `EmailProvider` abstraction either way.
 - **SMS provider.** Recommended: Twilio, the de facto standard. Worth confirming whether SMS is actually needed for MVP launch (order-ready pings, settlement failure alerts) or can wait — it adds cost and a second provider integration for a channel email may cover adequately at first.
