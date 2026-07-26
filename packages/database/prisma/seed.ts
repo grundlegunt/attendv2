@@ -199,6 +199,7 @@ export async function seedDatabase(
       runtimeMinutes: 155,
       rating: "PG-13",
       synopsis: "A former driver returns to the grid for one last shot.",
+      posterUrl: "/posters/f1.png",
     },
     {
       id: "20000000-0000-0000-0000-000000000002",
@@ -206,6 +207,7 @@ export async function seedDatabase(
       runtimeMinutes: 148,
       rating: "R",
       synopsis: "A small town standoff spirals into a modern American reckoning.",
+      posterUrl: "/posters/eddington.png",
     },
     {
       id: "20000000-0000-0000-0000-000000000003",
@@ -213,6 +215,23 @@ export async function seedDatabase(
       runtimeMinutes: 117,
       rating: "R",
       synopsis: "A New York matchmaker is caught between a perfect match and her past.",
+      posterUrl: "/posters/materialists.png",
+    },
+    {
+      id: "20000000-0000-0000-0000-000000000004",
+      title: "Ghostbusters",
+      runtimeMinutes: 105,
+      rating: "PG",
+      synopsis: "Three parapsychologists start a ghost-catching business in New York City.",
+      posterUrl: "/posters/ghostbusters.png",
+    },
+    {
+      id: "20000000-0000-0000-0000-000000000005",
+      title: "The Wedding Singer",
+      runtimeMinutes: 97,
+      rating: "PG-13",
+      synopsis: "A wedding singer and a waitress fall for each other while engaged to the wrong people.",
+      posterUrl: "/posters/the-wedding-singer.png",
     },
   ];
   for (const movie of movies) {
@@ -235,7 +254,7 @@ export async function seedDatabase(
       appliesOnWeekdays: [],
     },
   });
-  await prisma.priceTier.upsert({
+  const tuesdayPrice = await prisma.priceTier.upsert({
     where: { organizationId_name: { organizationId: org.id, name: "Tuesday" } },
     update: { ticketPriceMinor: 800, feeMinor: 200, currency: "USD", appliesOnWeekdays: [2] },
     create: {
@@ -248,23 +267,90 @@ export async function seedDatabase(
     },
   });
 
-  const base = new Date();
-  base.setUTCDate(base.getUTCDate() + 1);
-  base.setUTCHours(16, 0, 0, 0);
-  for (let index = 0; index < movies.length; index += 1) {
-    const movie = movies[index]!;
-    const startsAt = new Date(base.getTime() + index * 45 * 60000);
+  const movieByTitle = new Map(movies.map((movie) => [movie.title, movie]));
+  const auditoriumByName = new Map(auditoriumConfigs.map((auditorium) => [auditorium.name, auditorium]));
+  const regularDay = [
+    { movie: "F1", room: "Theater 1", time: "11:00" },
+    { movie: "Materialists", room: "Theater 1", time: "14:25" },
+    { movie: "Materialists", room: "Theater 1", time: "17:10" },
+    { movie: "Materialists", room: "Theater 1", time: "19:55" },
+    { movie: "Eddington", room: "Theater 1", time: "22:50" },
+    { movie: "Eddington", room: "Theater 2", time: "11:15" },
+    { movie: "Materialists", room: "Theater 2", time: "14:35" },
+    { movie: "F1", room: "Theater 2", time: "17:25" },
+    { movie: "Eddington", room: "Theater 2", time: "20:50" },
+    { movie: "Materialists", room: "Theater 3", time: "11:30" },
+    { movie: "F1", room: "Theater 3", time: "14:20" },
+    { movie: "Eddington", room: "Theater 3", time: "17:50" },
+    { movie: "Materialists", room: "Theater 3", time: "21:10" },
+  ];
+  const saturday = [
+    { movie: "The Wedding Singer", room: "Theater 1", time: "11:00" },
+    { movie: "F1", room: "Theater 1", time: "13:30" },
+    { movie: "F1", room: "Theater 1", time: "16:50" },
+    { movie: "F1", room: "Theater 1", time: "20:20" },
+    { movie: "Ghostbusters", room: "Theater 1", time: "23:45" },
+    { movie: "Ghostbusters", room: "Theater 2", time: "11:15" },
+    { movie: "Eddington", room: "Theater 2", time: "13:50" },
+    { movie: "Materialists", room: "Theater 2", time: "17:10" },
+    { movie: "Materialists", room: "Theater 2", time: "19:55" },
+    { movie: "Materialists", room: "Theater 2", time: "22:50" },
+    { movie: "F1", room: "Theater 3", time: "11:00" },
+    { movie: "Materialists", room: "Theater 3", time: "14:25" },
+    { movie: "Eddington", room: "Theater 3", time: "17:15" },
+    { movie: "Eddington", room: "Theater 3", time: "20:35" },
+  ];
+
+  // Remove the three simplified Milestone 1 demo showtimes. All subsequent
+  // seeds use the stable weekly-program IDs below.
+  await prisma.showtime.deleteMany({
+    where: {
+      id: {
+        in: [
+          "30000000-0000-0000-0000-000000000001",
+          "30000000-0000-0000-0000-000000000002",
+          "30000000-0000-0000-0000-000000000003",
+        ],
+      },
+    },
+  });
+
+  const firstDate = new Date();
+  firstDate.setUTCHours(5, 0, 0, 0);
+  for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
+    const date = new Date(firstDate);
+    date.setUTCDate(firstDate.getUTCDate() + dayIndex);
+    const schedule = date.getUTCDay() === 6 ? saturday : regularDay;
+
+    for (let slotIndex = 0; slotIndex < schedule.length; slotIndex += 1) {
+      const slot = schedule[slotIndex]!;
+      const movie = movieByTitle.get(slot.movie)!;
+      const auditorium = auditoriumByName.get(slot.room)!;
+      const [hour, minute] = slot.time.split(":").map(Number);
+      const startsAt = new Date(date);
+      // Nashville is UTC-5 during this summer demo week.
+      startsAt.setUTCHours(hour! + 5, minute!, 0, 0);
+      const priceTier = date.getUTCDay() === 2 ? tuesdayPrice : standardPrice;
     const featureStartsAt = new Date(startsAt.getTime() + location.preShowBufferMinutes * 60000);
     const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60000);
     const roomReadyAt = new Date(endsAt.getTime() + location.cleaningBufferMinutes * 60000);
     const showtime = await prisma.showtime.upsert({
-      where: { id: `30000000-0000-0000-0000-00000000000${index + 1}` },
-      update: { startsAt, featureStartsAt, endsAt, roomReadyAt, onSale: true },
+        where: { id: `31000000-0000-0000-${String(dayIndex + 1).padStart(4, "0")}-${String(slotIndex + 1).padStart(12, "0")}` },
+        update: {
+          movieId: movie.id,
+          auditoriumId: auditorium.id,
+          priceTierId: priceTier.id,
+          startsAt,
+          featureStartsAt,
+          endsAt,
+          roomReadyAt,
+          onSale: true,
+        },
       create: {
-        id: `30000000-0000-0000-0000-00000000000${index + 1}`,
+          id: `31000000-0000-0000-${String(dayIndex + 1).padStart(4, "0")}-${String(slotIndex + 1).padStart(12, "0")}`,
         movieId: movie.id,
-        auditoriumId: auditoriumConfigs[index]!.id,
-        priceTierId: standardPrice.id,
+          auditoriumId: auditorium.id,
+          priceTierId: priceTier.id,
         startsAt,
         featureStartsAt,
         endsAt,
@@ -273,13 +359,14 @@ export async function seedDatabase(
       },
     });
     const seats = await prisma.seat.findMany({
-      where: { seatMap: { auditoriumId: auditoriumConfigs[index]!.id }, active: true },
+        where: { seatMap: { auditoriumId: auditorium.id }, active: true },
       select: { id: true },
     });
     await prisma.showtimeSeat.createMany({
       data: seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })),
       skipDuplicates: true,
     });
+    }
   }
 
   return {
