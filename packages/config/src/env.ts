@@ -24,14 +24,44 @@ const envSchema = z.object({
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900), // 15 minutes
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(1209600), // 14 days
 
-  // Stripe — test/sandbox keys only outside production, per PAYMENT_FLOW.md.
-  // Optional at Milestone 0 since no payment code exists yet; required from
-  // Milestone 3 onward (enforced by a stricter schema at that point, not here).
+  PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
+  // Stripe — test-mode keys only during Milestone 3 development.
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
+}).superRefine((env, context) => {
+  if (env.PAYMENT_PROVIDER === "test" && env.NODE_ENV !== "test") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["PAYMENT_PROVIDER"],
+      message: "The test payment provider is only allowed when NODE_ENV=test.",
+    });
+  }
+  if (env.PAYMENT_PROVIDER === "stripe") {
+    if (!env.STRIPE_SECRET_KEY?.startsWith("sk_test_")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STRIPE_SECRET_KEY"],
+        message: "A Stripe test-mode secret key is required for Milestone 3.",
+      });
+    }
+    if (!env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STRIPE_WEBHOOK_SECRET"],
+        message: "A Stripe webhook signing secret is required for Milestone 3.",
+      });
+    }
+    if (!env.STRIPE_PUBLISHABLE_KEY?.startsWith("pk_test_")) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["STRIPE_PUBLISHABLE_KEY"],
+        message: "A Stripe test-mode publishable key is required for Milestone 3.",
+      });
+    }
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;
