@@ -270,19 +270,17 @@ export async function seedDatabase(
   const movieByTitle = new Map(movies.map((movie) => [movie.title, movie]));
   const auditoriumByName = new Map(auditoriumConfigs.map((auditorium) => [auditorium.name, auditorium]));
   const regularDay = [
-    { movie: "F1", room: "Theater 1", time: "11:00" },
-    { movie: "Materialists", room: "Theater 1", time: "14:25" },
-    { movie: "Materialists", room: "Theater 1", time: "17:10" },
-    { movie: "Materialists", room: "Theater 1", time: "19:55" },
-    { movie: "Eddington", room: "Theater 1", time: "22:50" },
-    { movie: "Eddington", room: "Theater 2", time: "11:15" },
-    { movie: "Materialists", room: "Theater 2", time: "14:35" },
-    { movie: "F1", room: "Theater 2", time: "17:25" },
-    { movie: "Eddington", room: "Theater 2", time: "20:50" },
-    { movie: "Materialists", room: "Theater 3", time: "11:30" },
-    { movie: "F1", room: "Theater 3", time: "14:20" },
-    { movie: "Eddington", room: "Theater 3", time: "17:50" },
-    { movie: "Materialists", room: "Theater 3", time: "21:10" },
+    { movie: "F1", room: "Theater 3", time: "11:00" },
+    { movie: "F1", room: "Theater 1", time: "13:30" },
+    { movie: "F1", room: "Theater 1", time: "16:50" },
+    { movie: "F1", room: "Theater 1", time: "20:20" },
+    { movie: "Materialists", room: "Theater 3", time: "14:25" },
+    { movie: "Materialists", room: "Theater 2", time: "17:10" },
+    { movie: "Materialists", room: "Theater 2", time: "19:55" },
+    { movie: "Materialists", room: "Theater 2", time: "22:50" },
+    { movie: "Eddington", room: "Theater 2", time: "13:50" },
+    { movie: "Eddington", room: "Theater 3", time: "17:15" },
+    { movie: "Eddington", room: "Theater 3", time: "20:35" },
   ];
   const saturday = [
     { movie: "The Wedding Singer", room: "Theater 1", time: "11:00" },
