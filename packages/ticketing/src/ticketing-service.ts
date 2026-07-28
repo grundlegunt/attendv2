@@ -598,7 +598,37 @@ export class TicketingService {
       // This is the real-time half of that; reconcilePendingRefunds below
       // is the polling half.
       await this.applyAsyncRefundUpdate(event);
-    } else {
+    } else if (
+      event.type === "payment_intent.succeeded" ||
+      event.type === "payment_intent.payment_failed" ||
+      event.type === "payment_intent.requires_action"
+    ) {
+      // Codex review fixes: explicitly enumerated, rather than "anything
+      // that isn't refund.updated." ProviderEventType is an open string
+      // union -- a real webhook endpoint can receive event types this
+      // handler was never written for (e.g. charge.dispute.created,
+      // customer.updated), and the OLD catch-all `else` treated every one
+      // of those as a payment_intent failure/action event too. Worse:
+      // event.paymentIntentId is undefined for those, and Prisma's `where`
+      // silently DROPS a key whose value is `undefined` rather than
+      // filtering for NULL -- `providerPaymentId: undefined` is not "no
+      // match," it's "no filter on this field at all," so
+      // payment.findFirst could return an arbitrary, unrelated Payment row
+      // and this handler would then dispatch a status change onto the
+      // WRONG order. Requiring event.paymentIntentId up front closes that
+      // off entirely for events of a kind this handler doesn't recognize.
+      if (!event.paymentIntentId) {
+        // eslint-disable-next-line no-console
+        console.error(
+          JSON.stringify({
+            event: "payment.webhook_missing_payment_intent_id.ignored",
+            providerEventType: event.type,
+            providerEventId: event.id,
+          }),
+        );
+        return this.recordProcessedWebhookEvent(event.id);
+      }
+
       let payment = await this.prisma.payment.findFirst({
         where: {
           provider: this.paymentProvider.name,
@@ -617,12 +647,7 @@ export class TicketingService {
       // via metadata, that row is guaranteed to exist -- enough to
       // reconstruct the missing link using the webhook's own
       // independently-known PaymentIntent id.
-      if (
-        !payment &&
-        event.type === "payment_intent.succeeded" &&
-        event.paymentIntentId &&
-        event.metadata?.ticketOrderId
-      ) {
+      if (!payment && event.type === "payment_intent.succeeded" && event.metadata?.ticketOrderId) {
         await this.ensurePaymentLinkedFromWebhook(event.metadata.ticketOrderId, event.paymentIntentId);
         payment = await this.prisma.payment.findFirst({
           where: {
@@ -693,11 +718,27 @@ export class TicketingService {
         ]);
       }
     }
+    // Codex review fixes: any event type that isn't refund.updated or a
+    // recognized payment_intent.* type (e.g. charge.dispute.created,
+    // customer.updated -- anything else this webhook endpoint might
+    // receive) falls through here as an intentional no-op, recorded as
+    // processed below like everything else so it's never redelivered
+    // forever.
+    return this.recordProcessedWebhookEvent(event.id);
+  }
+
+  /**
+   * Codex review fixes: extracted so both the normal end-of-function path
+   * and the early-return for a recognized-but-unusable event (missing
+   * paymentIntentId) go through the exact same dedup-recording logic,
+   * rather than duplicating the P2002-as-"already processed" handling.
+   */
+  private async recordProcessedWebhookEvent(providerEventId: string): Promise<{ duplicate: boolean }> {
     try {
       await this.prisma.processedWebhookEvent.create({
         data: {
           provider: this.paymentProvider.name,
-          providerEventId: event.id,
+          providerEventId,
         },
       });
       return { duplicate: false };
@@ -801,6 +842,18 @@ export class TicketingService {
         where: { id: localRefund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
         data: { status: mapped, providerRefundId: refundEvent.providerRefundId, leaseExpiresAt: null },
       });
+      // Codex review fixes: this whole block -- the Payment write below
+      // AND the audit alert further down -- must only run when THIS call
+      // actually won the race above (`updated.count > 0`). The refund
+      // write was already correctly guarded, but the Payment write here
+      // previously ran unconditionally whenever `mapped === SUCCEEDED`,
+      // with no check on whether the refund write actually took effect.
+      // In the exact race window this is meant to close -- this webhook
+      // loses to a concurrent settleRefund call that already recorded a
+      // DIFFERENT terminal outcome (e.g. FAILED) -- the Refund row would
+      // correctly stay FAILED while Payment got incorrectly flipped to
+      // REFUNDED anyway, leaving the two permanently inconsistent.
+      if (updated.count === 0) return;
       if (mapped === RefundStatus.SUCCEEDED) {
         await tx.payment.updateMany({
           where: { id: localRefund.paymentId, status: { not: PaymentStatus.REFUNDED } },
@@ -810,12 +863,8 @@ export class TicketingService {
       // Codex review fixes: a refund can also reach terminal FAILED via
       // an asynchronous refund.updated webhook (not just a thrown
       // ProviderDefinitiveError or a normal synchronous provider
-      // response) -- same alerting obligation applies. Guarded by
-      // `updated.count > 0` for the same reason as settleRefund's own
-      // returned-FAILED branch: only the call that actually transitions
-      // the row into FAILED creates the alert, so a redundant/duplicate
-      // webhook delivery for an already-FAILED refund never double-alerts.
-      if (mapped === RefundStatus.FAILED && updated.count > 0 && localRefund.payment?.ticketOrder) {
+      // response) -- same alerting obligation applies.
+      if (mapped === RefundStatus.FAILED && localRefund.payment?.ticketOrder) {
         await tx.auditEvent.create({
           data: {
             actorType: "SYSTEM",
