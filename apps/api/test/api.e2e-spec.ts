@@ -475,12 +475,12 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", signature)
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     const duplicate = await request(app.getHttpServer())
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", signature)
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(first.status).toBe(201);
     expect(first.body.duplicate).toBe(false);
     expect(duplicate.status).toBe(201);
@@ -680,7 +680,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", signature)
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
 
     expect(res.status).toBe(201);
     expect(res.body.duplicate).toBe(false);
@@ -876,7 +876,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", signature)
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(webhookRes.status).toBe(201);
     expect(webhookRes.body.duplicate).toBe(false);
 
@@ -982,7 +982,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", signature)
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(webhookRes.status).toBe(201);
 
     const afterWebhook = await prisma.refund.findUniqueOrThrow({
@@ -1047,7 +1047,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", provider.signWebhook(successRaw))
       .set("Content-Type", "application/json")
-      .send(successRaw);
+      .send(successRaw.toString());
     expect(successRes.status).toBe(201);
 
     const afterSuccess = await prisma.refund.findUniqueOrThrow({ where: { id: localRefundId } });
@@ -1067,7 +1067,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", provider.signWebhook(failureRaw))
       .set("Content-Type", "application/json")
-      .send(failureRaw);
+      .send(failureRaw.toString());
     expect(failureRes.status).toBe(201);
 
     const afterStaleFailure = await prisma.refund.findUniqueOrThrow({ where: { id: localRefundId } });
@@ -1137,7 +1137,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", provider.signWebhook(raw))
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(webhookRes.status).toBe(201);
 
     const afterStaleWebhook = await prisma.refund.findUniqueOrThrow({ where: { id: localRefundId } });
@@ -1199,7 +1199,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", provider.signWebhook(raw))
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(webhookRes.status).toBe(201);
 
     const afterWebhook = await prisma.ticketOrder.findUniqueOrThrow({
@@ -1272,7 +1272,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
         .post("/api/v1/ticketing/webhooks/stripe")
         .set("Stripe-Signature", provider.signWebhook(webhookRaw))
         .set("Content-Type", "application/json")
-        .send(webhookRaw),
+        .send(webhookRaw.toString()),
       ticketingService.reconcilePendingRefunds(),
     ]);
 
@@ -1326,7 +1326,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", provider.signWebhook(raw))
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(webhookRes.status).toBe(201);
     expect(webhookRes.body.duplicate).toBe(false);
 
@@ -1366,7 +1366,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post("/api/v1/ticketing/webhooks/stripe")
       .set("Stripe-Signature", provider.signWebhook(raw))
       .set("Content-Type", "application/json")
-      .send(raw);
+      .send(raw.toString());
     expect(webhookRes.status).toBe(201);
     expect(webhookRes.body.duplicate).toBe(false);
 
