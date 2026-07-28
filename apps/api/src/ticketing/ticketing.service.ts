@@ -86,6 +86,16 @@ export class TicketingService {
     return this.wrap(() => this.domain.processVerifiedWebhook(event));
   }
 
+  /**
+   * Durable safety net for refunds stuck in CREATED/PROCESSING (owning
+   * process died mid-call, or the provider responded but the write never
+   * committed) -- see TicketingService.reconcilePendingRefunds in
+   * @cinema/ticketing. Invoked periodically by RefundReconciliationService.
+   */
+  reconcilePendingRefunds(options?: { leaseDurationMs?: number; now?: Date }) {
+    return this.domain.reconcilePendingRefunds(options);
+  }
+
   private async wrap<T>(operation: () => Promise<T>) {
     try {
       return await operation();

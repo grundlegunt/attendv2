@@ -98,9 +98,6 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [diningAuthorization, setDiningAuthorization] = useState<
-    "yes" | "no" | null
-  >(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const stripeRef = useRef<StripeClient | null>(null);
@@ -128,7 +125,7 @@ export function TicketCheckout({
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
-    if (!config || diningAuthorization === null) return;
+    if (!config) return;
     setPending(true);
     setError(null);
     try {
@@ -149,7 +146,11 @@ export function TicketCheckout({
             ticketTypeId: config.ticketTypes[0]?.id,
             email,
             name: name || undefined,
-            diningAuthorizationRequested: diningAuthorization === "yes",
+            // Card-on-file dining authorization is Milestone 5 scope --
+            // see the informational note in the form below. Nothing in
+            // this checkout flow can act on `true` yet, so it is never
+            // sent as anything other than false.
+            diningAuthorizationRequested: false,
           }),
         },
       );
@@ -248,12 +249,6 @@ export function TicketCheckout({
           </p>
           <strong>{money(confirmation.totalCents, confirmation.currency)}</strong>
         </div>
-        {diningAuthorization === "yes" && (
-          <p className="authorization-note">
-            This payment method is authorized for food and drink ordered for these
-            seats tonight. Your server will bring the final bill for review and tip.
-          </p>
-        )}
       </section>
     );
   }
@@ -289,35 +284,15 @@ export function TicketCheckout({
               />
             </label>
           </div>
-          <fieldset className="checkout-panel authorization-choice">
-            <legend>Food + drink during the movie</legend>
+          <div className="checkout-panel authorization-note">
+            <h3>Food + drink during the movie</h3>
             <p>
-              May this card be used for food and drinks ordered from your server for
-              these seats tonight?
+              Card-on-file ordering for food and drinks isn't available yet. Your
+              server will collect payment for anything you order tonight
+              separately, in person. This card is only charged for your ticket
+              order above.
             </p>
-            <label>
-              <input
-                type="radio"
-                name="dining-authorization"
-                checked={diningAuthorization === "yes"}
-                onChange={() => setDiningAuthorization("yes")}
-              />
-              Yes, authorize this card for the final cinema bill
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="dining-authorization"
-                checked={diningAuthorization === "no"}
-                onChange={() => setDiningAuthorization("no")}
-              />
-              No, I’ll choose another payment method with my server
-            </label>
-            <small>
-              No tip is collected now. Your server will bring the final food and
-              drink bill for review and tip near the end of the movie.
-            </small>
-          </fieldset>
+          </div>
           {config && !config.payment.ready && (
             <div className="configuration-note">
               Test checkout is built, but this preview still needs its Stripe test
@@ -326,12 +301,7 @@ export function TicketCheckout({
           )}
           <button
             className="primary"
-            disabled={
-              pending ||
-              diningAuthorization === null ||
-              !config?.ticketTypes.length ||
-              !config.payment.ready
-            }
+            disabled={pending || !config?.ticketTypes.length || !config.payment.ready}
           >
             {pending ? "Preparing secure checkout…" : "Continue to payment"}
           </button>
