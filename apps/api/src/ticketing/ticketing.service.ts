@@ -92,8 +92,8 @@ export class TicketingService {
    * committed) -- see TicketingService.reconcilePendingRefunds in
    * @cinema/ticketing. Invoked periodically by RefundReconciliationService.
    */
-  reconcilePendingRefunds() {
-    return this.domain.reconcilePendingRefunds();
+  reconcilePendingRefunds(options?: { leaseDurationMs?: number; now?: Date }) {
+    return this.domain.reconcilePendingRefunds(options);
   }
 
   private async wrap<T>(operation: () => Promise<T>) {
