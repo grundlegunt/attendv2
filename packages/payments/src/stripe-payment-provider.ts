@@ -223,7 +223,7 @@ function mapIntentStatus(intent: Stripe.PaymentIntent): ProviderPaymentStatus {
 // this codebase's existing convention of the provider normalizing raw
 // processor statuses (see mapIntentStatus above) rather than leaking them
 // to @cinema/ticketing.
-function mapRefundStatus(status: Stripe.Refund.Status | null | undefined): ProviderRefundStatus {
+function mapRefundStatus(status: Stripe.Refund["status"] | null | undefined): ProviderRefundStatus {
   if (status === "succeeded") return "SUCCEEDED";
   if (status === "failed" || status === "canceled") return "FAILED";
   return "PENDING"; // "pending", "requires_action", or anything unrecognized.
