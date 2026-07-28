@@ -30,6 +30,13 @@ const envSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
 
+  // How often the durable refund-reconciliation sweep
+  // (TicketingService.reconcilePendingRefunds) runs, in milliseconds. See
+  // RefundReconciliationService in apps/api. Set to 0 to disable the
+  // background sweep entirely (e.g. in tests that manage reconciliation
+  // explicitly).
+  REFUND_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
+
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
 }).superRefine((env, context) => {
   if (env.PAYMENT_PROVIDER === "test" && env.NODE_ENV !== "test") {

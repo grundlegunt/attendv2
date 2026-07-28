@@ -579,6 +579,176 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     ).toBeGreaterThan(0);
     provider.setRefundFailure(null);
   });
+
+  it("treats an ambiguous (non-definitive) refund failure as retryable, not a confirmed rejection, and resolves it durably via the reconciliation sweep -- not the customer's original request", async () => {
+    const holderKey = "ticket-ambiguous-refund-0006";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const ticketingService = app.get(TicketingService);
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    provider.makeRefundsFailAmbiguously();
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const result = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(result.status).toBe(409);
+
+    const afterFailure = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    // A network/5xx-style failure must never be recorded as a confirmed
+    // rejection -- the true outcome is unknown. Payment stays SUCCEEDED
+    // (never REFUNDED on a guess), the Refund row is left exactly as it
+    // was (CREATED, not FAILED) so the next reconciliation pass revisits
+    // it, and no operational alert fires for something that isn't
+    // actually a confirmed failure yet.
+    expect(afterFailure.status).toBe(PaymentStatus.SUCCEEDED);
+    expect(afterFailure.refunds).toHaveLength(1);
+    expect(afterFailure.refunds[0].status).toBe(RefundStatus.CREATED);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: "payment.refund_attention_required",
+          entityType: "Refund",
+          entityId: afterFailure.refunds[0].id,
+        },
+      }),
+    ).toBe(0);
+
+    // The provider recovers. Nothing about the customer's original
+    // request retries this -- only the durable reconciliation sweep does.
+    provider.stopFailingRefunds();
+    const sweep = await ticketingService.reconcilePendingRefunds();
+    expect(sweep.reconciled).toBeGreaterThan(0);
+
+    const afterReconcile = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(afterReconcile.status).toBe(PaymentStatus.REFUNDED);
+    expect(afterReconcile.refunds[0].status).toBe(RefundStatus.SUCCEEDED);
+  });
+
+  it("reconstructs a missing Payment/PaymentAttempt link from a payment_intent.succeeded webhook's own metadata when completeCheckout's local write never committed", async () => {
+    const holderKey = "ticket-crash-recovery-holder-0007";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+
+    // Simulate the process dying after Stripe created/charged the
+    // PaymentIntent but before completeCheckout's own write ever
+    // committed locally -- the only thing that can recover this order
+    // afterwards is a webhook, using data it independently carries.
+    await prisma.payment.update({
+      where: { ticketOrderId: checkout.orderId },
+      data: { providerPaymentId: null },
+    });
+    await prisma.paymentAttempt.deleteMany({
+      where: { payment: { ticketOrderId: checkout.orderId } },
+    });
+
+    const raw = Buffer.from(
+      JSON.stringify({
+        id: "evt_test_ticket_crash_recovery_0007",
+        type: "payment_intent.succeeded",
+        paymentIntentId: checkout.payment.providerPaymentId,
+        metadata: { ticketOrderId: checkout.orderId },
+      }),
+    );
+    const signature = provider.signWebhook(raw);
+
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/webhooks/stripe")
+      .set("Stripe-Signature", signature)
+      .set("Content-Type", "application/json")
+      .send(raw);
+
+    expect(res.status).toBe(201);
+    expect(res.body.duplicate).toBe(false);
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+
+    const payment = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+    });
+    expect(payment.providerPaymentId).toBe(checkout.payment.providerPaymentId);
+    expect(
+      await prisma.paymentAttempt.count({ where: { paymentId: payment.id } }),
+    ).toBe(1);
+  });
+
+  it("flags a durable review state when a succeeded PaymentIntent's metadata doesn't match the order, refuses to issue tickets, and self-heals once the mismatch is gone", async () => {
+    const holderKey = "ticket-verification-mismatch-0008";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    provider.setIntentMetadata(checkout.payment.providerPaymentId, {
+      ticketOrderId: "some-other-unrelated-order-id",
+    });
+
+    const mismatched = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(mismatched.status).toBe(409);
+    expect(mismatched.body.code).toBe("CONFLICT");
+    expect(mismatched.body.details?.reason).toBe("PAYMENT_VERIFICATION_FAILED");
+
+    const flagged = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+    });
+    expect(flagged.verificationFailedAt).not.toBeNull();
+    expect(flagged.verificationFailureNote).toContain(checkout.orderId);
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(0);
+
+    // The mismatch clears (e.g. it was a transient reporting error, or an
+    // operator corrected it) -- the next finalize call re-verifies against
+    // the provider itself, and finding a match this time, self-heals the
+    // flag with no dedicated admin action required.
+    provider.setIntentMetadata(checkout.payment.providerPaymentId, {
+      ticketOrderId: checkout.orderId,
+    });
+
+    const healed = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(healed.status).toBe(201);
+    expect(healed.body.status).toBe("PAID");
+
+    const cleared = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+    });
+    expect(cleared.verificationFailedAt).toBeNull();
+    expect(cleared.verificationFailureNote).toBeNull();
+  });
 });
 
 describe("Customer authentication", () => {

@@ -9,7 +9,9 @@ import {
 } from "@cinema/database";
 import {
   PaymentProvider,
+  ProviderDefinitiveError,
   ProviderPaymentStatus,
+  ProviderRefundStatus,
   VerifiedProviderEvent,
 } from "@cinema/payments";
 import { TicketingError } from "./ticketing-error";
@@ -31,6 +33,11 @@ interface LockedHold {
   expiresAt: Date;
   releasedAt: Date | null;
 }
+
+// Round 2 review fixes: how long a refund claim/reconciliation lease is
+// held -- see Refund.leaseExpiresAt (schema.prisma) and
+// reconcilePendingRefunds below.
+const REFUND_LEASE_MS = 60_000;
 
 function paymentAttemptStatus(status: ProviderPaymentStatus): PaymentAttemptStatus {
   switch (status) {
@@ -64,6 +71,19 @@ function paymentStatus(status: ProviderPaymentStatus): PaymentStatus {
     case "CANCELED":
       return PaymentStatus.CANCELED;
   }
+}
+
+// Round 2 review fixes: the provider already normalizes a processor's raw
+// refund status into this friendly three-value type (see
+// StripePaymentProvider's own mapRefundStatus) -- this maps it onto the
+// LOCAL RefundStatus enum, which has no separate "pending" value of its
+// own. PROCESSING is the correct home for it: it already means "the
+// processor accepted the request but the operation isn't confirmed
+// settled yet," which is exactly what a provider-reported PENDING means.
+function refundStatusFromProvider(status: ProviderRefundStatus): RefundStatus {
+  if (status === "SUCCEEDED") return RefundStatus.SUCCEEDED;
+  if (status === "FAILED") return RefundStatus.FAILED;
+  return RefundStatus.PROCESSING;
 }
 
 function publicOrderNumber() {
@@ -100,7 +120,15 @@ export class TicketingService {
       where: { checkoutIdempotencyKey: input.checkoutIdempotencyKey },
       include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
     });
-    if (existing) return this.presentCheckout(existing);
+    // Round 2 review fixes: this used to just re-present `existing`
+    // as-is, with NO clientSecret at all -- fine if a real PaymentIntent
+    // was already attached, but if the process crashed between creating
+    // this order and ever calling the provider (or between calling it
+    // and persisting providerPaymentId), the retrying customer's browser
+    // got back an order with nothing to actually confirm payment with.
+    // completeCheckout finishes that work using this SAME order (never a
+    // new one) instead of leaving it stuck.
+    if (existing) return this.completeCheckout(existing);
 
     const holds = await this.prisma.seatHold.findMany({
       where: { holdToken: { in: holdTokens } },
@@ -183,52 +211,123 @@ export class TicketingService {
             },
           },
         },
-        include: { payment: { include: { attempts: true } } },
+        include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         const concurrent = await this.prisma.ticketOrder.findUnique({
           where: { checkoutIdempotencyKey: input.checkoutIdempotencyKey },
-          include: { payment: { include: { attempts: true } } },
+          include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
         });
-        if (concurrent) return this.presentCheckout(concurrent);
+        if (concurrent) return this.completeCheckout(concurrent);
       }
       throw error;
     }
 
+    return this.completeCheckout(order);
+  }
+
+  /**
+   * Round 2 review fixes: completes phase 2 (the provider PaymentIntent
+   * call) and phase 3 (persisting providerPaymentId + the first
+   * PaymentAttempt) for an order that already exists -- whether it's
+   * brand new (just created above) or a crash-recovery replay found via
+   * the checkout idempotency key. Reads back whatever was actually
+   * persisted on `order` rather than trusting the original request again,
+   * since a retry may be happening in a request that didn't even supply
+   * the original input shape.
+   */
+  private async completeCheckout(order: {
+    id: string;
+    locationId: string;
+    orderNumber: string;
+    status: TicketOrderStatus;
+    subtotalCents: number;
+    feesCents: number;
+    taxCents: number;
+    totalCents: number;
+    currency: string;
+    payment: {
+      id: string;
+      idempotencyKey: string;
+      providerPaymentId: string | null;
+      status: PaymentStatus;
+      attempts: Array<{ attemptNumber: number; status: PaymentAttemptStatus }>;
+    } | null;
+  }) {
+    const location = await this.prisma.location.findFirstOrThrow({
+      where: { id: order.locationId },
+      include: { organization: true },
+    });
+    const connectedAccountId = location.organization.stripeConnectedAccountId ?? undefined;
+
+    if (order.payment?.providerPaymentId) {
+      // A real PaymentIntent already exists for this order -- replay it
+      // rather than creating a second one. Re-retrieved (not read from
+      // our own cached fields) so a long-dormant retry still gets a
+      // live, usable clientSecret.
+      const intent = await this.paymentProvider.retrievePaymentIntent({
+        connectedAccountId,
+        paymentIntentId: order.payment.providerPaymentId,
+      });
+      return this.presentCheckout(order, intent.clientSecret);
+    }
+
+    if (!order.payment) {
+      // Shouldn't happen -- Payment is always created atomically with
+      // TicketOrder (see createCheckout) -- but don't silently proceed
+      // past a data-integrity assumption that isn't actually true.
+      throw TicketingError.notFound("Ticket order has no payment record.");
+    }
+
+    const idempotencyKey = order.payment.idempotencyKey;
     const intent = await this.paymentProvider.createPaymentIntent({
-      connectedAccountId: location.organization.stripeConnectedAccountId ?? undefined,
-      amountCents: totalCents,
-      currency: showtime.priceTier.currency,
+      connectedAccountId,
+      amountCents: order.totalCents,
+      currency: order.currency,
       metadata: {
         ticketOrderId: order.id,
         organizationId: location.organizationId,
         locationId: location.id,
       },
-      idempotencyKey: order.payment!.idempotencyKey,
+      idempotencyKey,
     });
 
-    const updated = await this.prisma.ticketOrder.update({
-      where: { id: order.id },
-      data: {
-        payment: {
-          update: {
-            providerPaymentId: intent.id,
-            status: paymentStatus(intent.status),
-            attempts: {
-              create: {
-                provider: this.paymentProvider.name,
-                providerIntentId: intent.id,
-                attemptNumber: 1,
-                status: paymentAttemptStatus(intent.status),
+    try {
+      const updated = await this.prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: {
+          payment: {
+            update: {
+              providerPaymentId: intent.id,
+              status: paymentStatus(intent.status),
+              attempts: {
+                create: {
+                  provider: this.paymentProvider.name,
+                  providerIntentId: intent.id,
+                  attemptNumber: 1,
+                  status: paymentAttemptStatus(intent.status),
+                },
               },
             },
           },
         },
-      },
-      include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
-    });
-    return this.presentCheckout(updated, intent.clientSecret);
+        include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
+      });
+      return this.presentCheckout(updated, intent.clientSecret);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        // A concurrent call for the same order already recorded this
+        // exact PaymentIntent (idempotencyKey collision) -- not an
+        // error, the work is already done.
+        const settled = await this.prisma.ticketOrder.findUniqueOrThrow({
+          where: { id: order.id },
+          include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
+        });
+        return this.presentCheckout(settled, intent.clientSecret);
+      }
+      throw error;
+    }
   }
 
   async finalizeOrder(orderId: string) {
@@ -243,8 +342,24 @@ export class TicketingService {
     if (!order?.payment?.providerPaymentId) {
       throw TicketingError.notFound("Ticket order was not found.");
     }
-    if (order.status === TicketOrderStatus.PAID) return this.presentConfirmation(order);
 
+    // Round 2 review fixes: there is deliberately NO "already PAID,
+    // short-circuit" fast path here. A prior design gated one on
+    // `order.status === PAID` alone -- but once a durable verification
+    // flag (below) exists, a snapshot-based short-circuit like that can
+    // itself become a race: one concurrent attempt can read "not
+    // flagged" before a different attempt records a GENUINE mismatch,
+    // and return success without ever re-checking. No snapshot-based
+    // check can close that gap -- only re-running verification every
+    // time does. This is safe unconditionally: exact duplicate webhook
+    // deliveries are already deduplicated earlier (processedWebhookEvent,
+    // in processVerifiedWebhook below), and every other repeated call
+    // (the frontend racing the webhook, a redelivery, a customer
+    // refreshing) is already made safe by the ticket-issuing
+    // transaction's own row-lock + `lockedOrder.status === PAID` no-op
+    // guard further down, unchanged by this fix. The accepted cost is a
+    // real one -- an extra provider API call on every repeat call
+    // instead of an instant return.
     const providerResult = await this.paymentProvider.retrievePaymentIntent({
       connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined,
       paymentIntentId: order.payment.providerPaymentId,
@@ -277,6 +392,87 @@ export class TicketingService {
         providerResult.failureMessage ?? "Payment has not completed.",
       );
     }
+
+    // Round 2 review fixes: "the provider confirms this PaymentIntent
+    // succeeded" is not, by itself, proof this is the RIGHT charge for
+    // this order -- verify the actual payment facts before treating
+    // "succeeded" as sufficient to issue tickets. This is most valuable
+    // as a check against a bug in OUR OWN record-keeping (a corrupted/
+    // mismatched Payment.providerPaymentId -- including from the webhook
+    // reconstruction path in processVerifiedWebhook, which writes that
+    // field from webhook-supplied data) rather than anything the
+    // processor itself would get wrong, but the consequence of NOT
+    // checking it -- silently issuing tickets against an unverified
+    // charge -- is severe enough to check unconditionally.
+    const mismatch =
+      providerResult.amountCents !== order.payment.amountCents ||
+      providerResult.currency.toLowerCase() !== order.payment.currency.toLowerCase() ||
+      providerResult.metadata.ticketOrderId !== order.id;
+
+    if (mismatch) {
+      // Persisted, not just logged -- a customer could be charged while
+      // this order never gets its tickets, and that must never be
+      // traceable only through structured logs nobody may ever read.
+      const note =
+        `Expected amountCents=${order.payment.amountCents} currency=${order.payment.currency} ticketOrderId=${order.id}; ` +
+        `got amountCents=${providerResult.amountCents} currency=${providerResult.currency} ` +
+        `ticketOrderId=${providerResult.metadata.ticketOrderId ?? "(missing)"} from providerPaymentId=${providerResult.id}.`;
+      await this.prisma.payment.update({
+        where: { id: order.payment.id },
+        data: { verificationFailedAt: new Date(), verificationFailureNote: note },
+      });
+      // eslint-disable-next-line no-console
+      console.error(
+        JSON.stringify({
+          event: "payment.verification_mismatch.manual_review_required",
+          orderId: order.id,
+          paymentId: order.payment.id,
+          providerPaymentId: providerResult.id,
+          expectedAmountCents: order.payment.amountCents,
+          expectedCurrency: order.payment.currency,
+          actualAmountCents: providerResult.amountCents,
+          actualCurrency: providerResult.currency,
+          actualMetadataTicketOrderId: providerResult.metadata.ticketOrderId,
+        }),
+      );
+      throw TicketingError.conflict(
+        "Payment verification failed: the confirmed charge does not match this order's expected amount, " +
+          "currency, or identity. This requires manual review before the order can be finalized.",
+        "PAYMENT_VERIFICATION_FAILED",
+      );
+    }
+
+    // Round 2 review fixes (equivalent to the reference implementation's
+    // "Payment.status decoupled from ticket issuance" fix): mark the
+    // confirmed charge SUCCEEDED immediately, independent of whether
+    // ticket issuance below succeeds -- this must survive even if that
+    // transaction rolls back for an unrelated reason (a transient DB
+    // error, not just the seats-unavailable case already handled). Any
+    // prior review flag is cleared UNCONDITIONALLY, in its OWN statement:
+    // it cannot be folded into the status-guarded update, because that
+    // update's WHERE deliberately excludes rows already at SUCCEEDED (to
+    // avoid downgrading a refunded payment) -- if Payment.status is
+    // ALREADY SUCCEEDED here (e.g. an earlier attempt got this far but
+    // then failed for an unrelated reason before TicketOrder ever
+    // reached PAID), that guarded update matches zero rows, and a
+    // flag-clear folded into it would silently never run.
+    await this.prisma.$transaction([
+      this.prisma.payment.updateMany({
+        where: {
+          id: order.payment.id,
+          status: { notIn: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] },
+        },
+        data: { status: PaymentStatus.SUCCEEDED },
+      }),
+      this.prisma.payment.updateMany({
+        where: { id: order.payment.id, verificationFailedAt: { not: null } },
+        data: { verificationFailedAt: null, verificationFailureNote: null },
+      }),
+      this.prisma.paymentAttempt.updateMany({
+        where: { paymentId: order.payment.id, providerIntentId: providerResult.id },
+        data: { status: PaymentAttemptStatus.SUCCEEDED },
+      }),
+    ]);
 
     try {
       const finalized = await this.prisma.$transaction(
@@ -354,17 +550,6 @@ export class TicketingService {
             where: { id: { in: lockedHolds.map((hold) => hold.id) }, releasedAt: null },
             data: { releasedAt: purchaseTime },
           });
-          await tx.payment.update({
-            where: { id: lockedOrder.payment!.id },
-            data: { status: PaymentStatus.SUCCEEDED },
-          });
-          await tx.paymentAttempt.updateMany({
-            where: {
-              paymentId: lockedOrder.payment!.id,
-              providerIntentId: providerResult.id,
-            },
-            data: { status: PaymentAttemptStatus.SUCCEEDED },
-          });
           return tx.ticketOrder.update({
             where: { id: lockedOrder.id },
             data: { status: TicketOrderStatus.PAID },
@@ -404,36 +589,73 @@ export class TicketingService {
       },
     });
     if (duplicate) return { duplicate: true };
-    const payment = await this.prisma.payment.findFirst({
-      where: {
-        provider: this.paymentProvider.name,
-        providerPaymentId: event.paymentIntentId,
-      },
-    });
-    if (!payment?.ticketOrderId) throw TicketingError.notFound("Payment was not found.");
-    if (event.type === "payment_intent.succeeded") {
-      await this.finalizeOrder(payment.ticketOrderId);
+
+    if (event.type === "refund.updated") {
+      // Round 2 review fixes: async refund-status webhook -- a §5.1-style
+      // refund that settles asynchronously (the provider reported PENDING
+      // at creation; some payment methods don't confirm a refund
+      // synchronously) needs to hear about the eventual outcome somehow.
+      // This is the real-time half of that; reconcilePendingRefunds below
+      // is the polling half.
+      await this.applyAsyncRefundUpdate(event);
     } else {
-      await this.prisma.$transaction([
-        this.prisma.payment.update({
-          where: { id: payment.id },
-          data: {
-            status:
-              event.type === "payment_intent.payment_failed"
-                ? PaymentStatus.FAILED
-                : PaymentStatus.REQUIRES_ACTION,
+      let payment = await this.prisma.payment.findFirst({
+        where: {
+          provider: this.paymentProvider.name,
+          providerPaymentId: event.paymentIntentId,
+        },
+      });
+      // Round 2 review fixes: finalizeOrder requires a Payment row whose
+      // providerPaymentId is already set -- if the process crashed after
+      // the provider created/charged the PaymentIntent but before
+      // completeCheckout ever persisted that link locally, AND nothing
+      // ever retries checkout, the ONLY thing that arrives again is this
+      // exact webhook. Before this fix, that meant "Payment was not
+      // found" forever. Phase 1 always creates the TicketOrder and its
+      // Payment row together (see createCheckout), so by the time ANY
+      // payment_intent.succeeded webhook can reference this ticketOrderId
+      // via metadata, that row is guaranteed to exist -- enough to
+      // reconstruct the missing link using the webhook's own
+      // independently-known PaymentIntent id.
+      if (
+        !payment &&
+        event.type === "payment_intent.succeeded" &&
+        event.paymentIntentId &&
+        event.metadata?.ticketOrderId
+      ) {
+        await this.ensurePaymentLinkedFromWebhook(event.metadata.ticketOrderId, event.paymentIntentId);
+        payment = await this.prisma.payment.findFirst({
+          where: {
+            provider: this.paymentProvider.name,
+            providerPaymentId: event.paymentIntentId,
           },
-        }),
-        this.prisma.ticketOrder.update({
-          where: { id: payment.ticketOrderId },
-          data: {
-            status:
-              event.type === "payment_intent.payment_failed"
-                ? TicketOrderStatus.PAYMENT_FAILED
-                : TicketOrderStatus.AWAITING_PAYMENT,
-          },
-        }),
-      ]);
+        });
+      }
+      if (!payment?.ticketOrderId) throw TicketingError.notFound("Payment was not found.");
+      if (event.type === "payment_intent.succeeded") {
+        await this.finalizeOrder(payment.ticketOrderId);
+      } else {
+        await this.prisma.$transaction([
+          this.prisma.payment.update({
+            where: { id: payment.id },
+            data: {
+              status:
+                event.type === "payment_intent.payment_failed"
+                  ? PaymentStatus.FAILED
+                  : PaymentStatus.REQUIRES_ACTION,
+            },
+          }),
+          this.prisma.ticketOrder.update({
+            where: { id: payment.ticketOrderId },
+            data: {
+              status:
+                event.type === "payment_intent.payment_failed"
+                  ? TicketOrderStatus.PAYMENT_FAILED
+                  : TicketOrderStatus.AWAITING_PAYMENT,
+            },
+          }),
+        ]);
+      }
     }
     try {
       await this.prisma.processedWebhookEvent.create({
@@ -459,6 +681,85 @@ export class TicketingService {
     return this.processVerifiedWebhook(event);
   }
 
+  /**
+   * Round 2 review fixes: reconstructs the Payment row's providerPaymentId
+   * (and the missing first PaymentAttempt) from a payment_intent.succeeded
+   * webhook's own known PaymentIntent id, ONLY if completeCheckout never
+   * got to persist it. A no-op (a single indexed lookup) on the
+   * overwhelmingly common path where that already happened normally.
+   */
+  private async ensurePaymentLinkedFromWebhook(ticketOrderId: string, providerIntentId: string): Promise<void> {
+    const existingAttempt = await this.prisma.paymentAttempt.findUnique({
+      where: {
+        provider_providerIntentId: { provider: this.paymentProvider.name, providerIntentId },
+      },
+    });
+    if (existingAttempt) return;
+
+    const order = await this.prisma.ticketOrder.findUnique({
+      where: { id: ticketOrderId },
+      include: { payment: true },
+    });
+    if (!order?.payment) return; // Shouldn't happen -- see this function's call site; processVerifiedWebhook's own not-found handling covers a genuinely missing order the same way it already did.
+
+    try {
+      await this.prisma.$transaction([
+        this.prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { providerPaymentId: providerIntentId },
+        }),
+        this.prisma.paymentAttempt.create({
+          data: {
+            paymentId: order.payment.id,
+            provider: this.paymentProvider.name,
+            providerIntentId,
+            attemptNumber: 1,
+          },
+        }),
+      ]);
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      // Concurrent reconstruction (a redelivered copy of this same
+      // webhook), or completeCheckout's own phase finishing at the same
+      // moment, already recorded it -- fine either way.
+    }
+  }
+
+  /**
+   * Round 2 review fixes: applies a `refund.updated` webhook to the local
+   * Refund row it corresponds to. Correlates by metadata.refundId set at
+   * settlement time (settleRefund) first -- works even if this row's
+   * providerRefundId was never persisted locally (the exact crash
+   * reconcilePendingRefunds also exists to recover from) -- falling back
+   * to providerRefundId for any refund object that arrives without it.
+   */
+  private async applyAsyncRefundUpdate(event: VerifiedProviderEvent): Promise<void> {
+    if (!event.refund) return;
+    const localRefund = event.refund.metadata?.refundId
+      ? await this.prisma.refund.findUnique({ where: { id: event.refund.metadata.refundId } })
+      : await this.prisma.refund.findFirst({ where: { providerRefundId: event.refund.providerRefundId } });
+    if (!localRefund) return;
+    if (localRefund.status !== RefundStatus.CREATED && localRefund.status !== RefundStatus.PROCESSING) return;
+
+    const mapped = refundStatusFromProvider(event.refund.status);
+    if (mapped === RefundStatus.PROCESSING) return; // still not resolved -- nothing to update yet.
+
+    await this.prisma.$transaction([
+      this.prisma.refund.update({
+        where: { id: localRefund.id },
+        data: { status: mapped, providerRefundId: event.refund.providerRefundId, leaseExpiresAt: null },
+      }),
+      ...(mapped === RefundStatus.SUCCEEDED
+        ? [
+            this.prisma.payment.updateMany({
+              where: { id: localRefund.paymentId, status: { not: PaymentStatus.REFUNDED } },
+              data: { status: PaymentStatus.REFUNDED },
+            }),
+          ]
+        : []),
+    ]);
+  }
+
   private async refundUnavailableOrder(orderId: string, reason: string) {
     const recovery = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
@@ -480,6 +781,11 @@ export class TicketingService {
           amountCents: locked.payment.amountCents,
           reason,
           idempotencyKey,
+          // Round 2 review fixes: claimed with a lease immediately, same
+          // as reconcilePendingRefunds' own claims, so a concurrent
+          // reconciliation pass can't also act on this row while this
+          // call is still working it.
+          leaseExpiresAt: new Date(Date.now() + REFUND_LEASE_MS),
         },
       });
       await tx.ticketOrder.update({
@@ -493,46 +799,259 @@ export class TicketingService {
       return { locked, refund };
     });
 
-    if (recovery.refund.status === RefundStatus.SUCCEEDED) return;
-    const result = await this.paymentProvider.refund({
-      connectedAccountId:
-        recovery.locked.location.organization.stripeConnectedAccountId ?? undefined,
-      providerPaymentId: recovery.locked.payment!.providerPaymentId!,
-      amountCents: recovery.refund.amountCents,
-      reason,
-      idempotencyKey: recovery.refund.idempotencyKey,
-    });
-    await this.prisma.$transaction(async (tx) => {
-      await tx.refund.update({
-        where: { id: recovery.refund.id },
-        data: {
-          status:
-            result.status === "SUCCEEDED" ? RefundStatus.SUCCEEDED : RefundStatus.FAILED,
-          providerRefundId: result.id,
+    // Round 2 review fixes: only CREATED/PROCESSING refunds are ours to
+    // settle here -- SUCCEEDED and FAILED are both terminal (a FAILED
+    // refund is a confirmed processor rejection; retrying the identical
+    // request would only hit the same rejection again, and
+    // reconcilePendingRefunds never revisits FAILED rows either, for the
+    // same reason).
+    if (recovery.refund.status !== RefundStatus.CREATED && recovery.refund.status !== RefundStatus.PROCESSING) {
+      return;
+    }
+
+    await this.settleRefund(
+      { id: recovery.refund.id, paymentId: recovery.locked.payment!.id },
+      recovery.refund.providerRefundId,
+      {
+        connectedAccountId: recovery.locked.location.organization.stripeConnectedAccountId ?? undefined,
+        providerPaymentId: recovery.locked.payment!.providerPaymentId!,
+        amountCents: recovery.refund.amountCents,
+        reason,
+        ticketOrderId: recovery.locked.id,
+        locationId: recovery.locked.locationId,
+      },
+    );
+  }
+
+  /**
+   * Round 2 review fixes: operational entry point for resuming a refund
+   * whose owning process died before ever calling the provider, or after
+   * the provider responded but before the local status update committed.
+   * Meant to be invoked periodically by an external scheduler (see
+   * apps/api's RefundReconciliationService) as the durable safety net
+   * alongside the real-time refund.updated webhook handling above.
+   *
+   * Safe to call concurrently with itself -- each row's lease is claimed
+   * with a conditional updateMany, so two overlapping reconciliation
+   * passes (or a pass overlapping a live refundUnavailableOrder call for
+   * the same refund) can't both act on the same row at once.
+   */
+  async reconcilePendingRefunds(
+    options: { leaseDurationMs?: number; now?: Date } = {},
+  ): Promise<{ reconciled: number; stillPending: number }> {
+    const now = options.now ?? new Date();
+    const leaseDurationMs = options.leaseDurationMs ?? REFUND_LEASE_MS;
+    const pendingStatuses = [RefundStatus.CREATED, RefundStatus.PROCESSING];
+
+    const candidates = await this.prisma.refund.findMany({
+      where: {
+        status: { in: pendingStatuses },
+        OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
+      },
+      include: {
+        payment: {
+          include: {
+            attempts: { orderBy: { attemptNumber: "desc" }, take: 1 },
+            ticketOrder: { include: { location: { include: { organization: true } } } },
+          },
         },
+      },
+    });
+
+    let reconciled = 0;
+    let stillPending = 0;
+
+    for (const candidate of candidates) {
+      const leaseUntil = new Date(now.getTime() + leaseDurationMs);
+      const claim = await this.prisma.refund.updateMany({
+        where: {
+          id: candidate.id,
+          status: { in: pendingStatuses },
+          OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: now } }],
+        },
+        data: { leaseExpiresAt: leaseUntil },
       });
-      if (result.status === "SUCCEEDED") {
-        await tx.payment.update({
-          where: { id: recovery.locked.payment!.id },
-          data: { status: PaymentStatus.REFUNDED },
-        });
-      } else {
-        await tx.auditEvent.create({
+      if (claim.count === 0) continue; // Lost the claim race to a concurrent reconciliation pass.
+
+      const attempt = candidate.payment.attempts[0];
+      const ticketOrder = candidate.payment.ticketOrder;
+      if (!attempt?.providerIntentId || !ticketOrder) {
+        // Nothing usable to act on -- release the lease rather than
+        // holding it on a row this pass can't process anyway.
+        await this.prisma.refund.updateMany({ where: { id: candidate.id }, data: { leaseExpiresAt: null } });
+        continue;
+      }
+
+      try {
+        const status = await this.settleRefund(
+          { id: candidate.id, paymentId: candidate.paymentId },
+          candidate.providerRefundId,
+          {
+            connectedAccountId: ticketOrder.location.organization.stripeConnectedAccountId ?? undefined,
+            providerPaymentId: attempt.providerIntentId,
+            amountCents: candidate.amountCents,
+            reason: candidate.reason,
+            ticketOrderId: ticketOrder.id,
+            locationId: ticketOrder.locationId,
+          },
+        );
+        if (status === RefundStatus.PROCESSING) stillPending += 1;
+        else reconciled += 1;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(
+          JSON.stringify({ event: "refund.reconcile_failed", refundId: candidate.id, error: String(error) }),
+        );
+        // Lease still holds until it naturally expires -- the next pass retries.
+      }
+    }
+
+    return { reconciled, stillPending };
+  }
+
+  /**
+   * Calls the payment provider for a Refund row this process already owns
+   * the claim on (via the (paymentId, reason)-derived idempotencyKey
+   * unique-constraint win in refundUnavailableOrder, or via the lease
+   * claim in reconcilePendingRefunds) and persists whatever the provider
+   * actually reports.
+   *
+   * `existingProviderRefundId` distinguishes "we don't yet know if the
+   * provider was ever called" (null -- use refund(), whose idempotencyKey
+   * makes this safe even if a previous, uncommitted attempt already
+   * reached the provider) from "we already know the provider's refund id,
+   * just not its current status" (non-null -- use retrieveRefund for the
+   * LIVE status, since a replayed refund() call would only return the
+   * response cached from the original creation, not a later async
+   * pending -> succeeded/failed transition).
+   */
+  private async settleRefund(
+    refund: { id: string; paymentId: string },
+    existingProviderRefundId: string | null,
+    ctx: {
+      connectedAccountId?: string;
+      providerPaymentId: string;
+      amountCents: number;
+      reason: string;
+      ticketOrderId: string;
+      locationId: string;
+    },
+  ): Promise<RefundStatus> {
+    const idempotencyKey = `seat-unavailable-refund:${refund.paymentId}`;
+
+    // Round 2 review fixes: a thrown provider error does NOT by itself
+    // mean the refund failed -- a network timeout, a connection reset, or
+    // a 5xx from the processor's own servers can all throw here while the
+    // request was actually received and processed before the response was
+    // lost in transit. Only a ProviderDefinitiveError -- thrown by the
+    // provider implementation ONLY when the processor positively
+    // confirmed a rejection -- means retrying can never succeed. Anything
+    // else is an UNKNOWN outcome, not a failed one.
+    let result;
+    try {
+      result = existingProviderRefundId
+        ? await this.paymentProvider.retrieveRefund({
+            connectedAccountId: ctx.connectedAccountId,
+            providerRefundId: existingProviderRefundId,
+          })
+        : await this.paymentProvider.refund({
+            connectedAccountId: ctx.connectedAccountId,
+            providerPaymentId: ctx.providerPaymentId,
+            amountCents: ctx.amountCents,
+            reason: ctx.reason,
+            idempotencyKey,
+            metadata: { ticketOrderId: ctx.ticketOrderId, refundId: refund.id },
+          });
+    } catch (error) {
+      if (!(error instanceof ProviderDefinitiveError)) {
+        // eslint-disable-next-line no-console
+        console.error(
+          JSON.stringify({
+            event: "payment.refund_provider_call_ambiguous.retry_required",
+            refundId: refund.id,
+            paymentId: refund.paymentId,
+            error: String(error),
+          }),
+        );
+        // Leave the row exactly as it was (still CREATED/PROCESSING --
+        // nothing here writes to it) so reconcilePendingRefunds retries
+        // with the SAME idempotencyKey, which is always safe.
+        return RefundStatus.PROCESSING;
+      }
+
+      // A genuine, confirmed rejection from the processor -- this, and
+      // only this, is a real terminal failure.
+      await this.prisma.$transaction([
+        this.prisma.refund.update({ where: { id: refund.id }, data: { status: RefundStatus.FAILED, leaseExpiresAt: null } }),
+        this.prisma.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } }),
+        this.prisma.auditEvent.create({
           data: {
             actorType: "SYSTEM",
             action: "payment.refund_attention_required",
             entityType: "Refund",
-            entityId: recovery.refund.id,
-            locationId: recovery.locked.locationId,
-            afterState: {
-              reason,
-              paymentId: recovery.locked.payment!.id,
-              failureMessage: result.failureMessage ?? "Provider refund failed.",
-            },
+            entityId: refund.id,
+            locationId: ctx.locationId,
+            afterState: { reason: ctx.reason, paymentId: refund.paymentId, failureMessage: error.message },
           },
-        });
-      }
-    });
+        }),
+      ]);
+      return RefundStatus.FAILED;
+    }
+
+    const mapped = refundStatusFromProvider(result.status);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.refund.update({
+          where: { id: refund.id },
+          data: { status: mapped, providerRefundId: result.id, leaseExpiresAt: null },
+        }),
+        ...(mapped === RefundStatus.SUCCEEDED
+          ? [
+              this.prisma.payment.updateMany({
+                where: { id: refund.paymentId, status: { not: PaymentStatus.REFUNDED } },
+                data: { status: PaymentStatus.REFUNDED },
+              }),
+            ]
+          : []),
+        this.prisma.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } }),
+      ]);
+    } catch (persistError) {
+      // The provider already gave a definitive, known answer -- we just
+      // failed to write it down. This must NEVER become FAILED: the
+      // refund may well have genuinely succeeded on the processor's side,
+      // and recording FAILED here would both lie about that and make the
+      // row unreachable to reconcilePendingRefunds forever (it only
+      // revisits CREATED/PROCESSING rows). The Refund row is untouched by
+      // this failed transaction, so the honest thing to report is
+      // PROCESSING -- reconcilePendingRefunds (once its lease expires) or
+      // the async refund.updated webhook will observe the SAME real
+      // outcome on the next attempt.
+      // eslint-disable-next-line no-console
+      console.error(
+        JSON.stringify({
+          event: "payment.refund_persist_failed.retry_required",
+          refundId: refund.id,
+          paymentId: refund.paymentId,
+          providerRefundId: result.id,
+          providerStatus: result.status,
+          error: String(persistError),
+        }),
+      );
+      return RefundStatus.PROCESSING;
+    }
+
+    if (mapped === RefundStatus.PROCESSING) {
+      // eslint-disable-next-line no-console
+      console.error(
+        JSON.stringify({
+          event: "payment.refund_not_confirmed.manual_review_required",
+          refundId: refund.id,
+          paymentId: refund.paymentId,
+          providerStatus: result.status,
+        }),
+      );
+    }
+    return mapped;
   }
 
   private presentCheckout(

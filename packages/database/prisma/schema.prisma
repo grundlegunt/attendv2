@@ -458,6 +458,19 @@ model Payment {
   idempotencyKey String @unique
   provider      String
   providerPaymentId String?
+
+  // Round 2 review fixes: durable "needs human review" signal, set by
+  // finalizeOrder when a succeeded PaymentIntent's amount, currency, or
+  // metadata don't match this order's expected charge (see
+  // TicketingService.finalizeOrder) -- the money may genuinely have
+  // moved while no ticket was ever issued, which must never be
+  // traceable only through logs. Deliberately additive fields, not a new
+  // PaymentStatus value: this is an orthogonal review flag, not a
+  // payment-processing lifecycle state. Cleared automatically the next
+  // time finalizeOrder re-checks this payment and the mismatch is gone.
+  verificationFailedAt    DateTime?
+  verificationFailureNote String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -465,6 +478,7 @@ model Payment {
   refunds  Refund[]
 
   @@index([status, createdAt])
+  @@index([verificationFailedAt])
   @@map("payments")
 }
 
@@ -478,10 +492,26 @@ model Refund {
   status      RefundStatus @default(CREATED)
   idempotencyKey String @unique
   providerRefundId String?
+
+  // Round 2 review fixes: claim lease for the refund-reconciliation job
+  // (TicketingService.reconcilePendingRefunds / apps/api's
+  // RefundReconciliationService) -- lets a stuck CREATED/PROCESSING
+  // refund (the process died before ever calling the provider, or after
+  // the provider responded but before the local status update committed)
+  // be safely resumed without a second concurrent reconciliation pass
+  // racing the same row. Null or in the past means unclaimed/claimable; a
+  // future timestamp means some in-flight attempt owns it until then.
+  leaseExpiresAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([paymentId, status])
+  @@index([status, leaseExpiresAt])
+  // Round 2 review fixes: lets the async refund-status webhook find the
+  // local row by the provider's refund id when it can't rely on
+  // metadata.
+  @@index([providerRefundId])
   @@map("refunds")
 }
 
