@@ -84,7 +84,7 @@ export type ProviderEventType =
   | "payment_intent.payment_failed"
   | "payment_intent.requires_action"
   | "refund.updated"
-  | (string & {});
+  | (string & NonNullable<unknown>);
 
 export interface VerifiedRefundEventData {
   providerRefundId: string;
