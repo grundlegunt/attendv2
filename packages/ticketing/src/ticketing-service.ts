@@ -635,9 +635,20 @@ export class TicketingService {
       if (event.type === "payment_intent.succeeded") {
         await this.finalizeOrder(payment.ticketOrderId);
       } else {
+        // Codex review fixes: guarded, forward-only transitions. Without
+        // these guards, a delayed/out-of-order payment_intent.payment_failed
+        // or .requires_action webhook (redelivered, or simply arriving
+        // late relative to a payment_intent.succeeded that already
+        // finalized this order) would downgrade an already-PAID order and
+        // its already-SUCCEEDED/REFUNDED payment back to an earlier
+        // state. Once either side has reached a resolved outcome, a stale
+        // non-succeeded webhook must be a no-op.
         await this.prisma.$transaction([
-          this.prisma.payment.update({
-            where: { id: payment.id },
+          this.prisma.payment.updateMany({
+            where: {
+              id: payment.id,
+              status: { notIn: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] },
+            },
             data: {
               status:
                 event.type === "payment_intent.payment_failed"
@@ -645,8 +656,19 @@ export class TicketingService {
                   : PaymentStatus.REQUIRES_ACTION,
             },
           }),
-          this.prisma.ticketOrder.update({
-            where: { id: payment.ticketOrderId },
+          this.prisma.ticketOrder.updateMany({
+            where: {
+              id: payment.ticketOrderId,
+              status: {
+                notIn: [
+                  TicketOrderStatus.PAID,
+                  TicketOrderStatus.EXPIRED,
+                  TicketOrderStatus.PARTIALLY_REFUNDED,
+                  TicketOrderStatus.REFUNDED,
+                  TicketOrderStatus.EXCHANGED,
+                ],
+              },
+            },
             data: {
               status:
                 event.type === "payment_intent.payment_failed"
@@ -734,30 +756,55 @@ export class TicketingService {
    * to providerRefundId for any refund object that arrives without it.
    */
   private async applyAsyncRefundUpdate(event: VerifiedProviderEvent): Promise<void> {
-    if (!event.refund) return;
-    const localRefund = event.refund.metadata?.refundId
-      ? await this.prisma.refund.findUnique({ where: { id: event.refund.metadata.refundId } })
-      : await this.prisma.refund.findFirst({ where: { providerRefundId: event.refund.providerRefundId } });
+    const refundEvent = event.refund;
+    if (!refundEvent) return;
+    const localRefund = refundEvent.metadata?.refundId
+      ? await this.prisma.refund.findUnique({
+          where: { id: refundEvent.metadata.refundId },
+          include: { payment: { include: { ticketOrder: true } } },
+        })
+      : await this.prisma.refund.findFirst({
+          where: { providerRefundId: refundEvent.providerRefundId },
+          include: { payment: { include: { ticketOrder: true } } },
+        });
     if (!localRefund) return;
     if (localRefund.status !== RefundStatus.CREATED && localRefund.status !== RefundStatus.PROCESSING) return;
 
-    const mapped = refundStatusFromProvider(event.refund.status);
+    const mapped = refundStatusFromProvider(refundEvent.status);
     if (mapped === RefundStatus.PROCESSING) return; // still not resolved -- nothing to update yet.
 
-    await this.prisma.$transaction([
-      this.prisma.refund.update({
-        where: { id: localRefund.id },
-        data: { status: mapped, providerRefundId: event.refund.providerRefundId, leaseExpiresAt: null },
-      }),
-      ...(mapped === RefundStatus.SUCCEEDED
-        ? [
-            this.prisma.payment.updateMany({
-              where: { id: localRefund.paymentId, status: { not: PaymentStatus.REFUNDED } },
-              data: { status: PaymentStatus.REFUNDED },
-            }),
-          ]
-        : []),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.refund.updateMany({
+        where: { id: localRefund.id, status: { not: mapped } },
+        data: { status: mapped, providerRefundId: refundEvent.providerRefundId, leaseExpiresAt: null },
+      });
+      if (mapped === RefundStatus.SUCCEEDED) {
+        await tx.payment.updateMany({
+          where: { id: localRefund.paymentId, status: { not: PaymentStatus.REFUNDED } },
+          data: { status: PaymentStatus.REFUNDED },
+        });
+      }
+      // Codex review fixes: a refund can also reach terminal FAILED via
+      // an asynchronous refund.updated webhook (not just a thrown
+      // ProviderDefinitiveError or a normal synchronous provider
+      // response) -- same alerting obligation applies. Guarded by
+      // `updated.count > 0` for the same reason as settleRefund's own
+      // returned-FAILED branch: only the call that actually transitions
+      // the row into FAILED creates the alert, so a redundant/duplicate
+      // webhook delivery for an already-FAILED refund never double-alerts.
+      if (mapped === RefundStatus.FAILED && updated.count > 0 && localRefund.payment?.ticketOrder) {
+        await tx.auditEvent.create({
+          data: {
+            actorType: "SYSTEM",
+            action: "payment.refund_attention_required",
+            entityType: "Refund",
+            entityId: localRefund.id,
+            locationId: localRefund.payment.ticketOrder.locationId,
+            afterState: { paymentId: localRefund.paymentId, providerStatus: refundEvent.status },
+          },
+        });
+      }
+    });
   }
 
   private async refundUnavailableOrder(orderId: string, reason: string) {
@@ -773,6 +820,14 @@ export class TicketingService {
         throw TicketingError.notFound("Payment was not found for recovery.");
       }
       const idempotencyKey = `seat-unavailable-refund:${locked.payment.id}`;
+      // Codex review fixes: NOT leased here. `upsert`'s `update: {}` only
+      // get-or-creates -- a caller that lands on an ALREADY-existing row
+      // (a concurrent call for the same order/payment) would otherwise
+      // proceed to call the provider without ever having actually claimed
+      // it. The lease is claimed as its own explicit, conditional step
+      // right after this transaction commits, below, so a freshly-created
+      // row and a rediscovered existing row go through the identical
+      // exclusive-claim gate.
       const refund = await tx.refund.upsert({
         where: { idempotencyKey },
         update: {},
@@ -781,25 +836,28 @@ export class TicketingService {
           amountCents: locked.payment.amountCents,
           reason,
           idempotencyKey,
-          // Round 2 review fixes: claimed with a lease immediately, same
-          // as reconcilePendingRefunds' own claims, so a concurrent
-          // reconciliation pass can't also act on this row while this
-          // call is still working it.
-          leaseExpiresAt: new Date(Date.now() + REFUND_LEASE_MS),
         },
       });
       await tx.ticketOrder.update({
         where: { id: locked.id },
         data: { status: TicketOrderStatus.EXPIRED },
       });
-      await tx.payment.update({
-        where: { id: locked.payment.id },
+      // Codex review fixes: never downgrade a refund that has already
+      // completed (or partially completed) back to SUCCEEDED -- a repeat
+      // call reaching this point after the refund already resolved (e.g.
+      // a redelivered webhook, or a retried finalize hitting the same
+      // seat-unavailable/hold-expired guard again) must not erase that.
+      await tx.payment.updateMany({
+        where: {
+          id: locked.payment.id,
+          status: { notIn: [PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] },
+        },
         data: { status: PaymentStatus.SUCCEEDED },
       });
       return { locked, refund };
     });
 
-    // Round 2 review fixes: only CREATED/PROCESSING refunds are ours to
+    // Codex review fixes: only CREATED/PROCESSING refunds are ours to
     // settle here -- SUCCEEDED and FAILED are both terminal (a FAILED
     // refund is a confirmed processor rejection; retrying the identical
     // request would only hit the same rejection again, and
@@ -808,6 +866,22 @@ export class TicketingService {
     if (recovery.refund.status !== RefundStatus.CREATED && recovery.refund.status !== RefundStatus.PROCESSING) {
       return;
     }
+
+    // Codex review fixes: the actual exclusive claim -- mirrors
+    // reconcilePendingRefunds' own conditional-updateMany claim exactly,
+    // so a concurrent refundUnavailableOrder call for the same
+    // order/payment, or an overlapping reconciliation sweep, cannot also
+    // act on this row at the same time. If this loses the race, whoever
+    // DID claim it (or already did) is responsible for settling it.
+    const claim = await this.prisma.refund.updateMany({
+      where: {
+        id: recovery.refund.id,
+        status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] },
+        OR: [{ leaseExpiresAt: null }, { leaseExpiresAt: { lt: new Date() } }],
+      },
+      data: { leaseExpiresAt: new Date(Date.now() + REFUND_LEASE_MS) },
+    });
+    if (claim.count === 0) return;
 
     await this.settleRefund(
       { id: recovery.refund.id, paymentId: recovery.locked.payment!.id },
@@ -973,9 +1047,18 @@ export class TicketingService {
             error: String(error),
           }),
         );
-        // Leave the row exactly as it was (still CREATED/PROCESSING --
-        // nothing here writes to it) so reconcilePendingRefunds retries
-        // with the SAME idempotencyKey, which is always safe.
+        // Codex review fixes: release the claim immediately rather than
+        // leaving it held for the rest of its lease -- this process is no
+        // longer actively handling the refund (the provider call itself
+        // failed ambiguously), so the next reconciliation sweep (or
+        // another retry) should be able to pick it up right away instead
+        // of waiting out a lease nobody is still working. Status is left
+        // exactly as it was (still CREATED/PROCESSING); only the claim is
+        // released.
+        await this.prisma.refund.updateMany({
+          where: { id: refund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
+          data: { leaseExpiresAt: null },
+        });
         return RefundStatus.PROCESSING;
       }
 
@@ -1000,21 +1083,40 @@ export class TicketingService {
 
     const mapped = refundStatusFromProvider(result.status);
     try {
-      await this.prisma.$transaction([
-        this.prisma.refund.update({
-          where: { id: refund.id },
+      await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.refund.updateMany({
+          where: { id: refund.id, status: { not: mapped } },
           data: { status: mapped, providerRefundId: result.id, leaseExpiresAt: null },
-        }),
-        ...(mapped === RefundStatus.SUCCEEDED
-          ? [
-              this.prisma.payment.updateMany({
-                where: { id: refund.paymentId, status: { not: PaymentStatus.REFUNDED } },
-                data: { status: PaymentStatus.REFUNDED },
-              }),
-            ]
-          : []),
-        this.prisma.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } }),
-      ]);
+        });
+        if (mapped === RefundStatus.SUCCEEDED) {
+          await tx.payment.updateMany({
+            where: { id: refund.paymentId, status: { not: PaymentStatus.REFUNDED } },
+            data: { status: PaymentStatus.REFUNDED },
+          });
+        }
+        await tx.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } });
+        // Codex review fixes: a refund can reach terminal FAILED via a
+        // normal (non-throwing) provider response too, not only a thrown
+        // ProviderDefinitiveError above -- that must alert the same way,
+        // since either path means the same thing operationally (the
+        // charge could not be refunded and needs a human). Guarded by
+        // `updated.count > 0` -- true only when THIS call is the one that
+        // actually transitioned the row into FAILED -- so a redundant
+        // call against an already-FAILED row never creates a duplicate
+        // alert.
+        if (mapped === RefundStatus.FAILED && updated.count > 0) {
+          await tx.auditEvent.create({
+            data: {
+              actorType: "SYSTEM",
+              action: "payment.refund_attention_required",
+              entityType: "Refund",
+              entityId: refund.id,
+              locationId: ctx.locationId,
+              afterState: { reason: ctx.reason, paymentId: refund.paymentId, providerStatus: result.status },
+            },
+          });
+        }
+      });
     } catch (persistError) {
       // The provider already gave a definitive, known answer -- we just
       // failed to write it down. This must NEVER become FAILED: the

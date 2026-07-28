@@ -250,8 +250,9 @@ export function TicketCheckout({
         </div>
         {diningAuthorization === "yes" && (
           <p className="authorization-note">
-            This payment method is authorized for food and drink ordered for these
-            seats tonight. Your server will bring the final bill for review and tip.
+            We've noted your interest in card-on-file food and drink ordering for
+            these seats tonight — this isn't active yet. Your server will collect
+            payment for anything you order separately.
           </p>
         )}
       </section>
@@ -292,8 +293,9 @@ export function TicketCheckout({
           <fieldset className="checkout-panel authorization-choice">
             <legend>Food + drink during the movie</legend>
             <p>
-              May this card be used for food and drinks ordered from your server for
-              these seats tonight?
+              Card-on-file ordering for food and drinks isn't available yet. Your
+              server will collect payment for anything you order tonight
+              separately, in person.
             </p>
             <label>
               <input
@@ -302,7 +304,7 @@ export function TicketCheckout({
                 checked={diningAuthorization === "yes"}
                 onChange={() => setDiningAuthorization("yes")}
               />
-              Yes, authorize this card for the final cinema bill
+              Yes, let me know when this is available
             </label>
             <label>
               <input
@@ -311,11 +313,11 @@ export function TicketCheckout({
                 checked={diningAuthorization === "no"}
                 onChange={() => setDiningAuthorization("no")}
               />
-              No, I’ll choose another payment method with my server
+              No, not interested
             </label>
             <small>
-              No tip is collected now. Your server will bring the final food and
-              drink bill for review and tip near the end of the movie.
+              This card is only charged for your ticket order above. It is not
+              authorized for anything else.
             </small>
           </fieldset>
           {config && !config.payment.ready && (

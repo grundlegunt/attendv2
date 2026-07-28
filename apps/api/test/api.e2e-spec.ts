@@ -749,6 +749,258 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(cleared.verificationFailedAt).toBeNull();
     expect(cleared.verificationFailureNote).toBeNull();
   });
+
+  it("never downgrades a completed refund back to SUCCEEDED on a repeated finalize/recovery call", async () => {
+    const holderKey = "ticket-refund-no-downgrade-0009";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const first = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(first.status).toBe(409);
+
+    const afterFirstRefund = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(afterFirstRefund.status).toBe(PaymentStatus.REFUNDED);
+    expect(afterFirstRefund.refunds[0].status).toBe(RefundStatus.SUCCEEDED);
+
+    // A repeated finalize call (a redelivered webhook, a customer retry)
+    // hits the SAME expired hold again and re-enters recovery -- it must
+    // never overwrite the already-completed refund's REFUNDED status back
+    // to SUCCEEDED.
+    const second = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(second.status).toBe(409);
+
+    const afterSecond = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(afterSecond.status).toBe(PaymentStatus.REFUNDED);
+    expect(afterSecond.refunds).toHaveLength(1);
+    expect(afterSecond.refunds[0].status).toBe(RefundStatus.SUCCEEDED);
+  });
+
+  it("acquires an exclusive claim before calling the refund provider, so two concurrent recovery attempts for the same payment never both call it", async () => {
+    const holderKey = "ticket-concurrent-refund-claim-0010";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+        .send({}),
+      request(app.getHttpServer())
+        .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+        .send({}),
+    ]);
+    expect(first.status).toBe(409);
+    expect(second.status).toBe(409);
+
+    // Both requests raced into recovery for the SAME payment -- only the
+    // one that actually won the exclusive lease claim may have ever
+    // called the provider. Without the claim, upsert's get-or-create
+    // alone lets both callers think they own the row.
+    const refundCallsForThisPayment = provider.refundCalls.filter(
+      (call) => call.providerPaymentId === checkout.payment.providerPaymentId,
+    );
+    expect(refundCallsForThisPayment).toHaveLength(1);
+
+    const payment = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(payment.status).toBe(PaymentStatus.REFUNDED);
+    expect(payment.refunds).toHaveLength(1);
+    expect(payment.refunds[0].status).toBe(RefundStatus.SUCCEEDED);
+  });
+
+  it("does not let a stale/out-of-order payment_intent webhook downgrade an already-finalized purchase", async () => {
+    const holderKey = "ticket-stale-webhook-0011";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, PaymentStatus, TicketOrderStatus } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    const finalize = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(finalize.status).toBe(201);
+    expect(finalize.body.status).toBe("PAID");
+
+    // A delayed/redelivered payment_intent.payment_failed webhook arrives
+    // AFTER the order already finalized successfully -- it must be a
+    // no-op, not a downgrade of an already-resolved order/payment.
+    const raw = Buffer.from(
+      JSON.stringify({
+        id: "evt_test_stale_failure_0011",
+        type: "payment_intent.payment_failed",
+        paymentIntentId: checkout.payment.providerPaymentId,
+      }),
+    );
+    const signature = provider.signWebhook(raw);
+    const webhookRes = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/webhooks/stripe")
+      .set("Stripe-Signature", signature)
+      .set("Content-Type", "application/json")
+      .send(raw);
+    expect(webhookRes.status).toBe(201);
+    expect(webhookRes.body.duplicate).toBe(false);
+
+    const order = await prisma.ticketOrder.findUniqueOrThrow({
+      where: { id: checkout.orderId },
+      include: { payment: true },
+    });
+    expect(order.status).toBe(TicketOrderStatus.PAID);
+    expect(order.payment?.status).toBe(PaymentStatus.SUCCEEDED);
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+  });
+
+  it("creates an operational alert when the provider returns (rather than throws) a terminal FAILED refund result", async () => {
+    const holderKey = "ticket-returned-failed-refund-0012";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, RefundStatus } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    provider.makeRefundsReturnStatus("FAILED");
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const result = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(result.status).toBe(409);
+
+    const payment = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(payment.refunds[0].status).toBe(RefundStatus.FAILED);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: "payment.refund_attention_required",
+          entityType: "Refund",
+          entityId: payment.refunds[0].id,
+        },
+      }),
+    ).toBe(1);
+
+    provider.makeRefundsReturnStatus("SUCCEEDED");
+  });
+
+  it("creates an operational alert when an async refund.updated webhook reports a terminal FAILED refund", async () => {
+    const holderKey = "ticket-webhook-failed-refund-0013";
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { prisma, RefundStatus } = await import("@cinema/database");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+
+    provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
+    // Provider reports the refund still PENDING at creation time -- it
+    // settles asynchronously via a later refund.updated webhook, the same
+    // way a real ACH refund would.
+    provider.makeRefundsReturnStatus("PENDING");
+    await prisma.seatHold.update({
+      where: { holdToken: hold.holdToken },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+
+    const result = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({});
+    expect(result.status).toBe(409);
+
+    const pending = await prisma.payment.findFirstOrThrow({
+      where: { ticketOrderId: checkout.orderId },
+      include: { refunds: true },
+    });
+    expect(pending.refunds[0].status).toBe(RefundStatus.PROCESSING);
+    const localRefundId = pending.refunds[0].id;
+    const providerRefundId = pending.refunds[0].providerRefundId as string;
+
+    const raw = Buffer.from(
+      JSON.stringify({
+        id: "evt_test_refund_webhook_failed_0013",
+        type: "refund.updated",
+        refund: {
+          providerRefundId,
+          status: "FAILED",
+          metadata: { refundId: localRefundId },
+        },
+      }),
+    );
+    const signature = provider.signWebhook(raw);
+    const webhookRes = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/webhooks/stripe")
+      .set("Stripe-Signature", signature)
+      .set("Content-Type", "application/json")
+      .send(raw);
+    expect(webhookRes.status).toBe(201);
+
+    const afterWebhook = await prisma.refund.findUniqueOrThrow({
+      where: { id: localRefundId },
+    });
+    expect(afterWebhook.status).toBe(RefundStatus.FAILED);
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: "payment.refund_attention_required",
+          entityType: "Refund",
+          entityId: localRefundId,
+        },
+      }),
+    ).toBe(1);
+
+    provider.makeRefundsReturnStatus("SUCCEEDED");
+  });
 });
 
 describe("Customer authentication", () => {
