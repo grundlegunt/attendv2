@@ -643,12 +643,25 @@ export class TicketingService {
         // its already-SUCCEEDED/REFUNDED payment back to an earlier
         // state. Once either side has reached a resolved outcome, a stale
         // non-succeeded webhook must be a no-op.
+        //
+        // The TicketOrder guard checks its OWN status AND its Payment's
+        // live status (via a relation filter, not the `payment` variable
+        // captured above -- that read happened before this transaction
+        // and would reintroduce the exact race being closed here).
+        // finalizeOrder deliberately flips Payment to SUCCEEDED in its own
+        // transaction BEFORE the ticket-issuing transaction reaches PAID
+        // (Payment.status is decoupled from ticket issuance) -- so there is
+        // a real, reachable window where Payment is already SUCCEEDED
+        // while TicketOrder is still AWAITING_PAYMENT. TicketOrder's own
+        // exclusion list alone does not cover that window; a stale failure
+        // webhook landing in it would otherwise still downgrade the order
+        // even though the payment genuinely succeeded.
+        const paymentNotResolved = {
+          notIn: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED],
+        };
         await this.prisma.$transaction([
           this.prisma.payment.updateMany({
-            where: {
-              id: payment.id,
-              status: { notIn: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] },
-            },
+            where: { id: payment.id, status: paymentNotResolved },
             data: {
               status:
                 event.type === "payment_intent.payment_failed"
@@ -668,6 +681,7 @@ export class TicketingService {
                   TicketOrderStatus.EXCHANGED,
                 ],
               },
+              payment: { status: paymentNotResolved },
             },
             data: {
               status:
@@ -774,8 +788,17 @@ export class TicketingService {
     if (mapped === RefundStatus.PROCESSING) return; // still not resolved -- nothing to update yet.
 
     await this.prisma.$transaction(async (tx) => {
+      // Codex review fixes: guarded on "still non-terminal" (CREATED or
+      // PROCESSING), not merely "not already at this exact status." A
+      // guard of `status: { not: mapped }` would still let a SUCCEEDED row
+      // be overwritten to FAILED (or vice versa) if this webhook is racing
+      // a concurrent settleRefund call (refundUnavailableOrder or
+      // reconcilePendingRefunds) that already wrote the OTHER terminal
+      // outcome first -- once ANY terminal status has been recorded, it
+      // must never be replaced by a different one arriving late, in
+      // either direction.
       const updated = await tx.refund.updateMany({
-        where: { id: localRefund.id, status: { not: mapped } },
+        where: { id: localRefund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
         data: { status: mapped, providerRefundId: refundEvent.providerRefundId, leaseExpiresAt: null },
       });
       if (mapped === RefundStatus.SUCCEEDED) {
@@ -1063,31 +1086,59 @@ export class TicketingService {
       }
 
       // A genuine, confirmed rejection from the processor -- this, and
-      // only this, is a real terminal failure.
-      await this.prisma.$transaction([
-        this.prisma.refund.update({ where: { id: refund.id }, data: { status: RefundStatus.FAILED, leaseExpiresAt: null } }),
-        this.prisma.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } }),
-        this.prisma.auditEvent.create({
+      // only this, is a real terminal failure. Codex review fixes: guarded
+      // the same way as the returned-FAILED branch below -- only
+      // transition FROM a still-open (CREATED/PROCESSING) row. A
+      // concurrent settleRefund call or refund.updated webhook may have
+      // already recorded a DIFFERENT (correct) terminal outcome for this
+      // exact row while this provider call was in flight; that must never
+      // be overwritten by a stale/contradictory rejection arriving after
+      // the fact. If this call loses that race, report the outcome that
+      // actually won, not the rejection this call itself observed.
+      const failureMessage = error.message;
+      return this.prisma.$transaction(async (tx) => {
+        const updated = await tx.refund.updateMany({
+          where: { id: refund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
+          data: { status: RefundStatus.FAILED, leaseExpiresAt: null },
+        });
+        await tx.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } });
+        if (updated.count === 0) {
+          const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
+          return current.status;
+        }
+        await tx.auditEvent.create({
           data: {
             actorType: "SYSTEM",
             action: "payment.refund_attention_required",
             entityType: "Refund",
             entityId: refund.id,
             locationId: ctx.locationId,
-            afterState: { reason: ctx.reason, paymentId: refund.paymentId, failureMessage: error.message },
+            afterState: { reason: ctx.reason, paymentId: refund.paymentId, failureMessage },
           },
-        }),
-      ]);
-      return RefundStatus.FAILED;
+        });
+        return RefundStatus.FAILED;
+      });
     }
 
     const mapped = refundStatusFromProvider(result.status);
+    let settled: RefundStatus;
     try {
-      await this.prisma.$transaction(async (tx) => {
+      settled = await this.prisma.$transaction(async (tx) => {
+        // Codex review fixes: guarded on "still non-terminal", not merely
+        // "not already at this exact status" -- see applyAsyncRefundUpdate's
+        // matching comment. A concurrent refund.updated webhook (or another
+        // settleRefund call) may have already recorded a DIFFERENT terminal
+        // outcome for this row while this provider call was in flight; once
+        // any terminal status is recorded, it must never be replaced by a
+        // different one arriving late, in either direction.
         const updated = await tx.refund.updateMany({
-          where: { id: refund.id, status: { not: mapped } },
+          where: { id: refund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
           data: { status: mapped, providerRefundId: result.id, leaseExpiresAt: null },
         });
+        if (updated.count === 0) {
+          const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
+          return current.status;
+        }
         if (mapped === RefundStatus.SUCCEEDED) {
           await tx.payment.updateMany({
             where: { id: refund.paymentId, status: { not: PaymentStatus.REFUNDED } },
@@ -1099,12 +1150,11 @@ export class TicketingService {
         // normal (non-throwing) provider response too, not only a thrown
         // ProviderDefinitiveError above -- that must alert the same way,
         // since either path means the same thing operationally (the
-        // charge could not be refunded and needs a human). Guarded by
-        // `updated.count > 0` -- true only when THIS call is the one that
-        // actually transitioned the row into FAILED -- so a redundant
-        // call against an already-FAILED row never creates a duplicate
-        // alert.
-        if (mapped === RefundStatus.FAILED && updated.count > 0) {
+        // charge could not be refunded and needs a human). Only reached
+        // when `updated.count > 0` above -- i.e. THIS call is the one that
+        // actually transitioned the row into FAILED -- so a redundant call
+        // against an already-resolved row never creates a duplicate alert.
+        if (mapped === RefundStatus.FAILED) {
           await tx.auditEvent.create({
             data: {
               actorType: "SYSTEM",
@@ -1116,6 +1166,7 @@ export class TicketingService {
             },
           });
         }
+        return mapped;
       });
     } catch (persistError) {
       // The provider already gave a definitive, known answer -- we just
@@ -1142,7 +1193,7 @@ export class TicketingService {
       return RefundStatus.PROCESSING;
     }
 
-    if (mapped === RefundStatus.PROCESSING) {
+    if (settled === RefundStatus.PROCESSING) {
       // eslint-disable-next-line no-console
       console.error(
         JSON.stringify({
@@ -1153,7 +1204,7 @@ export class TicketingService {
         }),
       );
     }
-    return mapped;
+    return settled;
   }
 
   private presentCheckout(
