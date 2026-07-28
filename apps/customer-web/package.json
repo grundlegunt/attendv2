@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@cinema/database": "workspace:*",
+    "@cinema/payments": "workspace:*",
     "@cinema/shared": "workspace:*",
+    "@cinema/ticketing": "workspace:*",
     "@cinema/ui": "workspace:*",
     "next": "^15.1.4",
     "react": "^19.0.0",

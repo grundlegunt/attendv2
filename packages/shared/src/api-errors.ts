@@ -17,6 +17,8 @@ export const ApiErrorCode = {
   Conflict: "CONFLICT",
   InvalidCredentials: "INVALID_CREDENTIALS",
   RateLimited: "RATE_LIMITED",
+  HoldExpired: "HOLD_EXPIRED",
+  PaymentNotSucceeded: "PAYMENT_NOT_SUCCEEDED",
   Internal: "INTERNAL_ERROR",
 } as const;
 

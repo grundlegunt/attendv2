@@ -30,7 +30,11 @@ Per PRODUCT_SPEC.md §1.1, this platform is multi-tenant from day one — each `
 - The `PaymentProvider` interface (§1) gains an organization/connected-account parameter on every method — this is a mechanical extension of the existing abstraction, not a redesign of it, since the interface was already written so nothing outside `/packages/payments` knows processor-specific details.
 - **The founder's own theater uses this exact same path.** It is Organization/tenant #1 with its own connected account like any other customer, per the product owner's explicit instruction — there is no "internal" payment path that bypasses Connect.
 
-This is planned architecture, not yet implemented — Milestone 3 (ticket checkout) is where this needs to be built correctly the first time, since retrofitting per-tenant payment routing after payments already exist single-tenant would mean migrating real transaction history.
+Milestone 3 implementation status (2026-07-26): the provider boundary,
+connected-account routing, onboarding-state fields, test-mode key enforcement,
+and checkout readiness guard are implemented. A cinema cannot accept a live
+checkout until it has a valid `acct_…` connected account. Hosted onboarding UI
+remains an operator setup task; no platform-account fallback is allowed.
 
 ## 1.2 Card-present payments (Stripe Terminal)
 
@@ -56,6 +60,23 @@ Saved payment methods: at checkout, if the customer opts in ("keep this payment 
 4. In parallel (belt-and-suspenders, not a race), Stripe's webhook (`payment_intent.succeeded`) also arrives and hits the same finalize path — see §5 for why this is safe.
 5. Optional dining authorization: if the customer opted in, the `SetupIntent` confirmation runs alongside checkout, and a `CustomerConsent(type=DINING_AUTO_SETTLEMENT)` row is written with `termsVersion` and `grantedAt` — only ever recorded on an explicit, separate opt-in action, never implied by completing ticket checkout. The checkout UI must show both explicit options (`YES`/`NO`) with neither pre-selected as a default that requires deselection.
 6. **Ticket checkout never includes a tip prompt.** Tipping is not a norm for box-office/online ticket purchase and is not collected here under any circumstance — it only ever appears in the restaurant tab flow (§4), where it's tied to service actually rendered by a server/bartender.
+
+### Milestone 3 implementation evidence
+
+- `TicketOrder`, `Ticket`, `TicketType`, `Payment`, `PaymentAttempt`, `Refund`,
+  `PaymentCustomer`, `PaymentMethodReference`, and
+  `ProcessedWebhookEvent` are migration-backed PostgreSQL records.
+- Checkout totals are calculated server-side in integer cents. Ticket tax uses
+  the location's configured basis-point rate; the seed remains `0` until the
+  operator confirms the applicable rate.
+- Payment Element is used for card entry and eligible wallets such as Apple Pay.
+  Attend never receives PAN or CVV.
+- Finalization retrieves payment status from Stripe server-side, then locks the
+  order, holds, and shared `ShowtimeSeat` inventory before issuing tickets.
+- Browser disconnect recovery and duplicate webhooks converge on the same
+  idempotent finalizer.
+- A successful charge whose seat can no longer be finalized creates one
+  idempotent refund. A failed refund writes an operational audit alert.
 
 ## 4. Restaurant tab payment flow
 

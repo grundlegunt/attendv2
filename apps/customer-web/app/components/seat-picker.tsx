@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { TicketCheckout } from "./ticket-checkout";
 
 type AvailabilitySeat = Omit<SeatMapSeat, "state"> & {
   id: string;
-  state: "AVAILABLE" | "HELD" | "BLOCKED";
+  state: "AVAILABLE" | "HELD" | "BLOCKED" | "SOLD";
   heldByMe: boolean;
   holdToken?: string;
   expiresAt?: string;
@@ -18,6 +19,11 @@ interface Availability {
     startsAt: string;
     movie: { id: string; title: string };
     auditorium: { id: string; name: string; capacity: number };
+    priceTier: {
+      ticketPriceMinor: number;
+      feeMinor: number;
+      currency: string;
+    };
   };
   serverTime: string;
   holdDurationSeconds: number;
@@ -44,6 +50,7 @@ export function SeatPicker({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
 
   useEffect(() => setHolderKey(getHolderKey()), []);
 
@@ -66,10 +73,11 @@ export function SeatPicker({
   }, [holderKey, showtimeId]);
 
   useEffect(() => {
+    if (checkoutOpen) return;
     void refresh();
     const poller = window.setInterval(() => void refresh(), 2_000);
     return () => window.clearInterval(poller);
-  }, [refresh]);
+  }, [checkoutOpen, refresh]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
@@ -142,6 +150,26 @@ export function SeatPicker({
         : ("unavailable" as const),
   }));
 
+  if (
+    checkoutOpen &&
+    availability &&
+    mySeats.length > 0 &&
+    mySeats.every((seat) => seat.holdToken)
+  ) {
+    return (
+      <TicketCheckout
+        showtimeId={showtimeId}
+        holdTokens={mySeats.map((seat) => seat.holdToken!)}
+        holderKey={holderKey}
+        seats={mySeats.map((seat) => seat.label)}
+        movie={availability.showtime.movie.title}
+        auditorium={availability.showtime.auditorium.name}
+        startsAt={availability.showtime.startsAt}
+        onBack={() => setCheckoutOpen(false)}
+      />
+    );
+  }
+
   return (
     <section className="seat-picker" aria-live="polite">
       <div className="seat-picker__header">
@@ -183,7 +211,11 @@ export function SeatPicker({
           <span className="eyebrow">YOUR SEATS</span>
           <strong>{mySeats.length ? mySeats.map((seat) => seat.label).join(", ") : "None selected"}</strong>
         </div>
-        <button className="primary" disabled={!mySeats.length || Boolean(pending)}>
+        <button
+          className="primary"
+          disabled={!mySeats.length || Boolean(pending)}
+          onClick={() => setCheckoutOpen(true)}
+        >
           Continue to tickets
         </button>
       </footer>

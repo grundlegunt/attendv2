@@ -410,12 +410,18 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       include: {
         movie: true,
         auditorium: true,
+        priceTier: true,
         showtimeSeats: {
           include: {
             seat: true,
             holds: {
               where: { releasedAt: null, expiresAt: { gt: now } },
               orderBy: { createdAt: "desc" },
+              take: 1,
+            },
+            tickets: {
+              where: { status: { notIn: ["REFUNDED", "CANCELED"] } },
+              select: { id: true },
               take: 1,
             },
           },
@@ -432,6 +438,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           id: showtime.auditorium.id,
           name: showtime.auditorium.name,
           capacity: showtime.auditorium.capacity,
+        },
+        priceTier: {
+          ticketPriceMinor: showtime.priceTier.ticketPriceMinor,
+          feeMinor: showtime.priceTier.feeMinor,
+          currency: showtime.priceTier.currency,
         },
       },
       serverTime: now.toISOString(),
@@ -451,7 +462,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             type: inventory.seat.type,
             tableGroupId: inventory.seat.tableGroupId,
             tablePosition: inventory.seat.tablePosition,
-            state: inventory.blockedAt ? "BLOCKED" : hold ? "HELD" : "AVAILABLE",
+            state: inventory.blockedAt
+              ? "BLOCKED"
+              : inventory.tickets.length
+                ? "SOLD"
+                : hold
+                  ? "HELD"
+                  : "AVAILABLE",
             heldByMe: Boolean(hold && holderKey && hold.holderKey === holderKey),
             holdToken: hold && holderKey && hold.holderKey === holderKey ? hold.holdToken : undefined,
             expiresAt: hold && holderKey && hold.holderKey === holderKey
@@ -493,6 +510,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
         const now = new Date();
         const inventoryIds = rows.map((row) => row.id);
+        const sold = await tx.ticket.findFirst({
+          where: {
+            showtimeSeatId: { in: inventoryIds },
+            status: { notIn: ["REFUNDED", "CANCELED"] },
+          },
+        });
+        if (sold) throw AppError.conflict("One or more seats have already been sold.");
         await tx.seatHold.updateMany({
           where: { showtimeSeatId: { in: inventoryIds }, releasedAt: null, expiresAt: { lte: now } },
           data: { releasedAt: now },

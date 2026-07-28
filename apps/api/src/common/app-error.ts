@@ -41,4 +41,12 @@ export class AppError extends HttpException {
   static conflict(message: string, details?: Record<string, unknown>) {
     return new AppError(ApiErrorCode.Conflict, message, HttpStatus.CONFLICT, details);
   }
+
+  static paymentRequired(message: string) {
+    return new AppError(
+      ApiErrorCode.PaymentNotSucceeded,
+      message,
+      HttpStatus.PAYMENT_REQUIRED,
+    );
+  }
 }

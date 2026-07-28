@@ -15,6 +15,7 @@ async function bootstrap() {
 
   const app = await NestFactory.create(AppModule, {
     logger: new StructuredLogger("Bootstrap"),
+    rawBody: true,
   });
 
   app.use(helmet());

@@ -1,6 +1,6 @@
-// Milestone 1 schema.
-// Scope: Milestone 0 identity/RBAC plus movies, auditoriums, structured
-// seat layouts, and conflict-safe showtime scheduling.
+// Milestone 3 schema.
+// Scope: identity/RBAC, cinema configuration, concurrency-safe seat holds,
+// ticket checkout, ticket issuance records, and payment state.
 //
 // Conventions (see /docs/DATA_MODEL.md):
 //  - UUID primary keys.
@@ -25,6 +25,8 @@ model Organization {
   name      String
   legalName String?
   timezone  String   @default("America/New_York")
+  stripeConnectedAccountId String?
+  connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -32,6 +34,7 @@ model Organization {
   roles     Role[]
   movies    Movie[]
   priceTiers PriceTier[]
+  paymentCustomers PaymentCustomer[]
 
   @@map("organizations")
 }
@@ -45,6 +48,10 @@ model Location {
   address   String?
   timezone  String   @default("America/New_York")
   currency  String   @default("USD")
+  // Configured by the operator. Zero is a deliberate safe default until the
+  // location's tax treatment has been confirmed; the application never
+  // invents a jurisdictional tax rate.
+  ticketTaxRateBasisPoints Int @default(0)
 
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
@@ -60,6 +67,8 @@ model Location {
   employeeRoles EmployeeRole[]
   auditEvents  AuditEvent[]
   auditoriums  Auditorium[]
+  ticketTypes  TicketType[]
+  ticketOrders TicketOrder[]
 
   @@map("locations")
 }
@@ -77,6 +86,13 @@ enum SeatType {
 enum TablePosition {
   LEFT
   RIGHT
+}
+
+enum ConnectOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  RESTRICTED
 }
 
 model Auditorium {
@@ -216,6 +232,7 @@ model ShowtimeSeat {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   holds      SeatHold[]
+  tickets    Ticket[]
 
   @@unique([showtimeId, seatId])
   @@index([showtimeId, blockedAt])
@@ -238,6 +255,295 @@ model SeatHold {
 }
 
 // ---------------------------------------------------------------------------
+// Ticketing and payments (Milestone 3)
+// ---------------------------------------------------------------------------
+
+enum TicketOrderChannel {
+  ONLINE
+  BOX_OFFICE
+}
+
+enum TicketOrderStatus {
+  CART
+  AWAITING_PAYMENT
+  PAYMENT_FAILED
+  PAID
+  EXPIRED
+  ABANDONED
+  PARTIALLY_REFUNDED
+  REFUNDED
+  EXCHANGED
+}
+
+enum TicketStatus {
+  ISSUED
+  ADMITTED
+  REFUNDED
+  TRANSFERRED
+  CANCELED
+}
+
+enum PaymentPurpose {
+  TICKET_ORDER
+  RESTAURANT_TAB
+}
+
+enum PaymentStatus {
+  CREATED
+  REQUIRES_PAYMENT_METHOD
+  REQUIRES_ACTION
+  PROCESSING
+  AUTHORIZED
+  SUCCEEDED
+  FAILED
+  CANCELED
+  PARTIALLY_REFUNDED
+  REFUNDED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  REQUIRES_ACTION
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELED
+}
+
+enum RefundStatus {
+  CREATED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+enum RefundScope {
+  TICKET
+  RESTAURANT
+  BOTH
+}
+
+model TicketType {
+  id         String   @id @default(uuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name       String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  orders  TicketOrder[]
+  tickets Ticket[]
+
+  @@unique([locationId, name])
+  @@index([locationId, active])
+  @@map("ticket_types")
+}
+
+model TicketOrder {
+  id         String   @id @default(uuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  ticketTypeId String
+  ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  // A single Milestone 3 checkout uses one ticket type for all selected
+  // seats. The hold tokens identify the exact pending seat lines and are
+  // revalidated under row locks during finalization.
+  holdTokens String[]
+  holderKey  String
+  guestEmail String?
+  guestName  String?
+  // Captures the explicit checkout choice so Milestone 5 can create the
+  // versioned CustomerConsent and saved payment reference after confirmation.
+  diningAuthorizationRequested Boolean?
+  channel    TicketOrderChannel @default(ONLINE)
+  status     TicketOrderStatus  @default(CART)
+  orderNumber String @unique
+  checkoutIdempotencyKey String @unique
+
+  subtotalCents Int
+  feesCents    Int
+  taxCents     Int
+  totalCents   Int
+  currency     String @default("USD")
+
+  placedByEmployeeId String?
+  placedByEmployee   Employee? @relation(fields: [placedByEmployeeId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tickets Ticket[]
+  payment Payment?
+
+  @@index([locationId, createdAt])
+  @@index([customerId, createdAt])
+  @@map("ticket_orders")
+}
+
+model Ticket {
+  id             String       @id @default(uuid())
+  ticketOrderId  String
+  ticketOrder    TicketOrder  @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  showtimeSeatId String
+  showtimeSeat   ShowtimeSeat @relation(fields: [showtimeSeatId], references: [id], onDelete: Restrict)
+  ticketTypeId   String
+  ticketType     TicketType   @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
+
+  priceCentsPaid Int
+  status         TicketStatus @default(ISSUED)
+  qrToken        String       @unique
+  issuedAt       DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([ticketOrderId])
+  @@index([showtimeSeatId, status])
+  @@map("tickets")
+}
+
+model PaymentCustomer {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customerId     String
+  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  provider       String
+  providerCustomerId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  paymentMethods PaymentMethodReference[]
+
+  @@unique([organizationId, customerId, provider])
+  @@unique([organizationId, provider, providerCustomerId])
+  @@map("payment_customers")
+}
+
+model PaymentMethodReference {
+  id                String          @id @default(uuid())
+  paymentCustomerId String
+  paymentCustomer   PaymentCustomer @relation(fields: [paymentCustomerId], references: [id], onDelete: Restrict)
+  provider          String
+  providerPaymentMethodId String
+  brand             String
+  last4             String
+  expMonth          Int
+  expYear           Int
+  isDefault         Boolean @default(false)
+  active            Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments Payment[]
+
+  @@unique([paymentCustomerId, provider, providerPaymentMethodId])
+  @@index([paymentCustomerId, active])
+  @@map("payment_method_references")
+}
+
+model Payment {
+  id            String         @id @default(uuid())
+  purpose       PaymentPurpose
+  ticketOrderId String?        @unique
+  ticketOrder   TicketOrder?   @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  amountCents   Int
+  tipCents      Int?
+  currency      String         @default("USD")
+  status        PaymentStatus  @default(CREATED)
+  paymentMethodReferenceId String?
+  paymentMethodReference   PaymentMethodReference? @relation(fields: [paymentMethodReferenceId], references: [id], onDelete: Restrict)
+  idempotencyKey String @unique
+  provider      String
+  providerPaymentId String?
+
+  // Round 2 review fixes: durable "needs human review" signal, set by
+  // finalizeOrder when a succeeded PaymentIntent's amount, currency, or
+  // metadata don't match this order's expected charge (see
+  // TicketingService.finalizeOrder) -- the money may genuinely have
+  // moved while no ticket was ever issued, which must never be
+  // traceable only through logs. Deliberately additive fields, not a new
+  // PaymentStatus value: this is an orthogonal review flag, not a
+  // payment-processing lifecycle state. Cleared automatically the next
+  // time finalizeOrder re-checks this payment and the mismatch is gone.
+  verificationFailedAt    DateTime?
+  verificationFailureNote String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  attempts PaymentAttempt[]
+  refunds  Refund[]
+
+  @@index([status, createdAt])
+  @@index([verificationFailedAt])
+  @@map("payments")
+}
+
+model Refund {
+  id          String       @id @default(uuid())
+  paymentId   String
+  payment     Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amountCents Int
+  reason      String
+  scope       RefundScope  @default(TICKET)
+  status      RefundStatus @default(CREATED)
+  idempotencyKey String @unique
+  providerRefundId String?
+
+  // Round 2 review fixes: claim lease for the refund-reconciliation job
+  // (TicketingService.reconcilePendingRefunds / apps/api's
+  // RefundReconciliationService) -- lets a stuck CREATED/PROCESSING
+  // refund (the process died before ever calling the provider, or after
+  // the provider responded but before the local status update committed)
+  // be safely resumed without a second concurrent reconciliation pass
+  // racing the same row. Null or in the past means unclaimed/claimable; a
+  // future timestamp means some in-flight attempt owns it until then.
+  leaseExpiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([paymentId, status])
+  @@index([status, leaseExpiresAt])
+  // Round 2 review fixes: lets the async refund-status webhook find the
+  // local row by the provider's refund id when it can't rely on
+  // metadata.
+  @@index([providerRefundId])
+  @@map("refunds")
+}
+
+model PaymentAttempt {
+  id              String               @id @default(uuid())
+  paymentId       String
+  payment         Payment              @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  provider        String
+  providerIntentId String
+  attemptNumber   Int
+  status          PaymentAttemptStatus @default(CREATED)
+  failureCode     String?
+  failureMessage  String?
+  attemptedAt     DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([paymentId, attemptNumber])
+  @@unique([provider, providerIntentId])
+  @@map("payment_attempts")
+}
+
+model ProcessedWebhookEvent {
+  id              String   @id @default(uuid())
+  provider        String
+  providerEventId String
+  processedAt     DateTime @default(now())
+
+  @@unique([provider, providerEventId])
+  @@map("processed_webhook_events")
+}
+
+// ---------------------------------------------------------------------------
 // Staff identity, roles, permissions
 // ---------------------------------------------------------------------------
 
@@ -256,6 +562,7 @@ model Employee {
 
   authAccount   StaffAuthAccount?
   employeeRoles EmployeeRole[]
+  placedTicketOrders TicketOrder[]
 
   @@map("employees")
 }
@@ -369,6 +676,8 @@ model Customer {
   deletedAt DateTime?
 
   authAccount CustomerAuthAccount?
+  ticketOrders TicketOrder[]
+  paymentCustomers PaymentCustomer[]
 
   @@map("customers")
 }

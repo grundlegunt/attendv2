@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { AuthenticatedCustomer, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { SeatPicker } from "./components/seat-picker";
@@ -9,6 +9,15 @@ type Mode = "login" | "register";
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
   movies: NowPlayingMovie[];
+}
+
+function localDateKey(value: string) {
+  const date = new Date(value);
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 export default function HomePage() {
@@ -23,6 +32,15 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<AuthenticatedCustomer | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const availableDates = useMemo(
+    () => Array.from(new Set(
+      program?.movies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt))) ?? [],
+    )).sort(),
+    [program],
+  );
+  const activeDate = selectedDate ?? availableDates[0] ?? null;
 
   useEffect(() => {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
@@ -86,6 +104,24 @@ export default function HomePage() {
         <h2>Showtimes</h2>
       </section>
 
+      {!selectedShowtimeId && availableDates.length > 0 && (
+        <nav className="date-bar" aria-label="Showtime dates">
+          {availableDates.map((dateKey) => {
+            const date = new Date(`${dateKey}T12:00:00`);
+            return (
+              <button
+                key={dateKey}
+                className={dateKey === activeDate ? "active" : ""}
+                onClick={() => setSelectedDate(dateKey)}
+              >
+                <span>{date.toLocaleDateString([], { weekday: "short" })}</span>
+                <strong>{date.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
+              </button>
+            );
+          })}
+        </nav>
+      )}
+
       {selectedShowtimeId ? (
         <SeatPicker showtimeId={selectedShowtimeId} onClose={() => setSelectedShowtimeId(null)} />
       ) : (
@@ -95,7 +131,10 @@ export default function HomePage() {
       {program && program.movies.length === 0 && <p className="loading-copy">No showtimes are on sale yet.</p>}
 
       <section className="movie-grid">
-        {program?.movies.map((movie) => (
+        {program?.movies.map((movie) => {
+          const showtimes = movie.showtimes.filter((showtime) => localDateKey(showtime.startsAt) === activeDate);
+          if (showtimes.length === 0) return null;
+          return (
           <article className="movie-card" key={movie.id}>
             <div className="poster-frame">
               {movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}
@@ -105,7 +144,7 @@ export default function HomePage() {
               <h3>{movie.title}</h3>
               {movie.synopsis && <p>{movie.synopsis}</p>}
               <div className="showtime-list">
-                {movie.showtimes.map((showtime) => (
+                {showtimes.map((showtime) => (
                   <button key={showtime.id} onClick={() => setSelectedShowtimeId(showtime.id)}>
                     <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
                     <span>{showtime.auditorium.name}</span>
@@ -119,7 +158,8 @@ export default function HomePage() {
               </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </section>
         </>
       )}
