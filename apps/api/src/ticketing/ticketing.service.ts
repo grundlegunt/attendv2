@@ -1,6 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
+import { EmailProvider } from "@cinema/notifications";
 import {
   CreateTicketCheckoutInput,
   TicketingError,
@@ -9,14 +10,24 @@ import {
 } from "@cinema/ticketing";
 import { AppError } from "../common/app-error";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 import { loadEnv } from "@cinema/config/env";
+import { createHash } from "node:crypto";
 
 @Injectable()
 export class TicketingService {
   private readonly domain: TicketingDomainService;
 
-  constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider) {
-    this.domain = new TicketingDomainService(prisma, provider, loadEnv().QR_CREDENTIAL_SECRET);
+  constructor(
+    @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    @Inject(EMAIL_PROVIDER) emailProvider: EmailProvider,
+  ) {
+    this.domain = new TicketingDomainService(
+      prisma,
+      provider,
+      loadEnv().QR_CREDENTIAL_SECRET,
+      emailProvider,
+    );
   }
 
   checkoutConfig(showtimeId: string) {
@@ -80,13 +91,14 @@ export class TicketingService {
 
   async scanTicket(input: {
     credential: string;
-    expectedShowtimeId?: string;
+    expectedShowtimeId: string;
     employeeId: string;
     locationId: string;
     deviceId?: string;
     entrance?: string;
   }) {
     const scannedAt = new Date();
+    const credentialFingerprint = createHash("sha256").update(input.credential).digest("hex");
     const credential = verifyTicketCredential(input.credential, loadEnv().QR_CREDENTIAL_SECRET);
     if (!credential) {
       await prisma.ticketScan.create({
@@ -97,6 +109,7 @@ export class TicketingService {
           entrance: input.entrance,
           result: "INVALID",
           scannedAt,
+          credentialFingerprint,
         },
       });
       return { result: "INVALID" as const, scannedAt: scannedAt.toISOString(), ticket: null };
@@ -129,6 +142,7 @@ export class TicketingService {
             entrance: input.entrance,
             result: "INVALID",
             scannedAt,
+            credentialFingerprint,
           },
         });
         return { result: "INVALID" as const, scannedAt: scannedAt.toISOString(), ticket: null };
@@ -155,6 +169,7 @@ export class TicketingService {
           entrance: input.entrance,
           result,
           scannedAt,
+          credentialFingerprint,
         },
       });
       if (result === "VALID") {

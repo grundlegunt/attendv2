@@ -49,4 +49,8 @@ export class AppError extends HttpException {
       HttpStatus.PAYMENT_REQUIRED,
     );
   }
+
+  static rateLimited(message = "Too many requests. Please wait and try again.") {
+    return new AppError(ApiErrorCode.RateLimited, message, HttpStatus.TOO_MANY_REQUESTS);
+  }
 }

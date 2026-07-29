@@ -19,6 +19,8 @@ import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
+import { AppError } from "../common/app-error";
+import { ScanRateLimitGuard } from "./scan-rate-limit.guard";
 
 @Controller("ticketing")
 export class TicketingController {
@@ -47,14 +49,14 @@ export class TicketingController {
   }
 
   @Post("scans")
-  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @UseGuards(JwtAuthGuard, ScanRateLimitGuard, PermissionsGuard)
   @RequirePermissions(Permission.TicketScan)
   scan(
     @CurrentActor() actor: RequestActor,
     @Body(new ZodValidationPipe(scanTicketRequestSchema)) body: unknown,
   ) {
     const parsed = scanTicketRequestSchema.parse(body);
-    if (!actor.locationId) throw new Error("Staff access token is missing a location.");
+    if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
     return this.ticketingService.scanTicket({
       ...parsed,
       employeeId: actor.sub,

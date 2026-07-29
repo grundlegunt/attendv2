@@ -228,8 +228,10 @@ export function TicketCheckout({
         <span className="eyebrow">ORDER CONFIRMED</span>
         <h2>See you at the movies.</h2>
         <p>
-          Confirmation <strong>{confirmation.orderNumber}</strong> was sent to{" "}
-          <strong>{email}</strong>.
+          Confirmation <strong>{confirmation.orderNumber}</strong> is ready.
+          {confirmation.receiptDelivery === "SENT"
+            ? ` A receipt with your QR tickets was sent to ${email}.`
+            : " Save these tickets for admission."}
         </p>
         {confirmation.tickets.map((ticket) => (
           <div className="confirmation-card digital-ticket" key={ticket.id}>

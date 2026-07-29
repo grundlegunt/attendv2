@@ -41,6 +41,7 @@ beforeAll(async () => {
   process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32-characters-min";
   process.env.QR_CREDENTIAL_SECRET = "test-qr-credential-secret-32-characters-min";
   process.env.PAYMENT_PROVIDER = "test";
+  process.env.EMAIL_PROVIDER = "test";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
@@ -1563,7 +1564,7 @@ describe("Milestone 4 ticket admission", () => {
     const invalid = await request(app.getHttpServer())
       .post("/api/v1/ticketing/scans")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ credential: `${milestone4Credential}tampered` });
+      .send({ credential: `${milestone4Credential}tampered`, expectedShowtimeId: showtimeId });
     expect(invalid.body.result).toBe("INVALID");
 
     const server = await request(app.getHttpServer())
@@ -1572,7 +1573,7 @@ describe("Milestone 4 ticket admission", () => {
     const forbidden = await request(app.getHttpServer())
       .post("/api/v1/ticketing/scans")
       .set("Authorization", `Bearer ${server.body.accessToken}`)
-      .send({ credential: milestone4Credential });
+      .send({ credential: milestone4Credential, expectedShowtimeId: showtimeId });
     expect(forbidden.status).toBe(403);
   });
 });

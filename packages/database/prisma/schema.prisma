@@ -365,6 +365,10 @@ model TicketOrder {
   holderKey  String
   guestEmail String?
   guestName  String?
+  receiptEmailClaimedAt DateTime?
+  receiptEmailSentAt DateTime?
+  receiptEmailMessageId String?
+  receiptEmailError String?
   // Captures the explicit checkout choice so Milestone 5 can create the
   // versioned CustomerConsent and saved payment reference after confirmation.
   diningAuthorizationRequested Boolean?
@@ -420,9 +424,10 @@ model TicketScan {
   ticket              Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Restrict)
   scannedByEmployeeId String
   scannedByEmployee   Employee         @relation(fields: [scannedByEmployeeId], references: [id], onDelete: Restrict)
-  expectedShowtimeId  String?
+  expectedShowtimeId  String
   deviceId            String?
   entrance            String?
+  credentialFingerprint String
   result              TicketScanResult
   scannedAt           DateTime         @default(now())
   createdAt           DateTime         @default(now())

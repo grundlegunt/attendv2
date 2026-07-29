@@ -37,6 +37,7 @@ export interface TicketConfirmationResponse {
   status: string;
   totalCents: number;
   currency: string;
+  receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED";
   tickets: Array<{
     id: string;
     issuanceToken: string;
@@ -49,7 +50,7 @@ export interface TicketConfirmationResponse {
 
 export const scanTicketRequestSchema = z.object({
   credential: z.string().trim().min(1).max(2048),
-  expectedShowtimeId: z.string().uuid().optional(),
+  expectedShowtimeId: z.string().uuid(),
   deviceId: z.string().trim().min(1).max(120).optional(),
   entrance: z.string().trim().min(1).max(120).optional(),
 });

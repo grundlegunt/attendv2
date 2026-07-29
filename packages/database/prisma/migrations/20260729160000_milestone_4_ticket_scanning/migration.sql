@@ -11,9 +11,10 @@ CREATE TABLE "ticket_scans" (
   "id" UUID NOT NULL,
   "ticketId" UUID,
   "scannedByEmployeeId" UUID NOT NULL,
-  "expectedShowtimeId" UUID,
+  "expectedShowtimeId" UUID NOT NULL,
   "deviceId" TEXT,
   "entrance" TEXT,
+  "credentialFingerprint" TEXT NOT NULL,
   "result" "TicketScanResult" NOT NULL,
   "scannedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -34,3 +35,9 @@ ALTER TABLE "ticket_scans"
   ADD CONSTRAINT "ticket_scans_scannedByEmployeeId_fkey"
   FOREIGN KEY ("scannedByEmployeeId") REFERENCES "employees"("id")
   ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "ticket_orders"
+  ADD COLUMN "receiptEmailClaimedAt" TIMESTAMP(3),
+  ADD COLUMN "receiptEmailSentAt" TIMESTAMP(3),
+  ADD COLUMN "receiptEmailMessageId" TEXT,
+  ADD COLUMN "receiptEmailError" TEXT;

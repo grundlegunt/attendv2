@@ -120,8 +120,10 @@ export default function StaffLoginPage() {
           )}
         </section>
 
-        {view === "scanner" ? (
-          <TicketScanner accessToken={accessToken} expectedShowtimeId={selectedShowtimeId || undefined} />
+        {view === "scanner" && selectedShowtimeId ? (
+          <TicketScanner accessToken={accessToken} expectedShowtimeId={selectedShowtimeId} />
+        ) : view === "scanner" ? (
+          <p>Select a showtime before scanning tickets.</p>
         ) : (
           <>
             {selectedShowtimeId && !availability && <p>Loading live seats…</p>}

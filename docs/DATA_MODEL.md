@@ -54,7 +54,8 @@ This document proposes the entity set and key relationships. It intentionally di
 - **TicketType**: id, locationId, name (`ADULT/CHILD/SENIOR/MATINEE`), active.
 - **TicketOrder**: id, customerId (nullable = guest with contact captured on order), locationId, channel (`ONLINE/BOX_OFFICE`), subtotalCents, feesCents, taxCents, totalCents, status (see STATE_MACHINES.md), placedByEmployeeId (nullable, box office), orderNumber (human-readable).
 - **Ticket**: id, ticketOrderId, showtimeSeatId, ticketTypeId, priceCentsPaid, status (see STATE_MACHINES.md), qrToken (opaque, signed), issuedAt.
-- **TicketScan**: id, ticketId, scannedAt, employeeId, deviceId, entrance, result (`VALID/ALREADY_USED/WRONG_SHOWTIME/REFUNDED/CANCELED/INVALID`).
+- **TicketScan**: id, nullable same-tenant ticketId, expectedShowtimeId, scannedAt, employeeId, deviceId, entrance, credentialFingerprint, result (`VALID/ALREADY_USED/WRONG_SHOWTIME/REFUNDED/CANCELED/INVALID`). The fingerprint supports investigation of invalid/foreign credentials without creating a cross-tenant ticket relationship or retaining the presented secret.
+- **TicketOrder receipt delivery**: receiptEmailClaimedAt, receiptEmailSentAt, receiptEmailMessageId, receiptEmailError. A short-lived claim prevents ordinary concurrent finalization requests from sending duplicate receipts; stale claims can be retried.
 - **Promotion**: id, locationId, code, discountType (`PERCENT/FIXED`), value, constraintsJson, active, validFrom/validTo.
 
 ### Payments (shared by ticketing and restaurant)

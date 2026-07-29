@@ -1,5 +1,6 @@
 import { prisma } from "@cinema/database";
 import { StripePaymentProvider } from "@cinema/payments";
+import { PostmarkEmailProvider } from "@cinema/notifications";
 import { TicketingError, TicketingService } from "@cinema/ticketing";
 
 export class CheckoutRouteError extends Error {
@@ -16,7 +17,16 @@ export function getTicketingService() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   const qrCredentialSecret = process.env.QR_CREDENTIAL_SECRET;
-  if (!secretKey || !webhookSecret || !qrCredentialSecret || qrCredentialSecret.length < 32) {
+  const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
+  const emailFrom = process.env.EMAIL_FROM;
+  if (
+    !secretKey ||
+    !webhookSecret ||
+    !qrCredentialSecret ||
+    qrCredentialSecret.length < 32 ||
+    !postmarkToken ||
+    !emailFrom
+  ) {
     throw new CheckoutRouteError(
       503,
       "PAYMENT_CONFIGURATION_REQUIRED",
@@ -27,6 +37,7 @@ export function getTicketingService() {
     prisma,
     new StripePaymentProvider(secretKey, webhookSecret),
     qrCredentialSecret,
+    new PostmarkEmailProvider(postmarkToken, emailFrom),
   );
 }
 
