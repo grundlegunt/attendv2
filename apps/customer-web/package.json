@@ -11,13 +11,15 @@
   },
   "dependencies": {
     "@cinema/database": "workspace:*",
+    "@cinema/notifications": "workspace:*",
     "@cinema/payments": "workspace:*",
     "@cinema/shared": "workspace:*",
     "@cinema/ticketing": "workspace:*",
     "@cinema/ui": "workspace:*",
     "next": "^15.1.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "qrcode.react": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.16.11",

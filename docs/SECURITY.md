@@ -72,6 +72,8 @@ All credentials (Stripe secret key, webhook signing secret, DB connection string
 
 Global per-IP rate limiting at the API gateway layer, with tighter, purpose-specific limits on: login/auth endpoints (brute-force protection), checkout/payment endpoints (card-testing abuse protection, PAYMENT_FLOW.md §9), and ticket-scan endpoints (prevents scan-spamming as a denial-of-service against the door). Implemented via Redis-backed counters (works correctly across multiple API instances).
 
+The ticket-scan endpoint enforces a fixed-window limit of 60 attempts per minute for each authenticated employee and source IP. The production path uses Redis so limits are shared by every API instance; tests use an isolated in-memory counter.
+
 ## 9. Audit logging
 
 Every sensitive action listed in the product spec (refund, seat move/block, item void, comp, permission change, price change, showtime cancellation, cash adjustment, manual tab closure, and more) writes an `AuditEvent` in the same transaction as the action itself — audit logging is not a best-effort side effect fired after the fact, it's part of the atomic operation, so an audit record can never be missing for an action that actually took effect. Audit records are immutable (no update/delete API), queryable by actor/entity/date range for GM/Owner/Accounting roles, and explicitly exclude payment credentials (§4) while including safe references (payment id, last4/brand) where useful for investigation.

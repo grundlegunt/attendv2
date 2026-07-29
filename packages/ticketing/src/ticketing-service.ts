@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   PaymentAttemptStatus,
   PaymentStatus,
@@ -14,7 +14,9 @@ import {
   ProviderRefundStatus,
   VerifiedProviderEvent,
 } from "@cinema/payments";
+import { EmailProvider, TicketReceipt } from "@cinema/notifications";
 import { TicketingError } from "./ticketing-error";
+import { createTicketCredential } from "./qr-credential";
 
 export interface CreateTicketCheckoutInput {
   holdTokens: string[];
@@ -90,15 +92,12 @@ function publicOrderNumber() {
   return `AT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
-function qrSeed() {
-  // Milestone 4 replaces this opaque issuance seed with a signed QR token.
-  return randomBytes(32).toString("base64url");
-}
-
 export class TicketingService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly paymentProvider: PaymentProvider,
+    private readonly qrCredentialSecret: string,
+    private readonly emailProvider: EmailProvider,
   ) {}
 
   async createCheckout(input: CreateTicketCheckoutInput) {
@@ -538,13 +537,17 @@ export class TicketingService {
             lockedOrder.subtotalCents / lockedHolds.length,
           );
           await tx.ticket.createMany({
-            data: lockedHolds.map((hold) => ({
-              ticketOrderId: lockedOrder.id,
-              showtimeSeatId: hold.showtimeSeatId,
-              ticketTypeId: lockedOrder.ticketTypeId,
-              priceCentsPaid: perTicketPrice,
-              qrToken: qrSeed(),
-            })),
+            data: lockedHolds.map((hold) => {
+              const id = randomUUID();
+              return {
+                id,
+                ticketOrderId: lockedOrder.id,
+                showtimeSeatId: hold.showtimeSeatId,
+                ticketTypeId: lockedOrder.ticketTypeId,
+                priceCentsPaid: perTicketPrice,
+                qrToken: createTicketCredential(id, this.qrCredentialSecret),
+              };
+            }),
           });
           await tx.seatHold.updateMany({
             where: { id: { in: lockedHolds.map((hold) => hold.id) }, releasedAt: null },
@@ -567,7 +570,8 @@ export class TicketingService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
       );
-      return this.presentConfirmation(finalized);
+      const receiptDelivery = await this.deliverReceipt(finalized);
+      return this.presentConfirmation(finalized, receiptDelivery);
     } catch (error) {
       if (
         error instanceof TicketingError &&
@@ -1296,6 +1300,91 @@ export class TicketingService {
     };
   }
 
+  private async deliverReceipt(order: {
+    id: string;
+    orderNumber: string;
+    guestEmail: string | null;
+    guestName: string | null;
+    totalCents: number;
+    currency: string;
+    receiptEmailSentAt: Date | null;
+    tickets: Array<{
+      id: string;
+      qrToken: string;
+      showtimeSeat: {
+        seat: { label: string };
+        showtime: {
+          startsAt: Date;
+          movie: { title: string };
+          auditorium: { name: string };
+        };
+      };
+    }>;
+  }): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> {
+    if (!order.guestEmail) return "NOT_REQUESTED";
+    if (order.receiptEmailSentAt) return "SENT";
+
+    const now = new Date();
+    const claimed = await this.prisma.ticketOrder.updateMany({
+      where: {
+        id: order.id,
+        receiptEmailSentAt: null,
+        OR: [
+          { receiptEmailClaimedAt: null },
+          { receiptEmailClaimedAt: { lt: new Date(now.getTime() - 5 * 60_000) } },
+        ],
+      },
+      data: { receiptEmailClaimedAt: now, receiptEmailError: null },
+    });
+    if (claimed.count === 0) {
+      const current = await this.prisma.ticketOrder.findUniqueOrThrow({
+        where: { id: order.id },
+        select: { receiptEmailSentAt: true },
+      });
+      return current.receiptEmailSentAt ? "SENT" : "NOT_REQUESTED";
+    }
+
+    const receipt: TicketReceipt = {
+      to: order.guestEmail,
+      guestName: order.guestName,
+      orderNumber: order.orderNumber,
+      totalCents: order.totalCents,
+      currency: order.currency,
+      tickets: order.tickets.map((ticket) => ({
+        id: ticket.id,
+        credential: ticket.qrToken,
+        movie: ticket.showtimeSeat.showtime.movie.title,
+        auditorium: ticket.showtimeSeat.showtime.auditorium.name,
+        seat: ticket.showtimeSeat.seat.label,
+        startsAt: ticket.showtimeSeat.showtime.startsAt,
+      })),
+    };
+
+    try {
+      const delivery = await this.emailProvider.sendTicketReceipt(receipt);
+      await this.prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: {
+          receiptEmailSentAt: new Date(),
+          receiptEmailMessageId: delivery.messageId,
+          receiptEmailClaimedAt: null,
+          receiptEmailError: null,
+        },
+      });
+      return "SENT";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error";
+      await this.prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: {
+          receiptEmailClaimedAt: null,
+          receiptEmailError: message.slice(0, 1000),
+        },
+      });
+      return "FAILED";
+    }
+  }
+
   private presentConfirmation(order: {
     id: string;
     orderNumber: string;
@@ -1314,13 +1403,14 @@ export class TicketingService {
         };
       };
     }>;
-  }) {
+  }, receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED") {
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
       totalCents: order.totalCents,
       currency: order.currency,
+      receiptDelivery,
       tickets: order.tickets.map((ticket) => ({
         id: ticket.id,
         issuanceToken: ticket.qrToken,

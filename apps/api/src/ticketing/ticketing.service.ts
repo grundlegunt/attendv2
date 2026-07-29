@@ -1,20 +1,33 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
+import { EmailProvider } from "@cinema/notifications";
 import {
   CreateTicketCheckoutInput,
   TicketingError,
   TicketingService as TicketingDomainService,
+  verifyTicketCredential,
 } from "@cinema/ticketing";
 import { AppError } from "../common/app-error";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
+import { loadEnv } from "@cinema/config/env";
+import { createHash } from "node:crypto";
 
 @Injectable()
 export class TicketingService {
   private readonly domain: TicketingDomainService;
 
-  constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider) {
-    this.domain = new TicketingDomainService(prisma, provider);
+  constructor(
+    @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    @Inject(EMAIL_PROVIDER) emailProvider: EmailProvider,
+  ) {
+    this.domain = new TicketingDomainService(
+      prisma,
+      provider,
+      loadEnv().QR_CREDENTIAL_SECRET,
+      emailProvider,
+    );
   }
 
   checkoutConfig(showtimeId: string) {
@@ -74,6 +87,108 @@ export class TicketingService {
 
   finalizeOrder(orderId: string) {
     return this.wrap(() => this.domain.finalizeOrder(orderId));
+  }
+
+  async scanTicket(input: {
+    credential: string;
+    expectedShowtimeId: string;
+    employeeId: string;
+    locationId: string;
+    deviceId?: string;
+    entrance?: string;
+  }) {
+    const scannedAt = new Date();
+    const credentialFingerprint = createHash("sha256").update(input.credential).digest("hex");
+    const credential = verifyTicketCredential(input.credential, loadEnv().QR_CREDENTIAL_SECRET);
+    if (!credential) {
+      await prisma.ticketScan.create({
+        data: {
+          scannedByEmployeeId: input.employeeId,
+          expectedShowtimeId: input.expectedShowtimeId,
+          deviceId: input.deviceId,
+          entrance: input.entrance,
+          result: "INVALID",
+          scannedAt,
+          credentialFingerprint,
+        },
+      });
+      return { result: "INVALID" as const, scannedAt: scannedAt.toISOString(), ticket: null };
+    }
+
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "tickets" WHERE "id" = ${credential.ticketId} FOR UPDATE`;
+      const ticket = await tx.ticket.findFirst({
+        where: {
+          id: credential.ticketId,
+          ticketOrder: { locationId: input.locationId },
+        },
+        include: {
+          ticketType: true,
+          showtimeSeat: {
+            include: {
+              seat: true,
+              showtime: { include: { movie: true, auditorium: true } },
+            },
+          },
+        },
+      });
+
+      if (!ticket) {
+        await tx.ticketScan.create({
+          data: {
+            scannedByEmployeeId: input.employeeId,
+            expectedShowtimeId: input.expectedShowtimeId,
+            deviceId: input.deviceId,
+            entrance: input.entrance,
+            result: "INVALID",
+            scannedAt,
+            credentialFingerprint,
+          },
+        });
+        return { result: "INVALID" as const, scannedAt: scannedAt.toISOString(), ticket: null };
+      }
+
+      const showtime = ticket.showtimeSeat.showtime;
+      const result =
+        ticket.status === "REFUNDED"
+          ? "REFUNDED"
+          : ticket.status === "CANCELED"
+            ? "CANCELED"
+            : ticket.status === "ADMITTED"
+              ? "ALREADY_USED"
+              : input.expectedShowtimeId && input.expectedShowtimeId !== showtime.id
+                ? "WRONG_SHOWTIME"
+                : "VALID";
+
+      await tx.ticketScan.create({
+        data: {
+          ticketId: ticket.id,
+          scannedByEmployeeId: input.employeeId,
+          expectedShowtimeId: input.expectedShowtimeId,
+          deviceId: input.deviceId,
+          entrance: input.entrance,
+          result,
+          scannedAt,
+          credentialFingerprint,
+        },
+      });
+      if (result === "VALID") {
+        await tx.ticket.update({ where: { id: ticket.id }, data: { status: "ADMITTED" } });
+      }
+      return {
+        result,
+        scannedAt: scannedAt.toISOString(),
+        ticket: {
+          id: ticket.id,
+          movie: showtime.movie.title,
+          auditorium: showtime.auditorium.name,
+          showtimeId: showtime.id,
+          startsAt: showtime.startsAt.toISOString(),
+          seat: ticket.showtimeSeat.seat.label,
+          ticketType: ticket.ticketType.name,
+        },
+      };
+    });
   }
 
   processWebhook(rawBody: Buffer, signatureHeader: string) {

@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import type { AuthenticatedEmployee, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { TicketScanner } from "./ticket-scanner";
 
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
@@ -27,9 +28,11 @@ export default function StaffLoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [employee, setEmployee] = useState<AuthenticatedEmployee | null>(null);
+  const [accessToken, setAccessToken] = useState("");
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
   const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
+  const [view, setView] = useState<"scanner" | "seats">("scanner");
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
@@ -68,6 +71,7 @@ export default function StaffLoginPage() {
         { method: "POST", body: JSON.stringify({ email, password }) },
       );
       setEmployee(res.employee);
+      setAccessToken(res.accessToken);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
     } finally {
@@ -90,6 +94,11 @@ export default function StaffLoginPage() {
 
         {error && <div className="error-banner">{error}</div>}
 
+        <nav className="staff-tabs" aria-label="Staff tools">
+          <button type="button" className={view === "scanner" ? "active" : ""} onClick={() => setView("scanner")}>Scan tickets</button>
+          <button type="button" className={view === "seats" ? "active" : ""} onClick={() => setView("seats")}>Live seats</button>
+        </nav>
+
         <section className="showtime-toolbar" aria-label="Select a showtime">
           <label htmlFor="showtime">Showtime</label>
           <select id="showtime" value={selectedShowtimeId} onChange={(event) => setSelectedShowtimeId(event.target.value)}>
@@ -111,8 +120,16 @@ export default function StaffLoginPage() {
           )}
         </section>
 
-        {selectedShowtimeId && !availability && <p>Loading live seats…</p>}
-        {availability && <SeatMap seats={seatMapSeats} label="Read-only live auditorium seat map" />}
+        {view === "scanner" && selectedShowtimeId ? (
+          <TicketScanner accessToken={accessToken} expectedShowtimeId={selectedShowtimeId} />
+        ) : view === "scanner" ? (
+          <p>Select a showtime before scanning tickets.</p>
+        ) : (
+          <>
+            {selectedShowtimeId && !availability && <p>Loading live seats…</p>}
+            {availability && <SeatMap seats={seatMapSeats} label="Read-only live auditorium seat map" />}
+          </>
+        )}
       </main>
     );
   }

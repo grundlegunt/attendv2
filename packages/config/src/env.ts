@@ -23,6 +23,11 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900), // 15 minutes
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(1209600), // 14 days
+  QR_CREDENTIAL_SECRET: z.string().min(32, "QR_CREDENTIAL_SECRET must be at least 32 characters"),
+
+  EMAIL_PROVIDER: z.enum(["postmark", "test"]).default("postmark"),
+  POSTMARK_SERVER_TOKEN: z.string().optional(),
+  EMAIL_FROM: z.string().email().default("receipts@example.com"),
 
   PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
   // Stripe — test-mode keys only during Milestone 3 development.
@@ -44,6 +49,20 @@ const envSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["PAYMENT_PROVIDER"],
       message: "The test payment provider is only allowed when NODE_ENV=test.",
+    });
+  }
+  if (env.EMAIL_PROVIDER === "test" && env.NODE_ENV !== "test") {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["EMAIL_PROVIDER"],
+      message: "The test email provider is only allowed when NODE_ENV=test.",
+    });
+  }
+  if (env.EMAIL_PROVIDER === "postmark" && !env.POSTMARK_SERVER_TOKEN) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["POSTMARK_SERVER_TOKEN"],
+      message: "A Postmark server token is required when EMAIL_PROVIDER=postmark.",
     });
   }
   if (env.PAYMENT_PROVIDER === "stripe") {

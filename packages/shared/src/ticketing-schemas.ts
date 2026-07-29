@@ -37,6 +37,7 @@ export interface TicketConfirmationResponse {
   status: string;
   totalCents: number;
   currency: string;
+  receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED";
   tickets: Array<{
     id: string;
     issuanceToken: string;
@@ -45,4 +46,35 @@ export interface TicketConfirmationResponse {
     auditorium: string;
     startsAt: string;
   }>;
+}
+
+export const scanTicketRequestSchema = z.object({
+  credential: z.string().trim().min(1).max(2048),
+  expectedShowtimeId: z.string().uuid(),
+  deviceId: z.string().trim().min(1).max(120).optional(),
+  entrance: z.string().trim().min(1).max(120).optional(),
+});
+
+export type ScanTicketRequest = z.infer<typeof scanTicketRequestSchema>;
+
+export type TicketScanResult =
+  | "VALID"
+  | "ALREADY_USED"
+  | "WRONG_SHOWTIME"
+  | "REFUNDED"
+  | "CANCELED"
+  | "INVALID";
+
+export interface TicketScanResponse {
+  result: TicketScanResult;
+  scannedAt: string;
+  ticket: {
+    id: string;
+    movie: string;
+    auditorium: string;
+    showtimeId: string;
+    startsAt: string;
+    seat: string;
+    ticketType: string;
+  } | null;
 }
