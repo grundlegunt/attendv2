@@ -1,5 +1,12 @@
 import { PostmarkEmailProvider } from "./postmark-email-provider";
 
+jest.mock("qrcode", () => ({
+  __esModule: true,
+  default: {
+    toDataURL: jest.fn().mockResolvedValue("data:image/png;base64,cXItcG5n"),
+  },
+}));
+
 describe("PostmarkEmailProvider", () => {
   afterEach(() => jest.restoreAllMocks());
 

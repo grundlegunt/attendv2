@@ -46,6 +46,7 @@ export class PostmarkEmailProvider implements EmailProvider {
     }).format(receipt.totalCents / 100);
     const response = await fetch("https://api.postmarkapp.com/email", {
       method: "POST",
+      signal: AbortSignal.timeout(8_000),
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",

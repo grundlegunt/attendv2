@@ -32,18 +32,35 @@ export class ScanRateLimitGuard implements CanActivate, OnModuleDestroy {
 
     let count: number;
     if (this.redis) {
-      if (this.redis.status === "wait") await this.redis.connect();
-      count = await this.redis.incr(key);
-      if (count === 1) await this.redis.expire(key, WINDOW_SECONDS + 1);
+      try {
+        if (this.redis.status === "wait") await this.redis.connect();
+        count = await this.redis.incr(key);
+        if (count === 1) await this.redis.expire(key, WINDOW_SECONDS + 1);
+      } catch (error) {
+        // Admission must remain available during a Redis outage. Postgres
+        // still enforces single admission; this local limiter preserves
+        // basic per-instance protection until the shared counter recovers.
+        count = this.incrementFallback(key);
+        // eslint-disable-next-line no-console
+        console.warn(JSON.stringify({
+          event: "ticket_scan.rate_limit_redis_unavailable",
+          error: error instanceof Error ? error.message : "Unknown Redis error",
+        }));
+      }
     } else {
-      count = (this.testBuckets.get(key) ?? 0) + 1;
-      this.testBuckets.set(key, count);
+      count = this.incrementFallback(key);
     }
 
     if (count > LIMIT) {
       throw AppError.rateLimited("Ticket scanner rate limit exceeded. Wait briefly and retry.");
     }
     return true;
+  }
+
+  private incrementFallback(key: string) {
+    const count = (this.testBuckets.get(key) ?? 0) + 1;
+    this.testBuckets.set(key, count);
+    return count;
   }
 
   async onModuleDestroy() {

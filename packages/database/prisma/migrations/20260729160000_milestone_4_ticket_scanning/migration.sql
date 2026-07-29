@@ -8,10 +8,10 @@ CREATE TYPE "TicketScanResult" AS ENUM (
 );
 
 CREATE TABLE "ticket_scans" (
-  "id" UUID NOT NULL,
-  "ticketId" UUID,
-  "scannedByEmployeeId" UUID NOT NULL,
-  "expectedShowtimeId" UUID NOT NULL,
+  "id" TEXT NOT NULL,
+  "ticketId" TEXT,
+  "scannedByEmployeeId" TEXT NOT NULL,
+  "expectedShowtimeId" TEXT NOT NULL,
   "deviceId" TEXT,
   "entrance" TEXT,
   "credentialFingerprint" TEXT NOT NULL,
