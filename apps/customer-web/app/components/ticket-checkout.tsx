@@ -6,6 +6,7 @@ import type {
   TicketConfirmationResponse,
 } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { QRCodeSVG } from "qrcode.react";
 
 interface CheckoutConfig {
   currency: string;
@@ -80,7 +81,6 @@ export function TicketCheckout({
   seats,
   movie,
   auditorium,
-  startsAt,
   onBack,
 }: {
   showtimeId: string;
@@ -89,7 +89,6 @@ export function TicketCheckout({
   seats: string[];
   movie: string;
   auditorium: string;
-  startsAt: string;
   onBack: () => void;
 }) {
   const [config, setConfig] = useState<CheckoutConfig | null>(null);
@@ -232,23 +231,21 @@ export function TicketCheckout({
           Confirmation <strong>{confirmation.orderNumber}</strong> was sent to{" "}
           <strong>{email}</strong>.
         </p>
-        <div className="confirmation-card">
-          <h3>{confirmation.tickets[0]?.movie ?? movie}</h3>
-          <p>
-            {new Date(startsAt).toLocaleString([], {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
-          </p>
-          <p>
-            {auditorium} · Seats{" "}
-            {confirmation.tickets.map((ticket) => ticket.seat).join(", ")}
-          </p>
-          <strong>{money(confirmation.totalCents, confirmation.currency)}</strong>
-        </div>
+        {confirmation.tickets.map((ticket) => (
+          <div className="confirmation-card digital-ticket" key={ticket.id}>
+            <div>
+              <h3>{ticket.movie}</h3>
+              <p>{new Date(ticket.startsAt).toLocaleString([], {
+                weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+              })}</p>
+              <p>{ticket.auditorium} · Seat {ticket.seat}</p>
+            </div>
+            <div className="ticket-qr" aria-label={`Admission QR code for seat ${ticket.seat}`}>
+              <QRCodeSVG value={ticket.issuanceToken} size={180} level="M" marginSize={2} />
+            </div>
+          </div>
+        ))}
+        <strong>{money(confirmation.totalCents, confirmation.currency)}</strong>
       </section>
     );
   }

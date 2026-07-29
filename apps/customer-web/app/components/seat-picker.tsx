@@ -164,7 +164,6 @@ export function SeatPicker({
         seats={mySeats.map((seat) => seat.label)}
         movie={availability.showtime.movie.title}
         auditorium={availability.showtime.auditorium.name}
-        startsAt={availability.showtime.startsAt}
         onBack={() => setCheckoutOpen(false)}
       />
     );

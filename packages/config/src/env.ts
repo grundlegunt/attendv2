@@ -23,6 +23,7 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900), // 15 minutes
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(1209600), // 14 days
+  QR_CREDENTIAL_SECRET: z.string().min(32, "QR_CREDENTIAL_SECRET must be at least 32 characters"),
 
   PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
   // Stripe — test-mode keys only during Milestone 3 development.

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import {
   PaymentAttemptStatus,
   PaymentStatus,
@@ -15,6 +15,7 @@ import {
   VerifiedProviderEvent,
 } from "@cinema/payments";
 import { TicketingError } from "./ticketing-error";
+import { createTicketCredential } from "./qr-credential";
 
 export interface CreateTicketCheckoutInput {
   holdTokens: string[];
@@ -90,15 +91,11 @@ function publicOrderNumber() {
   return `AT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
-function qrSeed() {
-  // Milestone 4 replaces this opaque issuance seed with a signed QR token.
-  return randomBytes(32).toString("base64url");
-}
-
 export class TicketingService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly paymentProvider: PaymentProvider,
+    private readonly qrCredentialSecret: string,
   ) {}
 
   async createCheckout(input: CreateTicketCheckoutInput) {
@@ -538,13 +535,17 @@ export class TicketingService {
             lockedOrder.subtotalCents / lockedHolds.length,
           );
           await tx.ticket.createMany({
-            data: lockedHolds.map((hold) => ({
-              ticketOrderId: lockedOrder.id,
-              showtimeSeatId: hold.showtimeSeatId,
-              ticketTypeId: lockedOrder.ticketTypeId,
-              priceCentsPaid: perTicketPrice,
-              qrToken: qrSeed(),
-            })),
+            data: lockedHolds.map((hold) => {
+              const id = randomUUID();
+              return {
+                id,
+                ticketOrderId: lockedOrder.id,
+                showtimeSeatId: hold.showtimeSeatId,
+                ticketTypeId: lockedOrder.ticketTypeId,
+                priceCentsPaid: perTicketPrice,
+                qrToken: createTicketCredential(id, this.qrCredentialSecret),
+              };
+            }),
           });
           await tx.seatHold.updateMany({
             where: { id: { in: lockedHolds.map((hold) => hold.id) }, releasedAt: null },

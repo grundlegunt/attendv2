@@ -283,6 +283,15 @@ enum TicketStatus {
   CANCELED
 }
 
+enum TicketScanResult {
+  VALID
+  ALREADY_USED
+  WRONG_SHOWTIME
+  REFUNDED
+  CANCELED
+  INVALID
+}
+
 enum PaymentPurpose {
   TICKET_ORDER
   RESTAURANT_TAB
@@ -398,10 +407,30 @@ model Ticket {
   issuedAt       DateTime     @default(now())
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
+  scans          TicketScan[]
 
   @@index([ticketOrderId])
   @@index([showtimeSeatId, status])
   @@map("tickets")
+}
+
+model TicketScan {
+  id                  String           @id @default(uuid())
+  ticketId            String?
+  ticket              Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  scannedByEmployeeId String
+  scannedByEmployee   Employee         @relation(fields: [scannedByEmployeeId], references: [id], onDelete: Restrict)
+  expectedShowtimeId  String?
+  deviceId            String?
+  entrance            String?
+  result              TicketScanResult
+  scannedAt           DateTime         @default(now())
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  @@index([ticketId, scannedAt])
+  @@index([scannedByEmployeeId, scannedAt])
+  @@map("ticket_scans")
 }
 
 model PaymentCustomer {
@@ -563,6 +592,7 @@ model Employee {
   authAccount   StaffAuthAccount?
   employeeRoles EmployeeRole[]
   placedTicketOrders TicketOrder[]
+  ticketScans TicketScan[]
 
   @@map("employees")
 }

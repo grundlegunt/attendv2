@@ -26,6 +26,9 @@
 .showtime-list button span { display: block; margin-top: 4px; color: var(--color-text-secondary); font-size: .72rem; }
 .showtime-list button.past { opacity: .4; cursor: not-allowed; border-color: var(--color-border); }
 .showtime-list button.past:hover { opacity: .4; }
+.digital-ticket { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+.ticket-qr { background: #fff; padding: 8px; line-height: 0; width: fit-content; }
+@media (max-width: 620px) { .digital-ticket { grid-template-columns: 1fr; } }
 .field { display: grid; gap: 6px; margin-bottom: 12px; }
 .field input { padding: 12px; background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-primary); }
 button.primary { width: 100%; padding: 13px; border: 0; background: var(--color-accent); font-weight: 800; }

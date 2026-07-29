@@ -15,7 +15,8 @@ export class CheckoutRouteError extends Error {
 export function getTicketingService() {
   const secretKey = process.env.STRIPE_SECRET_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  if (!secretKey || !webhookSecret) {
+  const qrCredentialSecret = process.env.QR_CREDENTIAL_SECRET;
+  if (!secretKey || !webhookSecret || !qrCredentialSecret || qrCredentialSecret.length < 32) {
     throw new CheckoutRouteError(
       503,
       "PAYMENT_CONFIGURATION_REQUIRED",
@@ -25,6 +26,7 @@ export function getTicketingService() {
   return new TicketingService(
     prisma,
     new StripePaymentProvider(secretKey, webhookSecret),
+    qrCredentialSecret,
   );
 }
 

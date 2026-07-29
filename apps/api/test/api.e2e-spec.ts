@@ -23,6 +23,8 @@ let testDb: TestDatabase;
 let app: INestApplication;
 let ownerAccessToken: string;
 let ownerRefreshToken: string;
+let milestone4Credential: string;
+let milestone4TicketId: string;
 
 const SEED_SUFFIX = "m0test.local";
 // Matches SEED_PASSWORD in packages/database/prisma/seed.ts.
@@ -37,6 +39,7 @@ beforeAll(async () => {
   process.env.REDIS_URL = "redis://127.0.0.1:6379"; // unused in Milestone 0, required by env schema
   process.env.JWT_ACCESS_SECRET = "test-access-secret-32-characters-min";
   process.env.JWT_REFRESH_SECRET = "test-refresh-secret-32-characters-min";
+  process.env.QR_CREDENTIAL_SECRET = "test-qr-credential-secret-32-characters-min";
   process.env.PAYMENT_PROVIDER = "test";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
@@ -500,6 +503,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(replay.status).toBe(201);
     expect(first.body.status).toBe("PAID");
     expect(first.body.tickets).toHaveLength(1);
+    milestone4Credential = first.body.tickets[0].issuanceToken;
+    milestone4TicketId = first.body.tickets[0].id;
     expect(replay.body.tickets[0].id).toBe(first.body.tickets[0].id);
 
     const after = await request(app.getHttpServer()).get(
@@ -1510,5 +1515,64 @@ describe("Input validation", () => {
 
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_FAILED");
+  });
+});
+
+describe("Milestone 4 ticket admission", () => {
+  const showtimeId = "31000000-0000-0000-0002-000000000002";
+
+  it("rejects the wrong showtime, admits once, and records a repeated scan", async () => {
+    const wrong = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/scans")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        credential: milestone4Credential,
+        expectedShowtimeId: "31000000-0000-0000-0001-000000000001",
+      });
+    expect(wrong.status).toBe(201);
+    expect(wrong.body.result).toBe("WRONG_SHOWTIME");
+
+    const simultaneous = await Promise.all(
+      [1, 2].map(() =>
+        request(app.getHttpServer())
+          .post("/api/v1/ticketing/scans")
+          .set("Authorization", `Bearer ${ownerAccessToken}`)
+          .send({ credential: milestone4Credential, expectedShowtimeId: showtimeId }),
+      ),
+    );
+    expect(simultaneous.map((response) => response.body.result).sort())
+      .toEqual(["ALREADY_USED", "VALID"]);
+
+    const { prisma } = await import("@cinema/database");
+    expect((await prisma.ticket.findUniqueOrThrow({ where: { id: milestone4TicketId } })).status)
+      .toBe("ADMITTED");
+    expect(await prisma.ticketScan.count({ where: { ticketId: milestone4TicketId } })).toBe(3);
+  });
+
+  it("reports a refunded ticket without admitting it", async () => {
+    const { prisma } = await import("@cinema/database");
+    await prisma.ticket.update({ where: { id: milestone4TicketId }, data: { status: "REFUNDED" } });
+    const result = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/scans")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ credential: milestone4Credential, expectedShowtimeId: showtimeId });
+    expect(result.body.result).toBe("REFUNDED");
+  });
+
+  it("rejects a tampered credential and a staff role without ticket.scan", async () => {
+    const invalid = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/scans")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ credential: `${milestone4Credential}tampered` });
+    expect(invalid.body.result).toBe("INVALID");
+
+    const server = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `server@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    const forbidden = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/scans")
+      .set("Authorization", `Bearer ${server.body.accessToken}`)
+      .send({ credential: milestone4Credential });
+    expect(forbidden.status).toBe(403);
   });
 });

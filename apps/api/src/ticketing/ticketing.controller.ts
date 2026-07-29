@@ -7,11 +7,18 @@ import {
   Post,
   RawBodyRequest,
   Req,
+  UseGuards,
 } from "@nestjs/common";
 import { Request } from "express";
-import { createTicketCheckoutRequestSchema } from "@cinema/shared";
+import { createTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
+import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { TicketingService } from "./ticketing.service";
+import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
+import { PermissionsGuard } from "../auth/guards/permissions.guard";
+import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
+import { CurrentActor } from "../auth/decorators/current-actor.decorator";
+import { RequestActor } from "../auth/types";
 
 @Controller("ticketing")
 export class TicketingController {
@@ -37,6 +44,22 @@ export class TicketingController {
   @Post("orders/:orderId/finalize")
   finalize(@Param("orderId") orderId: string) {
     return this.ticketingService.finalizeOrder(orderId);
+  }
+
+  @Post("scans")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.TicketScan)
+  scan(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(scanTicketRequestSchema)) body: unknown,
+  ) {
+    const parsed = scanTicketRequestSchema.parse(body);
+    if (!actor.locationId) throw new Error("Staff access token is missing a location.");
+    return this.ticketingService.scanTicket({
+      ...parsed,
+      employeeId: actor.sub,
+      locationId: actor.locationId,
+    });
   }
 
   @Post("webhooks/stripe")
