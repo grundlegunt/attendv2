@@ -355,6 +355,19 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
 
+    // Round trip fix: a showtime that already started must remain visible
+    // to the customer for the rest of that calendar day (shown disabled,
+    // never removed) -- see docs/PROGRAMMING_AND_SCHEDULING.md's "Past
+    // Showtime Display Behavior". The previous 30-minute grace window made
+    // showtimes vanish from the response entirely mid-afternoon. A full
+    // rolling 24-hour window is a deliberately simple stand-in for "since
+    // local midnight at this location" -- it doesn't need the location's
+    // own timezone to get the common case right, and the failure mode
+    // (a showtime from just under 24h ago lingering a few extra minutes
+    // right at a timezone boundary) is far less disruptive than showtimes
+    // disappearing during the day they're actually showing.
+    const listingCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
     const movies = await prisma.movie.findMany({
       where: {
         organizationId: location.organizationId,
@@ -362,7 +375,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         showtimes: {
           some: {
             onSale: true,
-            startsAt: { gte: new Date(Date.now() - 30 * 60000) },
+            startsAt: { gte: listingCutoff },
             auditorium: { locationId: location.id },
           },
         },
@@ -371,7 +384,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         showtimes: {
           where: {
             onSale: true,
-            startsAt: { gte: new Date(Date.now() - 30 * 60000) },
+            startsAt: { gte: listingCutoff },
             auditorium: { locationId: location.id },
           },
           select: {
@@ -385,11 +398,23 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           orderBy: { startsAt: "asc" },
         },
       },
-      orderBy: { title: "asc" },
     });
+
+    // Round trip fix: movies are ordered by their next upcoming showtime,
+    // not alphabetically -- a movie playing at 11am no longer gets stuck
+    // behind one that first plays at 1:50pm just because its title sorts
+    // later. A movie with no showtimes left in this window can't happen
+    // here (the `where` above already requires at least one), but the
+    // fallback keeps this total in case that ever changes.
+    const sortedMovies = [...movies].sort((a, b) => {
+      const aNext = a.showtimes[0]?.startsAt.getTime() ?? Infinity;
+      const bNext = b.showtimes[0]?.startsAt.getTime() ?? Infinity;
+      return aNext - bNext;
+    });
+
     return {
       location: { id: location.id, name: location.name, timezone: location.timezone },
-      movies: movies.map((movie) => ({
+      movies: sortedMovies.map((movie) => ({
         ...movie,
         showtimes: movie.showtimes.map((showtime) => ({
           ...showtime,

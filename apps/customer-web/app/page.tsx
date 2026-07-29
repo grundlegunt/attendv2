@@ -42,6 +42,24 @@ export default function HomePage() {
   );
   const activeDate = selectedDate ?? availableDates[0] ?? null;
 
+  // Round trip fix: sorted (and filtered to the active date) here, not
+  // just server-side -- the API orders movies by their next upcoming
+  // showtime across ALL dates, which isn't necessarily correct for
+  // whichever date tab is currently selected. Only the client knows that.
+  const moviesForActiveDate = useMemo(() => {
+    if (!program || !activeDate) return [];
+    return program.movies
+      .map((movie) => ({
+        movie,
+        showtimes: movie.showtimes.filter((showtime) => localDateKey(showtime.startsAt) === activeDate),
+      }))
+      .filter((entry) => entry.showtimes.length > 0)
+      .sort(
+        (a, b) =>
+          new Date(a.showtimes[0]!.startsAt).getTime() - new Date(b.showtimes[0]!.startsAt).getTime(),
+      );
+  }, [program, activeDate]);
+
   useEffect(() => {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
       .then(setProgram)
@@ -131,10 +149,7 @@ export default function HomePage() {
       {program && program.movies.length === 0 && <p className="loading-copy">No showtimes are on sale yet.</p>}
 
       <section className="movie-grid">
-        {program?.movies.map((movie) => {
-          const showtimes = movie.showtimes.filter((showtime) => localDateKey(showtime.startsAt) === activeDate);
-          if (showtimes.length === 0) return null;
-          return (
+        {moviesForActiveDate.map(({ movie, showtimes }) => (
           <article className="movie-card" key={movie.id}>
             <div className="poster-frame">
               {movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}
@@ -144,22 +159,34 @@ export default function HomePage() {
               <h3>{movie.title}</h3>
               {movie.synopsis && <p>{movie.synopsis}</p>}
               <div className="showtime-list">
-                {showtimes.map((showtime) => (
-                  <button key={showtime.id} onClick={() => setSelectedShowtimeId(showtime.id)}>
-                    <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
-                    <span>{showtime.auditorium.name}</span>
-                    <span>
-                      ${(showtime.priceTier.ticketPriceMinor / 100).toFixed(0)}
-                      {" + $"}
-                      {(showtime.priceTier.feeMinor / 100).toFixed(0)} fee
-                    </span>
-                  </button>
-                ))}
+                {showtimes.map((showtime) => {
+                  // Round trip fix: a showtime that already started stays
+                  // in place and visible for the rest of the day -- just
+                  // disabled -- instead of disappearing. See
+                  // docs/PROGRAMMING_AND_SCHEDULING.md.
+                  const isPast = new Date(showtime.startsAt).getTime() <= Date.now();
+                  return (
+                    <button
+                      key={showtime.id}
+                      className={isPast ? "past" : undefined}
+                      disabled={isPast}
+                      aria-disabled={isPast}
+                      onClick={() => setSelectedShowtimeId(showtime.id)}
+                    >
+                      <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
+                      <span>{showtime.auditorium.name}</span>
+                      <span>
+                        ${(showtime.priceTier.ticketPriceMinor / 100).toFixed(0)}
+                        {" + $"}
+                        {(showtime.priceTier.feeMinor / 100).toFixed(0)} fee
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </article>
-          );
-        })}
+        ))}
       </section>
         </>
       )}

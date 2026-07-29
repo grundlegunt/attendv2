@@ -292,6 +292,66 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
   });
 
+  it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
+    const zTitled = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Zzzchronological Early Show", runtimeMinutes: 90 });
+    expect(zTitled.status).toBe(201);
+
+    const aTitled = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Aaachronological Late Show", runtimeMinutes: 90 });
+    expect(aTitled.status).toBe(201);
+
+    // "Zzz..." (alphabetically last) plays first; "Aaa..." (alphabetically
+    // first) plays later the same day -- the listing must reflect
+    // showtime order, not title order.
+    const earlyShowtime = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId: zTitled.body.id, auditoriumId, startsAt: "2030-02-01T14:00:00.000Z", onSale: true });
+    expect(earlyShowtime.status).toBe(201);
+
+    const lateShowtime = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId: aTitled.body.id, auditoriumId, startsAt: "2030-02-01T20:00:00.000Z", onSale: true });
+    expect(lateShowtime.status).toBe(201);
+
+    const res = await request(app.getHttpServer()).get("/api/v1/cinema/now-playing");
+    expect(res.status).toBe(200);
+    const titles: string[] = res.body.movies.map((movie: { title: string }) => movie.title);
+    expect(titles.indexOf("Zzzchronological Early Show")).toBeLessThan(
+      titles.indexOf("Aaachronological Late Show"),
+    );
+  });
+
+  it("keeps a showtime that already started visible in the public listing instead of removing it", async () => {
+    const { prisma } = await import("@cinema/database");
+
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId, auditoriumId, startsAt: "2030-02-05T18:00:00.000Z", onSale: true });
+    expect(created.status).toBe(201);
+
+    // Simulate the showtime having already started -- directly, since the
+    // create endpoint itself won't accept a past startsAt.
+    await prisma.showtime.update({
+      where: { id: created.body.id },
+      data: { startsAt: new Date(Date.now() - 10 * 60 * 1000) },
+    });
+
+    const res = await request(app.getHttpServer()).get("/api/v1/cinema/now-playing");
+    expect(res.status).toBe(200);
+    const listedShowtimeIds = res.body.movies.flatMap((movie: { showtimes: Array<{ id: string }> }) =>
+      movie.showtimes.map((showtime) => showtime.id),
+    );
+    expect(listedShowtimeIds).toContain(created.body.id);
+  });
+
   it("rejects a server role from creating a movie", async () => {
     const login = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")
