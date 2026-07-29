@@ -55,6 +55,7 @@ button.link { padding: 14px 0 0; border: 0; background: none; color: var(--color
 .authorization-choice p, .authorization-choice small { color: var(--color-text-secondary); }
 .authorization-choice label { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; }
 .configuration-note, .authorization-note { grid-column: 1 / -1; padding: 16px; border: 1px solid var(--color-accent); color: var(--color-text-secondary); }
+.payment-element-loading { margin: 0 0 14px; color: var(--color-text-secondary); }
 .checkout-form > .primary, .payment-form > .primary { grid-column: 1 / -1; }
 .order-total p { display: flex; justify-content: space-between; gap: 24px; margin: 10px 0; }
 .order-total .total { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--color-border); font-size: 1.25rem; }

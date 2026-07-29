@@ -20,6 +20,7 @@ interface CheckoutConfig {
 interface StripeElement {
   mount(selector: string): void;
   destroy(): void;
+  on(event: "ready", handler: () => void): void;
 }
 
 interface StripeElements {
@@ -100,6 +101,7 @@ export function TicketCheckout({
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [paymentElementReady, setPaymentElementReady] = useState(false);
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const paymentElementRef = useRef<StripeElement | null>(null);
@@ -128,6 +130,7 @@ export function TicketCheckout({
     if (!config) return;
     setPending(true);
     setError(null);
+    setPaymentElementReady(false);
     try {
       const storageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
       let idempotencyKey = window.sessionStorage.getItem(storageKey);
@@ -175,6 +178,7 @@ export function TicketCheckout({
       const paymentElement = elements.create("payment", {
         layout: "tabs",
       });
+      paymentElement.on("ready", () => setPaymentElementReady(true));
       stripeRef.current = stripe;
       elementsRef.current = elements;
       paymentElementRef.current = paymentElement;
@@ -229,8 +233,8 @@ export function TicketCheckout({
         <span className="eyebrow">ORDER CONFIRMED</span>
         <h2>See you at the movies.</h2>
         <p>
-          Confirmation <strong>{confirmation.orderNumber}</strong> was sent to{" "}
-          <strong>{email}</strong>.
+          Order <strong>{confirmation.orderNumber}</strong> confirmed. Save this
+          page for your records.
         </p>
         <div className="confirmation-card">
           <h3>{confirmation.tickets[0]?.movie ?? movie}</h3>
@@ -316,10 +320,13 @@ export function TicketCheckout({
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
           <div className="checkout-panel">
-            <h3>Card or Apple Pay</h3>
+            <h3>Choose a payment method</h3>
+            {!paymentElementReady && (
+              <p className="payment-element-loading">Loading secure payment form…</p>
+            )}
             <div id="attend-payment-element" />
           </div>
-          <button className="primary" disabled={pending}>
+          <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
               ? "Completing purchase…"
               : `Pay ${money(checkout.totalCents, checkout.currency)}`}

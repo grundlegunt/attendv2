@@ -7,7 +7,8 @@
     "build": "pnpm --filter @cinema/database migrate:deploy && NODE_ENV=development pnpm --filter @cinema/database seed && pnpm --filter @cinema/database generate && next build",
     "start": "next start -p 3000",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint app --ext .ts,.tsx"
+    "lint": "eslint app --ext .ts,.tsx",
+    "test": "jest --config jest.config.js"
   },
   "dependencies": {
     "@cinema/database": "workspace:*",
@@ -20,9 +21,15 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.4.8",
+    "@testing-library/react": "^16.0.1",
+    "@types/jest": "^29.5.13",
     "@types/node": "^20.16.11",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
+    "ts-jest": "^29.2.5",
     "typescript": "^5.6.3"
   }
 }
