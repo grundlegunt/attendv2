@@ -24,6 +24,8 @@
 .showtime-list { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 32px; }
 .showtime-list button { min-width: 130px; text-align: left; opacity: 1; }
 .showtime-list button span { display: block; margin-top: 4px; color: var(--color-text-secondary); font-size: .72rem; }
+.showtime-list button.past { opacity: .4; cursor: not-allowed; border-color: var(--color-border); }
+.showtime-list button.past:hover { opacity: .4; }
 .field { display: grid; gap: 6px; margin-bottom: 12px; }
 .field input { padding: 12px; background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-primary); }
 button.primary { width: 100%; padding: 13px; border: 0; background: var(--color-accent); font-weight: 800; }
