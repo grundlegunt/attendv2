@@ -97,6 +97,7 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const stripeRef = useRef<StripeClient | null>(null);
@@ -124,7 +125,7 @@ export function TicketCheckout({
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
-    if (!config) return;
+    if (!config || diningAuthorization === null) return;
     setPending(true);
     setError(null);
     try {
@@ -145,11 +146,7 @@ export function TicketCheckout({
             ticketTypeId: config.ticketTypes[0]?.id,
             email,
             name: name || undefined,
-            // Card-on-file dining authorization is Milestone 5 scope --
-            // see the informational note in the form below. Nothing in
-            // this checkout flow can act on `true` yet, so it is never
-            // sent as anything other than false.
-            diningAuthorizationRequested: false,
+            diningAuthorizationRequested: diningAuthorization,
           }),
         },
       );
@@ -233,6 +230,9 @@ export function TicketCheckout({
             ? ` A receipt with your QR tickets was sent to ${email}.`
             : " Save these tickets for admission."}
         </p>
+        {confirmation.diningAuthorization === "AUTHORIZED" && (
+          <p>Your saved card is authorized for food and drinks during this visit.</p>
+        )}
         {confirmation.tickets.map((ticket) => (
           <div className="confirmation-card digital-ticket" key={ticket.id}>
             <div>
@@ -286,11 +286,28 @@ export function TicketCheckout({
           <div className="checkout-panel authorization-note">
             <h3>Food + drink during the movie</h3>
             <p>
-              Card-on-file ordering for food and drinks isn't available yet. Your
-              server will collect payment for anything you order tonight
-              separately, in person. This card is only charged for your ticket
-              order above.
+              Would you like to save this card for food and drinks during this
+              visit? If you authorize it, your final dining total can be charged
+              after service. You can still choose another payment method later.
             </p>
+            <label>
+              <input
+                type="radio"
+                name="dining-authorization"
+                checked={diningAuthorization === true}
+                onChange={() => setDiningAuthorization(true)}
+              />
+              Yes, save and authorize this card
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="dining-authorization"
+                checked={diningAuthorization === false}
+                onChange={() => setDiningAuthorization(false)}
+              />
+              No, I’ll pay separately
+            </label>
           </div>
           {config && !config.payment.ready && (
             <div className="configuration-note">
@@ -300,7 +317,12 @@ export function TicketCheckout({
           )}
           <button
             className="primary"
-            disabled={pending || !config?.ticketTypes.length || !config.payment.ready}
+            disabled={
+              pending ||
+              diningAuthorization === null ||
+              !config?.ticketTypes.length ||
+              !config.payment.ready
+            }
           >
             {pending ? "Preparing secure checkout…" : "Continue to payment"}
           </button>

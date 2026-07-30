@@ -40,6 +40,7 @@ interface LockedHold {
 // held -- see Refund.leaseExpiresAt (schema.prisma) and
 // reconcilePendingRefunds below.
 const REFUND_LEASE_MS = 60_000;
+const DINING_CONSENT_TERMS_VERSION = "dining-auto-settlement-2026-07-29";
 
 function paymentAttemptStatus(status: ProviderPaymentStatus): PaymentAttemptStatus {
   switch (status) {
@@ -179,16 +180,27 @@ export class TicketingService {
       (subtotalCents * location.ticketTaxRateBasisPoints) / 10_000,
     );
     const totalCents = subtotalCents + feesCents + taxCents;
+    const normalizedEmail = input.email.toLowerCase();
+    const customer = await this.prisma.customer.upsert({
+      where: { email: normalizedEmail },
+      create: {
+        email: normalizedEmail,
+        name: input.name?.trim() || null,
+        isGuest: true,
+      },
+      update: input.name?.trim() ? { name: input.name.trim() } : {},
+    });
 
     let order;
     try {
       order = await this.prisma.ticketOrder.create({
         data: {
           locationId: location.id,
+          customerId: customer.id,
           ticketTypeId: ticketType.id,
           holdTokens,
           holderKey: input.holderKey,
-          guestEmail: input.email.toLowerCase(),
+          guestEmail: normalizedEmail,
           guestName: input.name?.trim() || null,
           diningAuthorizationRequested: input.diningAuthorizationRequested,
           status: TicketOrderStatus.AWAITING_PAYMENT,
@@ -239,6 +251,10 @@ export class TicketingService {
   private async completeCheckout(order: {
     id: string;
     locationId: string;
+    customerId: string | null;
+    guestEmail: string | null;
+    guestName: string | null;
+    diningAuthorizationRequested: boolean | null;
     orderNumber: string;
     status: TicketOrderStatus;
     subtotalCents: number;
@@ -259,6 +275,16 @@ export class TicketingService {
       include: { organization: true },
     });
     const connectedAccountId = location.organization.stripeConnectedAccountId ?? undefined;
+    const paymentCustomer =
+      order.diningAuthorizationRequested && order.customerId && order.guestEmail
+        ? await this.ensurePaymentCustomer({
+            organizationId: location.organizationId,
+            customerId: order.customerId,
+            connectedAccountId,
+            email: order.guestEmail,
+            name: order.guestName ?? undefined,
+          })
+        : null;
 
     if (order.payment?.providerPaymentId) {
       // A real PaymentIntent already exists for this order -- replay it
@@ -282,6 +308,8 @@ export class TicketingService {
     const idempotencyKey = order.payment.idempotencyKey;
     const intent = await this.paymentProvider.createPaymentIntent({
       connectedAccountId,
+      providerCustomerId: paymentCustomer?.providerCustomerId,
+      savePaymentMethodForFuture: Boolean(order.diningAuthorizationRequested),
       amountCents: order.totalCents,
       currency: order.currency,
       metadata: {
@@ -327,6 +355,52 @@ export class TicketingService {
       }
       throw error;
     }
+  }
+
+  private async ensurePaymentCustomer(input: {
+    organizationId: string;
+    customerId: string;
+    connectedAccountId?: string;
+    email: string;
+    name?: string;
+  }) {
+    const existing = await this.prisma.paymentCustomer.findUnique({
+      where: {
+        organizationId_customerId_provider: {
+          organizationId: input.organizationId,
+          customerId: input.customerId,
+          provider: this.paymentProvider.name,
+        },
+      },
+    });
+    if (existing) return existing;
+
+    const providerCustomer = await this.paymentProvider.createCustomer({
+      connectedAccountId: input.connectedAccountId,
+      email: input.email,
+      name: input.name,
+      metadata: {
+        organizationId: input.organizationId,
+        customerId: input.customerId,
+      },
+      idempotencyKey: `payment-customer:${input.organizationId}:${input.customerId}`,
+    });
+    return this.prisma.paymentCustomer.upsert({
+      where: {
+        organizationId_customerId_provider: {
+          organizationId: input.organizationId,
+          customerId: input.customerId,
+          provider: this.paymentProvider.name,
+        },
+      },
+      create: {
+        organizationId: input.organizationId,
+        customerId: input.customerId,
+        provider: this.paymentProvider.name,
+        providerCustomerId: providerCustomer.id,
+      },
+      update: {},
+    });
   }
 
   async finalizeOrder(orderId: string) {
@@ -570,8 +644,12 @@ export class TicketingService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
       );
+      const diningAuthorization = await this.persistDiningAuthorization(
+        finalized,
+        providerResult.paymentMethod,
+      );
       const receiptDelivery = await this.deliverReceipt(finalized);
-      return this.presentConfirmation(finalized, receiptDelivery);
+      return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization);
     } catch (error) {
       if (
         error instanceof TicketingError &&
@@ -1385,6 +1463,93 @@ export class TicketingService {
     }
   }
 
+  private async persistDiningAuthorization(
+    order: {
+      id: string;
+      customerId: string | null;
+      diningAuthorizationRequested: boolean | null;
+      locationId: string;
+    },
+    paymentMethod: {
+      id: string;
+      brand: string;
+      last4: string;
+      expMonth: number;
+      expYear: number;
+    } | undefined,
+  ): Promise<"AUTHORIZED" | "DECLINED" | "UNAVAILABLE"> {
+    if (!order.customerId) return "UNAVAILABLE";
+    const requested = order.diningAuthorizationRequested === true;
+    const paymentCustomer = requested
+      ? await this.prisma.paymentCustomer.findFirst({
+          where: {
+            customerId: order.customerId,
+            organization: { locations: { some: { id: order.locationId } } },
+            provider: this.paymentProvider.name,
+          },
+        })
+      : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      let paymentMethodReferenceId: string | null = null;
+      if (requested && paymentCustomer && paymentMethod) {
+        await tx.paymentMethodReference.updateMany({
+          where: { paymentCustomerId: paymentCustomer.id, isDefault: true },
+          data: { isDefault: false },
+        });
+        const reference = await tx.paymentMethodReference.upsert({
+          where: {
+            paymentCustomerId_provider_providerPaymentMethodId: {
+              paymentCustomerId: paymentCustomer.id,
+              provider: this.paymentProvider.name,
+              providerPaymentMethodId: paymentMethod.id,
+            },
+          },
+          create: {
+            paymentCustomerId: paymentCustomer.id,
+            provider: this.paymentProvider.name,
+            providerPaymentMethodId: paymentMethod.id,
+            brand: paymentMethod.brand,
+            last4: paymentMethod.last4,
+            expMonth: paymentMethod.expMonth,
+            expYear: paymentMethod.expYear,
+            isDefault: true,
+          },
+          update: {
+            brand: paymentMethod.brand,
+            last4: paymentMethod.last4,
+            expMonth: paymentMethod.expMonth,
+            expYear: paymentMethod.expYear,
+            active: true,
+            isDefault: true,
+          },
+        });
+        paymentMethodReferenceId = reference.id;
+      }
+
+      const granted = requested && paymentMethodReferenceId !== null;
+      await tx.customerConsent.upsert({
+        where: {
+          ticketOrderId_type: {
+            ticketOrderId: order.id,
+            type: "DINING_AUTO_SETTLEMENT",
+          },
+        },
+        create: {
+          customerId: order.customerId!,
+          type: "DINING_AUTO_SETTLEMENT",
+          granted,
+          termsVersion: DINING_CONSENT_TERMS_VERSION,
+          grantedAt: new Date(),
+          ticketOrderId: order.id,
+          paymentMethodReferenceId,
+        },
+        update: {},
+      });
+      return granted ? "AUTHORIZED" : requested ? "UNAVAILABLE" : "DECLINED";
+    });
+  }
+
   private presentConfirmation(order: {
     id: string;
     orderNumber: string;
@@ -1403,7 +1568,10 @@ export class TicketingService {
         };
       };
     }>;
-  }, receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED") {
+  },
+  receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED",
+  diningAuthorization: "AUTHORIZED" | "DECLINED" | "UNAVAILABLE",
+  ) {
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -1411,6 +1579,7 @@ export class TicketingService {
       totalCents: order.totalCents,
       currency: order.currency,
       receiptDelivery,
+      diningAuthorization,
       tickets: order.tickets.map((ticket) => ({
         id: ticket.id,
         issuanceToken: ticket.qrToken,

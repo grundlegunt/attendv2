@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import {
   ProviderDefinitiveError,
   type CreatePaymentIntentArgs,
+  type CreateProviderCustomerArgs,
   type PaymentProvider,
   type ProviderPaymentIntentResult,
   type ProviderPaymentStatus,
@@ -42,6 +43,17 @@ export class StripePaymentProvider implements PaymentProvider {
     this.client = stripeClient ?? new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" as Stripe.LatestApiVersion });
   }
 
+  async createCustomer(args: CreateProviderCustomerArgs) {
+    const customer = await this.client.customers.create(
+      { email: args.email, name: args.name, metadata: args.metadata },
+      {
+        idempotencyKey: args.idempotencyKey,
+        ...(args.connectedAccountId ? { stripeAccount: args.connectedAccountId } : {}),
+      },
+    );
+    return { id: customer.id };
+  }
+
   async createPaymentIntent(args: CreatePaymentIntentArgs): Promise<ProviderPaymentIntentResult> {
     const intent = await this.client.paymentIntents.create(
       {
@@ -49,6 +61,8 @@ export class StripePaymentProvider implements PaymentProvider {
         currency: args.currency,
         metadata: args.metadata,
         automatic_payment_methods: { enabled: true },
+        ...(args.providerCustomerId ? { customer: args.providerCustomerId } : {}),
+        ...(args.savePaymentMethodForFuture ? { setup_future_usage: "off_session" as const } : {}),
       },
       {
         idempotencyKey: args.idempotencyKey,
@@ -61,7 +75,7 @@ export class StripePaymentProvider implements PaymentProvider {
   async retrievePaymentIntent(args: RetrievePaymentIntentArgs): Promise<ProviderPaymentIntentResult> {
     const intent = await this.client.paymentIntents.retrieve(
       args.paymentIntentId,
-      undefined,
+      { expand: ["payment_method"] },
       args.connectedAccountId ? { stripeAccount: args.connectedAccountId } : undefined,
     );
     return mapPaymentIntent(intent);
@@ -183,6 +197,10 @@ export class StripePaymentProvider implements PaymentProvider {
 }
 
 function mapPaymentIntent(intent: Stripe.PaymentIntent): ProviderPaymentIntentResult {
+  const card =
+    intent.payment_method && typeof intent.payment_method !== "string" && intent.payment_method.type === "card"
+      ? intent.payment_method.card
+      : null;
   return {
     id: intent.id,
     status: mapIntentStatus(intent),
@@ -192,6 +210,16 @@ function mapPaymentIntent(intent: Stripe.PaymentIntent): ProviderPaymentIntentRe
     metadata: intent.metadata ?? {},
     failureCode: intent.last_payment_error?.code ?? undefined,
     failureMessage: intent.last_payment_error?.message ?? undefined,
+    paymentMethod:
+      card && intent.payment_method && typeof intent.payment_method !== "string"
+        ? {
+            id: intent.payment_method.id,
+            brand: card.brand,
+            last4: card.last4,
+            expMonth: card.exp_month,
+            expYear: card.exp_year,
+          }
+        : undefined,
   };
 }
 

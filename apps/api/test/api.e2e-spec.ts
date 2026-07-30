@@ -1490,10 +1490,30 @@ describe("Customer authentication", () => {
     expect(res.body.code).toBe("CONFLICT");
   });
 
+  it("upgrades a ticket-checkout guest without losing their customer identity", async () => {
+    const guestEmail = "ticket-guest-upgrade@m0test.local";
+    const { prisma } = await import("@cinema/database");
+    const guest = await prisma.customer.create({
+      data: { email: guestEmail, name: "Ticket Guest", isGuest: true },
+    });
+
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/register")
+      .send({
+        email: guestEmail.toUpperCase(),
+        password: "customer-password-2",
+        name: "Registered Customer",
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.customer.id).toBe(guest.id);
+    expect(res.body.customer.isGuest).toBe(false);
+  });
+
   it("logs the customer in with correct credentials", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/login")
-      .send({ email, password: "customer-password-1" });
+      .send({ email: "NEW-CUSTOMER@M0TEST.LOCAL", password: "customer-password-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.customer.email).toBe(email);
@@ -1575,5 +1595,179 @@ describe("Milestone 4 ticket admission", () => {
       .set("Authorization", `Bearer ${server.body.accessToken}`)
       .send({ credential: milestone4Credential, expectedShowtimeId: showtimeId });
     expect(forbidden.status).toBe(403);
+  });
+});
+
+describe("Milestone 5 seat-linked dining tabs", () => {
+  const showtimeId = "31000000-0000-0000-0002-000000000002";
+  let sharedTabId: string;
+
+  async function purchaseSeats(holderKey: string, seatCount: number, authorizeDining: boolean) {
+    const availability = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
+    const seats = availability.body.seats
+      .filter((seat: { state: string }) => seat.state === "AVAILABLE")
+      .slice(0, seatCount);
+    expect(seats).toHaveLength(seatCount);
+    const hold = await request(app.getHttpServer())
+      .post(`/api/v1/cinema/showtimes/${showtimeId}/holds`)
+      .send({
+        seatIds: seats.map((seat: { id: string }) => seat.id),
+        holderKey,
+      });
+    expect(hold.status).toBe(201);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`);
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: hold.body.map((entry: { holdToken: string }) => entry.holdToken),
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        diningAuthorizationRequested: authorizeDining,
+      });
+    expect(checkout.status).toBe(201);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
+    const confirmation = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+      .send({});
+    expect(confirmation.status).toBe(201);
+    expect(confirmation.body.diningAuthorization)
+      .toBe(authorizeDining ? "AUTHORIZED" : "DECLINED");
+    return checkout.body.orderId as string;
+  }
+
+  it("opens one idempotent shared tab for a multi-seat authorized order", async () => {
+    const orderId = await purchaseSeats("m5-shared-holder-0001", 2, true);
+    const simultaneous = await Promise.all(
+      [1, 2].map(() =>
+        request(app.getHttpServer())
+          .post("/api/v1/restaurant-tabs/seat-linked")
+          .set("Authorization", `Bearer ${ownerAccessToken}`)
+          .send({ ticketOrderId: orderId, mode: "SHARED" }),
+      ),
+    );
+    expect(simultaneous.every((response) => response.status === 201)).toBe(true);
+    expect(simultaneous[0].body).toHaveLength(1);
+    expect(simultaneous[1].body[0].id).toBe(simultaneous[0].body[0].id);
+    expect(simultaneous[0].body[0].seats).toHaveLength(2);
+    expect(simultaneous[0].body[0].status).toBe("PREAUTHORIZED");
+    expect(simultaneous[0].body[0].paymentMethod).toEqual({
+      brand: "visa",
+      last4: "4242",
+    });
+    sharedTabId = simultaneous[0].body[0].id;
+
+    const { prisma } = await import("@cinema/database");
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: "restaurant_tab.opened",
+          entityId: sharedTabId,
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("opens one tab per seat when separate tabs are requested", async () => {
+    const orderId = await purchaseSeats("m5-separate-holder-0002", 2, false);
+    const result = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketOrderId: orderId, mode: "SEPARATE" });
+    expect(result.status).toBe(201);
+    expect(result.body).toHaveLength(2);
+    expect(result.body.every((tab: { seats: unknown[] }) => tab.seats.length === 1)).toBe(true);
+    expect(result.body.every((tab: { status: string }) => tab.status === "OPEN")).toBe(true);
+  });
+
+  it("treats shared and separate retries as equivalent for a single-seat order", async () => {
+    const orderId = await purchaseSeats("m5-single-holder-0003", 1, false);
+    const separate = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketOrderId: orderId, mode: "SEPARATE" });
+    const sharedRetry = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketOrderId: orderId, mode: "SHARED" });
+
+    expect(separate.status).toBe(201);
+    expect(sharedRetry.status).toBe(201);
+    expect(sharedRetry.body[0].id).toBe(separate.body[0].id);
+  });
+
+  it("enforces restaurant permission server-side", async () => {
+    const { prisma } = await import("@cinema/database");
+    const location = await prisma.location.findFirstOrThrow();
+    const { signTokenPair, Permission } = await import("@cinema/auth");
+    const doorAccessToken = signTokenPair(
+      {
+        sub: "00000000-0000-0000-0000-000000000098",
+        actorType: "EMPLOYEE",
+        locationId: location.id,
+        permissions: [Permission.TicketScan],
+      },
+      {
+        sub: "00000000-0000-0000-0000-000000000098",
+        actorType: "EMPLOYEE",
+        tokenVersion: 0,
+      },
+      {
+        accessSecret: process.env.JWT_ACCESS_SECRET!,
+        refreshSecret: process.env.JWT_REFRESH_SECRET!,
+        accessTtlSeconds: 900,
+        refreshTtlSeconds: 3600,
+      },
+    ).accessToken;
+    const result = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${doorAccessToken}`)
+      .send({
+        ticketOrderId: "00000000-0000-0000-0000-000000000001",
+        mode: "SHARED",
+      });
+    expect(result.status).toBe(403);
+  });
+
+  it("does not expose a tab summary to staff scoped to another location", async () => {
+    const { prisma } = await import("@cinema/database");
+    const organization = await prisma.organization.findFirstOrThrow();
+    const otherLocation = await prisma.location.create({
+      data: {
+        organizationId: organization.id,
+        name: "Other Cinema",
+      },
+    });
+    const { signTokenPair, Permission } = await import("@cinema/auth");
+    const otherLocationToken = signTokenPair(
+      {
+        sub: "00000000-0000-0000-0000-000000000099",
+        actorType: "EMPLOYEE",
+        locationId: otherLocation.id,
+        permissions: [Permission.RestaurantOrderCreate],
+      },
+      {
+        sub: "00000000-0000-0000-0000-000000000099",
+        actorType: "EMPLOYEE",
+        tokenVersion: 0,
+      },
+      {
+        accessSecret: process.env.JWT_ACCESS_SECRET!,
+        refreshSecret: process.env.JWT_REFRESH_SECRET!,
+        accessTtlSeconds: 900,
+        refreshTtlSeconds: 3600,
+      },
+    ).accessToken;
+
+    const result = await request(app.getHttpServer())
+      .get(`/api/v1/restaurant-tabs/${sharedTabId}/summary`)
+      .set("Authorization", `Bearer ${otherLocationToken}`);
+    expect(result.status).toBe(404);
   });
 });

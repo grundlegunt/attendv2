@@ -1,11 +1,11 @@
-// Milestone 3 schema.
+// Milestone 5 schema.
 // Scope: identity/RBAC, cinema configuration, concurrency-safe seat holds,
 // ticket checkout, ticket issuance records, and payment state.
 //
 // Conventions (see /docs/DATA_MODEL.md):
 //  - UUID primary keys.
 //  - createdAt/updatedAt on every model.
-//  - Money fields (none yet in this milestone) are always integer cents.
+//  - Money fields are always integer cents.
 
 generator client {
   provider = "prisma-client-js"
@@ -69,6 +69,7 @@ model Location {
   auditoriums  Auditorium[]
   ticketTypes  TicketType[]
   ticketOrders TicketOrder[]
+  restaurantTabs RestaurantTab[]
 
   @@map("locations")
 }
@@ -216,6 +217,7 @@ model Showtime {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   showtimeSeats   ShowtimeSeat[]
+  restaurantTabs  RestaurantTab[]
 
   @@index([auditoriumId, startsAt])
   @@index([movieId, startsAt])
@@ -233,6 +235,9 @@ model ShowtimeSeat {
   updatedAt  DateTime @updatedAt
   holds      SeatHold[]
   tickets    Ticket[]
+  tabSeats   RestaurantTabSeat[] @relation("TabSeatMembership")
+  currentTabSeatId String? @unique
+  currentTabSeat RestaurantTabSeat? @relation("CurrentTabSeat", fields: [currentTabSeatId], references: [id], onDelete: Restrict)
 
   @@unique([showtimeId, seatId])
   @@index([showtimeId, blockedAt])
@@ -332,6 +337,29 @@ enum RefundScope {
   BOTH
 }
 
+enum CustomerConsentType {
+  DINING_AUTO_SETTLEMENT
+  TERMS_OF_SERVICE
+  MARKETING
+}
+
+enum RestaurantTabType {
+  SEAT_LINKED
+  WALK_IN
+}
+
+enum RestaurantTabStatus {
+  PREAUTHORIZED
+  OPEN
+  READY_TO_CLOSE
+  SETTLEMENT_PENDING
+  PAYMENT_FAILED
+  MANAGER_REVIEW
+  CLOSED
+  REFUNDED
+  VOIDED
+}
+
 model TicketType {
   id         String   @id @default(uuid())
   locationId String
@@ -390,6 +418,7 @@ model TicketOrder {
 
   tickets Ticket[]
   payment Payment?
+  consents CustomerConsent[]
 
   @@index([locationId, createdAt])
   @@index([customerId, createdAt])
@@ -412,6 +441,7 @@ model Ticket {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   scans          TicketScan[]
+  tabSeats       RestaurantTabSeat[]
 
   @@index([ticketOrderId])
   @@index([showtimeSeatId, status])
@@ -472,6 +502,8 @@ model PaymentMethodReference {
   updatedAt DateTime @updatedAt
 
   payments Payment[]
+  consents CustomerConsent[]
+  restaurantTabs RestaurantTab[]
 
   @@unique([paymentCustomerId, provider, providerPaymentMethodId])
   @@index([paymentCustomerId, active])
@@ -483,6 +515,8 @@ model Payment {
   purpose       PaymentPurpose
   ticketOrderId String?        @unique
   ticketOrder   TicketOrder?   @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  restaurantTabId String?
+  restaurantTab RestaurantTab? @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
   amountCents   Int
   tipCents      Int?
   currency      String         @default("USD")
@@ -512,6 +546,7 @@ model Payment {
   refunds  Refund[]
 
   @@index([status, createdAt])
+  @@index([restaurantTabId, status])
   @@index([verificationFailedAt])
   @@map("payments")
 }
@@ -713,8 +748,79 @@ model Customer {
   authAccount CustomerAuthAccount?
   ticketOrders TicketOrder[]
   paymentCustomers PaymentCustomer[]
+  consents CustomerConsent[]
+  restaurantTabs RestaurantTab[]
 
   @@map("customers")
+}
+
+model CustomerConsent {
+  id                       String                 @id @default(uuid())
+  customerId               String
+  customer                 Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  type                     CustomerConsentType
+  granted                  Boolean
+  termsVersion             String
+  grantedAt                DateTime
+  ticketOrderId            String?
+  ticketOrder              TicketOrder?           @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  paymentMethodReferenceId String?
+  paymentMethodReference   PaymentMethodReference? @relation(fields: [paymentMethodReferenceId], references: [id], onDelete: Restrict)
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
+
+  @@index([customerId, type, grantedAt])
+  @@index([ticketOrderId])
+  @@unique([ticketOrderId, type])
+  @@map("customer_consents")
+}
+
+model RestaurantTab {
+  id                       String                 @id @default(uuid())
+  locationId               String
+  location                 Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  primaryCustomerId        String?
+  primaryCustomer          Customer?              @relation(fields: [primaryCustomerId], references: [id], onDelete: Restrict)
+  tabType                  RestaurantTabType
+  showtimeId               String?
+  showtime                 Showtime?              @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+  label                    String?
+  status                   RestaurantTabStatus
+  autoSettleAuthorized     Boolean                @default(false)
+  activePaymentMethodId    String?
+  activePaymentMethod      PaymentMethodReference? @relation(fields: [activePaymentMethodId], references: [id], onDelete: Restrict)
+  activePaymentMethodSetAt DateTime?
+  autoSettleAt             DateTime?
+  checkDroppedAt           DateTime?
+  openedAt                 DateTime               @default(now())
+  closedAt                 DateTime?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+
+  seats    RestaurantTabSeat[]
+  payments Payment[]
+
+  @@index([locationId, status, openedAt])
+  @@index([showtimeId, status])
+  @@map("restaurant_tabs")
+}
+
+model RestaurantTabSeat {
+  id             String       @id @default(uuid())
+  restaurantTabId String
+  restaurantTab   RestaurantTab @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
+  showtimeSeatId  String
+  showtimeSeat    ShowtimeSeat @relation("TabSeatMembership", fields: [showtimeSeatId], references: [id], onDelete: Restrict)
+  ticketId        String
+  ticket          Ticket      @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  currentForSeat  ShowtimeSeat? @relation("CurrentTabSeat")
+
+  @@unique([showtimeSeatId, restaurantTabId])
+  @@unique([ticketId, restaurantTabId])
+  @@index([restaurantTabId])
+  @@map("restaurant_tab_seats")
 }
 
 model CustomerAuthAccount {
