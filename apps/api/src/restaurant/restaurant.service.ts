@@ -5,10 +5,13 @@ import {
   RestaurantService as RestaurantDomainService,
 } from "@cinema/restaurant";
 import { AppError } from "../common/app-error";
+import { FulfillmentEventsService } from "./fulfillment-events.service";
 
 @Injectable()
 export class RestaurantService {
   private readonly domain = new RestaurantDomainService(prisma);
+
+  constructor(private readonly fulfillmentEvents: FulfillmentEventsService) {}
 
   openSeatLinkedTabs(input: {
     ticketOrderId: string;
@@ -73,8 +76,17 @@ export class RestaurantService {
     return this.wrap(() => this.domain.removeDraftOrderItem(input));
   }
 
-  sendOrder(input: Parameters<RestaurantDomainService["sendOrder"]>[0]) {
-    return this.wrap(() => this.domain.sendOrder(input));
+  async sendOrder(input: Parameters<RestaurantDomainService["sendOrder"]>[0]) {
+    const result = await this.wrap(() => this.domain.sendOrder(input));
+    for (const ticket of result.fulfillmentTickets) {
+      this.fulfillmentEvents.publish({
+        locationId: input.locationId,
+        kitchenStationId: ticket.kitchenStationId,
+        type: "TICKET_CREATED",
+        ticketId: ticket.id,
+      });
+    }
+    return result;
   }
 
   splitTab(input: Parameters<RestaurantDomainService["splitTab"]>[0]) {
@@ -87,6 +99,33 @@ export class RestaurantService {
 
   combineTabs(input: Parameters<RestaurantDomainService["combineTabs"]>[0]) {
     return this.wrap(() => this.domain.combineTabs(input));
+  }
+
+  getFulfillmentStations(
+    input: Parameters<RestaurantDomainService["getFulfillmentStations"]>[0],
+  ) {
+    return this.wrap(() => this.domain.getFulfillmentStations(input));
+  }
+
+  getFulfillmentQueue(
+    input: Parameters<RestaurantDomainService["getFulfillmentQueue"]>[0],
+  ) {
+    return this.wrap(() => this.domain.getFulfillmentQueue(input));
+  }
+
+  async transitionFulfillmentTicket(
+    input: Parameters<RestaurantDomainService["transitionFulfillmentTicket"]>[0],
+  ) {
+    const ticket = await this.wrap(() =>
+      this.domain.transitionFulfillmentTicket(input),
+    );
+    this.fulfillmentEvents.publish({
+      locationId: input.locationId,
+      kitchenStationId: ticket.kitchenStationId,
+      type: "TICKET_UPDATED",
+      ticketId: ticket.id,
+    });
+    return ticket;
   }
 
   private async wrap<T>(operation: () => Promise<T>) {

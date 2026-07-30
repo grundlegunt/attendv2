@@ -153,6 +153,58 @@ export async function seedDatabase(
     create: { employeeId: server.id, roleId: roleByKey.get(RoleKey.Server)!.id, locationId: location.id },
   });
 
+  const kitchenEmployee = await prisma.employee.upsert({
+    where: { email: `kitchen@${suffix}` },
+    update: {},
+    create: {
+      locationId: location.id,
+      name: "Kai Kitchen",
+      email: `kitchen@${suffix}`,
+      authAccount: { create: { passwordHash } },
+    },
+  });
+  await prisma.employeeRole.upsert({
+    where: {
+      employeeId_roleId_locationId: {
+        employeeId: kitchenEmployee.id,
+        roleId: roleByKey.get(RoleKey.Kitchen)!.id,
+        locationId: location.id,
+      },
+    },
+    update: {},
+    create: {
+      employeeId: kitchenEmployee.id,
+      roleId: roleByKey.get(RoleKey.Kitchen)!.id,
+      locationId: location.id,
+    },
+  });
+
+  const bartender = await prisma.employee.upsert({
+    where: { email: `bartender@${suffix}` },
+    update: {},
+    create: {
+      locationId: location.id,
+      name: "Blair Bartender",
+      email: `bartender@${suffix}`,
+      authAccount: { create: { passwordHash } },
+    },
+  });
+  await prisma.employeeRole.upsert({
+    where: {
+      employeeId_roleId_locationId: {
+        employeeId: bartender.id,
+        roleId: roleByKey.get(RoleKey.Bartender)!.id,
+        locationId: location.id,
+      },
+    },
+    update: {},
+    create: {
+      employeeId: bartender.id,
+      roleId: roleByKey.get(RoleKey.Bartender)!.id,
+      locationId: location.id,
+    },
+  });
+
   log("Seeding a demo customer account...");
   const customer = await prisma.customer.upsert({
     where: { email: `customer@${suffix}` },
@@ -515,6 +567,8 @@ if (require.main === module) {
       console.log("\nSeed complete.");
       console.log(`  Owner login:    owner@ridgelinecinema.test / ${SEED_PASSWORD}`);
       console.log(`  Server login:   server@ridgelinecinema.test / ${SEED_PASSWORD}`);
+      console.log(`  Kitchen login:  kitchen@ridgelinecinema.test / ${SEED_PASSWORD}`);
+      console.log(`  Bartender login: bartender@ridgelinecinema.test / ${SEED_PASSWORD}`);
       console.log(`  Customer login: customer@ridgelinecinema.test / ${SEED_PASSWORD}`);
       console.log(`  Location id:    ${result.locationId}`);
     })

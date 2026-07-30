@@ -29,3 +29,36 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+export function subscribeToStationEvents(
+  kitchenStationId: string,
+  accessToken: string,
+  onEvent: () => void,
+) {
+  const controller = new AbortController();
+  void fetch(`${API_BASE_URL}/fulfillment/stations/${kitchenStationId}/events`, {
+    headers: {
+      Accept: "text/event-stream",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    signal: controller.signal,
+  })
+    .then(async (response) => {
+      if (!response.ok || !response.body) return;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (!controller.signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split("\n\n");
+        buffer = events.pop() ?? "";
+        if (events.some((event) => event.includes("data:"))) onEvent();
+      }
+    })
+    .catch(() => {
+      // The queue's periodic authoritative refetch is the reconnect fallback.
+    });
+  return () => controller.abort();
+}

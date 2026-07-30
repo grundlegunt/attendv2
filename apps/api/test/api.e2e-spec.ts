@@ -2007,3 +2007,142 @@ describe("Milestone 6 server POS and menus", () => {
     ).toBe(1);
   });
 });
+
+describe("Milestone 7 kitchen and bar fulfillment", () => {
+  async function createMixedFulfillmentOrder(label: string) {
+    const menu = await request(app.getHttpServer())
+      .get("/api/v1/restaurant-menu")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    const items = menu.body.categories.flatMap(
+      (category: { items: unknown[] }) => category.items,
+    ) as Array<{
+      id: string;
+      name: string;
+      modifierGroups: Array<{
+        required: boolean;
+        modifiers: Array<{ id: string }>;
+      }>;
+    }>;
+    const burger = items.find((item) => item.name === "Cheeseburger")!;
+    const cocktail = items.find((item) => item.name === "Old Fashioned")!;
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    for (const item of [burger, cocktail]) {
+      await request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          menuItemId: item.id,
+          quantity: 1,
+          modifierIds: item.modifierGroups
+            .filter((group) => group.required)
+            .map((group) => group.modifiers[0]!.id),
+        })
+        .expect(201);
+    }
+    const sent = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    expect(sent.status).toBe(201);
+    return { tabId: tab.body.id as string, orderId: order.body.id as string, sent };
+  }
+
+  it("creates one station-isolated ticket for the burger and one for the cocktail", async () => {
+    const { orderId, sent } = await createMixedFulfillmentOrder("M7 routing");
+    expect(sent.body.fulfillmentTickets).toHaveLength(2);
+    const { prisma } = await import("@cinema/database");
+    const tickets = await prisma.fulfillmentTicket.findMany({
+      where: { restaurantOrderId: orderId },
+      include: {
+        kitchenStation: true,
+        items: { include: { menuItem: true } },
+      },
+    });
+    expect(
+      tickets.map((ticket) => ({
+        station: ticket.kitchenStation.name,
+        items: ticket.items.map((item) => item.menuItem.name),
+      })).sort((left, right) => left.station.localeCompare(right.station)),
+    ).toEqual([
+      { station: "Bar", items: ["Old Fashioned"] },
+      { station: "Kitchen", items: ["Cheeseburger"] },
+    ]);
+  });
+
+  it("enforces the transition sequence, rolls up the order, and preserves a refire cycle", async () => {
+    const { orderId, sent } = await createMixedFulfillmentOrder("M7 states");
+    const ticketId = sent.body.fulfillmentTickets[0].id as string;
+    for (const [action, expectedStatus] of [
+      ["ACCEPT", "ACCEPTED"],
+      ["START", "PREPARING"],
+      ["READY", "READY"],
+      ["DELIVER", "DELIVERED"],
+    ] as const) {
+      const response = await request(app.getHttpServer())
+        .patch(`/api/v1/fulfillment/tickets/${ticketId}`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ action });
+      expect(response.status).toBe(200);
+      expect(response.body.status).toBe(expectedStatus);
+    }
+    const { prisma } = await import("@cinema/database");
+    expect(await prisma.restaurantOrder.findUniqueOrThrow({ where: { id: orderId } }))
+      .toMatchObject({ status: "PARTIALLY_DELIVERED" });
+
+    const server = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `server@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    const refire = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/fulfillment/${ticketId}/refire`)
+      .set("Authorization", `Bearer ${server.body.accessToken}`)
+      .send({});
+    expect(refire.status).toBe(200);
+    expect(refire.body).toMatchObject({
+      status: "NEW",
+      refiredFromId: ticketId,
+      refireCount: 1,
+    });
+    const original = await prisma.fulfillmentTicket.findUniqueOrThrow({
+      where: { id: ticketId },
+    });
+    expect(original).toMatchObject({
+      status: "REFIRE",
+      refireCount: 1,
+      deliveredAt: expect.any(Date),
+    });
+  });
+
+  it("requires kitchen status permission and scopes station queues to the staff location", async () => {
+    const server = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `server@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    await request(app.getHttpServer())
+      .get("/api/v1/fulfillment/stations")
+      .set("Authorization", `Bearer ${server.body.accessToken}`)
+      .expect(403);
+
+    const { prisma } = await import("@cinema/database");
+    const organization = await prisma.organization.findFirstOrThrow();
+    const otherLocation = await prisma.location.create({
+      data: { organizationId: organization.id, name: "M7 Other Cinema" },
+    });
+    const otherStation = await prisma.kitchenStation.create({
+      data: {
+        locationId: otherLocation.id,
+        name: "Other Kitchen",
+        displayType: "KITCHEN",
+      },
+    });
+    await request(app.getHttpServer())
+      .get(`/api/v1/fulfillment/stations/${otherStation.id}/queue`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(404);
+  });
+});
