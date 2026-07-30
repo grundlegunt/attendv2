@@ -738,6 +738,10 @@ export class TicketingService {
           },
         });
       }
+      if (payment?.restaurantTabId) {
+        await this.applyRestaurantPaymentWebhook(payment, event);
+        return this.recordProcessedWebhookEvent(event.id);
+      }
       if (!payment?.ticketOrderId) throw TicketingError.notFound("Payment was not found.");
       if (event.type === "payment_intent.succeeded") {
         await this.finalizeOrder(payment.ticketOrderId);
@@ -830,6 +834,117 @@ export class TicketingService {
       }
       throw error;
     }
+  }
+
+  private async applyRestaurantPaymentWebhook(
+    payment: {
+      id: string;
+      restaurantTabId: string | null;
+      status: PaymentStatus;
+    },
+    event: VerifiedProviderEvent,
+  ) {
+    if (!payment.restaurantTabId) return;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${payment.restaurantTabId} FOR UPDATE`,
+      );
+      const tab = await tx.restaurantTab.findUnique({
+        where: { id: payment.restaurantTabId! },
+        include: { payments: true, receipt: true },
+      });
+      if (!tab || tab.status === "CLOSED") return;
+      const nextPaymentStatus =
+        event.type === "payment_intent.succeeded"
+          ? PaymentStatus.SUCCEEDED
+          : event.type === "payment_intent.payment_failed"
+            ? PaymentStatus.FAILED
+            : PaymentStatus.REQUIRES_ACTION;
+      if (
+        !new Set<PaymentStatus>([
+          PaymentStatus.SUCCEEDED,
+          PaymentStatus.REFUNDED,
+          PaymentStatus.PARTIALLY_REFUNDED,
+        ]).has(payment.status)
+      ) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: nextPaymentStatus },
+        });
+      }
+      const resolvedPayment = await tx.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+      });
+      const succeededPayments = await tx.payment.findMany({
+        where: {
+          restaurantTabId: tab.id,
+          status: PaymentStatus.SUCCEEDED,
+        },
+      });
+      const paidCents = succeededPayments.reduce(
+        (sum, candidate) => sum + candidate.amountCents,
+        0,
+      );
+      if (
+        resolvedPayment.status === PaymentStatus.SUCCEEDED &&
+        paidCents >= (tab.totalCents ?? 0)
+      ) {
+        const closedAt = new Date();
+        await tx.restaurantTab.update({
+          where: { id: tab.id },
+          data: { status: "CLOSED", closedAt },
+        });
+        if (!tab.receipt) {
+          await tx.restaurantReceipt.create({
+            data: {
+              restaurantTabId: tab.id,
+              receiptNumber: `R-${closedAt.getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+              subtotalCents: tab.subtotalCents ?? 0,
+              taxCents: tab.taxCents ?? 0,
+              serviceChargeCents: tab.serviceChargeCents ?? 0,
+              tipCents: tab.selectedTipCents ?? 0,
+              totalCents: tab.totalCents ?? 0,
+              tenderSummary: succeededPayments.map((candidate) => ({
+                amountCents: candidate.amountCents,
+                paymentMethodReferenceId: candidate.paymentMethodReferenceId,
+              })),
+            },
+          });
+        }
+        await tx.auditEvent.create({
+          data: {
+            actorType: "SYSTEM",
+            action: "restaurant_tab.closed_from_payment_webhook",
+            entityType: "RestaurantTab",
+            entityId: tab.id,
+            locationId: tab.locationId,
+            afterState: { status: "CLOSED", paidCents },
+          },
+        });
+      } else if (
+        new Set<PaymentStatus>([
+          PaymentStatus.FAILED,
+          PaymentStatus.REQUIRES_ACTION,
+          PaymentStatus.REQUIRES_PAYMENT_METHOD,
+          PaymentStatus.CANCELED,
+        ]).has(resolvedPayment.status)
+      ) {
+        await tx.restaurantTab.update({
+          where: { id: tab.id },
+          data: { status: "PAYMENT_FAILED" },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: "SYSTEM",
+            action: "restaurant_tab.payment_failed",
+            entityType: "RestaurantTab",
+            entityId: tab.id,
+            locationId: tab.locationId,
+            afterState: { paymentId: payment.id, providerEventId: event.id },
+          },
+        });
+      }
+    });
   }
 
   verifyAndProcessWebhook(rawBody: Buffer, signatureHeader: string) {

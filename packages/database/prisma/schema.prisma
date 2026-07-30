@@ -56,22 +56,27 @@ model Location {
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
   // Location-level setting.
-  cleaningBufferMinutes Int @default(15)
-  preShowBufferMinutes  Int @default(30)
+  cleaningBufferMinutes     Int @default(15)
+  preShowBufferMinutes      Int @default(30)
+  checkDropMinutesBeforeEnd Int @default(30)
+  autoSettleGraceMinutes    Int @default(5)
+  autoSettleTipBasisPoints  Int @default(0)
 
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  employees       Employee[]
-  employeeRoles   EmployeeRole[]
-  auditEvents     AuditEvent[]
-  auditoriums     Auditorium[]
-  ticketTypes     TicketType[]
-  ticketOrders    TicketOrder[]
-  restaurantTabs  RestaurantTab[]
-  kitchenStations KitchenStation[]
-  menuCategories  MenuCategory[]
+  employees          Employee[]
+  employeeRoles      EmployeeRole[]
+  auditEvents        AuditEvent[]
+  auditoriums        Auditorium[]
+  ticketTypes        TicketType[]
+  ticketOrders       TicketOrder[]
+  restaurantTabs     RestaurantTab[]
+  kitchenStations    KitchenStation[]
+  menuCategories     MenuCategory[]
+  taxRules           TaxRule[]
+  serviceChargeRules ServiceChargeRule[]
 
   @@map("locations")
 }
@@ -389,6 +394,19 @@ enum RestaurantOrderItemStatus {
   COMPED
 }
 
+enum RestaurantChargeCategory {
+  FOOD
+  ALCOHOL
+  NA_BEVERAGE
+}
+
+enum RestaurantChargeAppliesTo {
+  ALL
+  FOOD
+  ALCOHOL
+  NA_BEVERAGE
+}
+
 enum FulfillmentTicketStatus {
   NEW
   ACCEPTED
@@ -669,11 +687,12 @@ model Employee {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  authAccount        StaffAuthAccount?
-  employeeRoles      EmployeeRole[]
-  placedTicketOrders TicketOrder[]
-  ticketScans        TicketScan[]
-  restaurantOrders   RestaurantOrder[]
+  authAccount             StaffAuthAccount?
+  employeeRoles           EmployeeRole[]
+  placedTicketOrders      TicketOrder[]
+  ticketScans             TicketScan[]
+  restaurantOrders        RestaurantOrder[]
+  droppedRestaurantChecks RestaurantTab[]   @relation("DroppedRestaurantChecks")
 
   @@map("employees")
 }
@@ -834,6 +853,13 @@ model RestaurantTab {
   activePaymentMethodSetAt DateTime?
   autoSettleAt             DateTime?
   checkDroppedAt           DateTime?
+  checkDroppedByEmployeeId String?
+  checkDroppedByEmployee   Employee?                 @relation("DroppedRestaurantChecks", fields: [checkDroppedByEmployeeId], references: [id], onDelete: Restrict)
+  selectedTipCents         Int?
+  subtotalCents            Int?
+  taxCents                 Int?
+  serviceChargeCents       Int?
+  totalCents               Int?
   openedAt                 DateTime                  @default(now())
   closedAt                 DateTime?
   createdAt                DateTime                  @default(now())
@@ -841,6 +867,7 @@ model RestaurantTab {
 
   seats           RestaurantTabSeat[]
   payments        Payment[]
+  receipt         RestaurantReceipt?
   orders          RestaurantOrder[]
   mergedTabs      RestaurantTab[]     @relation("MergedRestaurantTabs")
   mergedIntoTabId String?
@@ -906,19 +933,20 @@ model MenuCategory {
 }
 
 model MenuItem {
-  id               String         @id @default(uuid())
+  id               String                   @id @default(uuid())
   menuCategoryId   String
-  menuCategory     MenuCategory   @relation(fields: [menuCategoryId], references: [id], onDelete: Restrict)
+  menuCategory     MenuCategory             @relation(fields: [menuCategoryId], references: [id], onDelete: Restrict)
   kitchenStationId String
-  kitchenStation   KitchenStation @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  kitchenStation   KitchenStation           @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
   name             String
   description      String?
   priceCents       Int
-  active           Boolean        @default(true)
-  is86d            Boolean        @default(false)
-  sortOrder        Int            @default(0)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  chargeCategory   RestaurantChargeCategory @default(FOOD)
+  active           Boolean                  @default(true)
+  is86d            Boolean                  @default(false)
+  sortOrder        Int                      @default(0)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   modifierGroups ModifierGroup[]
   orderItems     RestaurantOrderItem[]
@@ -927,6 +955,40 @@ model MenuItem {
   @@index([menuCategoryId, active, sortOrder])
   @@index([kitchenStationId, active])
   @@map("menu_items")
+}
+
+model TaxRule {
+  id           String                    @id @default(uuid())
+  locationId   String
+  location     Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name         String
+  appliesTo    RestaurantChargeAppliesTo
+  ratePermille Int
+  active       Boolean                   @default(true)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([locationId, name])
+  @@index([locationId, active])
+  @@map("tax_rules")
+}
+
+model ServiceChargeRule {
+  id           String                    @id @default(uuid())
+  locationId   String
+  location     Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name         String
+  appliesTo    RestaurantChargeAppliesTo
+  ratePermille Int?
+  flatCents    Int?
+  autoApply    Boolean                   @default(true)
+  active       Boolean                   @default(true)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([locationId, name])
+  @@index([locationId, active, autoApply])
+  @@map("service_charge_rules")
 }
 
 model ModifierGroup {
@@ -1041,6 +1103,24 @@ model FulfillmentTicket {
   @@index([restaurantOrderId, status])
   @@index([refiredFromId])
   @@map("fulfillment_tickets")
+}
+
+model RestaurantReceipt {
+  id                 String        @id @default(uuid())
+  restaurantTabId    String        @unique
+  restaurantTab      RestaurantTab @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
+  receiptNumber      String        @unique
+  subtotalCents      Int
+  taxCents           Int
+  serviceChargeCents Int
+  tipCents           Int
+  totalCents         Int
+  tenderSummary      Json
+  issuedAt           DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@map("restaurant_receipts")
 }
 
 model CustomerAuthAccount {

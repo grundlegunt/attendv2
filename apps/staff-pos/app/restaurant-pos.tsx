@@ -38,6 +38,20 @@ interface LiveTabSummary {
   }>;
 }
 
+interface SettlementTab {
+  status: string;
+  checkDroppedAt: string | null;
+  activePaymentMethod: { id: string; brand: string; last4: string } | null;
+  totals: {
+    subtotalCents: number;
+    taxCents: number;
+    serviceChargeCents: number;
+    totalCents: number;
+  };
+  paidCents: number;
+  receipt: { receiptNumber: string } | null;
+}
+
 export function RestaurantPos({
   accessToken,
   initialTabId = "",
@@ -57,6 +71,12 @@ export function RestaurantPos({
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
   const [blockedItems, setBlockedItems] = useState<Array<{ id: string; name: string }>>([]);
   const [liveTab, setLiveTab] = useState<LiveTabSummary | null>(null);
+  const [settlement, setSettlement] = useState<SettlementTab | null>(null);
+  const [tipCents, setTipCents] = useState("0");
+  const [savedCardCents, setSavedCardCents] = useState("");
+  const [terminalCents, setTerminalCents] = useState("");
+  const [readerId, setReaderId] = useState("tmr_test_reader");
+  const [guestAccessToken, setGuestAccessToken] = useState("");
 
   useEffect(() => {
     const refresh = () =>
@@ -76,8 +96,14 @@ export function RestaurantPos({
       return;
     }
     const refresh = () =>
-      apiFetch<LiveTabSummary>(`/restaurant-tabs/${tabId}/summary`, { accessToken })
-        .then(setLiveTab)
+      Promise.all([
+        apiFetch<LiveTabSummary>(`/restaurant-tabs/${tabId}/summary`, { accessToken }),
+        apiFetch<SettlementTab>(`/restaurant-settlement/tabs/${tabId}`, { accessToken }),
+      ])
+        .then(([summary, settlementTab]) => {
+          setLiveTab(summary);
+          setSettlement(settlementTab);
+        })
         .catch(() => undefined);
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
@@ -204,6 +230,73 @@ export function RestaurantPos({
     }
   }
 
+  async function dropCheck() {
+    try {
+      await apiFetch(`/restaurant-settlement/tabs/${tabId}/drop-check`, {
+        method: "POST",
+        accessToken,
+        body: "{}",
+      });
+      setMessage("Check dropped. One final order may still be added before payment.");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function finalizeTab() {
+    if (!settlement) return;
+    const tenders = [
+      ...(Number(savedCardCents) > 0 && settlement.activePaymentMethod
+        ? [{
+            type: "SAVED_METHOD",
+            amountCents: Number(savedCardCents),
+            paymentMethodReferenceId: settlement.activePaymentMethod.id,
+          }]
+        : []),
+      ...(Number(terminalCents) > 0
+        ? [{
+            type: "CARD_PRESENT",
+            amountCents: Number(terminalCents),
+            readerId,
+          }]
+        : []),
+    ];
+    try {
+      const result = await apiFetch<{ status: string }>(
+        `/restaurant-settlement/tabs/${tabId}/finalize`,
+        {
+          method: "POST",
+          accessToken,
+          body: JSON.stringify({
+            requestId: crypto.randomUUID(),
+            tipCents: Number(tipCents),
+            tenders,
+          }),
+        },
+      );
+      setMessage(
+        result.status === "CLOSED"
+          ? "Tab paid and closed. Receipt issued."
+          : `Settlement needs attention: ${result.status}.`,
+      );
+    } catch (error) {
+      showError(error);
+    }
+  }
+
+  async function createGuestLink() {
+    try {
+      const result = await apiFetch<{ token: string }>(
+        `/restaurant-settlement/tabs/${tabId}/access-link`,
+        { method: "POST", accessToken, body: "{}" },
+      );
+      setGuestAccessToken(result.token);
+      setMessage("Secure 24-hour guest tab link created.");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   return (
     <section className="scanner-panel">
       <h2>Server POS</h2>
@@ -229,6 +322,69 @@ export function RestaurantPos({
         {orderId ? "Order in progress" : "Start order"}
       </button>
       {message && <div className="scan-result valid"><strong>{message}</strong></div>}
+      {settlement && (
+        <div className="scan-result">
+          <h3>Check · {settlement.status}</h3>
+          <p>
+            Subtotal ${(settlement.totals.subtotalCents / 100).toFixed(2)} · Tax $
+            {(settlement.totals.taxCents / 100).toFixed(2)} · Service $
+            {(settlement.totals.serviceChargeCents / 100).toFixed(2)}
+          </p>
+          <strong>
+            Due ${((settlement.totals.totalCents - settlement.paidCents) / 100).toFixed(2)}
+          </strong>
+          {!settlement.checkDroppedAt && settlement.status !== "CLOSED" && (
+            <button className="secondary" type="button" onClick={dropCheck}>
+              Drop check
+            </button>
+          )}
+          {settlement.status !== "CLOSED" && settlement.activePaymentMethod && (
+            <button className="secondary" type="button" onClick={createGuestLink}>
+              Create guest tab link
+            </button>
+          )}
+          {guestAccessToken && (
+            <p>
+              Guest link token: <code>{guestAccessToken}</code>
+            </p>
+          )}
+          {settlement.checkDroppedAt && settlement.status !== "CLOSED" && (
+            <>
+              <label className="field">
+                <span>Tip (cents)</span>
+                <input value={tipCents} onChange={(event) => setTipCents(event.target.value)} />
+              </label>
+              {settlement.activePaymentMethod && (
+                <label className="field">
+                  <span>
+                    {settlement.activePaymentMethod.brand} ····
+                    {settlement.activePaymentMethod.last4} amount (cents)
+                  </span>
+                  <input
+                    value={savedCardCents}
+                    onChange={(event) => setSavedCardCents(event.target.value)}
+                  />
+                </label>
+              )}
+              <label className="field">
+                <span>Presented card amount (cents)</span>
+                <input
+                  value={terminalCents}
+                  onChange={(event) => setTerminalCents(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Terminal reader</span>
+                <input value={readerId} onChange={(event) => setReaderId(event.target.value)} />
+              </label>
+              <button className="primary" type="button" onClick={finalizeTab}>
+                Collect payment & close
+              </button>
+            </>
+          )}
+          {settlement.receipt && <p>Receipt {settlement.receipt.receiptNumber}</p>}
+        </div>
+      )}
       {liveTab?.orders.flatMap((order) =>
         order.fulfillment.map((ticket) => (
           <div
