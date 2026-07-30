@@ -43,6 +43,7 @@ beforeAll(async () => {
   process.env.QR_CREDENTIAL_SECRET = "test-qr-credential-secret-32-characters-min";
   process.env.PAYMENT_PROVIDER = "test";
   process.env.EMAIL_PROVIDER = "test";
+  process.env.RESTAURANT_SETTLEMENT_INTERVAL_MS = "0";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
@@ -2294,6 +2295,32 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const tab = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
     });
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/finalize`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        requestId: "88000000-0000-0000-0000-000000000000",
+        tipCents: 880,
+        tenders: [
+          {
+            type: "SAVED_METHOD",
+            amountCents: 3000,
+            paymentMethodReferenceId: tab.activePaymentMethodId,
+          },
+          {
+            type: "CARD_PRESENT",
+            amountCents: 2819,
+            readerId: "tmr_test_mismatch",
+          },
+        ],
+      })
+      .expect(400);
+    expect(
+      await prisma.payment.count({
+        where: { restaurantTabId: milestone8TabId },
+      }),
+    ).toBe(0);
+
     const finalized = await request(app.getHttpServer())
       .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/finalize`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
@@ -2402,16 +2429,12 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       data: { endsAt: new Date(Date.now() - 10 * 60_000) },
     });
 
-    await request(app.getHttpServer())
-      .post("/api/v1/restaurant-settlement/fallback/run")
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({})
-      .expect(201);
-    await request(app.getHttpServer())
-      .post("/api/v1/restaurant-settlement/fallback/run")
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({})
-      .expect(201);
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const settlement = app.get(RestaurantSettlementService);
+    await settlement.runFallback();
+    await settlement.runFallback();
     expect(
       await prisma.payment.count({ where: { restaurantTabId: tab.id } }),
     ).toBe(1);

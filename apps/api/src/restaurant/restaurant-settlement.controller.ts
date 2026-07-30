@@ -77,12 +77,6 @@ export class RestaurantSettlementController {
     });
   }
 
-  @Post("fallback/run")
-  @RequirePermissions(Permission.AuditLogView)
-  runFallback() {
-    return this.settlement.runFallback();
-  }
-
   private async settlementChecksNeedingAttention(locationId: string) {
     const { prisma } = await import("@cinema/database");
     return prisma.restaurantTab.findMany({

@@ -10,6 +10,7 @@ import {
   RestaurantSettlementController,
 } from "./restaurant-settlement.controller";
 import { RestaurantSettlementService } from "./restaurant-settlement.service";
+import { RestaurantSettlementSchedulerService } from "./restaurant-settlement-scheduler.service";
 import { PaymentsModule } from "../payments/payments.module";
 
 @Module({
@@ -26,6 +27,7 @@ import { PaymentsModule } from "../payments/payments.module";
     RestaurantService,
     FulfillmentEventsService,
     RestaurantSettlementService,
+    RestaurantSettlementSchedulerService,
   ],
 })
 export class RestaurantModule {}
