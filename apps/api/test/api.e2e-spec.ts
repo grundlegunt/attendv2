@@ -1751,6 +1751,11 @@ describe("Milestone 5 seat-linked dining tabs", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`);
     expect(separated.body.seats).toHaveLength(1);
     expect(separated.body.seats[0].showtimeSeatId).toBe(showtimeSeatId);
+    expect(separated.body).toMatchObject({
+      status: "OPEN",
+      autoSettleAuthorized: false,
+      paymentMethod: null,
+    });
 
     const combined = await request(app.getHttpServer())
       .post(`/api/v1/restaurant-tabs/${sharedTabId}/combine`)
@@ -1901,6 +1906,76 @@ describe("Milestone 6 server POS and menus", () => {
     expect(sent.body.message).toContain("Cheeseburger");
     expect(await prisma.restaurantOrder.findUniqueOrThrow({ where: { id: order.body.id } }))
       .toMatchObject({ status: "DRAFT", placedAt: null });
+    await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: false } });
+  });
+
+  it("sends available lines while preserving an 86'd line in a replacement draft", async () => {
+    const { prisma } = await import("@cinema/database");
+    const [burger, cocktail] = await Promise.all([
+      prisma.menuItem.findFirstOrThrow({
+        where: { name: "Cheeseburger" },
+        include: { modifierGroups: { include: { modifiers: true } } },
+      }),
+      prisma.menuItem.findFirstOrThrow({ where: { name: "Old Fashioned" } }),
+    ]);
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Partial 86 check" });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        menuItemId: burger.id,
+        quantity: 1,
+        modifierIds: [burger.modifierGroups[0]!.modifiers[0]!.id],
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ menuItemId: cocktail.id, quantity: 1, modifierIds: [] })
+      .expect(201);
+    await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: true } });
+
+    const sent = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    expect(sent.status).toBe(201);
+    expect(sent.body.status).toBe("SENT");
+    expect(sent.body.items).toHaveLength(1);
+    expect(sent.body.items[0].menuItemId).toBe(cocktail.id);
+    expect(sent.body.rejectedDraft.items).toEqual([
+      expect.objectContaining({
+        menuItemId: burger.id,
+        name: "Cheeseburger",
+        reason: "MENU_ITEM_86D",
+      }),
+    ]);
+    const rejected = await prisma.restaurantOrder.findUniqueOrThrow({
+      where: { id: sent.body.rejectedDraft.orderId },
+      include: { items: true },
+    });
+    expect(rejected.status).toBe("DRAFT");
+    expect(rejected.items).toEqual([
+      expect.objectContaining({ menuItemId: burger.id, status: "DRAFT" }),
+    ]);
+    await request(app.getHttpServer())
+      .delete(
+        `/api/v1/restaurant-tabs/orders/${rejected.id}/items/${rejected.items[0]!.id}`,
+      )
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(
+      await prisma.restaurantOrderItem.count({
+        where: { restaurantOrderId: rejected.id },
+      }),
+    ).toBe(0);
     await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: false } });
   });
 

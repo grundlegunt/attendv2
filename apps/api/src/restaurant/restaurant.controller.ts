@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+} from "@nestjs/common";
 import { Permission } from "@cinema/auth";
 import {
   addRestaurantOrderItemRequestSchema,
@@ -101,6 +109,19 @@ export class RestaurantController {
       orderId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+    });
+  }
+
+  @Delete("orders/:orderId/items/:orderItemId")
+  removeDraftOrderItem(
+    @CurrentActor() actor: RequestActor,
+    @Param("orderId") orderId: string,
+    @Param("orderItemId") orderItemId: string,
+  ) {
+    return this.restaurant.removeDraftOrderItem({
+      orderId,
+      orderItemId,
+      locationId: this.locationId(actor),
     });
   }
 

@@ -42,6 +42,7 @@ export function RestaurantPos({
   const [orderId, setOrderId] = useState("");
   const [message, setMessage] = useState("");
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
+  const [blockedItems, setBlockedItems] = useState<Array<{ id: string; name: string }>>([]);
 
   useEffect(() => {
     const refresh = () =>
@@ -105,6 +106,19 @@ export function RestaurantPos({
     }
   }
 
+  async function removeBlockedItem(item: { id: string; name: string }) {
+    try {
+      await apiFetch(`/restaurant-tabs/orders/${orderId}/items/${item.id}`, {
+        method: "DELETE",
+        accessToken,
+      });
+      setBlockedItems((current) => current.filter((candidate) => candidate.id !== item.id));
+      setMessage(`${item.name} removed. Add a substitute or send the remaining draft.`);
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   function chooseModifier(
     itemId: string,
     group: Menu["categories"][number]["items"][number]["modifierGroups"][number],
@@ -125,13 +139,25 @@ export function RestaurantPos({
 
   async function sendOrder() {
     try {
-      await apiFetch(`/restaurant-tabs/orders/${orderId}/send`, {
+      const result = await apiFetch<{
+        rejectedDraft: null | {
+          orderId: string;
+          items: Array<{ id: string; name: string; reason: string }>;
+        };
+      }>(`/restaurant-tabs/orders/${orderId}/send`, {
         method: "POST",
         accessToken,
         body: "{}",
       });
-      setOrderId("");
-      setMessage("Order sent to its stations.");
+      setOrderId(result.rejectedDraft?.orderId ?? "");
+      setBlockedItems(result.rejectedDraft?.items ?? []);
+      setMessage(
+        result.rejectedDraft
+          ? `Available items sent. Replace or remove: ${result.rejectedDraft.items
+              .map((item) => item.name)
+              .join(", ")}.`
+          : "Order sent to its stations.",
+      );
     } catch (error) {
       showError(error);
     }
@@ -162,6 +188,14 @@ export function RestaurantPos({
         {orderId ? "Order in progress" : "Start order"}
       </button>
       {message && <div className="scan-result valid"><strong>{message}</strong></div>}
+      {blockedItems.map((item) => (
+        <div className="scan-result" key={item.id}>
+          <strong>{item.name} is unavailable</strong>
+          <button className="secondary" type="button" onClick={() => removeBlockedItem(item)}>
+            Remove from draft
+          </button>
+        </div>
+      ))}
       {menu?.categories.map((category) => (
         <div key={category.id}>
           <h3>{category.name}</h3>

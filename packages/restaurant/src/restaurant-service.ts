@@ -391,7 +391,11 @@ export class RestaurantService {
       for (const group of item.modifierGroups) {
         const selected = group.modifiers.filter((modifier) => requested.has(modifier.id));
         const minimum = group.required ? Math.max(1, group.minSelections) : group.minSelections;
-        if (selected.length < minimum || (group.maxSelections && selected.length > group.maxSelections)) {
+        if (
+          selected.length < minimum ||
+          (typeof group.maxSelections === "number" &&
+            selected.length > group.maxSelections)
+        ) {
           throw new RestaurantError(`Invalid selections for ${group.name}.`, "INVALID");
         }
         if (group.selectionType === "SINGLE" && selected.length > 1) {
@@ -425,6 +429,27 @@ export class RestaurantService {
     });
   }
 
+  async removeDraftOrderItem(input: {
+    orderId: string;
+    orderItemId: string;
+    locationId: string;
+  }) {
+    const item = await this.prisma.restaurantOrderItem.findFirst({
+      where: {
+        id: input.orderItemId,
+        restaurantOrderId: input.orderId,
+        status: "DRAFT",
+        restaurantOrder: {
+          status: "DRAFT",
+          restaurantTab: { locationId: input.locationId },
+        },
+      },
+    });
+    if (!item) throw new RestaurantError("Draft order item was not found.", "NOT_FOUND");
+    await this.prisma.restaurantOrderItem.delete({ where: { id: item.id } });
+    return { removed: true };
+  }
+
   async sendOrder(input: { orderId: string; locationId: string; actorId: string }) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
@@ -456,16 +481,38 @@ export class RestaurantService {
         },
       });
       const unavailable = currentMenuItems.filter((item) => !item.active || item.is86d);
-      if (unavailable.length) {
+      if (unavailable.length === currentMenuItems.length) {
         throw new RestaurantError(
           `Cannot send order: ${unavailable.map((item) => item.name).join(", ")} is unavailable.`,
           "CONFLICT",
         );
       }
+      const unavailableMenuItemIds = new Set(unavailable.map((item) => item.id));
+      const rejectedItems = order.items.filter((item) =>
+        unavailableMenuItemIds.has(item.menuItemId),
+      );
+      let rejectedOrderId: string | null = null;
+      if (rejectedItems.length) {
+        const rejectedOrder = await tx.restaurantOrder.create({
+          data: {
+            restaurantTabId: order.restaurantTabId,
+            showtimeSeatId: order.showtimeSeatId,
+            serverEmployeeId: order.serverEmployeeId,
+          },
+        });
+        rejectedOrderId = rejectedOrder.id;
+        await tx.restaurantOrderItem.updateMany({
+          where: { id: { in: rejectedItems.map((item) => item.id) } },
+          data: { restaurantOrderId: rejectedOrder.id },
+        });
+      }
       const sentAt = new Date();
       const currentMenuItemById = new Map(currentMenuItems.map((item) => [item.id, item]));
+      const sendableItems = order.items.filter(
+        (item) => !unavailableMenuItemIds.has(item.menuItemId),
+      );
       await Promise.all(
-        order.items.map((item) =>
+        sendableItems.map((item) =>
           tx.restaurantOrderItem.update({
             where: { id: item.id },
             data: {
@@ -497,12 +544,33 @@ export class RestaurantService {
           afterState: {
             placedAt: sentAt.toISOString(),
             stationIds: [
-              ...new Set(currentMenuItems.map((item) => item.kitchenStationId)),
+              ...new Set(
+                sendableItems.map(
+                  (item) => currentMenuItemById.get(item.menuItemId)!.kitchenStationId,
+                ),
+              ),
             ],
+            rejectedOrderId,
+            rejectedItemIds: rejectedItems.map((item) => item.id),
           },
         },
       });
-      return sent;
+      return {
+        ...sent,
+        rejectedDraft: rejectedOrderId
+          ? {
+              orderId: rejectedOrderId,
+              items: rejectedItems.map((item) => ({
+                id: item.id,
+                menuItemId: item.menuItemId,
+                name: item.menuItem.name,
+                reason: currentMenuItemById.get(item.menuItemId)!.is86d
+                  ? "MENU_ITEM_86D"
+                  : "MENU_ITEM_INACTIVE",
+              })),
+            }
+          : null,
+      };
     });
   }
 
@@ -538,10 +606,10 @@ export class RestaurantService {
           tabType: source.tabType,
           fulfillmentMode: source.fulfillmentMode,
           showtimeId: source.showtimeId,
-          status: source.status,
-          autoSettleAuthorized: source.autoSettleAuthorized,
-          activePaymentMethodId: source.activePaymentMethodId,
-          activePaymentMethodSetAt: source.activePaymentMethodSetAt,
+          status: "OPEN",
+          autoSettleAuthorized: false,
+          activePaymentMethodId: null,
+          activePaymentMethodSetAt: null,
         },
       });
       await tx.restaurantTabSeat.update({
@@ -558,6 +626,7 @@ export class RestaurantService {
       await this.auditTabOperation(tx, input, "restaurant_tab.split", source.id, {
         targetTabId: target.id,
         showtimeSeatId: input.showtimeSeatId,
+        paymentAuthorizationInherited: false,
       });
       return { sourceTabId: source.id, targetTabId: target.id };
     });

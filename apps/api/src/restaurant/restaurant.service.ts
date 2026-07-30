@@ -67,6 +67,12 @@ export class RestaurantService {
     return this.wrap(() => this.domain.addOrderItem(input));
   }
 
+  removeDraftOrderItem(
+    input: Parameters<RestaurantDomainService["removeDraftOrderItem"]>[0],
+  ) {
+    return this.wrap(() => this.domain.removeDraftOrderItem(input));
+  }
+
   sendOrder(input: Parameters<RestaurantDomainService["sendOrder"]>[0]) {
     return this.wrap(() => this.domain.sendOrder(input));
   }
