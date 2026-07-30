@@ -21,37 +21,37 @@ datasource db {
 // ---------------------------------------------------------------------------
 
 model Organization {
-  id        String   @id @default(uuid())
-  name      String
-  legalName String?
-  timezone  String   @default("America/New_York")
+  id                       String                  @id @default(uuid())
+  name                     String
+  legalName                String?
+  timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt                DateTime                @default(now())
+  updatedAt                DateTime                @updatedAt
 
-  locations Location[]
-  roles     Role[]
-  movies    Movie[]
-  priceTiers PriceTier[]
+  locations        Location[]
+  roles            Role[]
+  movies           Movie[]
+  priceTiers       PriceTier[]
   paymentCustomers PaymentCustomer[]
 
   @@map("organizations")
 }
 
 model Location {
-  id        String   @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name      String
-  address   String?
-  timezone  String   @default("America/New_York")
-  currency  String   @default("USD")
+  name                     String
+  address                  String?
+  timezone                 String  @default("America/New_York")
+  currency                 String  @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the
   // location's tax treatment has been confirmed; the application never
   // invents a jurisdictional tax rate.
-  ticketTaxRateBasisPoints Int @default(0)
+  ticketTaxRateBasisPoints Int     @default(0)
 
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
@@ -63,13 +63,15 @@ model Location {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  employees    Employee[]
-  employeeRoles EmployeeRole[]
-  auditEvents  AuditEvent[]
-  auditoriums  Auditorium[]
-  ticketTypes  TicketType[]
-  ticketOrders TicketOrder[]
-  restaurantTabs RestaurantTab[]
+  employees       Employee[]
+  employeeRoles   EmployeeRole[]
+  auditEvents     AuditEvent[]
+  auditoriums     Auditorium[]
+  ticketTypes     TicketType[]
+  ticketOrders    TicketOrder[]
+  restaurantTabs  RestaurantTab[]
+  kitchenStations KitchenStation[]
+  menuCategories  MenuCategory[]
 
   @@map("locations")
 }
@@ -101,11 +103,11 @@ model Auditorium {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
 
-  name       String
-  capacity   Int
-  active     Boolean @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  name      String
+  capacity  Int
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   seatMap   SeatMap?
   showtimes Showtime[]
@@ -144,9 +146,9 @@ model Seat {
 
   tableGroupId  String?
   tablePosition TablePosition?
-  active        Boolean @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  active        Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   showtimeSeats ShowtimeSeat[]
 
   @@unique([seatMapId, label])
@@ -165,7 +167,7 @@ model Movie {
   runtimeMinutes Int
   rating         String?
   posterUrl      String?
-  active         Boolean @default(true)
+  active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -180,14 +182,14 @@ model PriceTier {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  name             String
-  ticketPriceMinor Int
-  feeMinor         Int
-  currency         String @default("USD")
+  name              String
+  ticketPriceMinor  Int
+  feeMinor          Int
+  currency          String   @default("USD")
   // JavaScript weekday numbers: Sunday 0 through Saturday 6.
   // Empty means the default tier.
   appliesOnWeekdays Int[]
-  active            Boolean @default(true)
+  active            Boolean  @default(true)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -213,9 +215,9 @@ model Showtime {
   featureStartsAt DateTime
   endsAt          DateTime
   roomReadyAt     DateTime
-  onSale          Boolean  @default(false)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  onSale          Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]
   restaurantTabs  RestaurantTab[]
 
@@ -225,19 +227,20 @@ model Showtime {
 }
 
 model ShowtimeSeat {
-  id         String   @id @default(uuid())
-  showtimeId String
-  showtime   Showtime @relation(fields: [showtimeId], references: [id], onDelete: Cascade)
-  seatId     String
-  seat       Seat     @relation(fields: [seatId], references: [id], onDelete: Restrict)
-  blockedAt  DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  holds      SeatHold[]
-  tickets    Ticket[]
-  tabSeats   RestaurantTabSeat[] @relation("TabSeatMembership")
-  currentTabSeatId String? @unique
-  currentTabSeat RestaurantTabSeat? @relation("CurrentTabSeat", fields: [currentTabSeatId], references: [id], onDelete: Restrict)
+  id               String              @id @default(uuid())
+  showtimeId       String
+  showtime         Showtime            @relation(fields: [showtimeId], references: [id], onDelete: Cascade)
+  seatId           String
+  seat             Seat                @relation(fields: [seatId], references: [id], onDelete: Restrict)
+  blockedAt        DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  holds            SeatHold[]
+  tickets          Ticket[]
+  tabSeats         RestaurantTabSeat[] @relation("TabSeatMembership")
+  currentTabSeatId String?             @unique
+  currentTabSeat   RestaurantTabSeat?  @relation("CurrentTabSeat", fields: [currentTabSeatId], references: [id], onDelete: Restrict)
+  restaurantOrders RestaurantOrder[]
 
   @@unique([showtimeId, seatId])
   @@index([showtimeId, blockedAt])
@@ -360,6 +363,32 @@ enum RestaurantTabStatus {
   VOIDED
 }
 
+enum RestaurantFulfillmentMode {
+  SEAT_DELIVERY
+  COUNTER_PICKUP
+}
+
+enum ModifierSelectionType {
+  SINGLE
+  MULTIPLE
+}
+
+enum RestaurantOrderStatus {
+  DRAFT
+  SENT
+  IN_PROGRESS
+  PARTIALLY_DELIVERED
+  DELIVERED
+  CANCELED
+}
+
+enum RestaurantOrderItemStatus {
+  DRAFT
+  SENT
+  VOIDED
+  COMPED
+}
+
 model TicketType {
   id         String   @id @default(uuid())
   locationId String
@@ -378,46 +407,46 @@ model TicketType {
 }
 
 model TicketOrder {
-  id         String   @id @default(uuid())
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  id           String     @id @default(uuid())
+  locationId   String
+  location     Location   @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  customerId   String?
+  customer     Customer?  @relation(fields: [customerId], references: [id], onDelete: Restrict)
   ticketTypeId String
   ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
 
   // A single Milestone 3 checkout uses one ticket type for all selected
   // seats. The hold tokens identify the exact pending seat lines and are
   // revalidated under row locks during finalization.
-  holdTokens String[]
-  holderKey  String
-  guestEmail String?
-  guestName  String?
-  receiptEmailClaimedAt DateTime?
-  receiptEmailSentAt DateTime?
-  receiptEmailMessageId String?
-  receiptEmailError String?
+  holdTokens                   String[]
+  holderKey                    String
+  guestEmail                   String?
+  guestName                    String?
+  receiptEmailClaimedAt        DateTime?
+  receiptEmailSentAt           DateTime?
+  receiptEmailMessageId        String?
+  receiptEmailError            String?
   // Captures the explicit checkout choice so Milestone 5 can create the
   // versioned CustomerConsent and saved payment reference after confirmation.
   diningAuthorizationRequested Boolean?
-  channel    TicketOrderChannel @default(ONLINE)
-  status     TicketOrderStatus  @default(CART)
-  orderNumber String @unique
-  checkoutIdempotencyKey String @unique
+  channel                      TicketOrderChannel @default(ONLINE)
+  status                       TicketOrderStatus  @default(CART)
+  orderNumber                  String             @unique
+  checkoutIdempotencyKey       String             @unique
 
   subtotalCents Int
-  feesCents    Int
-  taxCents     Int
-  totalCents   Int
-  currency     String @default("USD")
+  feesCents     Int
+  taxCents      Int
+  totalCents    Int
+  currency      String @default("USD")
 
   placedByEmployeeId String?
   placedByEmployee   Employee? @relation(fields: [placedByEmployeeId], references: [id], onDelete: Restrict)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  tickets Ticket[]
-  payment Payment?
+  tickets  Ticket[]
+  payment  Payment?
   consents CustomerConsent[]
 
   @@index([locationId, createdAt])
@@ -435,11 +464,11 @@ model Ticket {
   ticketType     TicketType   @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
 
   priceCentsPaid Int
-  status         TicketStatus @default(ISSUED)
-  qrToken        String       @unique
-  issuedAt       DateTime     @default(now())
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  status         TicketStatus        @default(ISSUED)
+  qrToken        String              @unique
+  issuedAt       DateTime            @default(now())
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
   scans          TicketScan[]
   tabSeats       RestaurantTabSeat[]
 
@@ -449,19 +478,19 @@ model Ticket {
 }
 
 model TicketScan {
-  id                  String           @id @default(uuid())
-  ticketId            String?
-  ticket              Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Restrict)
-  scannedByEmployeeId String
-  scannedByEmployee   Employee         @relation(fields: [scannedByEmployeeId], references: [id], onDelete: Restrict)
-  expectedShowtimeId  String
-  deviceId            String?
-  entrance            String?
+  id                    String           @id @default(uuid())
+  ticketId              String?
+  ticket                Ticket?          @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  scannedByEmployeeId   String
+  scannedByEmployee     Employee         @relation(fields: [scannedByEmployeeId], references: [id], onDelete: Restrict)
+  expectedShowtimeId    String
+  deviceId              String?
+  entrance              String?
   credentialFingerprint String
-  result              TicketScanResult
-  scannedAt           DateTime         @default(now())
-  createdAt           DateTime         @default(now())
-  updatedAt           DateTime         @updatedAt
+  result                TicketScanResult
+  scannedAt             DateTime         @default(now())
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   @@index([ticketId, scannedAt])
   @@index([scannedByEmployeeId, scannedAt])
@@ -469,15 +498,15 @@ model TicketScan {
 }
 
 model PaymentCustomer {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  customerId     String
-  customer       Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
-  provider       String
+  id                 String       @id @default(uuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  customerId         String
+  customer           Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  provider           String
   providerCustomerId String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
 
   paymentMethods PaymentMethodReference[]
 
@@ -487,22 +516,22 @@ model PaymentCustomer {
 }
 
 model PaymentMethodReference {
-  id                String          @id @default(uuid())
-  paymentCustomerId String
-  paymentCustomer   PaymentCustomer @relation(fields: [paymentCustomerId], references: [id], onDelete: Restrict)
-  provider          String
+  id                      String          @id @default(uuid())
+  paymentCustomerId       String
+  paymentCustomer         PaymentCustomer @relation(fields: [paymentCustomerId], references: [id], onDelete: Restrict)
+  provider                String
   providerPaymentMethodId String
-  brand             String
-  last4             String
-  expMonth          Int
-  expYear           Int
-  isDefault         Boolean @default(false)
-  active            Boolean @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  brand                   String
+  last4                   String
+  expMonth                Int
+  expYear                 Int
+  isDefault               Boolean         @default(false)
+  active                  Boolean         @default(true)
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
 
-  payments Payment[]
-  consents CustomerConsent[]
+  payments       Payment[]
+  consents       CustomerConsent[]
   restaurantTabs RestaurantTab[]
 
   @@unique([paymentCustomerId, provider, providerPaymentMethodId])
@@ -511,21 +540,21 @@ model PaymentMethodReference {
 }
 
 model Payment {
-  id            String         @id @default(uuid())
-  purpose       PaymentPurpose
-  ticketOrderId String?        @unique
-  ticketOrder   TicketOrder?   @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
-  restaurantTabId String?
-  restaurantTab RestaurantTab? @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
-  amountCents   Int
-  tipCents      Int?
-  currency      String         @default("USD")
-  status        PaymentStatus  @default(CREATED)
+  id                       String                  @id @default(uuid())
+  purpose                  PaymentPurpose
+  ticketOrderId            String?                 @unique
+  ticketOrder              TicketOrder?            @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  restaurantTabId          String?
+  restaurantTab            RestaurantTab?          @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
+  amountCents              Int
+  tipCents                 Int?
+  currency                 String                  @default("USD")
+  status                   PaymentStatus           @default(CREATED)
   paymentMethodReferenceId String?
   paymentMethodReference   PaymentMethodReference? @relation(fields: [paymentMethodReferenceId], references: [id], onDelete: Restrict)
-  idempotencyKey String @unique
-  provider      String
-  providerPaymentId String?
+  idempotencyKey           String                  @unique
+  provider                 String
+  providerPaymentId        String?
 
   // Round 2 review fixes: durable "needs human review" signal, set by
   // finalizeOrder when a succeeded PaymentIntent's amount, currency, or
@@ -552,14 +581,14 @@ model Payment {
 }
 
 model Refund {
-  id          String       @id @default(uuid())
-  paymentId   String
-  payment     Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  amountCents Int
-  reason      String
-  scope       RefundScope  @default(TICKET)
-  status      RefundStatus @default(CREATED)
-  idempotencyKey String @unique
+  id               String       @id @default(uuid())
+  paymentId        String
+  payment          Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  amountCents      Int
+  reason           String
+  scope            RefundScope  @default(TICKET)
+  status           RefundStatus @default(CREATED)
+  idempotencyKey   String       @unique
   providerRefundId String?
 
   // Round 2 review fixes: claim lease for the refund-reconciliation job
@@ -585,17 +614,17 @@ model Refund {
 }
 
 model PaymentAttempt {
-  id              String               @id @default(uuid())
-  paymentId       String
-  payment         Payment              @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  provider        String
+  id               String               @id @default(uuid())
+  paymentId        String
+  payment          Payment              @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  provider         String
   providerIntentId String
-  attemptNumber   Int
-  status          PaymentAttemptStatus @default(CREATED)
-  failureCode     String?
-  failureMessage  String?
-  attemptedAt     DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  attemptNumber    Int
+  status           PaymentAttemptStatus @default(CREATED)
+  failureCode      String?
+  failureMessage   String?
+  attemptedAt      DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   @@unique([paymentId, attemptNumber])
   @@unique([provider, providerIntentId])
@@ -621,24 +650,25 @@ model Employee {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
 
-  name       String
-  email      String   @unique
-  active     Boolean  @default(true)
+  name   String
+  email  String  @unique
+  active Boolean @default(true)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  deletedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  authAccount   StaffAuthAccount?
-  employeeRoles EmployeeRole[]
+  authAccount        StaffAuthAccount?
+  employeeRoles      EmployeeRole[]
   placedTicketOrders TicketOrder[]
-  ticketScans TicketScan[]
+  ticketScans        TicketScan[]
+  restaurantOrders   RestaurantOrder[]
 
   @@map("employees")
 }
 
 model StaffAuthAccount {
-  id       String @id @default(uuid())
+  id String @id @default(uuid())
 
   employeeId String   @unique
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
@@ -647,7 +677,7 @@ model StaffAuthAccount {
   // See /docs/SECURITY.md §1.
   passwordHash String
 
-  mfaEnabled        Boolean @default(false)
+  mfaEnabled         Boolean @default(false)
   // Encrypted TOTP secret at rest. Required for OWNER / GENERAL_MANAGER /
   // ACCOUNTING roles per /docs/SECURITY.md §1 — enforcement of "required"
   // happens in application logic (Milestone 0 auth module), not the schema.
@@ -666,7 +696,7 @@ model StaffAuthAccount {
 // catalog (see @cinema/auth) — never user-editable. This is a deliberate
 // anti-privilege-escalation choice; see /docs/OPEN_QUESTIONS.md §5 (risks).
 model Role {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -741,64 +771,69 @@ model Customer {
 
   isGuest Boolean @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  authAccount CustomerAuthAccount?
-  ticketOrders TicketOrder[]
+  authAccount      CustomerAuthAccount?
+  ticketOrders     TicketOrder[]
   paymentCustomers PaymentCustomer[]
-  consents CustomerConsent[]
-  restaurantTabs RestaurantTab[]
+  consents         CustomerConsent[]
+  restaurantTabs   RestaurantTab[]
 
   @@map("customers")
 }
 
 model CustomerConsent {
-  id                       String                 @id @default(uuid())
+  id                       String                  @id @default(uuid())
   customerId               String
-  customer                 Customer               @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer                 Customer                @relation(fields: [customerId], references: [id], onDelete: Restrict)
   type                     CustomerConsentType
   granted                  Boolean
   termsVersion             String
   grantedAt                DateTime
   ticketOrderId            String?
-  ticketOrder              TicketOrder?           @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  ticketOrder              TicketOrder?            @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
   paymentMethodReferenceId String?
   paymentMethodReference   PaymentMethodReference? @relation(fields: [paymentMethodReferenceId], references: [id], onDelete: Restrict)
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 
+  @@unique([ticketOrderId, type])
   @@index([customerId, type, grantedAt])
   @@index([ticketOrderId])
-  @@unique([ticketOrderId, type])
   @@map("customer_consents")
 }
 
 model RestaurantTab {
-  id                       String                 @id @default(uuid())
+  id                       String                    @id @default(uuid())
   locationId               String
-  location                 Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  location                 Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
   primaryCustomerId        String?
-  primaryCustomer          Customer?              @relation(fields: [primaryCustomerId], references: [id], onDelete: Restrict)
+  primaryCustomer          Customer?                 @relation(fields: [primaryCustomerId], references: [id], onDelete: Restrict)
   tabType                  RestaurantTabType
+  fulfillmentMode          RestaurantFulfillmentMode @default(SEAT_DELIVERY)
   showtimeId               String?
-  showtime                 Showtime?              @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+  showtime                 Showtime?                 @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
   label                    String?
   status                   RestaurantTabStatus
-  autoSettleAuthorized     Boolean                @default(false)
+  autoSettleAuthorized     Boolean                   @default(false)
   activePaymentMethodId    String?
-  activePaymentMethod      PaymentMethodReference? @relation(fields: [activePaymentMethodId], references: [id], onDelete: Restrict)
+  activePaymentMethod      PaymentMethodReference?   @relation(fields: [activePaymentMethodId], references: [id], onDelete: Restrict)
   activePaymentMethodSetAt DateTime?
   autoSettleAt             DateTime?
   checkDroppedAt           DateTime?
-  openedAt                 DateTime               @default(now())
+  openedAt                 DateTime                  @default(now())
   closedAt                 DateTime?
-  createdAt                DateTime               @default(now())
-  updatedAt                DateTime               @updatedAt
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
 
-  seats    RestaurantTabSeat[]
-  payments Payment[]
+  seats           RestaurantTabSeat[]
+  payments        Payment[]
+  orders          RestaurantOrder[]
+  mergedTabs      RestaurantTab[]     @relation("MergedRestaurantTabs")
+  mergedIntoTabId String?
+  mergedIntoTab   RestaurantTab?      @relation("MergedRestaurantTabs", fields: [mergedIntoTabId], references: [id], onDelete: Restrict)
 
   @@index([locationId, status, openedAt])
   @@index([showtimeId, status])
@@ -806,21 +841,160 @@ model RestaurantTab {
 }
 
 model RestaurantTabSeat {
-  id             String       @id @default(uuid())
+  id              String        @id @default(uuid())
   restaurantTabId String
   restaurantTab   RestaurantTab @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
   showtimeSeatId  String
-  showtimeSeat    ShowtimeSeat @relation("TabSeatMembership", fields: [showtimeSeatId], references: [id], onDelete: Restrict)
+  showtimeSeat    ShowtimeSeat  @relation("TabSeatMembership", fields: [showtimeSeatId], references: [id], onDelete: Restrict)
   ticketId        String
-  ticket          Ticket      @relation(fields: [ticketId], references: [id], onDelete: Restrict)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  ticket          Ticket        @relation(fields: [ticketId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   currentForSeat  ShowtimeSeat? @relation("CurrentTabSeat")
 
   @@unique([showtimeSeatId, restaurantTabId])
   @@unique([ticketId, restaurantTabId])
   @@index([restaurantTabId])
   @@map("restaurant_tab_seats")
+}
+
+model KitchenStation {
+  id          String   @id @default(uuid())
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name        String
+  displayType String
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  menuItems  MenuItem[]
+  orderItems RestaurantOrderItem[]
+
+  @@unique([locationId, name])
+  @@index([locationId, active])
+  @@map("kitchen_stations")
+}
+
+model MenuCategory {
+  id         String   @id @default(uuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name       String
+  sortOrder  Int      @default(0)
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  items MenuItem[]
+
+  @@unique([locationId, name])
+  @@index([locationId, active, sortOrder])
+  @@map("menu_categories")
+}
+
+model MenuItem {
+  id               String         @id @default(uuid())
+  menuCategoryId   String
+  menuCategory     MenuCategory   @relation(fields: [menuCategoryId], references: [id], onDelete: Restrict)
+  kitchenStationId String
+  kitchenStation   KitchenStation @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  name             String
+  description      String?
+  priceCents       Int
+  active           Boolean        @default(true)
+  is86d            Boolean        @default(false)
+  sortOrder        Int            @default(0)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  modifierGroups ModifierGroup[]
+  orderItems     RestaurantOrderItem[]
+
+  @@unique([menuCategoryId, name])
+  @@index([menuCategoryId, active, sortOrder])
+  @@index([kitchenStationId, active])
+  @@map("menu_items")
+}
+
+model ModifierGroup {
+  id            String                @id @default(uuid())
+  menuItemId    String
+  menuItem      MenuItem              @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  name          String
+  selectionType ModifierSelectionType
+  required      Boolean               @default(false)
+  minSelections Int                   @default(0)
+  maxSelections Int?
+  sortOrder     Int                   @default(0)
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  modifiers Modifier[]
+
+  @@unique([menuItemId, name])
+  @@index([menuItemId, sortOrder])
+  @@map("modifier_groups")
+}
+
+model Modifier {
+  id              String        @id @default(uuid())
+  modifierGroupId String
+  modifierGroup   ModifierGroup @relation(fields: [modifierGroupId], references: [id], onDelete: Cascade)
+  name            String
+  priceDeltaCents Int
+  active          Boolean       @default(true)
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([modifierGroupId, name])
+  @@index([modifierGroupId, active, sortOrder])
+  @@map("modifiers")
+}
+
+model RestaurantOrder {
+  id               String                @id @default(uuid())
+  restaurantTabId  String
+  restaurantTab    RestaurantTab         @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
+  showtimeSeatId   String?
+  showtimeSeat     ShowtimeSeat?         @relation(fields: [showtimeSeatId], references: [id], onDelete: Restrict)
+  serverEmployeeId String
+  serverEmployee   Employee              @relation(fields: [serverEmployeeId], references: [id], onDelete: Restrict)
+  status           RestaurantOrderStatus @default(DRAFT)
+  placedAt         DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  items RestaurantOrderItem[]
+
+  @@index([restaurantTabId, status])
+  @@index([showtimeSeatId, status])
+  @@index([serverEmployeeId, createdAt])
+  @@map("restaurant_orders")
+}
+
+model RestaurantOrderItem {
+  id                     String                    @id @default(uuid())
+  restaurantOrderId      String
+  restaurantOrder        RestaurantOrder           @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
+  menuItemId             String
+  menuItem               MenuItem                  @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+  quantity               Int
+  unitPriceCentsSnapshot Int
+  selectedModifiers      Json
+  modifierTotalCents     Int                       @default(0)
+  allergyNotes           String?
+  course                 String?
+  kitchenStationId       String
+  kitchenStation         KitchenStation            @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  status                 RestaurantOrderItemStatus @default(DRAFT)
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  @@index([restaurantOrderId, status])
+  @@index([kitchenStationId, status])
+  @@map("restaurant_order_items")
 }
 
 model CustomerAuthAccount {

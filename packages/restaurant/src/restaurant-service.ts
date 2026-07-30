@@ -1,4 +1,9 @@
-import { Prisma, PrismaClient } from "@cinema/database";
+import {
+  KitchenStation,
+  MenuCategory,
+  Prisma,
+  PrismaClient,
+} from "@cinema/database";
 
 const summaryInclude = Prisma.validator<Prisma.RestaurantTabInclude>()({
   activePaymentMethod: true,
@@ -10,6 +15,12 @@ const summaryInclude = Prisma.validator<Prisma.RestaurantTabInclude>()({
       showtimeSeat: { include: { seat: true } },
     },
     orderBy: { showtimeSeat: { seat: { label: "asc" } } },
+  },
+  orders: {
+    include: {
+      items: { include: { menuItem: true, kitchenStation: true } },
+    },
+    orderBy: { createdAt: "asc" },
   },
 });
 
@@ -26,6 +37,687 @@ export class RestaurantError extends Error {
 
 export class RestaurantService {
   constructor(private readonly prisma: PrismaClient) {}
+
+  async getMenu(input: { locationId: string; includeInactive?: boolean }) {
+    const [stations, categories] = await Promise.all([
+      this.prisma.kitchenStation.findMany({
+        where: {
+          locationId: input.locationId,
+          ...(input.includeInactive ? {} : { active: true }),
+        },
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.menuCategory.findMany({
+        where: {
+          locationId: input.locationId,
+          ...(input.includeInactive ? {} : { active: true }),
+        },
+        include: {
+          items: {
+            where: input.includeInactive ? {} : { active: true },
+            include: {
+              kitchenStation: true,
+              modifierGroups: {
+                include: {
+                  modifiers: {
+                    where: input.includeInactive ? {} : { active: true },
+                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                  },
+                },
+                orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+              },
+            },
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          },
+        },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+    ]);
+    return { stations, categories };
+  }
+
+  async getSeatDetail(input: { locationId: string; showtimeSeatId: string }) {
+    const showtimeSeat = await this.prisma.showtimeSeat.findFirst({
+      where: {
+        id: input.showtimeSeatId,
+        showtime: { auditorium: { locationId: input.locationId } },
+      },
+      include: {
+        seat: true,
+        showtime: { include: { movie: true, auditorium: true } },
+        currentTabSeat: { select: { restaurantTabId: true } },
+      },
+    });
+    if (!showtimeSeat) throw new RestaurantError("Showtime seat was not found.", "NOT_FOUND");
+    return {
+      id: showtimeSeat.id,
+      seat: showtimeSeat.seat.label,
+      movie: showtimeSeat.showtime.movie.title,
+      auditorium: showtimeSeat.showtime.auditorium.name,
+      startsAt: showtimeSeat.showtime.startsAt.toISOString(),
+      tab: showtimeSeat.currentTabSeat
+        ? await this.getSummary({
+            tabId: showtimeSeat.currentTabSeat.restaurantTabId,
+            locationId: input.locationId,
+          })
+        : null,
+    };
+  }
+
+  createKitchenStation(input: {
+    locationId: string;
+    name: string;
+    displayType: string;
+  }): Promise<KitchenStation> {
+    return this.prisma.kitchenStation.create({ data: input });
+  }
+
+  createMenuCategory(input: {
+    locationId: string;
+    name: string;
+    sortOrder: number;
+  }): Promise<MenuCategory> {
+    return this.prisma.menuCategory.create({ data: input });
+  }
+
+  async createMenuItem(input: {
+    locationId: string;
+    actorId: string;
+    menuCategoryId: string;
+    kitchenStationId: string;
+    name: string;
+    description?: string;
+    priceCents: number;
+    sortOrder: number;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      await this.requireMenuParents(tx, input);
+      const item = await tx.menuItem.create({
+        data: {
+          menuCategoryId: input.menuCategoryId,
+          kitchenStationId: input.kitchenStationId,
+          name: input.name,
+          description: input.description,
+          priceCents: input.priceCents,
+          sortOrder: input.sortOrder,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "menu_item.created",
+          entityType: "MenuItem",
+          entityId: item.id,
+          locationId: input.locationId,
+          afterState: item,
+        },
+      });
+      return item;
+    });
+  }
+
+  async createModifierGroup(input: {
+    locationId: string;
+    actorId: string;
+    menuItemId: string;
+    name: string;
+    selectionType: "SINGLE" | "MULTIPLE";
+    required: boolean;
+    minSelections: number;
+    maxSelections: number | null;
+    sortOrder: number;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const item = await tx.menuItem.findFirst({
+        where: { id: input.menuItemId, menuCategory: { locationId: input.locationId } },
+      });
+      if (!item) throw new RestaurantError("Menu item was not found.", "NOT_FOUND");
+      const group = await tx.modifierGroup.create({
+        data: {
+          menuItemId: item.id,
+          name: input.name,
+          selectionType: input.selectionType,
+          required: input.required,
+          minSelections: input.minSelections,
+          maxSelections: input.maxSelections,
+          sortOrder: input.sortOrder,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "modifier_group.created",
+          entityType: "ModifierGroup",
+          entityId: group.id,
+          locationId: input.locationId,
+          afterState: {
+            menuItemId: item.id,
+            name: group.name,
+            required: group.required,
+          },
+        },
+      });
+      return group;
+    });
+  }
+
+  async createModifier(input: {
+    locationId: string;
+    actorId: string;
+    modifierGroupId: string;
+    name: string;
+    priceDeltaCents: number;
+    sortOrder: number;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const group = await tx.modifierGroup.findFirst({
+        where: {
+          id: input.modifierGroupId,
+          menuItem: { menuCategory: { locationId: input.locationId } },
+        },
+      });
+      if (!group) throw new RestaurantError("Modifier group was not found.", "NOT_FOUND");
+      const modifier = await tx.modifier.create({
+        data: {
+          modifierGroupId: group.id,
+          name: input.name,
+          priceDeltaCents: input.priceDeltaCents,
+          sortOrder: input.sortOrder,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "modifier.created",
+          entityType: "Modifier",
+          entityId: modifier.id,
+          locationId: input.locationId,
+          afterState: {
+            modifierGroupId: group.id,
+            name: modifier.name,
+            priceDeltaCents: modifier.priceDeltaCents,
+          },
+        },
+      });
+      return modifier;
+    });
+  }
+
+  async updateMenuItem(input: {
+    locationId: string;
+    actorId: string;
+    menuItemId: string;
+    changes: {
+      name?: string;
+      description?: string | null;
+      priceCents?: number;
+      active?: boolean;
+      is86d?: boolean;
+      sortOrder?: number;
+      kitchenStationId?: string;
+    };
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.menuItem.findFirst({
+        where: { id: input.menuItemId, menuCategory: { locationId: input.locationId } },
+      });
+      if (!existing) throw new RestaurantError("Menu item was not found.", "NOT_FOUND");
+      if (input.changes.kitchenStationId) {
+        const station = await tx.kitchenStation.findFirst({
+          where: { id: input.changes.kitchenStationId, locationId: input.locationId },
+        });
+        if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+      }
+      const updated = await tx.menuItem.update({
+        where: { id: existing.id },
+        data: input.changes,
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: input.changes.is86d === undefined ? "menu_item.updated" : "menu_item.86_changed",
+          entityType: "MenuItem",
+          entityId: updated.id,
+          locationId: input.locationId,
+          beforeState: existing,
+          afterState: updated,
+        },
+      });
+      return updated;
+    });
+  }
+
+  async openWalkInTab(input: {
+    locationId: string;
+    actorId: string;
+    label: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const tab = await tx.restaurantTab.create({
+        data: {
+          locationId: input.locationId,
+          tabType: "WALK_IN",
+          label: input.label,
+          status: "OPEN",
+          fulfillmentMode: "SEAT_DELIVERY",
+          autoSettleAuthorized: false,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "restaurant_tab.opened",
+          entityType: "RestaurantTab",
+          entityId: tab.id,
+          locationId: input.locationId,
+          afterState: { tabType: "WALK_IN", label: input.label },
+        },
+      });
+      return tab;
+    });
+  }
+
+  async createOrder(input: {
+    tabId: string;
+    locationId: string;
+    actorId: string;
+    showtimeSeatId?: string;
+  }) {
+    const tab = await this.prisma.restaurantTab.findFirst({
+      where: {
+        id: input.tabId,
+        locationId: input.locationId,
+        status: { in: ["PREAUTHORIZED", "OPEN"] },
+      },
+      include: { seats: true },
+    });
+    if (!tab) throw new RestaurantError("Open restaurant tab was not found.", "NOT_FOUND");
+    if (
+      input.showtimeSeatId &&
+      !tab.seats.some((seat) => seat.showtimeSeatId === input.showtimeSeatId)
+    ) {
+      throw new RestaurantError("The selected seat does not belong to this tab.", "INVALID");
+    }
+    return this.prisma.restaurantOrder.create({
+      data: {
+        restaurantTabId: tab.id,
+        serverEmployeeId: input.actorId,
+        showtimeSeatId: input.showtimeSeatId,
+      },
+    });
+  }
+
+  async addOrderItem(input: {
+    orderId: string;
+    locationId: string;
+    menuItemId: string;
+    quantity: number;
+    modifierIds: string[];
+    allergyNotes?: string;
+    course?: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.restaurantOrder.findFirst({
+        where: {
+          id: input.orderId,
+          status: "DRAFT",
+          restaurantTab: { locationId: input.locationId },
+        },
+      });
+      if (!order) throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      const item = await tx.menuItem.findFirst({
+        where: {
+          id: input.menuItemId,
+          active: true,
+          menuCategory: { locationId: input.locationId, active: true },
+        },
+        include: {
+          modifierGroups: { include: { modifiers: { where: { active: true } } } },
+        },
+      });
+      if (!item) throw new RestaurantError("Active menu item was not found.", "NOT_FOUND");
+      if (item.is86d) throw new RestaurantError(`${item.name} is currently 86'd.`, "CONFLICT");
+
+      const requested = new Set(input.modifierIds);
+      if (requested.size !== input.modifierIds.length) {
+        throw new RestaurantError("A modifier cannot be selected more than once.", "INVALID");
+      }
+      const selections: Array<{ id: string; name: string; priceDeltaCents: number }> = [];
+      for (const group of item.modifierGroups) {
+        const selected = group.modifiers.filter((modifier) => requested.has(modifier.id));
+        const minimum = group.required ? Math.max(1, group.minSelections) : group.minSelections;
+        if (
+          selected.length < minimum ||
+          (typeof group.maxSelections === "number" &&
+            selected.length > group.maxSelections)
+        ) {
+          throw new RestaurantError(`Invalid selections for ${group.name}.`, "INVALID");
+        }
+        if (group.selectionType === "SINGLE" && selected.length > 1) {
+          throw new RestaurantError(`Choose only one option for ${group.name}.`, "INVALID");
+        }
+        for (const modifier of selected) {
+          requested.delete(modifier.id);
+          selections.push({
+            id: modifier.id,
+            name: modifier.name,
+            priceDeltaCents: modifier.priceDeltaCents,
+          });
+        }
+      }
+      if (requested.size) {
+        throw new RestaurantError("One or more modifiers do not belong to this item.", "INVALID");
+      }
+      return tx.restaurantOrderItem.create({
+        data: {
+          restaurantOrderId: order.id,
+          menuItemId: item.id,
+          quantity: input.quantity,
+          unitPriceCentsSnapshot: item.priceCents,
+          selectedModifiers: selections,
+          modifierTotalCents: selections.reduce((sum, modifier) => sum + modifier.priceDeltaCents, 0),
+          allergyNotes: input.allergyNotes,
+          course: input.course,
+          kitchenStationId: item.kitchenStationId,
+        },
+      });
+    });
+  }
+
+  async removeDraftOrderItem(input: {
+    orderId: string;
+    orderItemId: string;
+    locationId: string;
+  }) {
+    const item = await this.prisma.restaurantOrderItem.findFirst({
+      where: {
+        id: input.orderItemId,
+        restaurantOrderId: input.orderId,
+        status: "DRAFT",
+        restaurantOrder: {
+          status: "DRAFT",
+          restaurantTab: { locationId: input.locationId },
+        },
+      },
+    });
+    if (!item) throw new RestaurantError("Draft order item was not found.", "NOT_FOUND");
+    await this.prisma.restaurantOrderItem.delete({ where: { id: item.id } });
+    return { removed: true };
+  }
+
+  async sendOrder(input: { orderId: string; locationId: string; actorId: string }) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_orders" WHERE "id" = ${input.orderId} FOR UPDATE`,
+      );
+      const order = await tx.restaurantOrder.findFirst({
+        where: {
+          id: input.orderId,
+          status: "DRAFT",
+          restaurantTab: { locationId: input.locationId },
+        },
+        include: { items: { include: { menuItem: true } }, restaurantTab: true },
+      });
+      if (!order) throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      if (!order.items.length) throw new RestaurantError("An empty order cannot be sent.", "INVALID");
+
+      const menuItemIds = [...new Set(order.items.map((item) => item.menuItemId))].sort();
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "menu_items" WHERE "id" IN (${Prisma.join(menuItemIds)}) ORDER BY "id" FOR UPDATE`,
+      );
+      const currentMenuItems = await tx.menuItem.findMany({
+        where: { id: { in: menuItemIds } },
+        select: {
+          id: true,
+          name: true,
+          active: true,
+          is86d: true,
+          kitchenStationId: true,
+        },
+      });
+      const unavailable = currentMenuItems.filter((item) => !item.active || item.is86d);
+      if (unavailable.length === currentMenuItems.length) {
+        throw new RestaurantError(
+          `Cannot send order: ${unavailable.map((item) => item.name).join(", ")} is unavailable.`,
+          "CONFLICT",
+        );
+      }
+      const unavailableMenuItemIds = new Set(unavailable.map((item) => item.id));
+      const rejectedItems = order.items.filter((item) =>
+        unavailableMenuItemIds.has(item.menuItemId),
+      );
+      let rejectedOrderId: string | null = null;
+      if (rejectedItems.length) {
+        const rejectedOrder = await tx.restaurantOrder.create({
+          data: {
+            restaurantTabId: order.restaurantTabId,
+            showtimeSeatId: order.showtimeSeatId,
+            serverEmployeeId: order.serverEmployeeId,
+          },
+        });
+        rejectedOrderId = rejectedOrder.id;
+        await tx.restaurantOrderItem.updateMany({
+          where: { id: { in: rejectedItems.map((item) => item.id) } },
+          data: { restaurantOrderId: rejectedOrder.id },
+        });
+      }
+      const sentAt = new Date();
+      const currentMenuItemById = new Map(currentMenuItems.map((item) => [item.id, item]));
+      const sendableItems = order.items.filter(
+        (item) => !unavailableMenuItemIds.has(item.menuItemId),
+      );
+      await Promise.all(
+        sendableItems.map((item) =>
+          tx.restaurantOrderItem.update({
+            where: { id: item.id },
+            data: {
+              status: "SENT",
+              kitchenStationId: currentMenuItemById.get(item.menuItemId)!.kitchenStationId,
+            },
+          }),
+        ),
+      );
+      const sent = await tx.restaurantOrder.update({
+        where: { id: order.id },
+        data: { status: "SENT", placedAt: sentAt },
+        include: { items: true },
+      });
+      if (order.restaurantTab.status === "PREAUTHORIZED") {
+        await tx.restaurantTab.update({
+          where: { id: order.restaurantTab.id },
+          data: { status: "OPEN" },
+        });
+      }
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "restaurant_order.sent",
+          entityType: "RestaurantOrder",
+          entityId: order.id,
+          locationId: input.locationId,
+          afterState: {
+            placedAt: sentAt.toISOString(),
+            stationIds: [
+              ...new Set(
+                sendableItems.map(
+                  (item) => currentMenuItemById.get(item.menuItemId)!.kitchenStationId,
+                ),
+              ),
+            ],
+            rejectedOrderId,
+            rejectedItemIds: rejectedItems.map((item) => item.id),
+          },
+        },
+      });
+      return {
+        ...sent,
+        rejectedDraft: rejectedOrderId
+          ? {
+              orderId: rejectedOrderId,
+              items: rejectedItems.map((item) => ({
+                id: item.id,
+                menuItemId: item.menuItemId,
+                name: item.menuItem.name,
+                reason: currentMenuItemById.get(item.menuItemId)!.is86d
+                  ? "MENU_ITEM_86D"
+                  : "MENU_ITEM_INACTIVE",
+              })),
+            }
+          : null,
+      };
+    });
+  }
+
+  async splitTab(input: {
+    tabId: string;
+    showtimeSeatId: string;
+    locationId: string;
+    actorId: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${input.tabId} FOR UPDATE`,
+      );
+      const source = await tx.restaurantTab.findFirst({
+        where: {
+          id: input.tabId,
+          locationId: input.locationId,
+          tabType: "SEAT_LINKED",
+          status: { in: ["PREAUTHORIZED", "OPEN"] },
+        },
+        include: { seats: true },
+      });
+      if (!source) throw new RestaurantError("Open seat-linked tab was not found.", "NOT_FOUND");
+      if (source.seats.length < 2) {
+        throw new RestaurantError("A one-seat tab cannot be split.", "INVALID");
+      }
+      const seat = source.seats.find((candidate) => candidate.showtimeSeatId === input.showtimeSeatId);
+      if (!seat) throw new RestaurantError("Seat does not belong to this tab.", "NOT_FOUND");
+      const target = await tx.restaurantTab.create({
+        data: {
+          locationId: source.locationId,
+          primaryCustomerId: source.primaryCustomerId,
+          tabType: source.tabType,
+          fulfillmentMode: source.fulfillmentMode,
+          showtimeId: source.showtimeId,
+          status: "OPEN",
+          autoSettleAuthorized: false,
+          activePaymentMethodId: null,
+          activePaymentMethodSetAt: null,
+        },
+      });
+      await tx.restaurantTabSeat.update({
+        where: { id: seat.id },
+        data: { restaurantTabId: target.id },
+      });
+      await tx.restaurantOrder.updateMany({
+        where: {
+          restaurantTabId: source.id,
+          showtimeSeatId: input.showtimeSeatId,
+        },
+        data: { restaurantTabId: target.id },
+      });
+      await this.auditTabOperation(tx, input, "restaurant_tab.split", source.id, {
+        targetTabId: target.id,
+        showtimeSeatId: input.showtimeSeatId,
+        paymentAuthorizationInherited: false,
+      });
+      return { sourceTabId: source.id, targetTabId: target.id };
+    });
+  }
+
+  async transferOrder(input: {
+    orderId: string;
+    targetTabId: string;
+    locationId: string;
+    actorId: string;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.restaurantOrder.findFirst({
+        where: { id: input.orderId, restaurantTab: { locationId: input.locationId } },
+        include: { restaurantTab: true },
+      });
+      const target = await tx.restaurantTab.findFirst({
+        where: {
+          id: input.targetTabId,
+          locationId: input.locationId,
+          status: { in: ["PREAUTHORIZED", "OPEN"] },
+        },
+      });
+      if (!order || !target) {
+        throw new RestaurantError("Order or target tab was not found.", "NOT_FOUND");
+      }
+      if (order.restaurantTabId === target.id) return order;
+      if (order.restaurantTab.showtimeId !== target.showtimeId) {
+        throw new RestaurantError("Orders can only move between tabs for the same showtime.", "INVALID");
+      }
+      const updated = await tx.restaurantOrder.update({
+        where: { id: order.id },
+        data: { restaurantTabId: target.id },
+      });
+      await this.auditTabOperation(
+        tx,
+        input,
+        "restaurant_order.transferred",
+        order.id,
+        { fromTabId: order.restaurantTabId, toTabId: target.id },
+        "RestaurantOrder",
+      );
+      return updated;
+    });
+  }
+
+  async combineTabs(input: {
+    targetTabId: string;
+    sourceTabId: string;
+    locationId: string;
+    actorId: string;
+  }) {
+    if (input.targetTabId === input.sourceTabId) {
+      throw new RestaurantError("A tab cannot be combined with itself.", "INVALID");
+    }
+    return this.prisma.$transaction(async (tx) => {
+      const ids = [input.targetTabId, input.sourceTabId].sort();
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`,
+      );
+      const tabs = await tx.restaurantTab.findMany({
+        where: {
+          id: { in: ids },
+          locationId: input.locationId,
+          status: { in: ["PREAUTHORIZED", "OPEN"] },
+        },
+      });
+      const target = tabs.find((tab) => tab.id === input.targetTabId);
+      const source = tabs.find((tab) => tab.id === input.sourceTabId);
+      if (!target || !source) throw new RestaurantError("Open tabs were not found.", "NOT_FOUND");
+      if (target.tabType !== source.tabType || target.showtimeId !== source.showtimeId) {
+        throw new RestaurantError("Only matching tabs for the same showtime can be combined.", "INVALID");
+      }
+      await tx.restaurantTabSeat.updateMany({
+        where: { restaurantTabId: source.id },
+        data: { restaurantTabId: target.id },
+      });
+      await tx.restaurantOrder.updateMany({
+        where: { restaurantTabId: source.id },
+        data: { restaurantTabId: target.id },
+      });
+      await tx.restaurantTab.update({
+        where: { id: source.id },
+        data: { status: "VOIDED", mergedIntoTabId: target.id },
+      });
+      await this.auditTabOperation(tx, input, "restaurant_tab.combined", target.id, {
+        sourceTabId: source.id,
+      });
+      return { targetTabId: target.id, sourceTabId: source.id };
+    });
+  }
 
   async openSeatLinkedTabs(input: {
     ticketOrderId: string;
@@ -194,6 +886,58 @@ export class RestaurantService {
         seat: seat.showtimeSeat.seat.label,
         ticketType: seat.ticket.ticketType.name,
       })),
+      orders: tab.orders.map((order) => ({
+        id: order.id,
+        status: order.status,
+        showtimeSeatId: order.showtimeSeatId,
+        placedAt: order.placedAt?.toISOString() ?? null,
+        items: order.items.map((item) => ({
+          id: item.id,
+          name: item.menuItem.name,
+          quantity: item.quantity,
+          unitPriceCents: item.unitPriceCentsSnapshot,
+          modifierTotalCents: item.modifierTotalCents,
+          station: item.kitchenStation.name,
+          status: item.status,
+        })),
+      })),
     };
+  }
+
+  private async requireMenuParents(
+    tx: Prisma.TransactionClient,
+    input: { locationId: string; menuCategoryId: string; kitchenStationId: string },
+  ) {
+    const [category, station] = await Promise.all([
+      tx.menuCategory.findFirst({
+        where: { id: input.menuCategoryId, locationId: input.locationId },
+      }),
+      tx.kitchenStation.findFirst({
+        where: { id: input.kitchenStationId, locationId: input.locationId },
+      }),
+    ]);
+    if (!category) throw new RestaurantError("Menu category was not found.", "NOT_FOUND");
+    if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+  }
+
+  private auditTabOperation(
+    tx: Prisma.TransactionClient,
+    input: { locationId: string; actorId: string },
+    action: string,
+    entityId: string,
+    afterState: Prisma.InputJsonValue,
+    entityType = "RestaurantTab",
+  ) {
+    return tx.auditEvent.create({
+      data: {
+        actorType: "EMPLOYEE",
+        actorId: input.actorId,
+        action,
+        entityType,
+        entityId,
+        locationId: input.locationId,
+        afterState,
+      },
+    });
   }
 }

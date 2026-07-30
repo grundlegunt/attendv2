@@ -5,6 +5,7 @@ import type { AuthenticatedEmployee, AuthTokenResponse, NowPlayingMovie } from "
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { TicketScanner } from "./ticket-scanner";
+import { RestaurantPos } from "./restaurant-pos";
 
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
@@ -29,6 +30,12 @@ interface TabSummary {
   seats: Array<{ seat: string }>;
 }
 
+interface SeatDetail {
+  id: string;
+  seat: string;
+  tab: TabSummary | null;
+}
+
 export default function StaffLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,10 +46,11 @@ export default function StaffLoginPage() {
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
   const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
-  const [view, setView] = useState<"scanner" | "seats" | "tabs">("scanner");
+  const [view, setView] = useState<"scanner" | "seats" | "tabs" | "restaurant">("scanner");
   const [tabOrderId, setTabOrderId] = useState("");
   const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
   const [openedTabs, setOpenedTabs] = useState<TabSummary[]>([]);
+  const [seatDetail, setSeatDetail] = useState<SeatDetail | null>(null);
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
@@ -103,6 +111,21 @@ export default function StaffLoginPage() {
     }
   }
 
+  async function openSeat(seat: SeatMapSeat) {
+    if (!seat.id) return;
+    setError(null);
+    try {
+      const detail = await apiFetch<SeatDetail>(
+        `/restaurant-tabs/seats/${seat.id}/detail`,
+        { accessToken },
+      );
+      setSeatDetail(detail);
+      setView("restaurant");
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.body.message : "Seat detail could not be opened.");
+    }
+  }
+
   if (employee) {
     const seatMapSeats = availability?.seats.map((seat) => ({
       ...seat,
@@ -122,9 +145,10 @@ export default function StaffLoginPage() {
           <button type="button" className={view === "scanner" ? "active" : ""} onClick={() => setView("scanner")}>Scan tickets</button>
           <button type="button" className={view === "seats" ? "active" : ""} onClick={() => setView("seats")}>Live seats</button>
           <button type="button" className={view === "tabs" ? "active" : ""} onClick={() => setView("tabs")}>Tab debug</button>
+          <button type="button" className={view === "restaurant" ? "active" : ""} onClick={() => setView("restaurant")}>Server POS</button>
         </nav>
 
-        {view !== "tabs" && <section className="showtime-toolbar" aria-label="Select a showtime">
+        {view !== "tabs" && view !== "restaurant" && <section className="showtime-toolbar" aria-label="Select a showtime">
           <label htmlFor="showtime">Showtime</label>
           <select id="showtime" value={selectedShowtimeId} onChange={(event) => setSelectedShowtimeId(event.target.value)}>
             {program?.movies.flatMap((movie) =>
@@ -145,7 +169,14 @@ export default function StaffLoginPage() {
           )}
         </section>}
 
-        {view === "tabs" ? (
+        {view === "restaurant" ? (
+          <RestaurantPos
+            accessToken={accessToken}
+            initialTabId={seatDetail?.tab?.id}
+            showtimeSeatId={seatDetail?.id}
+            seatLabel={seatDetail?.seat}
+          />
+        ) : view === "tabs" ? (
           <section className="scanner-panel">
             <h2>Open seat-linked tabs</h2>
             <p>Internal Milestone 5 verification view. Enter a paid ticket order ID.</p>
@@ -178,7 +209,14 @@ export default function StaffLoginPage() {
         ) : (
           <>
             {selectedShowtimeId && !availability && <p>Loading live seats…</p>}
-            {availability && <SeatMap seats={seatMapSeats} label="Read-only live auditorium seat map" />}
+            {availability && (
+              <SeatMap
+                seats={seatMapSeats}
+                label="Live auditorium seat map"
+                onSeatClick={openSeat}
+                allowUnavailableSelection
+              />
+            )}
           </>
         )}
       </main>
