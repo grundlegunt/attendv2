@@ -389,6 +389,17 @@ enum RestaurantOrderItemStatus {
   COMPED
 }
 
+enum FulfillmentTicketStatus {
+  NEW
+  ACCEPTED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELED
+  VOIDED
+  REFIRE
+}
+
 model TicketType {
   id         String   @id @default(uuid())
   locationId String
@@ -868,8 +879,9 @@ model KitchenStation {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  menuItems  MenuItem[]
-  orderItems RestaurantOrderItem[]
+  menuItems          MenuItem[]
+  orderItems         RestaurantOrderItem[]
+  fulfillmentTickets FulfillmentTicket[]
 
   @@unique([locationId, name])
   @@index([locationId, active])
@@ -966,7 +978,8 @@ model RestaurantOrder {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
-  items RestaurantOrderItem[]
+  items              RestaurantOrderItem[]
+  fulfillmentTickets FulfillmentTicket[]
 
   @@index([restaurantTabId, status])
   @@index([showtimeSeatId, status])
@@ -991,10 +1004,43 @@ model RestaurantOrderItem {
   status                 RestaurantOrderItemStatus @default(DRAFT)
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
+  fulfillmentTickets     FulfillmentTicket[]
 
   @@index([restaurantOrderId, status])
   @@index([kitchenStationId, status])
   @@map("restaurant_order_items")
+}
+
+model FulfillmentTicket {
+  id                String                  @id @default(uuid())
+  restaurantOrderId String
+  restaurantOrder   RestaurantOrder         @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
+  kitchenStationId  String
+  kitchenStation    KitchenStation          @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  tabLabel          String?
+  auditoriumName    String?
+  seatLabels        String[]
+  showtimeId        String?
+  showtimeStartsAt  DateTime?
+  serverName        String
+  status            FulfillmentTicketStatus @default(NEW)
+  firedAt           DateTime                @default(now())
+  acceptedAt        DateTime?
+  startedAt         DateTime?
+  readyAt           DateTime?
+  deliveredAt       DateTime?
+  refireCount       Int                     @default(0)
+  refiredFromId     String?
+  refiredFrom       FulfillmentTicket?      @relation("FulfillmentRefires", fields: [refiredFromId], references: [id], onDelete: Restrict)
+  refires           FulfillmentTicket[]     @relation("FulfillmentRefires")
+  items             RestaurantOrderItem[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([kitchenStationId, status, firedAt])
+  @@index([restaurantOrderId, status])
+  @@index([refiredFromId])
+  @@map("fulfillment_tickets")
 }
 
 model CustomerAuthAccount {

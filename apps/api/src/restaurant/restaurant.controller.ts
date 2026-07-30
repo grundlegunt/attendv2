@@ -112,6 +112,19 @@ export class RestaurantController {
     });
   }
 
+  @Post("fulfillment/:ticketId/refire")
+  refire(
+    @CurrentActor() actor: RequestActor,
+    @Param("ticketId") ticketId: string,
+  ) {
+    return this.restaurant.transitionFulfillmentTicket({
+      ticketId,
+      action: "REFIRE",
+      locationId: this.locationId(actor),
+      actorId: actor.sub,
+    });
+  }
+
   @Delete("orders/:orderId/items/:orderItemId")
   removeDraftOrderItem(
     @CurrentActor() actor: RequestActor,

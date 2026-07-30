@@ -25,6 +25,19 @@ interface Menu {
   }>;
 }
 
+interface LiveTabSummary {
+  orders: Array<{
+    id: string;
+    status: string;
+    fulfillment: Array<{
+      id: string;
+      station: string;
+      status: string;
+      refireCount: number;
+    }>;
+  }>;
+}
+
 export function RestaurantPos({
   accessToken,
   initialTabId = "",
@@ -43,6 +56,7 @@ export function RestaurantPos({
   const [message, setMessage] = useState("");
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
   const [blockedItems, setBlockedItems] = useState<Array<{ id: string; name: string }>>([]);
+  const [liveTab, setLiveTab] = useState<LiveTabSummary | null>(null);
 
   useEffect(() => {
     const refresh = () =>
@@ -55,6 +69,20 @@ export function RestaurantPos({
   }, [accessToken]);
 
   useEffect(() => setTabId(initialTabId), [initialTabId]);
+
+  useEffect(() => {
+    if (!tabId) {
+      setLiveTab(null);
+      return;
+    }
+    const refresh = () =>
+      apiFetch<LiveTabSummary>(`/restaurant-tabs/${tabId}/summary`, { accessToken })
+        .then(setLiveTab)
+        .catch(() => undefined);
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2_000);
+    return () => window.clearInterval(timer);
+  }, [accessToken, tabId]);
 
   function showError(error: unknown) {
     setMessage(error instanceof ApiRequestError ? error.body.message : "The request failed.");
@@ -163,6 +191,19 @@ export function RestaurantPos({
     }
   }
 
+  async function refire(ticketId: string) {
+    try {
+      await apiFetch(`/restaurant-tabs/fulfillment/${ticketId}/refire`, {
+        method: "POST",
+        accessToken,
+        body: "{}",
+      });
+      setMessage("Refire sent to the station.");
+    } catch (error) {
+      showError(error);
+    }
+  }
+
   return (
     <section className="scanner-panel">
       <h2>Server POS</h2>
@@ -188,6 +229,22 @@ export function RestaurantPos({
         {orderId ? "Order in progress" : "Start order"}
       </button>
       {message && <div className="scan-result valid"><strong>{message}</strong></div>}
+      {liveTab?.orders.flatMap((order) =>
+        order.fulfillment.map((ticket) => (
+          <div
+            className={`scan-result ${ticket.status === "READY" ? "valid" : ""}`}
+            key={ticket.id}
+          >
+            <strong>{ticket.station}: {ticket.status}</strong>
+            <p>Order {order.status}{ticket.refireCount ? ` · refire ${ticket.refireCount}` : ""}</p>
+            {ticket.status === "DELIVERED" && (
+              <button className="secondary" type="button" onClick={() => refire(ticket.id)}>
+                Refire
+              </button>
+            )}
+          </div>
+        )),
+      )}
       {blockedItems.map((item) => (
         <div className="scan-result" key={item.id}>
           <strong>{item.name} is unavailable</strong>

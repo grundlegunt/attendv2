@@ -86,6 +86,10 @@ export const combineRestaurantTabsRequestSchema = z.object({
   sourceTabId: z.string().uuid(),
 });
 
+export const fulfillmentTicketTransitionRequestSchema = z.object({
+  action: z.enum(["ACCEPT", "START", "READY", "DELIVER", "CANCEL", "VOID", "REFIRE"]),
+});
+
 export type OpenWalkInTabRequest = z.infer<typeof openWalkInTabRequestSchema>;
 export type CreateRestaurantOrderRequest = z.infer<
   typeof createRestaurantOrderRequestSchema

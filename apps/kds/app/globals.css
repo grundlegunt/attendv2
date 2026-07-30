@@ -86,3 +86,157 @@ button.primary:disabled {
   flex-direction: column;
   gap: var(--space-2);
 }
+
+.kds-shell {
+  min-height: 100vh;
+  padding: 24px;
+  background: #080a0d;
+  color: #f8fafc;
+}
+
+.kds-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 24px;
+  border-bottom: 3px solid #d7ad2a;
+  padding-bottom: 18px;
+}
+
+.kds-header span,
+.kds-header p,
+.kds-header label {
+  color: #aeb6c2;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.kds-header h1 {
+  margin: 4px 0 0;
+  color: #ffd95c;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+}
+
+.kds-header select {
+  display: block;
+  margin-top: 6px;
+  min-width: 180px;
+  padding: 12px;
+  background: #141820;
+  color: #ffffff;
+  border: 2px solid #586172;
+  border-radius: 8px;
+  font-size: 1.1rem;
+}
+
+.queue-section h2 {
+  margin: 28px 0 14px;
+  font-size: 1.6rem;
+}
+
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.fulfillment-ticket {
+  border: 4px solid #3ed07f;
+  border-radius: 12px;
+  background: #11151c;
+  overflow: hidden;
+}
+
+.fulfillment-ticket.warning {
+  border-color: #ffb020;
+}
+
+.fulfillment-ticket.critical {
+  border-color: #ff453a;
+  box-shadow: 0 0 24px rgba(255, 69, 58, 0.3);
+}
+
+.fulfillment-ticket > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  background: #1c222d;
+  font-size: 1.35rem;
+}
+
+.fulfillment-ticket time {
+  color: #ffd95c;
+  font-variant-numeric: tabular-nums;
+}
+
+.ticket-meta {
+  margin: 0;
+  padding: 12px 16px;
+  color: #b9c1cc;
+  font-weight: 700;
+}
+
+.fulfillment-ticket ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px 16px;
+}
+
+.fulfillment-ticket li {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-top: 1px solid #3a414d;
+  padding: 14px 0;
+  font-size: 1.2rem;
+}
+
+.fulfillment-ticket li b {
+  font-size: 1.45rem;
+}
+
+.fulfillment-ticket li span {
+  color: #c8ced7;
+}
+
+.fulfillment-ticket li em {
+  color: #ff8b83;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.ticket-actions {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+}
+
+.ticket-actions button {
+  min-height: 60px;
+  border: 0;
+  background: #d7ad2a;
+  color: #050607;
+  font-size: 1.25rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.ticket-actions button.destructive {
+  background: #562b31;
+  color: #fff;
+}
+
+.ready-section .fulfillment-ticket {
+  border-color: #50b7ff;
+}
+
+@media (max-width: 720px) {
+  .kds-shell {
+    padding: 14px;
+  }
+
+  .kds-header {
+    grid-template-columns: 1fr;
+  }
+}
