@@ -209,7 +209,7 @@ export class AuthService {
 
   async customerLogin(input: CustomerLoginRequest): Promise<{ tokens: TokenPair; customer: AuthenticatedCustomer }> {
     const customer = await prisma.customer.findUnique({
-      where: { email: input.email },
+      where: { email: input.email.toLowerCase() },
       include: { authAccount: true },
     });
 

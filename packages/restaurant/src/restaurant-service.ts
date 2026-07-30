@@ -72,6 +72,11 @@ export class RestaurantService {
       if (seats.some((seat) => seat.currentTabSeatId)) {
         const existing = await this.summariesForOrder(tx, order.id);
         if (existing.length) {
+          // For a one-seat order the two requested arrangements are
+          // structurally identical: one tab containing one seat. Treat
+          // either literal as an idempotent replay instead of inventing a
+          // mode distinction that cannot be recovered from the stored shape.
+          if (order.tickets.length === 1) return existing;
           const existingMode =
             existing.length === 1 && existing[0]!.seats.length === order.tickets.length
               ? "SHARED"

@@ -1513,7 +1513,7 @@ describe("Customer authentication", () => {
   it("logs the customer in with correct credentials", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/login")
-      .send({ email, password: "customer-password-1" });
+      .send({ email: "NEW-CUSTOMER@M0TEST.LOCAL", password: "customer-password-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.customer.email).toBe(email);
@@ -1686,13 +1686,48 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     expect(result.body.every((tab: { status: string }) => tab.status === "OPEN")).toBe(true);
   });
 
+  it("treats shared and separate retries as equivalent for a single-seat order", async () => {
+    const orderId = await purchaseSeats("m5-single-holder-0003", 1, false);
+    const separate = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketOrderId: orderId, mode: "SEPARATE" });
+    const sharedRetry = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketOrderId: orderId, mode: "SHARED" });
+
+    expect(separate.status).toBe(201);
+    expect(sharedRetry.status).toBe(201);
+    expect(sharedRetry.body[0].id).toBe(separate.body[0].id);
+  });
+
   it("enforces restaurant permission server-side", async () => {
-    const door = await request(app.getHttpServer())
-      .post("/api/v1/auth/staff/login")
-      .send({ email: `door@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    const { prisma } = await import("@cinema/database");
+    const location = await prisma.location.findFirstOrThrow();
+    const { signTokenPair, Permission } = await import("@cinema/auth");
+    const doorAccessToken = signTokenPair(
+      {
+        sub: "00000000-0000-0000-0000-000000000098",
+        actorType: "EMPLOYEE",
+        locationId: location.id,
+        permissions: [Permission.TicketScan],
+      },
+      {
+        sub: "00000000-0000-0000-0000-000000000098",
+        actorType: "EMPLOYEE",
+        tokenVersion: 0,
+      },
+      {
+        accessSecret: process.env.JWT_ACCESS_SECRET!,
+        refreshSecret: process.env.JWT_REFRESH_SECRET!,
+        accessTtlSeconds: 900,
+        refreshTtlSeconds: 3600,
+      },
+    ).accessToken;
     const result = await request(app.getHttpServer())
       .post("/api/v1/restaurant-tabs/seat-linked")
-      .set("Authorization", `Bearer ${door.body.accessToken}`)
+      .set("Authorization", `Bearer ${doorAccessToken}`)
       .send({
         ticketOrderId: "00000000-0000-0000-0000-000000000001",
         mode: "SHARED",
