@@ -2103,7 +2103,7 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
       .post(`/api/v1/restaurant-tabs/fulfillment/${ticketId}/refire`)
       .set("Authorization", `Bearer ${server.body.accessToken}`)
       .send({});
-    expect(refire.status).toBe(200);
+    expect(refire.status).toBe(201);
     expect(refire.body).toMatchObject({
       status: "NEW",
       refiredFromId: ticketId,
