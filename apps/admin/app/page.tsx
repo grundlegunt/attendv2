@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { AuthenticatedEmployee, AuthTokenResponse, SeatInput } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { MenuManager } from "./menu-manager";
 
 interface Auditorium {
   id: string; name: string; capacity: number;
@@ -189,5 +190,6 @@ export default function AdminPage() {
         <button type="button" className="secondary" onClick={() => editShowtime(showtime)}>Edit</button>
       </article>)}</div>
     </section>
+    {token && <MenuManager accessToken={token} />}
   </main>;
 }

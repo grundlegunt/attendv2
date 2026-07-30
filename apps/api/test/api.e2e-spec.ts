@@ -1735,6 +1735,34 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     expect(result.status).toBe(403);
   });
 
+  it("splits a seat from a shared tab and combines it back without rewriting seat history", async () => {
+    const summary = await request(app.getHttpServer())
+      .get(`/api/v1/restaurant-tabs/${sharedTabId}/summary`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    const showtimeSeatId = summary.body.seats[0].showtimeSeatId as string;
+    const split = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${sharedTabId}/split`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ showtimeSeatId });
+    expect(split.status).toBe(201);
+
+    const separated = await request(app.getHttpServer())
+      .get(`/api/v1/restaurant-tabs/${split.body.targetTabId}/summary`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(separated.body.seats).toHaveLength(1);
+    expect(separated.body.seats[0].showtimeSeatId).toBe(showtimeSeatId);
+
+    const combined = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${sharedTabId}/combine`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ sourceTabId: split.body.targetTabId });
+    expect(combined.status).toBe(201);
+    const restored = await request(app.getHttpServer())
+      .get(`/api/v1/restaurant-tabs/${sharedTabId}/summary`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(restored.body.seats).toHaveLength(2);
+  });
+
   it("does not expose a tab summary to staff scoped to another location", async () => {
     const { prisma } = await import("@cinema/database");
     const organization = await prisma.organization.findFirstOrThrow();
@@ -1769,5 +1797,138 @@ describe("Milestone 5 seat-linked dining tabs", () => {
       .get(`/api/v1/restaurant-tabs/${sharedTabId}/summary`)
       .set("Authorization", `Bearer ${otherLocationToken}`);
     expect(result.status).toBe(404);
+  });
+});
+
+describe("Milestone 6 server POS and menus", () => {
+  it("opens a walk-in tab and sends items to the correct kitchen and bar stations", async () => {
+    const menu = await request(app.getHttpServer())
+      .get("/api/v1/restaurant-menu")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(menu.status).toBe(200);
+    const items = menu.body.categories.flatMap(
+      (category: { items: unknown[] }) => category.items,
+    ) as Array<{
+      id: string;
+      name: string;
+      kitchenStation: { name: string };
+      modifierGroups: Array<{
+        required: boolean;
+        modifiers: Array<{ id: string }>;
+      }>;
+    }>;
+    const burger = items.find((item) => item.name === "Cheeseburger")!;
+    const cocktail = items.find((item) => item.name === "Old Fashioned")!;
+
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Bar guest 12" });
+    expect(tab.status).toBe(201);
+    expect(tab.body).toMatchObject({
+      tabType: "WALK_IN",
+      label: "Bar guest 12",
+      showtimeId: null,
+      autoSettleAuthorized: false,
+    });
+
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    expect(order.status).toBe(201);
+    for (const item of [burger, cocktail]) {
+      const modifierIds = item.modifierGroups
+        .filter((group) => group.required)
+        .map((group) => group.modifiers[0]!.id);
+      const added = await request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ menuItemId: item.id, quantity: 1, modifierIds });
+      expect(added.status).toBe(201);
+    }
+    const sent = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    expect(sent.status).toBe(201);
+    expect(sent.body.status).toBe("SENT");
+
+    const { prisma } = await import("@cinema/database");
+    const routed = await prisma.restaurantOrderItem.findMany({
+      where: { restaurantOrderId: order.body.id },
+      include: { kitchenStation: true },
+    });
+    expect(routed.map((item) => item.kitchenStation.name).sort()).toEqual([
+      "Bar",
+      "Kitchen",
+    ]);
+  });
+
+  it("authoritatively rejects an item that becomes 86'd after it was added", async () => {
+    const { prisma } = await import("@cinema/database");
+    const burger = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Cheeseburger" },
+      include: { modifierGroups: { include: { modifiers: true } } },
+    });
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "86 check" });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        menuItemId: burger.id,
+        quantity: 1,
+        modifierIds: [burger.modifierGroups[0]!.modifiers[0]!.id],
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/restaurant-menu/items/${burger.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ is86d: true })
+      .expect(200);
+    const sent = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    expect(sent.status).toBe(409);
+    expect(sent.body.message).toContain("Cheeseburger");
+    expect(await prisma.restaurantOrder.findUniqueOrThrow({ where: { id: order.body.id } }))
+      .toMatchObject({ status: "DRAFT", placedAt: null });
+    await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: false } });
+  });
+
+  it("transfers an order between compatible open tabs and records the move", async () => {
+    const source = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Transfer source" });
+    const target = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Transfer target" });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${source.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    const moved = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/transfer`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ targetTabId: target.body.id });
+    expect(moved.status).toBe(201);
+    expect(moved.body.restaurantTabId).toBe(target.body.id);
+
+    const { prisma } = await import("@cinema/database");
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: "restaurant_order.transferred", entityId: order.body.id },
+      }),
+    ).toBe(1);
   });
 });

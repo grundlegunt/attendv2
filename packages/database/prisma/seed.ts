@@ -383,6 +383,113 @@ export async function seedDatabase(
     }
   }
 
+  log("Seeding Milestone 6 restaurant stations and menu...");
+  const kitchenStation = await prisma.kitchenStation.upsert({
+    where: { locationId_name: { locationId: location.id, name: "Kitchen" } },
+    update: { displayType: "KITCHEN", active: true },
+    create: {
+      id: "60000000-0000-0000-0000-000000000001",
+      locationId: location.id,
+      name: "Kitchen",
+      displayType: "KITCHEN",
+    },
+  });
+  const barStation = await prisma.kitchenStation.upsert({
+    where: { locationId_name: { locationId: location.id, name: "Bar" } },
+    update: { displayType: "BAR", active: true },
+    create: {
+      id: "60000000-0000-0000-0000-000000000002",
+      locationId: location.id,
+      name: "Bar",
+      displayType: "BAR",
+    },
+  });
+  const foodCategory = await prisma.menuCategory.upsert({
+    where: { locationId_name: { locationId: location.id, name: "Food" } },
+    update: { active: true, sortOrder: 10 },
+    create: {
+      id: "61000000-0000-0000-0000-000000000001",
+      locationId: location.id,
+      name: "Food",
+      sortOrder: 10,
+    },
+  });
+  const cocktailsCategory = await prisma.menuCategory.upsert({
+    where: { locationId_name: { locationId: location.id, name: "Cocktails" } },
+    update: { active: true, sortOrder: 20 },
+    create: {
+      id: "61000000-0000-0000-0000-000000000002",
+      locationId: location.id,
+      name: "Cocktails",
+      sortOrder: 20,
+    },
+  });
+  const burger = await prisma.menuItem.upsert({
+    where: {
+      menuCategoryId_name: { menuCategoryId: foodCategory.id, name: "Cheeseburger" },
+    },
+    update: { kitchenStationId: kitchenStation.id, priceCents: 1600, active: true },
+    create: {
+      id: "62000000-0000-0000-0000-000000000001",
+      menuCategoryId: foodCategory.id,
+      kitchenStationId: kitchenStation.id,
+      name: "Cheeseburger",
+      description: "Double patty, American cheese, pickles, and cinema sauce.",
+      priceCents: 1600,
+    },
+  });
+  await prisma.menuItem.upsert({
+    where: {
+      menuCategoryId_name: {
+        menuCategoryId: cocktailsCategory.id,
+        name: "Old Fashioned",
+      },
+    },
+    update: { kitchenStationId: barStation.id, priceCents: 1400, active: true },
+    create: {
+      id: "62000000-0000-0000-0000-000000000002",
+      menuCategoryId: cocktailsCategory.id,
+      kitchenStationId: barStation.id,
+      name: "Old Fashioned",
+      description: "Bourbon, bitters, demerara, and orange.",
+      priceCents: 1400,
+    },
+  });
+  const temperatureGroup = await prisma.modifierGroup.upsert({
+    where: {
+      menuItemId_name: { menuItemId: burger.id, name: "Temperature" },
+    },
+    update: {
+      selectionType: "SINGLE",
+      required: true,
+      minSelections: 1,
+      maxSelections: 1,
+    },
+    create: {
+      id: "63000000-0000-0000-0000-000000000001",
+      menuItemId: burger.id,
+      name: "Temperature",
+      selectionType: "SINGLE",
+      required: true,
+      minSelections: 1,
+      maxSelections: 1,
+    },
+  });
+  for (const [index, name] of ["Medium", "Well Done"].entries()) {
+    await prisma.modifier.upsert({
+      where: {
+        modifierGroupId_name: { modifierGroupId: temperatureGroup.id, name },
+      },
+      update: { active: true, sortOrder: index },
+      create: {
+        modifierGroupId: temperatureGroup.id,
+        name,
+        priceDeltaCents: 0,
+        sortOrder: index,
+      },
+    });
+  }
+
   return {
     organizationId: org.id,
     locationId: location.id,
