@@ -337,7 +337,7 @@ export class RestaurantService {
       where: {
         id: input.tabId,
         locationId: input.locationId,
-        status: { in: ["PREAUTHORIZED", "OPEN"] },
+        status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"] },
       },
       include: { seats: true },
     });
@@ -888,9 +888,10 @@ export class RestaurantService {
           status: "PAID",
         },
         include: {
+          location: true,
           tickets: {
             where: { status: { notIn: ["REFUNDED", "CANCELED"] } },
-            include: { showtimeSeat: true },
+            include: { showtimeSeat: { include: { showtime: true } } },
             orderBy: { showtimeSeatId: "asc" },
           },
           consents: {
@@ -958,6 +959,12 @@ export class RestaurantService {
             autoSettleAuthorized: Boolean(paymentMethod),
             activePaymentMethodId: paymentMethod?.id,
             activePaymentMethodSetAt: paymentMethod ? new Date() : null,
+            autoSettleAt: paymentMethod
+              ? new Date(
+                  tickets[0]!.showtimeSeat.showtime.endsAt.getTime() +
+                    order.location.autoSettleGraceMinutes * 60_000,
+                )
+              : null,
           },
         });
         for (const ticket of tickets) {

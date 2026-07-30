@@ -25,6 +25,7 @@ let ownerAccessToken: string;
 let ownerRefreshToken: string;
 let milestone4Credential: string;
 let milestone4TicketId: string;
+let milestone8TabId: string;
 
 const SEED_SUFFIX = "m0test.local";
 // Matches SEED_PASSWORD in packages/database/prisma/seed.ts.
@@ -42,6 +43,7 @@ beforeAll(async () => {
   process.env.QR_CREDENTIAL_SECRET = "test-qr-credential-secret-32-characters-min";
   process.env.PAYMENT_PROVIDER = "test";
   process.env.EMAIL_PROVIDER = "test";
+  process.env.RESTAURANT_SETTLEMENT_INTERVAL_MS = "0";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
@@ -1662,6 +1664,7 @@ describe("Milestone 5 seat-linked dining tabs", () => {
       last4: "4242",
     });
     sharedTabId = simultaneous[0].body[0].id;
+    milestone8TabId = sharedTabId;
 
     const { prisma } = await import("@cinema/database");
     expect(
@@ -2198,5 +2201,251 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
       .get(`/api/v1/fulfillment/stations/${otherStation.id}/queue`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .expect(404);
+  });
+});
+
+describe("Milestone 8 restaurant settlement and tipping", () => {
+  it("drops the check, permits one final order, and closes with split tender", async () => {
+    const { prisma } = await import("@cinema/database");
+    const location = await prisma.location.findFirstOrThrow();
+    await prisma.taxRule.create({
+      data: {
+        locationId: location.id,
+        name: "M8 test tax",
+        appliesTo: "ALL",
+        ratePermille: 100,
+      },
+    });
+    await prisma.serviceChargeRule.create({
+      data: {
+        locationId: location.id,
+        name: "M8 test service",
+        appliesTo: "ALL",
+        flatCents: 100,
+      },
+    });
+    const summary = await request(app.getHttpServer())
+      .get(`/api/v1/restaurant-tabs/${milestone8TabId}/summary`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    const showtimeSeatId = summary.body.seats[0].showtimeSeatId as string;
+    const [burger, cocktail] = await Promise.all([
+      prisma.menuItem.findFirstOrThrow({
+        where: { name: "Cheeseburger" },
+        include: { modifierGroups: { include: { modifiers: true } } },
+      }),
+      prisma.menuItem.findFirstOrThrow({ where: { name: "Old Fashioned" } }),
+    ]);
+    const addAndSend = async (
+      item: typeof burger | typeof cocktail,
+      modifierIds: string[],
+    ) => {
+      const order = await request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/${milestone8TabId}/orders`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ showtimeSeatId });
+      expect(order.status).toBe(201);
+      await request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ menuItemId: item.id, quantity: 1, modifierIds })
+        .expect(201);
+      return request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({})
+        .expect(201);
+    };
+    const burgerSent = await addAndSend(
+      burger,
+      [burger.modifierGroups[0]!.modifiers[0]!.id],
+    );
+    const cocktailSent = await addAndSend(cocktail, []);
+    for (const ticket of [
+      ...burgerSent.body.fulfillmentTickets,
+      ...cocktailSent.body.fulfillmentTickets,
+    ] as Array<{ id: string }>) {
+      for (const action of ["ACCEPT", "START", "READY", "DELIVER"]) {
+        await request(app.getHttpServer())
+          .patch(`/api/v1/fulfillment/tickets/${ticket.id}`)
+          .set("Authorization", `Bearer ${ownerAccessToken}`)
+          .send({ action })
+          .expect(200);
+      }
+    }
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/drop-check`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+
+    const guestLink = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/access-link`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+    await request(app.getHttpServer())
+      .get(`/api/v1/public/restaurant-tabs/${guestLink.body.token}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/v1/public/restaurant-tabs/${guestLink.body.token}tampered`)
+      .expect(401);
+
+    // Check drop deliberately does not prevent a final order.
+    await addAndSend(cocktail, []);
+    const tab = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+    });
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/finalize`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        requestId: "88000000-0000-0000-0000-000000000000",
+        tipCents: 880,
+        tenders: [
+          {
+            type: "SAVED_METHOD",
+            amountCents: 3000,
+            paymentMethodReferenceId: tab.activePaymentMethodId,
+          },
+          {
+            type: "CARD_PRESENT",
+            amountCents: 2819,
+            readerId: "tmr_test_mismatch",
+          },
+        ],
+      })
+      .expect(400);
+    expect(
+      await prisma.payment.count({
+        where: { restaurantTabId: milestone8TabId },
+      }),
+    ).toBe(0);
+
+    const finalized = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/finalize`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        requestId: "88000000-0000-0000-0000-000000000001",
+        tipCents: 880,
+        tenders: [
+          {
+            type: "SAVED_METHOD",
+            amountCents: 3000,
+            paymentMethodReferenceId: tab.activePaymentMethodId,
+          },
+          {
+            type: "CARD_PRESENT",
+            amountCents: 2820,
+            readerId: "tmr_test_split",
+          },
+        ],
+      });
+    expect(finalized.status).toBe(201);
+    expect(finalized.body.status).toBe("CLOSED");
+    expect(
+      await prisma.payment.count({
+        where: { restaurantTabId: milestone8TabId, status: "SUCCEEDED" },
+      }),
+    ).toBe(2);
+    expect(
+      await prisma.restaurantReceipt.findUnique({
+        where: { restaurantTabId: milestone8TabId },
+      }),
+    ).toMatchObject({
+      subtotalCents: 4400,
+      taxCents: 440,
+      serviceChargeCents: 100,
+      tipCents: 880,
+      totalCents: 5820,
+    });
+  });
+
+  it("runs fallback once, does not retry a failed card, and surfaces attention", async () => {
+    const { prisma } = await import("@cinema/database");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      include: {
+        activePaymentMethod: { include: { paymentCustomer: true } },
+        showtime: true,
+        orders: { include: { items: true } },
+      },
+    });
+    const declinedMethod = await prisma.paymentMethodReference.create({
+      data: {
+        paymentCustomerId: source.activePaymentMethod!.paymentCustomerId,
+        provider: "test",
+        providerPaymentMethodId: "pm_declined_m8",
+        brand: "visa",
+        last4: "0002",
+        expMonth: 12,
+        expYear: 2035,
+      },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "SEAT_LINKED",
+        showtimeId: source.showtimeId,
+        status: "PREAUTHORIZED",
+        autoSettleAuthorized: true,
+        activePaymentMethodId: declinedMethod.id,
+      },
+    });
+    await prisma.restaurantTab.updateMany({
+      where: {
+        showtimeId: source.showtimeId,
+        id: { not: tab.id },
+        status: { in: ["PREAUTHORIZED", "OPEN"] },
+      },
+      data: { autoSettleAuthorized: false },
+    });
+    const server = await prisma.employee.findFirstOrThrow({
+      where: { email: `server@${SEED_SUFFIX}` },
+    });
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    await prisma.restaurantOrder.create({
+      data: {
+        restaurantTabId: tab.id,
+        serverEmployeeId: server.id,
+        status: "SENT",
+        placedAt: new Date(),
+        items: {
+          create: {
+            menuItemId: cocktail.id,
+            quantity: 1,
+            unitPriceCentsSnapshot: cocktail.priceCents,
+            selectedModifiers: [],
+            kitchenStationId: cocktail.kitchenStationId,
+            status: "SENT",
+          },
+        },
+      },
+    });
+    await prisma.showtime.update({
+      where: { id: source.showtimeId! },
+      data: { endsAt: new Date(Date.now() - 10 * 60_000) },
+    });
+
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const settlement = app.get(RestaurantSettlementService);
+    await settlement.runFallback();
+    await settlement.runFallback();
+    expect(
+      await prisma.payment.count({ where: { restaurantTabId: tab.id } }),
+    ).toBe(1);
+    expect(
+      await prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).toMatchObject({ status: "PAYMENT_FAILED" });
+    const attention = await request(app.getHttpServer())
+      .get("/api/v1/restaurant-settlement/attention")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(attention.body.map((candidate: { id: string }) => candidate.id))
+      .toContain(tab.id);
   });
 });

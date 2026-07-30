@@ -60,7 +60,11 @@ export async function seedDatabase(
 
   const location = await prisma.location.upsert({
     where: { id: "00000000-0000-0000-0000-000000000002" },
-    update: {},
+    update: {
+      checkDropMinutesBeforeEnd: 30,
+      autoSettleGraceMinutes: 5,
+      autoSettleTipBasisPoints: 0,
+    },
     create: {
       id: "00000000-0000-0000-0000-000000000002",
       organizationId: org.id,
@@ -70,6 +74,9 @@ export async function seedDatabase(
       currency: "USD",
       cleaningBufferMinutes: 15,
       preShowBufferMinutes: 30,
+      checkDropMinutesBeforeEnd: 30,
+      autoSettleGraceMinutes: 5,
+      autoSettleTipBasisPoints: 0,
     },
   });
 
@@ -480,7 +487,12 @@ export async function seedDatabase(
     where: {
       menuCategoryId_name: { menuCategoryId: foodCategory.id, name: "Cheeseburger" },
     },
-    update: { kitchenStationId: kitchenStation.id, priceCents: 1600, active: true },
+    update: {
+      kitchenStationId: kitchenStation.id,
+      priceCents: 1600,
+      chargeCategory: "FOOD",
+      active: true,
+    },
     create: {
       id: "62000000-0000-0000-0000-000000000001",
       menuCategoryId: foodCategory.id,
@@ -488,6 +500,7 @@ export async function seedDatabase(
       name: "Cheeseburger",
       description: "Double patty, American cheese, pickles, and cinema sauce.",
       priceCents: 1600,
+      chargeCategory: "FOOD",
     },
   });
   await prisma.menuItem.upsert({
@@ -497,7 +510,12 @@ export async function seedDatabase(
         name: "Old Fashioned",
       },
     },
-    update: { kitchenStationId: barStation.id, priceCents: 1400, active: true },
+    update: {
+      kitchenStationId: barStation.id,
+      priceCents: 1400,
+      chargeCategory: "ALCOHOL",
+      active: true,
+    },
     create: {
       id: "62000000-0000-0000-0000-000000000002",
       menuCategoryId: cocktailsCategory.id,
@@ -505,6 +523,7 @@ export async function seedDatabase(
       name: "Old Fashioned",
       description: "Bourbon, bitters, demerara, and orange.",
       priceCents: 1400,
+      chargeCategory: "ALCOHOL",
     },
   });
   const temperatureGroup = await prisma.modifierGroup.upsert({

@@ -3,6 +3,8 @@ import {
   ProviderDefinitiveError,
   type CreatePaymentIntentArgs,
   type CreateProviderCustomerArgs,
+  type ChargeSavedPaymentMethodArgs,
+  type CollectCardPresentPaymentArgs,
   type PaymentProvider,
   type ProviderPaymentIntentResult,
   type ProviderPaymentStatus,
@@ -70,6 +72,56 @@ export class StripePaymentProvider implements PaymentProvider {
       },
     );
     return mapPaymentIntent(intent);
+  }
+
+  async chargeSavedPaymentMethod(
+    args: ChargeSavedPaymentMethodArgs,
+  ): Promise<ProviderPaymentIntentResult> {
+    const intent = await this.client.paymentIntents.create(
+      {
+        amount: args.amountCents,
+        currency: args.currency,
+        customer: args.providerCustomerId,
+        payment_method: args.providerPaymentMethodId,
+        confirm: true,
+        off_session: true,
+        metadata: args.metadata,
+      },
+      {
+        idempotencyKey: args.idempotencyKey,
+        ...(args.connectedAccountId ? { stripeAccount: args.connectedAccountId } : {}),
+      },
+    );
+    return mapPaymentIntent(intent);
+  }
+
+  async collectCardPresentPayment(
+    args: CollectCardPresentPaymentArgs,
+  ): Promise<ProviderPaymentIntentResult> {
+    const intent = await this.client.paymentIntents.create(
+      {
+        amount: args.amountCents,
+        currency: args.currency,
+        payment_method_types: ["card_present"],
+        capture_method: "automatic",
+        metadata: args.metadata,
+      },
+      {
+        idempotencyKey: args.idempotencyKey,
+        ...(args.connectedAccountId ? { stripeAccount: args.connectedAccountId } : {}),
+      },
+    );
+    const reader = await this.client.terminal.readers.processPaymentIntent(
+      args.readerId,
+      { payment_intent: intent.id },
+      args.connectedAccountId ? { stripeAccount: args.connectedAccountId } : undefined,
+    );
+    const processed = reader.action?.process_payment_intent?.payment_intent;
+    if (processed && typeof processed !== "string") return mapPaymentIntent(processed);
+    return this.retrievePaymentIntent({
+      connectedAccountId: args.connectedAccountId,
+      paymentIntentId: intent.id,
+    });
   }
 
   async retrievePaymentIntent(args: RetrievePaymentIntentArgs): Promise<ProviderPaymentIntentResult> {

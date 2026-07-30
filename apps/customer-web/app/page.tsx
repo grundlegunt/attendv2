@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { AuthenticatedCustomer, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { SeatPicker } from "./components/seat-picker";
+import { LiveRestaurantTab } from "./components/live-restaurant-tab";
 
 type Mode = "login" | "register";
 interface NowPlayingResponse {
@@ -31,6 +32,10 @@ export default function HomePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<AuthenticatedCustomer | null>(null);
+  const [customerAccessToken, setCustomerAccessToken] = useState("");
+  const [liveTabId, setLiveTabId] = useState("");
+  const [tabLookup, setTabLookup] = useState("");
+  const [guestTabToken, setGuestTabToken] = useState("");
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -80,6 +85,7 @@ export default function HomePage() {
         body: JSON.stringify(body),
       });
       setCustomer(response.customer);
+      setCustomerAccessToken(response.accessToken);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Please try again.");
     } finally {
@@ -99,8 +105,41 @@ export default function HomePage() {
         </button>
       </header>
 
-      {accountOpen && !customer && (
+      {guestTabToken ? (
+        <LiveRestaurantTab
+          guestToken={guestTabToken}
+          onClose={() => setGuestTabToken("")}
+        />
+      ) : liveTabId && customerAccessToken ? (
+        <LiveRestaurantTab
+          tabId={liveTabId}
+          accessToken={customerAccessToken}
+          onClose={() => setLiveTabId("")}
+        />
+      ) : accountOpen && customer ? (
+        <section className="account-panel">
+          <h2>Open your dining tab</h2>
+          <label className="field">
+            <span>Tab ID from your ticket or server</span>
+            <input value={tabLookup} onChange={(event) => setTabLookup(event.target.value)} />
+          </label>
+          <button className="primary" onClick={() => setLiveTabId(tabLookup)}>
+            View live tab
+          </button>
+        </section>
+      ) : accountOpen && !customer && (
         <section className="account-panel" aria-label="Customer account">
+          <h2>Open a secure dining-tab link</h2>
+          <label className="field">
+            <span>Tab link token</span>
+            <input
+              value={tabLookup}
+              onChange={(event) => setTabLookup(event.target.value)}
+            />
+          </label>
+          <button className="primary" onClick={() => setGuestTabToken(tabLookup)}>
+            View live tab
+          </button>
           <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
           {error && <div className="error-banner">{error}</div>}
           <form onSubmit={handleSubmit}>

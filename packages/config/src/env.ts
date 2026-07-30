@@ -42,6 +42,11 @@ const envSchema = z.object({
   // explicitly).
   REFUND_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
 
+  // How often the API checks for seat-linked restaurant tabs whose automatic
+  // settlement time has arrived. Set to 0 in tests that invoke the sweep
+  // explicitly.
+  RESTAURANT_SETTLEMENT_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
+
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
 }).superRefine((env, context) => {
   if (env.PAYMENT_PROVIDER === "test" && env.NODE_ENV !== "test") {
