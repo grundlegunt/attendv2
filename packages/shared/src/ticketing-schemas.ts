@@ -38,6 +38,7 @@ export interface TicketConfirmationResponse {
   totalCents: number;
   currency: string;
   receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED";
+  diningAuthorization: "AUTHORIZED" | "DECLINED" | "UNAVAILABLE";
   tickets: Array<{
     id: string;
     issuanceToken: string;

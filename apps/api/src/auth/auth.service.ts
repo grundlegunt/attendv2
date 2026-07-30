@@ -173,21 +173,35 @@ export class AuthService {
   async customerRegister(
     input: CustomerRegisterRequest,
   ): Promise<{ tokens: TokenPair; customer: AuthenticatedCustomer }> {
-    const existing = await prisma.customer.findUnique({ where: { email: input.email } });
-    if (existing) {
+    const normalizedEmail = input.email.toLowerCase();
+    const existing = await prisma.customer.findUnique({
+      where: { email: normalizedEmail },
+      include: { authAccount: true },
+    });
+    if (existing?.authAccount) {
       throw AppError.conflict("An account with this email already exists.");
     }
 
     const passwordHash = await hashPassword(input.password);
-    const customer = await prisma.customer.create({
-      data: {
-        email: input.email,
-        name: input.name,
-        isGuest: false,
-        authAccount: { create: { passwordHash } },
-      },
-      include: { authAccount: true },
-    });
+    const customer = existing
+      ? await prisma.customer.update({
+          where: { id: existing.id },
+          data: {
+            name: input.name,
+            isGuest: false,
+            authAccount: { create: { passwordHash } },
+          },
+          include: { authAccount: true },
+        })
+      : await prisma.customer.create({
+          data: {
+            email: normalizedEmail,
+            name: input.name,
+            isGuest: false,
+            authAccount: { create: { passwordHash } },
+          },
+          include: { authAccount: true },
+        });
 
     const tokens = this.issueCustomerTokens(customer.id, customer.authAccount!.refreshTokenVersion);
     return { tokens, customer: this.customerToProfile(customer) };

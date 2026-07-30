@@ -175,11 +175,6 @@ export default function HomePage() {
                     >
                       <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
                       <span>{showtime.auditorium.name}</span>
-                      <span>
-                        ${(showtime.priceTier.ticketPriceMinor / 100).toFixed(0)}
-                        {" + $"}
-                        {(showtime.priceTier.feeMinor / 100).toFixed(0)} fee
-                      </span>
                     </button>
                   );
                 })}

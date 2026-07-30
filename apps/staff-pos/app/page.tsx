@@ -22,6 +22,13 @@ interface SeatAvailabilityResponse {
   counts: { available: number; held: number; sold: number; blocked: number };
 }
 
+interface TabSummary {
+  id: string;
+  status: string;
+  paymentMethod: { brand: string; last4: string } | null;
+  seats: Array<{ seat: string }>;
+}
+
 export default function StaffLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,7 +39,10 @@ export default function StaffLoginPage() {
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
   const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
-  const [view, setView] = useState<"scanner" | "seats">("scanner");
+  const [view, setView] = useState<"scanner" | "seats" | "tabs">("scanner");
+  const [tabOrderId, setTabOrderId] = useState("");
+  const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
+  const [openedTabs, setOpenedTabs] = useState<TabSummary[]>([]);
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
@@ -79,6 +89,20 @@ export default function StaffLoginPage() {
     }
   }
 
+  async function openTabs(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      setOpenedTabs(await apiFetch<TabSummary[]>("/restaurant-tabs/seat-linked", {
+        method: "POST",
+        accessToken,
+        body: JSON.stringify({ ticketOrderId: tabOrderId, mode: tabMode }),
+      }));
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.body.message : "Tabs could not be opened.");
+    }
+  }
+
   if (employee) {
     const seatMapSeats = availability?.seats.map((seat) => ({
       ...seat,
@@ -97,9 +121,10 @@ export default function StaffLoginPage() {
         <nav className="staff-tabs" aria-label="Staff tools">
           <button type="button" className={view === "scanner" ? "active" : ""} onClick={() => setView("scanner")}>Scan tickets</button>
           <button type="button" className={view === "seats" ? "active" : ""} onClick={() => setView("seats")}>Live seats</button>
+          <button type="button" className={view === "tabs" ? "active" : ""} onClick={() => setView("tabs")}>Tab debug</button>
         </nav>
 
-        <section className="showtime-toolbar" aria-label="Select a showtime">
+        {view !== "tabs" && <section className="showtime-toolbar" aria-label="Select a showtime">
           <label htmlFor="showtime">Showtime</label>
           <select id="showtime" value={selectedShowtimeId} onChange={(event) => setSelectedShowtimeId(event.target.value)}>
             {program?.movies.flatMap((movie) =>
@@ -118,9 +143,35 @@ export default function StaffLoginPage() {
               <span>{availability.counts.blocked} blocked</span>
             </div>
           )}
-        </section>
+        </section>}
 
-        {view === "scanner" && selectedShowtimeId ? (
+        {view === "tabs" ? (
+          <section className="scanner-panel">
+            <h2>Open seat-linked tabs</h2>
+            <p>Internal Milestone 5 verification view. Enter a paid ticket order ID.</p>
+            <form onSubmit={openTabs}>
+              <label className="field">
+                <span>Ticket order ID</span>
+                <input required value={tabOrderId} onChange={(event) => setTabOrderId(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>Tab arrangement</span>
+                <select value={tabMode} onChange={(event) => setTabMode(event.target.value as "SHARED" | "SEPARATE")}>
+                  <option value="SHARED">One shared tab</option>
+                  <option value="SEPARATE">One tab per seat</option>
+                </select>
+              </label>
+              <button className="primary">Open tabs</button>
+            </form>
+            {openedTabs.map((tab) => (
+              <div className="scan-result valid" key={tab.id}>
+                <strong>{tab.status}</strong>
+                <p>Seats {tab.seats.map((seat) => seat.seat).join(", ")}</p>
+                <p>{tab.paymentMethod ? `${tab.paymentMethod.brand} •••• ${tab.paymentMethod.last4}` : "Payment required"}</p>
+              </div>
+            ))}
+          </section>
+        ) : view === "scanner" && selectedShowtimeId ? (
           <TicketScanner accessToken={accessToken} expectedShowtimeId={selectedShowtimeId} />
         ) : view === "scanner" ? (
           <p>Select a showtime before scanning tickets.</p>

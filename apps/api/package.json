@@ -17,6 +17,7 @@
     "@cinema/database": "workspace:*",
     "@cinema/notifications": "workspace:*",
     "@cinema/payments": "workspace:*",
+    "@cinema/restaurant": "workspace:*",
     "@cinema/shared": "workspace:*",
     "@cinema/ticketing": "workspace:*",
     "@nestjs/common": "^10.4.6",
