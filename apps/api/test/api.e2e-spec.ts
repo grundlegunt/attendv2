@@ -2119,6 +2119,60 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
     });
   });
 
+  it("allows only one winner when the same fulfillment transition is requested concurrently", async () => {
+    const { sent } = await createMixedFulfillmentOrder("M7 transition race");
+    const ticketId = sent.body.fulfillmentTickets[0].id as string;
+    const transition = () =>
+      request(app.getHttpServer())
+        .patch(`/api/v1/fulfillment/tickets/${ticketId}`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ action: "ACCEPT" });
+
+    const responses = await Promise.all([transition(), transition()]);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    const { prisma } = await import("@cinema/database");
+    expect(
+      await prisma.fulfillmentTicket.findUniqueOrThrow({ where: { id: ticketId } }),
+    ).toMatchObject({ status: "ACCEPTED" });
+  });
+
+  it("cancels active tickets, voids ready tickets, and rolls a fully stopped order to canceled", async () => {
+    const { orderId, sent } = await createMixedFulfillmentOrder("M7 cancel and void");
+    const [cancelTicket, voidTicket] = sent.body.fulfillmentTickets as Array<{
+      id: string;
+    }>;
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/fulfillment/tickets/${cancelTicket.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ action: "CANCEL" })
+      .expect(200)
+      .expect(({ body }) => expect(body.status).toBe("CANCELED"));
+
+    for (const action of ["ACCEPT", "START", "READY"] as const) {
+      await request(app.getHttpServer())
+        .patch(`/api/v1/fulfillment/tickets/${voidTicket.id}`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ action })
+        .expect(200);
+    }
+    await request(app.getHttpServer())
+      .patch(`/api/v1/fulfillment/tickets/${voidTicket.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ action: "CANCEL" })
+      .expect(409);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/fulfillment/tickets/${voidTicket.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ action: "VOID" })
+      .expect(200)
+      .expect(({ body }) => expect(body.status).toBe("VOIDED"));
+
+    const { prisma } = await import("@cinema/database");
+    expect(await prisma.restaurantOrder.findUniqueOrThrow({ where: { id: orderId } }))
+      .toMatchObject({ status: "CANCELED" });
+  });
+
   it("requires kitchen status permission and scopes station queues to the staff location", async () => {
     const server = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")

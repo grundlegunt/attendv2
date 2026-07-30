@@ -87,7 +87,7 @@ export const combineRestaurantTabsRequestSchema = z.object({
 });
 
 export const fulfillmentTicketTransitionRequestSchema = z.object({
-  action: z.enum(["ACCEPT", "START", "READY", "DELIVER", "REFIRE"]),
+  action: z.enum(["ACCEPT", "START", "READY", "DELIVER", "CANCEL", "VOID", "REFIRE"]),
 });
 
 export type OpenWalkInTabRequest = z.infer<typeof openWalkInTabRequestSchema>;

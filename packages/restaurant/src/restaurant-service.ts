@@ -653,7 +653,7 @@ export class RestaurantService {
     ticketId: string;
     locationId: string;
     actorId: string;
-    action: "ACCEPT" | "START" | "READY" | "DELIVER" | "REFIRE";
+    action: "ACCEPT" | "START" | "READY" | "DELIVER" | "CANCEL" | "VOID" | "REFIRE";
   }) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
@@ -1107,7 +1107,7 @@ export class RestaurantService {
 
   private fulfillmentTransition(
     current: FulfillmentTicketStatus,
-    action: "ACCEPT" | "START" | "READY" | "DELIVER" | "REFIRE",
+    action: "ACCEPT" | "START" | "READY" | "DELIVER" | "CANCEL" | "VOID" | "REFIRE",
   ): FulfillmentTicketStatus {
     const transitions: Partial<
       Record<
@@ -1115,10 +1115,10 @@ export class RestaurantService {
         Partial<Record<typeof action, FulfillmentTicketStatus>>
       >
     > = {
-      NEW: { ACCEPT: "ACCEPTED" },
-      ACCEPTED: { START: "PREPARING" },
-      PREPARING: { READY: "READY" },
-      READY: { DELIVER: "DELIVERED" },
+      NEW: { ACCEPT: "ACCEPTED", CANCEL: "CANCELED" },
+      ACCEPTED: { START: "PREPARING", CANCEL: "CANCELED" },
+      PREPARING: { READY: "READY", CANCEL: "CANCELED" },
+      READY: { DELIVER: "DELIVERED", VOID: "VOIDED" },
       DELIVERED: { REFIRE: "REFIRE" },
     };
     const next = transitions[current]?.[action];
@@ -1142,9 +1142,14 @@ export class RestaurantService {
     const currentCycles = tickets.filter((ticket) => ticket._count.refires === 0);
     const statuses = currentCycles.map((ticket) => ticket.status);
     const delivered = statuses.filter((status) => status === "DELIVERED").length;
+    const allCanceledOrVoided = statuses.every(
+      (candidate) => candidate === "CANCELED" || candidate === "VOIDED",
+    );
     const hasProgressHistory = tickets.some((ticket) => ticket.status !== "NEW");
     const status =
-      delivered === statuses.length
+      allCanceledOrVoided
+        ? "CANCELED"
+        : delivered === statuses.length
         ? "DELIVERED"
         : delivered > 0
           ? "PARTIALLY_DELIVERED"

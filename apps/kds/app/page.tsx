@@ -38,6 +38,14 @@ interface QueueResponse {
   tickets: FulfillmentTicket[];
 }
 
+type FulfillmentAction =
+  | "ACCEPT"
+  | "START"
+  | "READY"
+  | "DELIVER"
+  | "CANCEL"
+  | "VOID";
+
 function ageClass(firedAt: string) {
   const ageMinutes = (Date.now() - new Date(firedAt).getTime()) / 60_000;
   if (ageMinutes >= 15) return "critical";
@@ -139,7 +147,7 @@ export default function KdsPage() {
 
   async function transition(
     ticket: FulfillmentTicket,
-    action: "ACCEPT" | "START" | "READY" | "DELIVER",
+    action: FulfillmentAction,
   ) {
     try {
       await apiFetch(`/fulfillment/tickets/${ticket.id}`, {
@@ -225,7 +233,7 @@ function TicketCard({
   now: number;
   onTransition: (
     ticket: FulfillmentTicket,
-    action: "ACCEPT" | "START" | "READY" | "DELIVER",
+    action: FulfillmentAction,
   ) => void;
 }) {
   const next =
@@ -257,9 +265,20 @@ function TicketCard({
           </li>
         ))}
       </ul>
-      <button type="button" onClick={() => onTransition(ticket, next.action)}>
-        {next.label}
-      </button>
+      <div className="ticket-actions">
+        <button type="button" onClick={() => onTransition(ticket, next.action)}>
+          {next.label}
+        </button>
+        <button
+          className="destructive"
+          type="button"
+          onClick={() =>
+            onTransition(ticket, ticket.status === "READY" ? "VOID" : "CANCEL")
+          }
+        >
+          {ticket.status === "READY" ? "Void" : "Cancel"}
+        </button>
+      </div>
     </article>
   );
 }

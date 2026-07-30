@@ -103,7 +103,7 @@ flowchart TB
 
 ## 6. Real-time design
 
-Single WebSocket gateway, Redis-backed adapter so it scales across multiple API instances (Redis pub/sub fans events out to all instances, each instance pushes to its own connected sockets). Clients subscribe to rooms scoped to what they're looking at:
+The production scaling target is a single WebSocket gateway with a Redis-backed adapter so it scales across multiple API instances (Redis pub/sub fans events out to all instances, each instance pushes to its own connected sockets). Milestone 7 intentionally ships an in-process, station-scoped SSE notification channel for the initial single-instance release; KDS and staff POS independently re-fetch authoritative PostgreSQL state every two seconds, so missed notifications or instance mismatch only add bounded latency and never create stale authoritative state. Redis-backed cross-instance fan-out must be completed before deploying multiple load-balanced API instances. Clients subscribe to rooms scoped to what they're looking at:
 
 - `showtime:{id}` — seat map viewers (customer seat selection page, box office) receive `SEAT_HELD`, `SEAT_RELEASED`, `SEAT_SOLD`.
 - `auditorium:{id}:{showtimeId}` — server POS auditorium view receives seat/tab status changes for that screening.
