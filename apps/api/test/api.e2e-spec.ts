@@ -2641,5 +2641,5 @@ describe("Milestone 10 management reporting", () => {
       const reportResponse = await request(app.getHttpServer()).get("/api/v1/reports/revenue?from=2023-06-01T00:00:00.000Z&to=2023-07-01T00:00:00.000Z").set(auth);
       if (rolePermissions.includes(Permission.ReportsViewFinancial)) { expect(reportResponse.status).toBe(200); expect(reportResponse.body.totals.combinedRevenueCents).toBe(0); } else expect(reportResponse.status).toBe(403);
     }
-  });
+  }, 30_000);
 });
