@@ -44,6 +44,12 @@ export class ManagementController {
   @Get("people") @RequirePermissions(Permission.EmployeeEdit)
   people(@CurrentActor() actor: RequestActor) { return this.management.people(this.location(actor)); }
 
+  @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
+  customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }
+
+  @Get("payment-methods/:paymentMethodId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
+  paymentMethod(@CurrentActor() actor: RequestActor, @Param("paymentMethodId") paymentMethodId: string) { return this.management.paymentMethod(this.location(actor), paymentMethodId); }
+
   @Post("employees") @RequirePermissions(Permission.EmployeeCreate)
   employee(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(employeeSchema)) body: unknown) { return this.management.createEmployee({ ...employeeSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
 

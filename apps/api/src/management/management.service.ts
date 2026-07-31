@@ -58,6 +58,18 @@ export class ManagementService {
     return { employees, roles, permissions };
   }
 
+  async customer(locationId: string, customerId: string) {
+    const customer = await prisma.customer.findFirst({ where: { id: customerId, ticketOrders: { some: { locationId } } }, select: { id: true, name: true, email: true, phone: true } });
+    if (!customer) throw AppError.notFound("Customer was not found.");
+    return customer;
+  }
+
+  async paymentMethod(locationId: string, paymentMethodId: string) {
+    const method = await prisma.paymentMethodReference.findFirst({ where: { id: paymentMethodId, paymentCustomer: { organization: { locations: { some: { id: locationId } } } } }, select: { id: true, brand: true, last4: true, expMonth: true, expYear: true, active: true, paymentCustomer: { select: { customerId: true } } } });
+    if (!method) throw AppError.notFound("Payment method was not found.");
+    return method;
+  }
+
   async createEmployee(input: { locationId: string; employeeId: string; name: string; email: string; password: string; pin?: string; roleIds: string[] }) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
     const roleCount = await prisma.role.count({ where: { id: { in: input.roleIds }, organizationId: location.organizationId } });

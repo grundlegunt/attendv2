@@ -2594,4 +2594,52 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain("Break minutes,Worked minutes");
     expect(csv.text).toContain('"30","450"');
   });
+
+  it("enforces the full role and cross-tenant isolation matrix", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, signTokenPair } = await import("@cinema/auth");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const tenantB = await prisma.organization.create({ data: { name: `Tenant B ${crypto.randomUUID()}`, locations: { create: { name: "Tenant B Cinema" } } }, include: { locations: true } });
+    const locationB = tenantB.locations[0]!;
+    const auditoriumB = await prisma.auditorium.create({ data: { locationId: locationB.id, name: "Tenant B Room", capacity: 1, seatMap: { create: { name: "Tenant B Map", seats: { create: { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0 } } } } }, include: { seatMap: { include: { seats: true } } } });
+    const [movieB, tierB, typeB, customerB, employeeB] = await Promise.all([
+      prisma.movie.create({ data: { organizationId: tenantB.id, title: "Tenant B Secret Film", runtimeMinutes: 90 } }),
+      prisma.priceTier.create({ data: { organizationId: tenantB.id, name: "Tenant B Standard", ticketPriceMinor: 999, feeMinor: 0, appliesOnWeekdays: [] } }),
+      prisma.ticketType.create({ data: { locationId: locationB.id, name: "Tenant B Adult" } }),
+      prisma.customer.create({ data: { name: "Tenant B Patron", email: `patron-${crypto.randomUUID()}@tenant-b.test` } }),
+      prisma.employee.create({ data: { locationId: locationB.id, name: "Tenant B Employee", email: `employee-${crypto.randomUUID()}@tenant-b.test` } }),
+    ]);
+    const showingB = await prisma.showtime.create({ data: { movieId: movieB.id, auditoriumId: auditoriumB.id, priceTierId: tierB.id, startsAt: new Date("2023-06-10T12:00:00.000Z"), featureStartsAt: new Date("2023-06-10T12:30:00.000Z"), endsAt: new Date("2023-06-10T14:00:00.000Z"), roomReadyAt: new Date("2023-06-10T14:15:00.000Z"), onSale: true, showtimeSeats: { create: { seatId: auditoriumB.seatMap!.seats[0]!.id } } }, include: { showtimeSeats: true } });
+    const orderB = await prisma.ticketOrder.create({ data: { locationId: locationB.id, customerId: customerB.id, ticketTypeId: typeB.id, holdTokens: [], holderKey: crypto.randomUUID(), status: "PAID", orderNumber: `B-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 999, feesCents: 0, taxCents: 0, totalCents: 999, createdAt: new Date("2023-06-01T12:00:00.000Z"), tickets: { create: { showtimeSeatId: showingB.showtimeSeats[0]!.id, ticketTypeId: typeB.id, priceCentsPaid: 999, qrToken: `tenant-b-${crypto.randomUUID()}` } } } });
+    const paymentCustomerB = await prisma.paymentCustomer.create({ data: { organizationId: tenantB.id, customerId: customerB.id, provider: "test", providerCustomerId: `cus_b_${crypto.randomUUID()}` } });
+    const paymentMethodB = await prisma.paymentMethodReference.create({ data: { paymentCustomerId: paymentCustomerB.id, provider: "test", providerPaymentMethodId: `pm_b_${crypto.randomUUID()}`, brand: "visa", last4: "4242", expMonth: 12, expYear: 2035 } });
+    const tabB = await prisma.restaurantTab.create({ data: { locationId: locationB.id, primaryCustomerId: customerB.id, tabType: "WALK_IN", status: "CLOSED", label: "Tenant B Secret Tab", subtotalCents: 500, taxCents: 0, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2023-06-01T14:00:00.000Z"), payments: { create: { purpose: "RESTAURANT_TAB", amountCents: 500, status: "SUCCEEDED", idempotencyKey: `tenant-b-${crypto.randomUUID()}`, provider: "test", providerPaymentId: `pi_b_${crypto.randomUUID()}` } } } });
+    const restaurantOrderB = await prisma.restaurantOrder.create({ data: { restaurantTabId: tabB.id, serverEmployeeId: employeeB.id, status: "DRAFT" } });
+    const auditB = await prisma.auditEvent.create({ data: { actorType: "SYSTEM", locationId: locationB.id, action: `tenant_b.secret.${crypto.randomUUID()}`, entityType: "TenantBSecret", entityId: tenantB.id } });
+
+    const expected = (role: keyof typeof DEFAULT_ROLE_PERMISSIONS, permission: string) => DEFAULT_ROLE_PERMISSIONS[role].some((key) => key === permission) ? 404 : 403;
+    for (const role of Object.values(RoleKey)) {
+      const rolePermissions = DEFAULT_ROLE_PERMISSIONS[role];
+      const token = signTokenPair(
+        { sub: crypto.randomUUID(), actorType: "EMPLOYEE", locationId: owner.locationId, permissions: rolePermissions },
+        { sub: crypto.randomUUID(), actorType: "EMPLOYEE", tokenVersion: 0 },
+        { accessSecret: process.env.JWT_ACCESS_SECRET!, refreshSecret: process.env.JWT_REFRESH_SECRET!, accessTtlSeconds: 900, refreshTtlSeconds: 3600 },
+      ).accessToken;
+      const auth = { Authorization: `Bearer ${token}` };
+
+      await request(app.getHttpServer()).get(`/api/v1/management/customers/${customerB.id}`).set(auth).expect(expected(role, Permission.PaymentViewDisplaySafe));
+      await request(app.getHttpServer()).get(`/api/v1/management/payment-methods/${paymentMethodB.id}`).set(auth).expect(expected(role, Permission.PaymentViewDisplaySafe));
+      await request(app.getHttpServer()).post(`/api/v1/management/refunds/ticket-orders/${orderB.id}`).set(auth).send({ requestId: crypto.randomUUID(), reason: "Isolation test" }).expect(expected(role, Permission.TicketRefund));
+      await request(app.getHttpServer()).post(`/api/v1/management/refunds/restaurant-tabs/${tabB.id}`).set(auth).send({ requestId: crypto.randomUUID(), reason: "Isolation test" }).expect(expected(role, Permission.PaymentRefund));
+      await request(app.getHttpServer()).patch(`/api/v1/management/employees/${employeeB.id}`).set(auth).send({ active: false }).expect(expected(role, Permission.EmployeeEdit));
+      await request(app.getHttpServer()).patch(`/api/v1/cinema/showtimes/${showingB.id}`).set(auth).send({ onSale: false }).expect(expected(role, Permission.ShowtimeManage));
+      await request(app.getHttpServer()).get(`/api/v1/restaurant-tabs/${tabB.id}/summary`).set(auth).expect(expected(role, Permission.RestaurantOrderCreate));
+      await request(app.getHttpServer()).post(`/api/v1/restaurant-tabs/orders/${restaurantOrderB.id}/send`).set(auth).expect(expected(role, Permission.RestaurantOrderCreate));
+
+      const auditResponse = await request(app.getHttpServer()).get("/api/v1/audit-events?limit=200").set(auth);
+      if (rolePermissions.includes(Permission.AuditLogView)) { expect(auditResponse.status).toBe(200); expect(auditResponse.body.map((event: { id: string }) => event.id)).not.toContain(auditB.id); } else expect(auditResponse.status).toBe(403);
+      const reportResponse = await request(app.getHttpServer()).get("/api/v1/reports/revenue?from=2023-06-01T00:00:00.000Z&to=2023-07-01T00:00:00.000Z").set(auth);
+      if (rolePermissions.includes(Permission.ReportsViewFinancial)) { expect(reportResponse.status).toBe(200); expect(reportResponse.body.totals.combinedRevenueCents).toBe(0); } else expect(reportResponse.status).toBe(403);
+    }
+  });
 });

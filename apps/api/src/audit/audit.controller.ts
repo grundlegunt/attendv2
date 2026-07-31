@@ -21,14 +21,17 @@ export class AuditController {
   @RequirePermissions(Permission.AuditLogView)
   async list(@CurrentActor() actor: RequestActor, @Query("limit") limit?: string, @Query("action") action?: string, @Query("entityType") entityType?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
     if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
-    const take = Math.min(Number(limit) || 50, 200);
+    const take = Math.max(1, Math.min(Number(limit) || 50, 200));
+    const start = from ? new Date(from) : undefined;
+    const end = to ? new Date(to) : undefined;
+    if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime())) || (start && end && start >= end)) throw AppError.validationFailed("A valid audit date range is required.");
     return prisma.auditEvent.findMany({
       where: {
         locationId: actor.locationId,
         ...(action ? { action: { contains: action, mode: "insensitive" as const } } : {}),
         ...(entityType ? { entityType } : {}),
         ...(actorId ? { actorId } : {}),
-        ...((from || to) ? { occurredAt: { ...(from ? { gte: new Date(from) } : {}), ...(to ? { lt: new Date(to) } : {}) } } : {}),
+        ...((start || end) ? { occurredAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } } : {}),
       },
       orderBy: { occurredAt: "desc" },
       take,
