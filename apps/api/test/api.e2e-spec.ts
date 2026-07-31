@@ -2449,3 +2449,109 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       .toContain(tab.id);
   });
 });
+
+describe("Milestone 9 box office and workforce", () => {
+  it("clocks staff in by PIN, rejects duplicate punches, records breaks, and clocks out", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const body = { locationId: owner.locationId, employeeId: owner.id, pin: "1234" };
+    const clockIn = await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(201);
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(409);
+    await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send(body).expect(201);
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(409);
+    await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send(body).expect(201);
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(201);
+    const shift = await prisma.shift.findUniqueOrThrow({ where: { id: clockIn.body.id } });
+    expect(shift.clockOutAt).not.toBeNull();
+    expect(shift.breakStartAt).not.toBeNull();
+    expect(shift.breakEndAt).not.toBeNull();
+    expect(await prisma.auditEvent.count({ where: { entityType: "Shift", entityId: shift.id } })).toBe(4);
+    const correctedClockOut = new Date(shift.clockOutAt!.getTime() + 60_000).toISOString();
+    await request(app.getHttpServer()).patch(`/api/v1/shifts/${shift.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ clockOutAt: correctedClockOut, notes: "Manager correction for E2E verification" }).expect(200);
+    expect(await prisma.auditEvent.count({ where: { entityType: "Shift", entityId: shift.id, action: "shift.manager_adjusted" } })).toBe(1);
+  });
+
+  it("uses shared seat inventory for a mixed-tender box-office sale and full refund", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+      include: { showtime: true },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: "E2E-BOX", openingBalanceCents: 20000 }).expect(201);
+    const holderKey = `box-office-e2e-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+
+    // The public channel sees the same hold and cannot acquire a second one.
+    await request(app.getHttpServer()).post(`/api/v1/cinema/showtimes/${inventory.showtimeId}/holds`)
+      .send({ seatIds: [inventory.seatId], holderKey: `online-e2e-${crypto.randomUUID()}` }).expect(409);
+    const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+    const cashCents = Math.floor(quote.body.totalCents / 2);
+    const cardCents = quote.body.totalCents - cashCents;
+    const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
+        requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey,
+        ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
+        cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
+      }).expect(201);
+    expect(sale.body.status).toBe("PAID");
+    expect(sale.body.tickets).toHaveLength(1);
+    expect(sale.body.cashTransactions[0]).toMatchObject({ amountCents: cashCents, changeGivenCents: 500 });
+    expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
+
+    await request(app.getHttpServer()).post(`/api/v1/box-office/tickets/${sale.body.tickets[0].id}/reprint`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({}).expect(201);
+    const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E full refund", cashDrawerId: drawer.body.id }).expect(201);
+    expect(refunded.body.status).toBe("REFUNDED");
+    expect(refunded.body.tickets[0].status).toBe("REFUNDED");
+    expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
+  });
+
+  it("refunds a successful card-present charge exactly once when seat finalization loses its hold", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+      include: { showtime: true },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const holderKey = `box-office-compensation-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+    const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+    const requestId = crypto.randomUUID();
+    const checkout = request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
+        requestId, holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id,
+        cashCents: 0, cardCents: quote.body.totalCents, readerId: "tmr_delayed_finalize_failure",
+      }).then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await prisma.seatHold.update({ where: { id: holds.body[0].id }, data: { releasedAt: new Date() } });
+    expect((await checkout).status).toBe(409);
+
+    const order = await prisma.ticketOrder.findUniqueOrThrow({ where: { checkoutIdempotencyKey: requestId }, include: { payment: { include: { refunds: true } } } });
+    expect(order.status).toBe("REFUNDED");
+    expect(order.payment?.status).toBe("REFUNDED");
+    expect(order.payment?.refunds).toHaveLength(1);
+    expect(order.payment?.refunds[0]).toMatchObject({ status: "SUCCEEDED", reason: "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED" });
+    expect(await prisma.auditEvent.count({ where: { entityType: "TicketOrder", entityId: order.id, action: "ticket_order.box_office_compensation_succeeded" } })).toBe(1);
+  });
+
+  it("rate limits repeated public workforce PIN attempts", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const body = { locationId: owner.locationId, employeeId: crypto.randomUUID(), pin: "0000" };
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(403);
+    }
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(429);
+  });
+});

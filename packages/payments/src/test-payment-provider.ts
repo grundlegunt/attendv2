@@ -135,6 +135,9 @@ export class TestPaymentProvider implements PaymentProvider {
     args: CollectCardPresentPaymentArgs,
   ): Promise<ProviderPaymentIntentResult> {
     this.collectCardPresentPaymentCalls.push(args);
+    if (args.readerId.includes("delayed")) {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
     const status: ProviderPaymentStatus = args.readerId.includes("declined")
       ? "FAILED"
       : "SUCCEEDED";

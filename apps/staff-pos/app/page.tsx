@@ -6,6 +6,9 @@ import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { TicketScanner } from "./ticket-scanner";
 import { RestaurantPos } from "./restaurant-pos";
+import { TimeClockGate } from "./time-clock-gate";
+import { BoxOfficePos } from "./box-office-pos";
+import { ShiftControls } from "./shift-controls";
 
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
@@ -46,11 +49,13 @@ export default function StaffLoginPage() {
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
   const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
-  const [view, setView] = useState<"scanner" | "seats" | "tabs" | "restaurant">("scanner");
+  const [view, setView] = useState<"scanner" | "seats" | "tabs" | "restaurant" | "box-office">("scanner");
   const [tabOrderId, setTabOrderId] = useState("");
   const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
   const [openedTabs, setOpenedTabs] = useState<TabSummary[]>([]);
   const [seatDetail, setSeatDetail] = useState<SeatDetail | null>(null);
+  const [clockReady, setClockReady] = useState(false);
+  const [clockPin, setClockPin] = useState("");
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
@@ -126,6 +131,10 @@ export default function StaffLoginPage() {
     }
   }
 
+  if (employee?.timeClockEnabled && !clockReady) {
+    return <TimeClockGate employee={employee} onReady={(pin) => { setClockPin(pin); setClockReady(true); }} />;
+  }
+
   if (employee) {
     const seatMapSeats = availability?.seats.map((seat) => ({
       ...seat,
@@ -136,7 +145,7 @@ export default function StaffLoginPage() {
       <main className="staff-shell">
         <header className="staff-header">
           <div><span className="eyebrow">ATTEND STAFF</span><h1>Live seats</h1></div>
-          <p>{employee.name} · {employee.roles.join(", ")}</p>
+          <div><p>{employee.name} · {employee.roles.join(", ")}</p>{employee.timeClockEnabled && <ShiftControls employee={employee} pin={clockPin} onClockOut={() => { setClockPin(""); setClockReady(false); }} />}</div>
         </header>
 
         {error && <div className="error-banner">{error}</div>}
@@ -146,6 +155,7 @@ export default function StaffLoginPage() {
           <button type="button" className={view === "seats" ? "active" : ""} onClick={() => setView("seats")}>Live seats</button>
           <button type="button" className={view === "tabs" ? "active" : ""} onClick={() => setView("tabs")}>Tab debug</button>
           <button type="button" className={view === "restaurant" ? "active" : ""} onClick={() => setView("restaurant")}>Server POS</button>
+          {employee.permissions.includes("seat.sell") && <button type="button" className={view === "box-office" ? "active" : ""} onClick={() => setView("box-office")}>Box office</button>}
         </nav>
 
         {view !== "tabs" && view !== "restaurant" && <section className="showtime-toolbar" aria-label="Select a showtime">
@@ -169,7 +179,9 @@ export default function StaffLoginPage() {
           )}
         </section>}
 
-        {view === "restaurant" ? (
+        {view === "box-office" && availability ? (
+          <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} refresh={loadAvailability} />
+        ) : view === "restaurant" ? (
           <RestaurantPos
             accessToken={accessToken}
             initialTabId={seatDetail?.tab?.id}
