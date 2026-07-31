@@ -8,12 +8,12 @@ export class ReportingService {
   async revenue(locationId: string, range: ReportRange) {
     const [ticketOrders, tabs] = await Promise.all([
       prisma.ticketOrder.findMany({
-        where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED"] } },
-        include: { tickets: { where: { status: { in: ["ISSUED", "ADMITTED"] } }, include: { showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
+        where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
+        include: { tickets: { include: { showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
       }),
       prisma.restaurantTab.findMany({
-        where: { locationId, closedAt: { gte: range.from, lt: range.to }, status: "CLOSED" },
-        include: { showtime: { include: { movie: true } }, seats: true },
+        where: { locationId, closedAt: { gte: range.from, lt: range.to }, status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } },
+        include: { showtime: { include: { movie: true } }, seats: true, payments: { include: { refunds: { where: { status: "SUCCEEDED" } } } } },
       }),
     ]);
 
@@ -31,7 +31,9 @@ export class ReportingService {
     };
 
     let ticketRevenueCents = 0;
+    let ticketRefundedCents = 0;
     for (const order of ticketOrders) {
+      if (order.status === "REFUNDED") { ticketRefundedCents += order.totalCents; continue; }
       if (!order.tickets.length) continue;
       const allocated = Math.floor(order.totalCents / order.tickets.length);
       order.tickets.forEach((ticket, index) => {
@@ -46,11 +48,19 @@ export class ReportingService {
     }
 
     let fnbRevenueCents = 0;
+    let fnbRefundedCents = 0;
     let fnbSeatCount = 0;
+    let fnbOrderCount = 0;
     for (const tab of tabs) {
-      const revenue = tab.totalCents ?? 0;
+      const gross = tab.totalCents ?? 0;
+      const recordedRefunds = tab.payments.reduce((sum, payment) => sum + payment.refunds.reduce((paymentSum, refund) => paymentSum + refund.amountCents, 0), 0);
+      const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
+      const revenue = gross - refunded;
+      fnbRefundedCents += refunded;
+      if (!revenue) continue;
       fnbRevenueCents += revenue;
       fnbSeatCount += tab.seats.length;
+      fnbOrderCount += 1;
       if (tab.showtime) {
         ensureMovie(tab.showtime.movieId, tab.showtime.movie.title).fnbRevenueCents += revenue;
         ensureShowtime(tab.showtime.id, tab.showtime.movieId, tab.showtime.movie.title, tab.showtime.startsAt).fnbRevenueCents += revenue;
@@ -58,7 +68,7 @@ export class ReportingService {
     }
 
     return {
-      range, totals: { ticketRevenueCents, fnbRevenueCents, combinedRevenueCents: ticketRevenueCents + fnbRevenueCents, ticketsSold: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), fnbOrders: tabs.length, averageFnbSpendPerOrderCents: tabs.length ? Math.round(fnbRevenueCents / tabs.length) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0 },
+      range, totals: { grossRevenueCents: ticketRevenueCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, fnbRevenueCents, combinedRevenueCents: ticketRevenueCents + fnbRevenueCents, ticketsSold: ticketOrders.filter((order) => order.status !== "REFUNDED").reduce((sum, order) => sum + order.tickets.length, 0), fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0 },
       movies: [...movies.values()].sort((a, b) => a.title.localeCompare(b.title)),
       showtimes: [...showtimes.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
     };
@@ -73,7 +83,9 @@ export class ReportingService {
     const rows = shifts.map((shift) => {
       const effectiveStart = shift.clockInAt < range.from ? range.from : shift.clockInAt;
       const effectiveEnd = !shift.clockOutAt || shift.clockOutAt > range.to ? range.to : shift.clockOutAt;
-      const breakMinutes = shift.breakStartAt && shift.breakEndAt ? Math.max(0, Math.round((shift.breakEndAt.getTime() - shift.breakStartAt.getTime()) / 60_000)) : 0;
+      const breakStart = shift.breakStartAt && shift.breakStartAt > effectiveStart ? shift.breakStartAt : effectiveStart;
+      const breakEnd = shift.breakEndAt && shift.breakEndAt < effectiveEnd ? shift.breakEndAt : effectiveEnd;
+      const breakMinutes = shift.breakStartAt && shift.breakEndAt ? Math.max(0, Math.round((breakEnd.getTime() - breakStart.getTime()) / 60_000)) : 0;
       const workedMinutes = Math.max(0, Math.round((effectiveEnd.getTime() - effectiveStart.getTime()) / 60_000) - breakMinutes);
       return { shiftId: shift.id, employeeId: shift.employeeId, employeeName: shift.employee.name, roles: shift.employee.employeeRoles.map((entry) => entry.role.name), clockInAt: shift.clockInAt, clockOutAt: shift.clockOutAt, breakMinutes, workedMinutes };
     });

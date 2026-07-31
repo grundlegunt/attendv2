@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type RevenueReport = {
-  totals: { ticketRevenueCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
+  totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
   movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
 };
@@ -74,7 +74,7 @@ export function ManagementDashboard({ accessToken, permissions }: { accessToken:
     </div>
 
     {revenue && <section className="panel"><p className="kicker">FINANCE</p><h2>Revenue overview</h2>
-      <div className="stats"><div><strong>{money(revenue.totals.combinedRevenueCents)}</strong><span>Total revenue</span></div><div><strong>{money(revenue.totals.ticketRevenueCents)}</strong><span>Tickets</span></div><div><strong>{money(revenue.totals.fnbRevenueCents)}</strong><span>Food & beverage</span></div><div><strong>{revenue.totals.ticketsSold}</strong><span>Tickets sold</span></div></div>
+      <div className="stats"><div><strong>{money(revenue.totals.grossRevenueCents)}</strong><span>Gross revenue</span></div><div><strong>{money(revenue.totals.refundedCents)}</strong><span>Refunds</span></div><div><strong>{money(revenue.totals.combinedRevenueCents)}</strong><span>Net revenue</span></div><div><strong>{revenue.totals.ticketsSold}</strong><span>Tickets sold</span></div></div>
       <h3>By movie</h3><div className="management-table"><div className="table-row table-head"><span>Movie</span><span>Tickets</span><span>Ticket revenue</span><span>F&B revenue</span></div>{revenue.movies.map((row) => <div className="table-row" key={row.movieId}><strong>{row.title}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
       <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket revenue</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
     </section>}

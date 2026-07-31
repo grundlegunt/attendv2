@@ -2571,9 +2571,11 @@ describe("Milestone 10 management reporting", () => {
     const [firstTicket, secondTicket] = await Promise.all([prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: firstOrder.id } }), prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: secondOrder.id } })]);
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: firstShowing!.id, status: "CLOSED", subtotalCents: 450, taxCents: 50, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2024-01-10T16:00:00.000Z"), seats: { create: { showtimeSeatId: firstTicket.showtimeSeatId, ticketId: firstTicket.id } } } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: secondShowing!.id, status: "CLOSED", subtotalCents: 650, taxCents: 50, serviceChargeCents: 0, totalCents: 700, closedAt: new Date("2024-01-12T16:00:00.000Z"), seats: { create: { showtimeSeatId: secondTicket.showtimeSeatId, ticketId: secondTicket.id } } } });
+    await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 750, feesCents: 25, taxCents: 25, totalCents: 800, createdAt: new Date("2024-01-15T12:00:00.000Z") } });
+    await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", status: "REFUNDED", subtotalCents: 275, taxCents: 25, serviceChargeCents: 0, totalCents: 300, closedAt: new Date("2024-01-15T16:00:00.000Z") } });
 
     const response = await request(app.getHttpServer()).get(`/api/v1/reports/revenue?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
-    expect(response.body.totals).toMatchObject({ ticketRevenueCents: 3000, fnbRevenueCents: 1200, combinedRevenueCents: 4200, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
+    expect(response.body.totals).toMatchObject({ grossRevenueCents: 5300, refundedCents: 1100, ticketRefundedCents: 800, fnbRefundedCents: 300, ticketRevenueCents: 3000, fnbRevenueCents: 1200, combinedRevenueCents: 4200, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
     expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, ticketRevenueCents: 3000, ticketsSold: 2, fnbRevenueCents: 1200 }]);
     expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1000, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 2000, fnbRevenueCents: 700, ticketsSold: 1 }]);
   });
@@ -2593,6 +2595,50 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.text).toContain("Break minutes,Worked minutes");
     expect(csv.text).toContain('"30","450"');
+  });
+
+  it("subtracts only the part of a break that overlaps the labor report window", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    await prisma.shift.create({ data: { employeeId: owner.id, locationId: owner.locationId, clockInAt: new Date("2024-05-01T20:00:00.000Z"), breakStartAt: new Date("2024-05-01T23:00:00.000Z"), breakEndAt: new Date("2024-05-01T23:30:00.000Z"), clockOutAt: new Date("2024-05-02T04:00:00.000Z") } });
+    const report = await request(app.getHttpServer()).get("/api/v1/reports/labor?from=2024-05-02T00:00:00.000Z&to=2024-05-03T00:00:00.000Z").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(report.body.rows).toEqual([expect.objectContaining({ breakMinutes: 0, workedMinutes: 240 })]);
+    expect(report.body.totalMinutes).toBe(240);
+  });
+
+  it("continues split-tender refunds after ambiguity and can recover manager-review tabs", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { ManagementRefundService } = await import("../src/management/management-refund.service");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const tab = await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", status: "CLOSED", subtotalCents: 1000, taxCents: 0, serviceChargeCents: 0, totalCents: 1000, closedAt: new Date("2022-06-01T12:00:00.000Z"), payments: { create: [
+      { purpose: "RESTAURANT_TAB", amountCents: 400, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_ambiguous_${crypto.randomUUID()}` },
+      { purpose: "RESTAURANT_TAB", amountCents: 600, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_success_${crypto.randomUUID()}` },
+    ] } }, include: { payments: true } });
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const originalRefund = provider.refund.bind(provider);
+    const refunds = app.get(ManagementRefundService);
+    try {
+      provider.refund = async (args) => {
+        if (args.providerPaymentId.startsWith("pi_ambiguous_")) throw new Error("Simulated ambiguous timeout");
+        return originalRefund(args);
+      };
+      await expect(refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: crypto.randomUUID(), reason: "Manager test" })).rejects.toMatchObject({ code: "CONFLICT" });
+    } finally {
+      provider.refund = originalRefund;
+    }
+    const afterFirstAttempt = await prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id }, include: { payments: { include: { refunds: true } } } });
+    expect(afterFirstAttempt.status).toBe("MANAGER_REVIEW");
+    expect(afterFirstAttempt.payments.map((payment) => payment.status).sort()).toEqual(["REFUNDED", "SUCCEEDED"]);
+    const partialReport = await request(app.getHttpServer()).get("/api/v1/reports/revenue?from=2022-01-01T00:00:00.000Z&to=2023-01-01T00:00:00.000Z").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(partialReport.body.totals).toMatchObject({ grossRevenueCents: 1000, refundedCents: 600, fnbRevenueCents: 400, fnbRefundedCents: 600, combinedRevenueCents: 400, fnbOrders: 1 });
+    const recovered = await refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: crypto.randomUUID(), reason: "Manager retry" });
+    expect(recovered.status).toBe("REFUNDED");
+    expect(recovered.payments.every((payment) => payment.status === "REFUNDED")).toBe(true);
+    expect(await prisma.refund.count({ where: { paymentId: { in: tab.payments.map((payment) => payment.id) }, status: "SUCCEEDED" } })).toBe(2);
+    const finalReport = await request(app.getHttpServer()).get("/api/v1/reports/revenue?from=2022-01-01T00:00:00.000Z&to=2023-01-01T00:00:00.000Z").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(finalReport.body.totals).toMatchObject({ grossRevenueCents: 1000, refundedCents: 1000, fnbRevenueCents: 0, fnbRefundedCents: 1000, combinedRevenueCents: 0, fnbOrders: 0 });
   });
 
   it("enforces the full role and cross-tenant isolation matrix", async () => {
