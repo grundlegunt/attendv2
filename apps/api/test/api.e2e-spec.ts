@@ -2555,3 +2555,43 @@ describe("Milestone 9 box office and workforce", () => {
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(429);
   });
 });
+
+describe("Milestone 10 management reporting", () => {
+  it("reports exact ticket and F&B revenue per movie and showtime for a known period", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const movies = await prisma.movie.findMany({ where: { organization: { locations: { some: { id: owner.locationId } } } }, include: { showtimes: { where: { auditorium: { locationId: owner.locationId } }, include: { showtimeSeats: { where: { tickets: { none: {} } }, take: 1 } }, orderBy: { startsAt: "asc" } } } });
+    const movie = movies.find((candidate) => candidate.showtimes.length >= 2 && candidate.showtimes[0]!.showtimeSeats.length && candidate.showtimes[1]!.showtimeSeats.length);
+    expect(movie).toBeDefined();
+    const [firstShowing, secondShowing] = movie!.showtimes;
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const period = { from: new Date("2024-01-01T00:00:00.000Z"), to: new Date("2024-02-01T00:00:00.000Z") };
+    const firstOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 900, feesCents: 50, taxCents: 50, totalCents: 1000, createdAt: new Date("2024-01-10T12:00:00.000Z"), tickets: { create: { showtimeSeatId: firstShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 900, qrToken: `m10-${crypto.randomUUID()}` } } } });
+    const secondOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1800, feesCents: 100, taxCents: 100, totalCents: 2000, createdAt: new Date("2024-01-12T12:00:00.000Z"), tickets: { create: { showtimeSeatId: secondShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 1800, qrToken: `m10-${crypto.randomUUID()}` } } } });
+    const [firstTicket, secondTicket] = await Promise.all([prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: firstOrder.id } }), prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: secondOrder.id } })]);
+    await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: firstShowing!.id, status: "CLOSED", subtotalCents: 450, taxCents: 50, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2024-01-10T16:00:00.000Z"), seats: { create: { showtimeSeatId: firstTicket.showtimeSeatId, ticketId: firstTicket.id } } } });
+    await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: secondShowing!.id, status: "CLOSED", subtotalCents: 650, taxCents: 50, serviceChargeCents: 0, totalCents: 700, closedAt: new Date("2024-01-12T16:00:00.000Z"), seats: { create: { showtimeSeatId: secondTicket.showtimeSeatId, ticketId: secondTicket.id } } } });
+
+    const response = await request(app.getHttpServer()).get(`/api/v1/reports/revenue?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(response.body.totals).toMatchObject({ ticketRevenueCents: 3000, fnbRevenueCents: 1200, combinedRevenueCents: 4200, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
+    expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, ticketRevenueCents: 3000, ticketsSold: 2, fnbRevenueCents: 1200 }]);
+    expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1000, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 2000, fnbRevenueCents: 700, ticketsSold: 1 }]);
+  });
+
+  it("reports exact worked minutes and exports payroll-ready CSV", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    await prisma.shift.createMany({ data: [
+      { employeeId: owner.id, locationId: owner.locationId, clockInAt: new Date("2024-03-04T09:00:00.000Z"), clockOutAt: new Date("2024-03-04T17:00:00.000Z"), breakStartAt: new Date("2024-03-04T12:00:00.000Z"), breakEndAt: new Date("2024-03-04T12:30:00.000Z") },
+      { employeeId: owner.id, locationId: owner.locationId, clockInAt: new Date("2024-03-05T09:00:00.000Z"), clockOutAt: new Date("2024-03-05T13:00:00.000Z") },
+    ] });
+    const from = "2024-03-01T00:00:00.000Z"; const to = "2024-04-01T00:00:00.000Z";
+    const report = await request(app.getHttpServer()).get(`/api/v1/reports/labor?from=${from}&to=${to}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(report.body.totalMinutes).toBe(690);
+    expect(report.body.rows.map((row: { workedMinutes: number }) => row.workedMinutes)).toEqual([450, 240]);
+    const csv = await request(app.getHttpServer()).get(`/api/v1/reports/labor.csv?from=${from}&to=${to}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(csv.headers["content-type"]).toContain("text/csv");
+    expect(csv.text).toContain("Break minutes,Worked minutes");
+    expect(csv.text).toContain('"30","450"');
+  });
+});

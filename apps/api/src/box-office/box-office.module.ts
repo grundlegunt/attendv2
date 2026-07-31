@@ -4,5 +4,5 @@ import { BoxOfficeService } from "./box-office.service";
 import { CinemaModule } from "../cinema/cinema.module";
 import { PaymentsModule } from "../payments/payments.module";
 
-@Module({ imports: [CinemaModule, PaymentsModule], controllers: [BoxOfficeController], providers: [BoxOfficeService] })
+@Module({ imports: [CinemaModule, PaymentsModule], controllers: [BoxOfficeController], providers: [BoxOfficeService], exports: [BoxOfficeService] })
 export class BoxOfficeModule {}

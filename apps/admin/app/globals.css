@@ -27,3 +27,26 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .sale-open, .sale-draft { padding: 8px; font-size: .7rem; } .sale-open { color: var(--color-success); } .sale-draft { color: var(--color-accent); }
 .error-banner { margin: 16px 0; padding: 12px; border: 2px solid var(--color-danger); color: #ffb3ad; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }
+.management-stack { display: grid; gap: 1.5rem; margin-top: 1.5rem; }
+.management-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 1rem; }
+.report-range { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.report-range label { min-width: 150px; }
+.management-table { display: grid; margin-top: 1rem; border-top: 1px solid var(--line); }
+.table-row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)); gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); align-items: center; }
+.table-row strong { display: grid; gap: .2rem; }
+.table-row small { color: var(--muted); font-weight: 400; }
+.table-head { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }
+.audit-list article { display: flex; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
+.audit-list article div { display: grid; gap: .2rem; }
+.audit-list span, .audit-list time { color: var(--muted); font-size: .85rem; }
+.button-link { display: inline-block; text-decoration: none; margin: .5rem 0; }
+@media (max-width: 760px) { .table-row { grid-template-columns: 1fr 1fr; } .table-head { display: none; } }
+.people-list, .refund-list { display: grid; margin-top: 1rem; }
+.people-list article, .refund-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
+.people-list article div, .refund-list article div { display: grid; gap: .2rem; }
+.people-list span, .refund-list span { color: var(--muted); font-size: .85rem; }
+.permission-list { display: grid; gap: .5rem; max-height: 420px; overflow: auto; margin: 1rem 0; padding-right: .5rem; }
+.permission-list .checkbox { align-items: start; }
+.permission-list span { display: grid; gap: .15rem; }
+.permission-list small { color: var(--muted); }
+.destructive { background: #7c2020; color: white; border: 0; padding: .7rem 1rem; border-radius: 6px; cursor: pointer; }
