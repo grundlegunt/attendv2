@@ -7,7 +7,7 @@
  * known test credentials documented in the README, not secrets.
  */
 import { PrismaClient } from "@prisma/client";
-import { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, hashPassword } from "@cinema/auth";
+import { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, hashPassword, hashPin } from "@cinema/auth";
 
 export const SEED_PASSWORD = "DevPassword123!";
 
@@ -115,6 +115,7 @@ export async function seedDatabase(
 
   log("Seeding demo employees (Owner, Server)...");
   const passwordHash = await hashPassword(SEED_PASSWORD);
+  const pinHash = await hashPin("1234");
 
   const owner = await prisma.employee.upsert({
     where: { email: `owner@${suffix}` },
@@ -123,7 +124,7 @@ export async function seedDatabase(
       locationId: location.id,
       name: "Olivia Owner",
       email: `owner@${suffix}`,
-      authAccount: { create: { passwordHash } },
+      authAccount: { create: { passwordHash, pinHash } },
     },
   });
   await prisma.employeeRole.upsert({
@@ -145,7 +146,7 @@ export async function seedDatabase(
       locationId: location.id,
       name: "Sam Server",
       email: `server@${suffix}`,
-      authAccount: { create: { passwordHash } },
+      authAccount: { create: { passwordHash, pinHash } },
     },
   });
   await prisma.employeeRole.upsert({
@@ -167,7 +168,7 @@ export async function seedDatabase(
       locationId: location.id,
       name: "Kai Kitchen",
       email: `kitchen@${suffix}`,
-      authAccount: { create: { passwordHash } },
+      authAccount: { create: { passwordHash, pinHash } },
     },
   });
   await prisma.employeeRole.upsert({
@@ -193,7 +194,7 @@ export async function seedDatabase(
       locationId: location.id,
       name: "Blair Bartender",
       email: `bartender@${suffix}`,
-      authAccount: { create: { passwordHash } },
+      authAccount: { create: { passwordHash, pinHash } },
     },
   });
   await prisma.employeeRole.upsert({

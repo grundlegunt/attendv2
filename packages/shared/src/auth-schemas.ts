@@ -43,6 +43,7 @@ export interface AuthenticatedEmployee {
   locationId: string;
   roles: string[];
   permissions: string[];
+  timeClockEnabled: boolean;
 }
 
 export interface AuthenticatedCustomer {

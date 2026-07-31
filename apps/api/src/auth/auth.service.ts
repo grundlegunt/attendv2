@@ -21,6 +21,7 @@ import { AuditService } from "../audit/audit.service";
 
 const employeeInclude = {
   authAccount: true,
+  location: true,
   employeeRoles: {
     include: {
       role: {
@@ -52,6 +53,7 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
     locationId: employee.locationId,
     roles: employee.employeeRoles.map((er) => er.role.key),
     permissions: flattenEmployeePermissions(employee),
+    timeClockEnabled: employee.location.timeClockEnabled,
   };
 }
 

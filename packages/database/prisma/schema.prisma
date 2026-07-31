@@ -56,11 +56,12 @@ model Location {
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
   // Location-level setting.
-  cleaningBufferMinutes     Int @default(15)
-  preShowBufferMinutes      Int @default(30)
-  checkDropMinutesBeforeEnd Int @default(30)
-  autoSettleGraceMinutes    Int @default(5)
-  autoSettleTipBasisPoints  Int @default(0)
+  cleaningBufferMinutes     Int     @default(15)
+  preShowBufferMinutes      Int     @default(30)
+  checkDropMinutesBeforeEnd Int     @default(30)
+  autoSettleGraceMinutes    Int     @default(5)
+  autoSettleTipBasisPoints  Int     @default(0)
+  timeClockEnabled          Boolean @default(true)
 
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -77,6 +78,10 @@ model Location {
   menuCategories     MenuCategory[]
   taxRules           TaxRule[]
   serviceChargeRules ServiceChargeRule[]
+  cashDrawers        CashDrawer[]
+  cashTransactions   CashTransaction[]
+  promotions         Promotion[]
+  shifts             Shift[]
 
   @@map("locations")
 }
@@ -305,6 +310,30 @@ enum TicketScanResult {
   INVALID
 }
 
+enum CashDrawerStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashTransactionType {
+  SALE
+  REFUND
+  PAID_IN
+  PAID_OUT
+}
+
+enum PromotionType {
+  FIXED_AMOUNT
+  PERCENTAGE
+  COMP
+}
+
+enum ShiftClockMethod {
+  PIN
+  BADGE
+  MANAGER_OVERRIDE
+}
+
 enum PaymentPurpose {
   TICKET_ORDER
   RESTAURANT_TAB
@@ -467,16 +496,21 @@ model TicketOrder {
   feesCents     Int
   taxCents      Int
   totalCents    Int
+  discountCents Int    @default(0)
   currency      String @default("USD")
+
+  promotionId String?
+  promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
 
   placedByEmployeeId String?
   placedByEmployee   Employee? @relation(fields: [placedByEmployeeId], references: [id], onDelete: Restrict)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tickets  Ticket[]
-  payment  Payment?
-  consents CustomerConsent[]
+  tickets          Ticket[]
+  payment          Payment?
+  consents         CustomerConsent[]
+  cashTransactions CashTransaction[]
 
   @@index([locationId, createdAt])
   @@index([customerId, createdAt])
@@ -693,6 +727,11 @@ model Employee {
   ticketScans             TicketScan[]
   restaurantOrders        RestaurantOrder[]
   droppedRestaurantChecks RestaurantTab[]   @relation("DroppedRestaurantChecks")
+  openedCashDrawers       CashDrawer[]      @relation("OpenedCashDrawers")
+  closedCashDrawers       CashDrawer[]      @relation("ClosedCashDrawers")
+  cashTransactions        CashTransaction[]
+  shifts                  Shift[]           @relation("EmployeeShifts")
+  adjustedShifts          Shift[]           @relation("AdjustedShifts")
 
   @@map("employees")
 }
@@ -706,6 +745,7 @@ model StaffAuthAccount {
   // argon2id hash — never a plaintext password, never reversible.
   // See /docs/SECURITY.md §1.
   passwordHash String
+  pinHash      String?
 
   mfaEnabled         Boolean @default(false)
   // Encrypted TOTP secret at rest. Required for OWNER / GENERAL_MANAGER /
@@ -719,6 +759,98 @@ model StaffAuthAccount {
   updatedAt DateTime @updatedAt
 
   @@map("staff_auth_accounts")
+}
+
+model CashDrawer {
+  id                   String            @id @default(uuid())
+  locationId           String
+  location             Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  registerId           String
+  status               CashDrawerStatus  @default(OPEN)
+  openingBalanceCents  Int
+  closingBalanceCents  Int?
+  expectedBalanceCents Int?
+  openedByEmployeeId   String
+  openedByEmployee     Employee          @relation("OpenedCashDrawers", fields: [openedByEmployeeId], references: [id], onDelete: Restrict)
+  closedByEmployeeId   String?
+  closedByEmployee     Employee?         @relation("ClosedCashDrawers", fields: [closedByEmployeeId], references: [id], onDelete: Restrict)
+  openedAt             DateTime          @default(now())
+  closedAt             DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  transactions         CashTransaction[]
+
+  @@index([locationId, registerId, status])
+  @@map("cash_drawers")
+}
+
+model CashTransaction {
+  id                String              @id @default(uuid())
+  locationId        String
+  location          Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  cashDrawerId      String
+  cashDrawer        CashDrawer          @relation(fields: [cashDrawerId], references: [id], onDelete: Restrict)
+  ticketOrderId     String?
+  ticketOrder       TicketOrder?        @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  employeeId        String
+  employee          Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  type              CashTransactionType
+  amountCents       Int
+  cashReceivedCents Int?
+  changeGivenCents  Int?
+  reason            String?
+  idempotencyKey    String              @unique
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([cashDrawerId, createdAt])
+  @@index([ticketOrderId])
+  @@map("cash_transactions")
+}
+
+model Promotion {
+  id                    String        @id @default(uuid())
+  locationId            String
+  location              Location      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  code                  String
+  name                  String
+  type                  PromotionType
+  amountCents           Int?
+  percentageBasisPoints Int?
+  active                Boolean       @default(true)
+  startsAt              DateTime?
+  endsAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  ticketOrders          TicketOrder[]
+
+  @@unique([locationId, code])
+  @@index([locationId, active])
+  @@map("promotions")
+}
+
+model Shift {
+  id                   String           @id @default(uuid())
+  employeeId           String
+  employee             Employee         @relation("EmployeeShifts", fields: [employeeId], references: [id], onDelete: Restrict)
+  locationId           String
+  location             Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  scheduledStartAt     DateTime?
+  scheduledEndAt       DateTime?
+  clockInAt            DateTime
+  clockOutAt           DateTime?
+  clockInMethod        ShiftClockMethod @default(PIN)
+  breakStartAt         DateTime?
+  breakEndAt           DateTime?
+  adjustedByEmployeeId String?
+  adjustedByEmployee   Employee?        @relation("AdjustedShifts", fields: [adjustedByEmployeeId], references: [id], onDelete: Restrict)
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([employeeId, clockInAt])
+  @@index([locationId, clockInAt])
+  @@map("shifts")
 }
 
 // Roles are organization-defined (an org could rename/reorganize roles over

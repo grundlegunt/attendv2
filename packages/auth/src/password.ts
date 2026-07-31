@@ -29,3 +29,13 @@ export async function verifyPassword(hash: string, plainTextPassword: string): P
     return false;
   }
 }
+
+export async function hashPin(pin: string): Promise<string> {
+  if (!/^\d{4,8}$/.test(pin)) throw new Error("PIN must contain 4 to 8 digits.");
+  return argon2.hash(`staff-pin:${pin}`, ARGON2_OPTIONS);
+}
+
+export async function verifyPin(hash: string, pin: string): Promise<boolean> {
+  if (!/^\d{4,8}$/.test(pin)) return false;
+  try { return await argon2.verify(hash, `staff-pin:${pin}`); } catch { return false; }
+}
