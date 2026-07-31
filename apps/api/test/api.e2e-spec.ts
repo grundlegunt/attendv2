@@ -2513,4 +2513,45 @@ describe("Milestone 9 box office and workforce", () => {
     expect(refunded.body.tickets[0].status).toBe("REFUNDED");
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
   });
+
+  it("refunds a successful card-present charge exactly once when seat finalization loses its hold", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+      include: { showtime: true },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const holderKey = `box-office-compensation-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+    const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+    const requestId = crypto.randomUUID();
+    const checkout = request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
+        requestId, holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id,
+        cashCents: 0, cardCents: quote.body.totalCents, readerId: "tmr_delayed_finalize_failure",
+      }).then((response) => response);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await prisma.seatHold.update({ where: { id: holds.body[0].id }, data: { releasedAt: new Date() } });
+    expect((await checkout).status).toBe(409);
+
+    const order = await prisma.ticketOrder.findUniqueOrThrow({ where: { checkoutIdempotencyKey: requestId }, include: { payment: { include: { refunds: true } } } });
+    expect(order.status).toBe("REFUNDED");
+    expect(order.payment?.status).toBe("REFUNDED");
+    expect(order.payment?.refunds).toHaveLength(1);
+    expect(order.payment?.refunds[0]).toMatchObject({ status: "SUCCEEDED", reason: "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED" });
+    expect(await prisma.auditEvent.count({ where: { entityType: "TicketOrder", entityId: order.id, action: "ticket_order.box_office_compensation_succeeded" } })).toBe(1);
+  });
+
+  it("rate limits repeated public workforce PIN attempts", async () => {
+    const { prisma } = await import("@cinema/database");
+    const employee = await prisma.employee.findFirstOrThrow({ where: { email: `door@${SEED_SUFFIX}` } });
+    const body = { locationId: employee.locationId, employeeId: employee.id, pin: "0000" };
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(401);
+    }
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(429);
+  });
 });

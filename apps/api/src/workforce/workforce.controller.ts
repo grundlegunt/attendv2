@@ -9,8 +9,10 @@ import { RequirePermissions } from "../auth/decorators/require-permissions.decor
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
+import { WorkforceRateLimitGuard } from "./workforce-rate-limit.guard";
 
 @Controller("shifts")
+@UseGuards(WorkforceRateLimitGuard)
 export class WorkforceController {
   constructor(private readonly workforce: WorkforceService) {}
 

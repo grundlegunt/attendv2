@@ -188,24 +188,55 @@ export class BoxOfficeService {
         return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true } });
       });
     } catch (error) {
-      if (cardResult?.status === "SUCCEEDED") await this.compensateFailedCardOrder(order.id, order.payment!.id, cardResult.id, input.cardCents, location.organization.stripeConnectedAccountId ?? undefined, input.requestId);
+      if (cardResult?.status === "SUCCEEDED") await this.compensateFailedCardOrder({
+        orderId: order.id, paymentId: order.payment!.id, providerPaymentId: cardResult.id,
+        amountCents: input.cardCents, connectedAccountId: location.organization.stripeConnectedAccountId ?? undefined,
+        requestId: input.requestId, locationId: input.locationId, employeeId: input.employeeId,
+      });
       throw error;
     }
   }
 
-  private async compensateFailedCardOrder(orderId: string, paymentId: string, providerPaymentId: string, amountCents: number, connectedAccountId: string | undefined, requestId: string) {
+  private async compensateFailedCardOrder(input: { orderId: string; paymentId: string; providerPaymentId: string; amountCents: number; connectedAccountId?: string; requestId: string; locationId: string; employeeId: string }) {
+    const idempotencyKey = `box-office-finalize-refund:${input.requestId}`;
     const refund = await prisma.refund.upsert({
-      where: { idempotencyKey: `box-office-finalize-refund:${requestId}` },
-      create: { paymentId, amountCents, reason: "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED", scope: "TICKET", status: "CREATED", idempotencyKey: `box-office-finalize-refund:${requestId}` },
+      where: { idempotencyKey },
+      create: { paymentId: input.paymentId, amountCents: input.amountCents, reason: "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED", scope: "TICKET", status: "CREATED", idempotencyKey },
       update: {},
     });
     if (!["CREATED", "PROCESSING"].includes(refund.status)) return;
-    const result = await this.paymentProvider.refund({ connectedAccountId, providerPaymentId, amountCents, reason: "requested_by_customer", idempotencyKey: refund.idempotencyKey, metadata: { refundId: refund.id, ticketOrderId: orderId } });
-    await prisma.$transaction([
-      prisma.refund.update({ where: { id: refund.id }, data: { providerRefundId: result.id, status: result.status === "SUCCEEDED" ? "SUCCEEDED" : result.status === "FAILED" ? "FAILED" : "PROCESSING" } }),
-      prisma.payment.update({ where: { id: paymentId }, data: { status: result.status === "SUCCEEDED" ? "REFUNDED" : "SUCCEEDED" } }),
-      prisma.ticketOrder.update({ where: { id: orderId }, data: { status: result.status === "SUCCEEDED" ? "REFUNDED" : "PAYMENT_FAILED" } }),
-    ]);
+    try {
+      const result = await this.paymentProvider.refund({ connectedAccountId: input.connectedAccountId, providerPaymentId: input.providerPaymentId, amountCents: input.amountCents, reason: "requested_by_customer", idempotencyKey: refund.idempotencyKey, metadata: { refundId: refund.id, ticketOrderId: input.orderId } });
+      const succeeded = result.status === "SUCCEEDED";
+      await prisma.$transaction([
+        prisma.refund.update({ where: { id: refund.id }, data: { providerRefundId: result.id, status: succeeded ? "SUCCEEDED" : result.status === "FAILED" ? "FAILED" : "PROCESSING" } }),
+        prisma.payment.update({ where: { id: input.paymentId }, data: { status: succeeded ? "REFUNDED" : "SUCCEEDED" } }),
+        prisma.ticketOrder.update({ where: { id: input.orderId }, data: { status: succeeded ? "REFUNDED" : "PAYMENT_FAILED" } }),
+        prisma.auditEvent.create({ data: {
+          actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
+          action: succeeded ? "ticket_order.box_office_compensation_succeeded" : "ticket_order.box_office_compensation_attention_required",
+          entityType: "TicketOrder", entityId: input.orderId,
+          afterState: { refundId: refund.id, refundStatus: result.status, providerRefundId: result.id },
+        } }),
+      ]);
+    } catch (error) {
+      await prisma.$transaction([
+        prisma.ticketOrder.update({ where: { id: input.orderId }, data: { status: "PAYMENT_FAILED" } }),
+        prisma.auditEvent.create({ data: {
+          actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
+          action: "ticket_order.box_office_compensation_attention_required", entityType: "TicketOrder", entityId: input.orderId,
+          afterState: { refundId: refund.id, refundStatus: "UNKNOWN", error: error instanceof Error ? error.message : "Unknown refund error" },
+        } }),
+      ]);
+    }
+  }
+
+  attentionRequired(locationId: string) {
+    return prisma.ticketOrder.findMany({
+      where: { locationId, channel: "BOX_OFFICE", status: "PAYMENT_FAILED" },
+      include: { payment: { include: { refunds: true } }, tickets: true },
+      orderBy: { updatedAt: "desc" },
+    });
   }
 
   async setSeatBlocked(input: { inventoryId: string; locationId: string; employeeId: string; blocked: boolean; reason: string }) {

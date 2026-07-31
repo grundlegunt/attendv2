@@ -71,8 +71,14 @@ export class BoxOfficeController {
   }
 
   @Post("tickets/:ticketId/exchange")
+  @RequirePermissions(Permission.TicketRefund)
   refundTicket(@CurrentActor() actor: RequestActor, @Param("ticketId") ticketId: string, @Body(new ZodValidationPipe(ticketExchangeRequestSchema)) body: unknown) {
     return this.boxOffice.exchangeTicket({ ...ticketExchangeRequestSchema.parse(body), ticketId, locationId: this.location(actor), employeeId: actor.sub });
+  }
+
+  @Get("attention")
+  attention(@CurrentActor() actor: RequestActor) {
+    return this.boxOffice.attentionRequired(this.location(actor));
   }
 
   @Get("customers")

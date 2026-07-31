@@ -111,6 +111,9 @@ export class StripePaymentProvider implements PaymentProvider {
         ...(args.connectedAccountId ? { stripeAccount: args.connectedAccountId } : {}),
       },
     );
+    if (["succeeded", "canceled"].includes(intent.status)) {
+      return mapPaymentIntent(intent);
+    }
     const reader = await this.client.terminal.readers.processPaymentIntent(
       args.readerId,
       { payment_intent: intent.id },
