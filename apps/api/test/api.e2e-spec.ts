@@ -2550,7 +2550,7 @@ describe("Milestone 9 box office and workforce", () => {
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const body = { locationId: owner.locationId, employeeId: crypto.randomUUID(), pin: "0000" };
     for (let attempt = 0; attempt < 10; attempt += 1) {
-      await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(401);
+      await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(403);
     }
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(429);
   });
