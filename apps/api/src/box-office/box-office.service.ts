@@ -309,7 +309,7 @@ export class BoxOfficeService {
   }) {
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
-        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`${input.locationId}:${input.registerId}`}))`,
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`${input.locationId}:${input.registerId}`}))::text AS "lock"`,
       );
       const existing = await tx.cashDrawer.findFirst({
         where: { locationId: input.locationId, registerId: input.registerId, status: "OPEN" },
