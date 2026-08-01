@@ -44,6 +44,7 @@ beforeAll(async () => {
   process.env.PAYMENT_PROVIDER = "test";
   process.env.EMAIL_PROVIDER = "test";
   process.env.RESTAURANT_SETTLEMENT_INTERVAL_MS = "0";
+  process.env.OBSERVABILITY_TOKEN = "test-observability-token-at-least-32-characters";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
@@ -86,6 +87,16 @@ describe("GET /api/v1/health", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("ok");
     expect(res.body.database).toBe("connected");
+  });
+
+  it("separates liveness, dependency readiness, and protected operational signals", async () => {
+    const live = await request(app.getHttpServer()).get("/api/v1/health/live").expect(200);
+    expect(live.body).toEqual(expect.objectContaining({ status: "ok" }));
+    const ready = await request(app.getHttpServer()).get("/api/v1/health/ready").expect(200);
+    expect(ready.body).toEqual(expect.objectContaining({ status: "ok", database: "connected", redis: "not-required-in-tests" }));
+    await request(app.getHttpServer()).get("/api/v1/health/operations").expect(401);
+    const operations = await request(app.getHttpServer()).get("/api/v1/health/operations").set("Authorization", `Bearer ${process.env.OBSERVABILITY_TOKEN}`).expect(200);
+    expect(operations.body).toEqual(expect.objectContaining({ failedPayments15m: expect.any(Number), stalePayments: expect.any(Number), staleRefunds: expect.any(Number), managerReviewTabs: expect.any(Number), expiredHoldBacklog: expect.any(Number), attentionEvents15m: expect.any(Number) }));
   });
 });
 

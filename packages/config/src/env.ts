@@ -47,8 +47,20 @@ const envSchema = z.object({
   // explicitly.
   RESTAURANT_SETTLEMENT_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
 
+  AUTH_RATE_LIMIT_ATTEMPTS: z.coerce.number().int().positive().default(10),
+  AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(300),
+  CHECKOUT_RATE_LIMIT_ATTEMPTS: z.coerce.number().int().positive().default(30),
+  CHECKOUT_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+  // Protects the machine-facing operational metrics endpoint. This is a
+  // distinct secret from application/session credentials.
+  OBSERVABILITY_TOKEN: z.string().min(32).optional(),
+
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
 }).superRefine((env, context) => {
+  if (env.NODE_ENV === "production" && !env.OBSERVABILITY_TOKEN) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["OBSERVABILITY_TOKEN"], message: "OBSERVABILITY_TOKEN is required in production." });
+  }
   if (env.PAYMENT_PROVIDER === "test" && env.NODE_ENV !== "test") {
     context.addIssue({
       code: z.ZodIssueCode.custom,
