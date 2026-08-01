@@ -392,6 +392,7 @@ describe("Milestone 2 concurrency-safe seat holds", () => {
     expect(res.status).toBe(200);
     expect(res.body.seats).toHaveLength(96);
     expect(res.body.seats.every((seat: { state: string }) => seat.state === "AVAILABLE")).toBe(true);
+    expect(res.body.counts).toEqual({ available: 96, held: 0, sold: 0, blocked: 0 });
   });
 
   it("allows exactly one winner when twelve guests hold the same seat concurrently", async () => {
