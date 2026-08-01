@@ -1,4 +1,9 @@
-import { showtimeWindowsOverlap, validateSeatLayout } from "./cinema-schemas";
+import {
+  dedupePublicShowtimes,
+  showtimeWindowsOverlap,
+  type PublicShowtime,
+  validateSeatLayout,
+} from "./cinema-schemas";
 
 describe("validateSeatLayout", () => {
   const base = [
@@ -41,4 +46,32 @@ describe("showtimeWindowsOverlap", () => {
         { startsAt: ready, roomReadyAt: new Date("2026-07-25T23:00:00Z") },
       ),
     ).toBe(false));
+});
+
+function screening(id: string, startsAt: string, auditoriumId = "room-1"): PublicShowtime {
+  return {
+    id,
+    startsAt,
+    auditorium: { id: auditoriumId, name: "Theater 1", capacity: 60 },
+    priceTier: { name: "Standard", ticketPriceMinor: 1700, feeMinor: 200, currency: "USD" },
+  };
+}
+
+describe("dedupePublicShowtimes", () => {
+  it("keeps one choice for the same auditorium and advertised start", () => {
+    const first = screening("showtime-1", "2026-08-01T22:15:00.000Z");
+    const duplicate = screening("showtime-2", "2026-08-01T22:15:00.000Z");
+
+    expect(dedupePublicShowtimes([first, duplicate])).toEqual([first]);
+  });
+
+  it("keeps screenings on different dates or in different auditoriums", () => {
+    const showtimes = [
+      screening("showtime-1", "2026-08-01T22:15:00.000Z"),
+      screening("showtime-2", "2026-08-02T22:15:00.000Z"),
+      screening("showtime-3", "2026-08-01T22:15:00.000Z", "room-2"),
+    ];
+
+    expect(dedupePublicShowtimes(showtimes)).toEqual(showtimes);
+  });
 });

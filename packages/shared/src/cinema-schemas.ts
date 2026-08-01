@@ -98,6 +98,20 @@ export interface PublicShowtime {
   priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
 }
 
+/**
+ * Keep one public screening when legacy/demo data contains multiple rows for
+ * the same auditorium and advertised start time. A database cleanup can then
+ * happen independently without showing duplicate purchase choices.
+ */
+export function dedupePublicShowtimes(showtimes: PublicShowtime[]): PublicShowtime[] {
+  const unique = new Map<string, PublicShowtime>();
+  for (const showtime of showtimes) {
+    const key = `${showtime.auditorium.id}:${showtime.startsAt}`;
+    if (!unique.has(key)) unique.set(key, showtime);
+  }
+  return [...unique.values()];
+}
+
 export interface NowPlayingMovie {
   id: string;
   title: string;
