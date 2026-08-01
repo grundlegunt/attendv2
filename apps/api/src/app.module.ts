@@ -8,9 +8,11 @@ import { TicketingModule } from "./ticketing/ticketing.module";
 import { RestaurantModule } from "./restaurant/restaurant.module";
 import { WorkforceModule } from "./workforce/workforce.module";
 import { BoxOfficeModule } from "./box-office/box-office.module";
+import { ReportingModule } from "./reporting/reporting.module";
+import { ManagementModule } from "./management/management.module";
 
 @Module({
-  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule],
+  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

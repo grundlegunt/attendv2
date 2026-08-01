@@ -5,6 +5,8 @@ import type { AuthenticatedEmployee, AuthTokenResponse, SeatInput } from "@cinem
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { MenuManager } from "./menu-manager";
+import { ManagementDashboard } from "./management-dashboard";
+import { ManagementControls } from "./management-controls";
 
 interface Auditorium {
   id: string; name: string; capacity: number;
@@ -191,5 +193,7 @@ export default function AdminPage() {
       </article>)}</div>
     </section>
     {token && <MenuManager accessToken={token} />}
+    {token && <ManagementDashboard accessToken={token} permissions={employee.permissions} />}
+    {token && <ManagementControls accessToken={token} permissions={employee.permissions} />}
   </main>;
 }
