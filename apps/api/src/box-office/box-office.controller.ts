@@ -9,6 +9,7 @@ import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { BoxOfficeService } from "./box-office.service";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 
 @Controller("box-office")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -49,6 +50,8 @@ export class BoxOfficeController {
   }
 
   @Post("checkouts")
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard, PermissionsGuard)
+  @RateLimit({ scope: "checkout", identity: "actor" })
   checkout(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(boxOfficeCheckoutRequestSchema)) body: unknown) {
     return this.boxOffice.checkout({ ...boxOfficeCheckoutRequestSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub });
   }

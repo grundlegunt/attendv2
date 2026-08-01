@@ -21,6 +21,7 @@ import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 import { ScanRateLimitGuard } from "./scan-rate-limit.guard";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 
 @Controller("ticketing")
 export class TicketingController {
@@ -32,6 +33,8 @@ export class TicketingController {
   }
 
   @Post("checkouts")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
   createCheckout(
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(createTicketCheckoutRequestSchema)) body: unknown,
@@ -44,6 +47,8 @@ export class TicketingController {
   }
 
   @Post("orders/:orderId/finalize")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
   finalize(@Param("orderId") orderId: string) {
     return this.ticketingService.finalizeOrder(orderId);
   }

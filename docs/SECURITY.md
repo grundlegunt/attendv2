@@ -72,6 +72,8 @@ All credentials (Stripe secret key, webhook signing secret, DB connection string
 
 Global per-IP rate limiting at the API gateway layer, with tighter, purpose-specific limits on: login/auth endpoints (brute-force protection), checkout/payment endpoints (card-testing abuse protection, PAYMENT_FLOW.md §9), and ticket-scan endpoints (prevents scan-spamming as a denial-of-service against the door). Implemented via Redis-backed counters (works correctly across multiple API instances).
 
+Anonymous customer checkout is application-limited by source IP only; holder keys and request IDs are client-generated and therefore are not trusted as stable abuse-prevention identities. Authenticated box-office checkout additionally limits by employee identity. See PAYMENT_FLOW.md §9 for the explicit rationale and monitoring boundary.
+
 The ticket-scan endpoint enforces a fixed-window limit of 60 attempts per minute for each authenticated employee and source IP. The production path uses Redis so limits are shared by every API instance; tests use an isolated in-memory counter.
 
 ## 9. Audit logging

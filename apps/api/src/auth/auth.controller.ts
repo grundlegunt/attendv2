@@ -13,6 +13,7 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import { CurrentActor } from "./decorators/current-actor.decorator";
 import { RequestActor } from "./types";
 import { TokenPair } from "@cinema/auth";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 
 function toTokenResponse(tokens: TokenPair): AuthTokenResponse {
   const env = loadEnv();
@@ -33,6 +34,8 @@ export class AuthController {
 
   @Post("staff/login")
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "email" })
   async staffLogin(@Body(new ZodValidationPipe(staffLoginRequestSchema)) body: unknown) {
     const { tokens, employee } = await this.authService.staffLogin(
       body as ReturnType<typeof staffLoginRequestSchema.parse>,
@@ -66,6 +69,8 @@ export class AuthController {
 
   @Post("customers/register")
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "email" })
   async customerRegister(@Body(new ZodValidationPipe(customerRegisterRequestSchema)) body: unknown) {
     const { tokens, customer } = await this.authService.customerRegister(
       body as ReturnType<typeof customerRegisterRequestSchema.parse>,
@@ -75,6 +80,8 @@ export class AuthController {
 
   @Post("customers/login")
   @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "email" })
   async customerLogin(@Body(new ZodValidationPipe(customerLoginRequestSchema)) body: unknown) {
     const { tokens, customer } = await this.authService.customerLogin(
       body as ReturnType<typeof customerLoginRequestSchema.parse>,

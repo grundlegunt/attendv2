@@ -454,6 +454,35 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!showtime) throw AppError.notFound("Showtime not found.");
+    const seats = showtime.showtimeSeats
+      .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
+      .map((inventory) => {
+        const hold = inventory.holds[0];
+        return {
+          id: inventory.seat.id,
+          inventoryId: inventory.id,
+          label: inventory.seat.label,
+          rowLabel: inventory.seat.rowLabel,
+          number: inventory.seat.number,
+          x: inventory.seat.x,
+          y: inventory.seat.y,
+          type: inventory.seat.type,
+          tableGroupId: inventory.seat.tableGroupId,
+          tablePosition: inventory.seat.tablePosition,
+          state: inventory.blockedAt
+            ? "BLOCKED"
+            : inventory.tickets.length
+              ? "SOLD"
+              : hold
+                ? "HELD"
+                : "AVAILABLE",
+          heldByMe: Boolean(hold && holderKey && hold.holderKey === holderKey),
+          holdToken: hold && holderKey && hold.holderKey === holderKey ? hold.holdToken : undefined,
+          expiresAt: hold && holderKey && hold.holderKey === holderKey
+            ? hold.expiresAt.toISOString()
+            : undefined,
+        };
+      });
     return {
       showtime: {
         id: showtime.id,
@@ -472,35 +501,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       serverTime: now.toISOString(),
       holdDurationSeconds: 300,
-      seats: showtime.showtimeSeats
-        .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
-        .map((inventory) => {
-          const hold = inventory.holds[0];
-          return {
-            id: inventory.seat.id,
-            inventoryId: inventory.id,
-            label: inventory.seat.label,
-            rowLabel: inventory.seat.rowLabel,
-            number: inventory.seat.number,
-            x: inventory.seat.x,
-            y: inventory.seat.y,
-            type: inventory.seat.type,
-            tableGroupId: inventory.seat.tableGroupId,
-            tablePosition: inventory.seat.tablePosition,
-            state: inventory.blockedAt
-              ? "BLOCKED"
-              : inventory.tickets.length
-                ? "SOLD"
-                : hold
-                  ? "HELD"
-                  : "AVAILABLE",
-            heldByMe: Boolean(hold && holderKey && hold.holderKey === holderKey),
-            holdToken: hold && holderKey && hold.holderKey === holderKey ? hold.holdToken : undefined,
-            expiresAt: hold && holderKey && hold.holderKey === holderKey
-              ? hold.expiresAt.toISOString()
-              : undefined,
-          };
-        }),
+      seats,
+      counts: {
+        available: seats.filter((seat) => seat.state === "AVAILABLE").length,
+        held: seats.filter((seat) => seat.state === "HELD").length,
+        sold: seats.filter((seat) => seat.state === "SOLD").length,
+        blocked: seats.filter((seat) => seat.state === "BLOCKED").length,
+      },
     };
   }
 

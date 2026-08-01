@@ -5,10 +5,11 @@ import { RefundReconciliationService } from "./refund-reconciliation.service";
 import { TicketingController } from "./ticketing.controller";
 import { TicketingService } from "./ticketing.service";
 import { ScanRateLimitGuard } from "./scan-rate-limit.guard";
+import { RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 
 @Module({
   imports: [PaymentsModule, NotificationsModule],
   controllers: [TicketingController],
-  providers: [TicketingService, RefundReconciliationService, ScanRateLimitGuard],
+  providers: [TicketingService, RefundReconciliationService, ScanRateLimitGuard, RequestRateLimitGuard],
 })
 export class TicketingModule {}
