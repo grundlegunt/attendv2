@@ -12,13 +12,15 @@ interface NowPlayingResponse {
   movies: NowPlayingMovie[];
 }
 
-function localDateKey(value: string) {
-  const date = new Date(value);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
+function localDateKey(value: string, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export default function HomePage() {
@@ -41,7 +43,7 @@ export default function HomePage() {
 
   const availableDates = useMemo(
     () => Array.from(new Set(
-      program?.movies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt))) ?? [],
+      program?.movies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, program.location.timezone))) ?? [],
     )).sort(),
     [program],
   );
@@ -56,7 +58,9 @@ export default function HomePage() {
     return program.movies
       .map((movie) => ({
         movie,
-        showtimes: movie.showtimes.filter((showtime) => localDateKey(showtime.startsAt) === activeDate),
+        showtimes: movie.showtimes
+          .filter((showtime) => localDateKey(showtime.startsAt, program.location.timezone) === activeDate)
+          .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
       }))
       .filter((entry) => entry.showtimes.length > 0)
       .sort(

@@ -1,9 +1,22 @@
 import {
   dedupePublicShowtimes,
+  startOfLocalDay,
   showtimeWindowsOverlap,
   type PublicShowtime,
   validateSeatLayout,
 } from "./cinema-schemas";
+
+describe("startOfLocalDay", () => {
+  it("keeps the full current cinema day visible after showtimes begin", () => {
+    expect(startOfLocalDay(new Date("2026-08-01T22:15:00.000Z"), "America/Chicago").toISOString())
+      .toBe("2026-08-01T05:00:00.000Z");
+  });
+
+  it("resolves midnight correctly during standard time", () => {
+    expect(startOfLocalDay(new Date("2026-01-15T18:00:00.000Z"), "America/Chicago").toISOString())
+      .toBe("2026-01-15T06:00:00.000Z");
+  });
+});
 
 describe("validateSeatLayout", () => {
   const base = [
