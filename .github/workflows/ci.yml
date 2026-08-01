@@ -245,7 +245,7 @@ jobs:
       - run: pnpm --filter @cinema/database seed
       - name: Start API
         run: |
-          pnpm --filter @cinema/api dev > /tmp/attend-api.log 2>&1 &
+          pnpm --filter @cinema/api start:test > /tmp/attend-api.log 2>&1 &
           for attempt in {1..60}; do
             curl --fail --silent http://127.0.0.1:4000/api/v1/health/ready && exit 0
             sleep 2
