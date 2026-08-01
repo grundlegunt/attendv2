@@ -115,7 +115,7 @@ Every event carries the authoritative post-change state (not just a delta) so a 
 
 ## 7. Deployment shape
 
-Docker-compatible from day one. Local dev: `docker-compose.yml` running Postgres, Redis, and the API; frontends run via `pnpm dev` per app or containerized. Production target (detailed in Milestone 11): containerized API behind a load balancer, managed Postgres, managed Redis, frontends deployed as their own services (e.g., Vercel or containers behind the same LB) — exact hosting choice deferred, see OPEN_QUESTIONS.md. No production secrets in source control; environment variables validated at boot (fail fast if a required secret is missing) using a schema in `/packages/config`.
+Docker-compatible from day one. Local dev: `docker-compose.yml` running Postgres, Redis, and the API; frontends run via `pnpm dev` per app or containerized. The Milestone 11 MVP topology is finalized in `OPERATIONS.md`: Vercel frontends, one active containerized API in the same region as managed Postgres and managed Redis, provider-managed Stripe/Postmark, and platform-managed secret storage. No production secrets live in source control; environment variables are validated at boot using `/packages/config`.
 
 ## 8. Observability (introduced incrementally, hardened in Milestone 11)
 

@@ -62,7 +62,7 @@ These are genuinely undecided and don't block early milestones (they matter star
 
 - Prisma over Drizzle (ARCHITECTURE.md §3) — revisit if seat-reservation-path query performance under real load proves Prisma's overhead material; the domain layer's use of raw SQL for the hot path already limits how much this decision matters.
 - NestJS as a separate API service rather than a Next.js backend (ARCHITECTURE.md §2) — revisit only if the operational overhead of a second service proves not worth the modularity benefit, unlikely given the real-time/job/webhook needs.
-- Exact production hosting topology — deferred to Milestone 11 by design, not an oversight.
+- Exact MVP production hosting topology — resolved in Milestone 11; see `OPERATIONS.md`. Multi-active API replication remains gated on Redis-backed fulfillment-event fanout.
 
 ## 5. Explicitly flagged risks
 
