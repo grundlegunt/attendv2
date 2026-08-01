@@ -5,7 +5,7 @@
   "engines": {
     "node": ">=20"
   },
-  "packageManager": "pnpm@11.9.0",
+  "packageManager": "pnpm@10.28.1",
   "scripts": {
     "postinstall": "pnpm --filter @cinema/database run generate",
     "build": "turbo run build",

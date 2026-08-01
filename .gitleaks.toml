@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-production QR credential used only by isolated CI databases"
+condition = "AND"
+paths = ['''^\.github/workflows/ci\.yml$''']
+regexes = ['''^ci-test-qr-secret-at-least-32-characters-long$''']
