@@ -1,0 +1,15 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "pnpm --filter @cinema/api build"
+  },
+  "deploy": {
+    "preDeployCommand": ["pnpm --filter @cinema/database migrate:deploy"],
+    "startCommand": "pnpm --filter @cinema/api start",
+    "healthcheckPath": "/api/v1/health/ready",
+    "healthcheckTimeout": 300,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

@@ -68,6 +68,56 @@ jobs:
       - name: Unit tests
         run: pnpm turbo run test
 
+  production-api-bundle:
+    name: Production API bundle and boot
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      QR_CREDENTIAL_SECRET: ci-test-qr-secret-at-least-32-characters-long
+      OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
+      PAYMENT_PROVIDER: stripe
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+      STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      EMAIL_PROVIDER: postmark
+      POSTMARK_SERVER_TOKEN: ci-placeholder
+      EMAIL_FROM: ci@example.com
+      REFUND_RECONCILIATION_INTERVAL_MS: 0
+      RESTAURANT_SETTLEMENT_INTERVAL_MS: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production API bundle
+        run: pnpm --filter @cinema/api build
+
+      - name: Boot compiled API and verify liveness
+        run: |
+          pnpm --filter @cinema/api start > /tmp/attend-production-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/api/v1/health/live; then
+              exit 0
+            fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              cat /tmp/attend-production-api.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/attend-production-api.log
+          exit 1
+
   integration:
     name: Integration tests (real Postgres)
     runs-on: ubuntu-latest
