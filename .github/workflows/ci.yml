@@ -180,7 +180,7 @@ jobs:
       PAYMENT_PROVIDER: test
       EMAIL_PROVIDER: test
       OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
-      NEXT_PUBLIC_API_BASE_URL: http://127.0.0.1:4000/api/v1
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000/api/v1
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

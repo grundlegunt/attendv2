@@ -42,8 +42,12 @@ const sellouts = await Promise.all(showtimeIds.map(async (showtimeId, auditorium
     return call("/box-office/checkouts", { method: "POST", headers: auth, body: JSON.stringify({ requestId: randomUUID(), ticketTypeId, holderKey, holdTokens, cashDrawerId: drawers[auditoriumIndex].id, cashCents: quote.totalCents, cardCents: 0, cashReceivedCents: quote.totalCents }) });
   }));
   const after = await call(`/cinema/showtimes/${showtimeId}/seats`);
-  if (after.counts.sold !== available.length || after.counts.held !== 0 || after.counts.available !== 0) {
-    throw new Error(`Sellout invariant failed for ${showtimeId}: ${JSON.stringify(after.counts)}`);
+  const counts = after.seats.reduce((totals, seat) => {
+    totals[seat.state] = (totals[seat.state] ?? 0) + 1;
+    return totals;
+  }, {});
+  if ((counts.SOLD ?? 0) !== available.length || (counts.HELD ?? 0) !== 0 || (counts.AVAILABLE ?? 0) !== 0) {
+    throw new Error(`Sellout invariant failed for ${showtimeId}: ${JSON.stringify(counts)}`);
   }
   const issued = sales.reduce((sum, sale) => sum + sale.tickets.length, 0);
   if (issued !== available.length) throw new Error(`Ticket count mismatch for ${showtimeId}: expected ${available.length}, got ${issued}`);
