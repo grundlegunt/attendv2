@@ -71,11 +71,11 @@ function summarize(samples, budgetMs) {
   return { requests: samples.length, p95Ms: Math.round(sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] ?? 0), budgetMs };
 }
 
-const performance = {
+const performanceSummary = {
   setup: summarize(timings.setup, null),
   ticketSales: summarize(timings.ticketSales, ticketSalesP95BudgetMs),
   restaurant: summarize(timings.restaurant, restaurantP95BudgetMs),
 };
-if (performance.ticketSales.p95Ms > ticketSalesP95BudgetMs) throw new Error(`Ticket-sales p95 ${performance.ticketSales.p95Ms}ms exceeded ${ticketSalesP95BudgetMs}ms budget.`);
-if (performance.restaurant.p95Ms > restaurantP95BudgetMs) throw new Error(`Restaurant p95 ${performance.restaurant.p95Ms}ms exceeded ${restaurantP95BudgetMs}ms budget.`);
-console.log(JSON.stringify({ result: "PASS", performance, sellouts, restaurantBursts }, null, 2));
+if (performanceSummary.ticketSales.p95Ms > ticketSalesP95BudgetMs) throw new Error(`Ticket-sales p95 ${performanceSummary.ticketSales.p95Ms}ms exceeded ${ticketSalesP95BudgetMs}ms budget.`);
+if (performanceSummary.restaurant.p95Ms > restaurantP95BudgetMs) throw new Error(`Restaurant p95 ${performanceSummary.restaurant.p95Ms}ms exceeded ${restaurantP95BudgetMs}ms budget.`);
+console.log(JSON.stringify({ result: "PASS", performance: performanceSummary, sellouts, restaurantBursts }, null, 2));
