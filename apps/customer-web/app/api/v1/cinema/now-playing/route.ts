@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@cinema/database";
+import { dedupePublicShowtimes, type PublicShowtime } from "@cinema/shared";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const locationId = new URL(request.url).searchParams.get("locationId");
@@ -10,7 +11,18 @@ export async function GET(request: Request) {
     include: { showtimes: { where: { onSale: true, startsAt: { gte: new Date(Date.now() - 1800000) }, auditorium: { locationId: location.id } }, select: { id: true, startsAt: true, auditorium: { select: { id: true, name: true, capacity: true } }, priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } } }, orderBy: { startsAt: "asc" } } },
     orderBy: { title: "asc" },
   });
-  return NextResponse.json({ location: { id: location.id, name: location.name, timezone: location.timezone }, movies: movies.map((movie) => ({ ...movie, showtimes: movie.showtimes.map((showtime) => ({ ...showtime, startsAt: showtime.startsAt.toISOString() })) })) });
+  return NextResponse.json({
+    location: { id: location.id, name: location.name, timezone: location.timezone },
+    movies: movies.map((movie) => ({
+      ...movie,
+      showtimes: dedupePublicShowtimes(
+        movie.showtimes.map((showtime) => ({
+          ...showtime,
+          startsAt: showtime.startsAt.toISOString(),
+        })) as PublicShowtime[],
+      ),
+    })),
+  });
 }
 
 // Production route for the Milestone 1 customer program.
