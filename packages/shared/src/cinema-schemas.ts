@@ -112,6 +112,47 @@ export function dedupePublicShowtimes(showtimes: PublicShowtime[]): PublicShowti
   return [...unique.values()];
 }
 
+/** Return the UTC instant at which the supplied calendar day began locally. */
+export function startOfLocalDay(date: Date, timeZone: string): Date {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = Object.fromEntries(
+    formatter.formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  const localMidnightAsUtc = Date.UTC(parts.year!, parts.month! - 1, parts.day!);
+
+  // Resolve the zone offset at the target instant twice so this remains
+  // correct across daylight-saving transitions as well as ordinary days.
+  let candidate = localMidnightAsUtc;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const candidateParts = Object.fromEntries(
+      formatter.formatToParts(new Date(candidate))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, Number(part.value)]),
+    );
+    const representedAsUtc = Date.UTC(
+      candidateParts.year!,
+      candidateParts.month! - 1,
+      candidateParts.day!,
+      candidateParts.hour!,
+      candidateParts.minute!,
+      candidateParts.second!,
+    );
+    candidate = localMidnightAsUtc - (representedAsUtc - candidate);
+  }
+  return new Date(candidate);
+}
+
 export interface NowPlayingMovie {
   id: string;
   title: string;
