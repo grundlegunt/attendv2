@@ -199,3 +199,60 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  opening-night-load:
+    name: Opening-night correctness load
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cinema
+          POSTGRES_PASSWORD: cinema_test_password
+          POSTGRES_DB: cinema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema -d cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      QR_CREDENTIAL_SECRET: ci-test-qr-secret-at-least-32-characters-long
+      PAYMENT_PROVIDER: test
+      EMAIL_PROVIDER: test
+      OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
+      CHECKOUT_RATE_LIMIT_ATTEMPTS: 1000
+      RESTAURANT_SETTLEMENT_INTERVAL_MS: 0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cinema/database exec prisma migrate deploy
+      - run: pnpm --filter @cinema/database seed
+      - name: Start API
+        run: |
+          pnpm --filter @cinema/api dev > /tmp/attend-api.log 2>&1 &
+          for attempt in {1..60}; do
+            curl --fail --silent http://127.0.0.1:4000/api/v1/health/ready && exit 0
+            sleep 2
+          done
+          cat /tmp/attend-api.log
+          exit 1
+      - name: Resolve isolated load fixture
+        run: node tests/load/fixture.cjs >> "$GITHUB_ENV"
+      - name: Sell out three rooms and burst restaurant orders
+        run: pnpm test:load

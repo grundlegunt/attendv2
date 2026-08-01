@@ -24,12 +24,13 @@ async function call(path, init = {}) {
 
 const login = await call("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
 const auth = { authorization: `Bearer ${login.accessToken}` };
-const drawer = await call("/box-office/cash-drawers", { method: "POST", headers: auth, body: JSON.stringify({ registerId: `opening-night-${randomUUID()}`, openingBalanceCents: 0 }) });
+const drawers = await Promise.all(showtimeIds.map((_, index) => call("/box-office/cash-drawers", { method: "POST", headers: auth, body: JSON.stringify({ registerId: `opening-night-${index + 1}-${randomUUID()}`, openingBalanceCents: 0 }) })));
 const menu = await call("/restaurant-menu", { headers: auth });
 const menuItem = menu.categories.flatMap((category) => category.items).find((item) => !item.is86d);
 if (!menuItem) throw new Error("The load fixture needs at least one active, available menu item.");
+const modifierIds = menuItem.modifierGroups.filter((group) => group.required).map((group) => group.modifiers[0]?.id).filter(Boolean);
 
-const sellouts = await Promise.all(showtimeIds.map(async (showtimeId) => {
+const sellouts = await Promise.all(showtimeIds.map(async (showtimeId, auditoriumIndex) => {
   const availability = await call(`/cinema/showtimes/${showtimeId}/seats`);
   const available = availability.seats.filter((seat) => seat.state === "AVAILABLE");
   const groups = Array.from({ length: Math.ceil(available.length / 10) }, (_, index) => available.slice(index * 10, index * 10 + 10));
@@ -38,7 +39,7 @@ const sellouts = await Promise.all(showtimeIds.map(async (showtimeId) => {
     const holds = await call(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", headers: auth, body: JSON.stringify({ holderKey, seatIds: seats.map((seat) => seat.id) }) });
     const holdTokens = holds.map((hold) => hold.holdToken);
     const quote = await call("/box-office/quotes", { method: "POST", headers: auth, body: JSON.stringify({ holderKey, holdTokens }) });
-    return call("/box-office/checkouts", { method: "POST", headers: auth, body: JSON.stringify({ requestId: randomUUID(), ticketTypeId, holderKey, holdTokens, cashDrawerId: drawer.id, cashCents: quote.totalCents, cardCents: 0, cashReceivedCents: quote.totalCents }) });
+    return call("/box-office/checkouts", { method: "POST", headers: auth, body: JSON.stringify({ requestId: randomUUID(), ticketTypeId, holderKey, holdTokens, cashDrawerId: drawers[auditoriumIndex].id, cashCents: quote.totalCents, cardCents: 0, cashReceivedCents: quote.totalCents }) });
   }));
   const after = await call(`/cinema/showtimes/${showtimeId}/seats`);
   if (after.counts.sold !== available.length || after.counts.held !== 0 || after.counts.available !== 0) {
@@ -53,7 +54,7 @@ const restaurantBursts = await Promise.all(showtimeIds.map(async (showtimeId, au
   const sent = await Promise.all(Array.from({ length: ordersPerAuditorium }, async (_, orderIndex) => {
     const tab = await call("/restaurant-tabs/walk-in", { method: "POST", headers: auth, body: JSON.stringify({ label: `Load A${auditoriumIndex + 1}-${orderIndex + 1}-${showtimeId.slice(0, 6)}` }) });
     const order = await call(`/restaurant-tabs/${tab.id}/orders`, { method: "POST", headers: auth, body: "{}" });
-    await call(`/restaurant-tabs/orders/${order.id}/items`, { method: "POST", headers: auth, body: JSON.stringify({ menuItemId: menuItem.id, quantity: 2, modifierIds: [] }) });
+    await call(`/restaurant-tabs/orders/${order.id}/items`, { method: "POST", headers: auth, body: JSON.stringify({ menuItemId: menuItem.id, quantity: 2, modifierIds }) });
     return call(`/restaurant-tabs/orders/${order.id}/send`, { method: "POST", headers: auth, body: "{}" });
   }));
   if (sent.some((order) => order.status !== "SENT")) throw new Error(`Restaurant order invariant failed for auditorium ${auditoriumIndex + 1}.`);
