@@ -55,6 +55,7 @@ button.link { padding: 14px 0 0; border: 0; background: none; color: var(--color
 .checkout-panel { padding: 22px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .checkout-panel h3 { margin: 0 0 18px; font: 1.5rem var(--font-family-display); }
 .checkout-panel .field input { box-sizing: border-box; width: 100%; }
+#attend-express-checkout-element:not(:empty) { margin-bottom: 18px; }
 .authorization-choice { display: grid; gap: 15px; }
 .authorization-choice legend { padding: 0 8px; font: 1.5rem var(--font-family-display); }
 .authorization-choice p, .authorization-choice small { color: var(--color-text-secondary); }
