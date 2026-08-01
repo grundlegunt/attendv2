@@ -7,7 +7,7 @@ import { AppError } from "./app-error";
 
 interface RateLimitPolicy {
   scope: "auth" | "checkout";
-  identity?: "email" | "holder" | "actor";
+  identity?: "email" | "actor";
 }
 
 const RATE_LIMIT_POLICY = Symbol("rate-limit-policy");
@@ -38,10 +38,6 @@ export class RequestRateLimitGuard implements CanActivate, OnModuleDestroy {
 
   private identity(request: Request, kind?: RateLimitPolicy["identity"]) {
     if (kind === "email" && typeof request.body?.email === "string") return request.body.email.trim().toLowerCase();
-    if (kind === "holder") {
-      const value = request.body?.holderKey ?? request.body?.requestId ?? request.headers["idempotency-key"];
-      return typeof value === "string" ? value : undefined;
-    }
     if (kind === "actor") return request.actor?.sub;
     return undefined;
   }

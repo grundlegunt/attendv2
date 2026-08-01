@@ -34,7 +34,7 @@ export class TicketingController {
 
   @Post("checkouts")
   @UseGuards(RequestRateLimitGuard)
-  @RateLimit({ scope: "checkout", identity: "holder" })
+  @RateLimit({ scope: "checkout" })
   createCheckout(
     @Headers("idempotency-key") idempotencyKey: string | undefined,
     @Body(new ZodValidationPipe(createTicketCheckoutRequestSchema)) body: unknown,
@@ -48,7 +48,7 @@ export class TicketingController {
 
   @Post("orders/:orderId/finalize")
   @UseGuards(RequestRateLimitGuard)
-  @RateLimit({ scope: "checkout", identity: "holder" })
+  @RateLimit({ scope: "checkout" })
   finalize(@Param("orderId") orderId: string) {
     return this.ticketingService.finalizeOrder(orderId);
   }

@@ -24,4 +24,23 @@ describe("RequestRateLimitGuard", () => {
     await expect(guard.canActivate(context)).rejects.toMatchObject({ code: "RATE_LIMITED" });
     await guard.onModuleDestroy();
   });
+
+  it("applies anonymous checkout limits by source IP even when client identifiers rotate", async () => {
+    process.env.CHECKOUT_RATE_LIMIT_ATTEMPTS = "2";
+    const { __resetEnvCacheForTests } = await import("@cinema/config/env");
+    __resetEnvCacheForTests();
+    const { RequestRateLimitGuard } = await import("./request-rate-limit.guard");
+    const reflector = { get: () => ({ scope: "checkout" }) };
+    const guard = new RequestRateLimitGuard(reflector as never);
+    const request = { baseUrl: "/api/v1/ticketing", route: { path: "/checkouts" }, path: "/checkouts", ip: "127.0.0.2", body: {}, headers: {} };
+    const context = { getHandler: () => function checkout() {}, switchToHttp: () => ({ getRequest: () => request }) } as unknown as ExecutionContext;
+
+    request.body = { holderKey: "rotating-holder-1", requestId: "rotating-request-1" };
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    request.body = { holderKey: "rotating-holder-2", requestId: "rotating-request-2" };
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    request.body = { holderKey: "rotating-holder-3", requestId: "rotating-request-3" };
+    await expect(guard.canActivate(context)).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    await guard.onModuleDestroy();
+  });
 });
