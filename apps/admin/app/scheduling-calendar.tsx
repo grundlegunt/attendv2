@@ -75,6 +75,7 @@ export function SchedulingCalendar({
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
   const [view, setView] = useState<"day" | "week">("day");
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
@@ -116,15 +117,17 @@ export function SchedulingCalendar({
   async function dropOnTimeline(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, start: Date) {
     event.preventDefault();
     const key = event.dataTransfer.getData("text/plain") || draggingKey;
+    const targetTime = dropPreview?.auditoriumId === auditoriumId ? dropPreview.startsAt : timeAtPointer(event, start);
     setDraggingKey(null);
+    setDropPreview(null);
     if (key?.startsWith("movie:")) {
-      onCreate(auditoriumId, timeAtPointer(event, start), key.slice("movie:".length));
+      onCreate(auditoriumId, targetTime, key.slice("movie:".length));
       return;
     }
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
-    await onMove(showtime, auditoriumId, timeAtPointer(event, start));
+    await onMove(showtime, auditoriumId, targetTime);
   }
 
   async function dropOnWeekRoom(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, targetDay: Date) {
@@ -188,7 +191,7 @@ export function SchedulingCalendar({
             event.dataTransfer.setData("text/plain", key);
             setDraggingKey(key);
           }}
-          onDragEnd={() => setDraggingKey(null)}
+          onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
         ><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span></div>)}
       </div>
@@ -208,10 +211,28 @@ export function SchedulingCalendar({
             <div
               className={`room-timeline ${draggingKey ? "drag-target" : ""}`}
               onClick={(event) => createAtPointer(event, auditorium.id)}
-              onDragOver={(event) => event.preventDefault()}
+              onDragOver={(event) => {
+                event.preventDefault();
+                const startsAt = timeAtPointer(event, dayStart);
+                if (dropPreview?.auditoriumId !== auditorium.id || dropPreview.startsAt.getTime() !== startsAt.getTime()) {
+                  setDropPreview({ auditoriumId: auditorium.id, startsAt });
+                }
+              }}
               onDrop={(event) => void dropOnTimeline(event, auditorium.id, dayStart)}
             >
               {hours.slice(0, -1).map((hour) => <i key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }} />)}
+              {draggingKey && dropPreview?.auditoriumId === auditorium.id && (() => {
+                const movie = draggingKey.startsWith("movie:")
+                  ? movies.find((item) => item.id === draggingKey.slice("movie:".length))
+                  : showtimes.find((item) => item.id === draggingKey.slice("showtime:".length))?.movie;
+                const durationMinutes = preShowBufferMinutes + (movie?.runtimeMinutes ?? 90) + cleaningBufferMinutes;
+                const left = (minutesFrom(dayStart, dropPreview.startsAt) / 60) * HOUR_WIDTH;
+                const width = Math.max(82, (durationMinutes / 60) * HOUR_WIDTH - 8);
+                return <div className="drop-preview" style={{ left: `${left + 4}px`, width: `${width}px` }}>
+                  <strong>{movie?.title ?? "Showing"}</strong>
+                  <span>{formatTime(dropPreview.startsAt)}</span>
+                </div>;
+              })()}
               {roomShowtimes.map((showtime) => {
                 const startMinutes = Math.max(0, minutesFrom(dayStart, showtime.startsAt));
                 const endMinutes = Math.min(TOTAL_HOURS * 60, minutesFrom(dayStart, showtime.roomReadyAt));
@@ -232,7 +253,7 @@ export function SchedulingCalendar({
                     event.dataTransfer.setData("text/plain", key);
                     setDraggingKey(key);
                   }}
-                  onDragEnd={() => setDraggingKey(null)}
+                  onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
                   title={`Edit ${showtime.movie.title}`}
                 >
                   <strong>{showtime.movie.title}</strong>
@@ -281,7 +302,7 @@ export function SchedulingCalendar({
                       event.dataTransfer.setData("text/plain", key);
                       setDraggingKey(key);
                     }}
-                    onDragEnd={() => setDraggingKey(null)}
+                    onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
                   ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}</span></button>;
                 }) : <small>Open</small>}
               </div>;

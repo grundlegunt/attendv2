@@ -79,6 +79,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-block.past { border-color: #5d6059; background: #3a3d38; color: #aaa; box-shadow: none; }
 .showtime-block[draggable="true"] { cursor: grab; }
 .showtime-block[draggable="true"]:active { cursor: grabbing; opacity: .72; }
+.drop-preview { position: absolute; top: 16px; bottom: 16px; z-index: 5; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 12px 14px; border: 2px dashed #f0bd2d; border-radius: 4px; background: rgba(240,189,45,.2); color: white; pointer-events: none; }
+.drop-preview strong, .drop-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop-preview strong { font-family: Georgia, serif; }
+.drop-preview span { color: #f5df9c; font-size: .72rem; font-weight: 800; }
 .week-scroll { overflow-x: auto; }
 .week-calendar { display: grid; grid-template-columns: repeat(7, minmax(190px, 1fr)); min-width: 1330px; }
 .week-day { border-right: 1px solid #34342f; }
