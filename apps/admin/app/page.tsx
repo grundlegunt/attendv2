@@ -60,6 +60,7 @@ export default function AdminPage() {
   const [onSale, setOnSale] = useState(true);
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
 
   const previewSeats = useMemo(() => buildSeats(rows, seatsPerRow), [rows, seatsPerRow]);
 
@@ -142,6 +143,30 @@ export default function AdminPage() {
     setShowtimeEditorOpen(true);
   }
 
+  async function moveShowtime(showtime: CalendarShowtime, nextAuditoriumId: string, nextStartsAt: Date) {
+    setError(null);
+    try {
+      await apiFetch(`/cinema/showtimes/${showtime.id}`, {
+        accessToken: token ?? undefined,
+        method: "PATCH",
+        body: JSON.stringify({
+          movieId: showtime.movie.id,
+          auditoriumId: nextAuditoriumId,
+          startsAt: nextStartsAt.toISOString(),
+          onSale: showtime.onSale,
+        }),
+      });
+      await refresh();
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
+  function openMovieSetup() {
+    setSetupOpen(true);
+    window.setTimeout(() => document.getElementById("movie-setup")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+  }
+
   if (!employee) {
     return <main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
       <p className="kicker">ATTEND ADMIN</p><h1>Manager sign in</h1>
@@ -169,6 +194,8 @@ export default function AdminPage() {
       cleaningBufferMinutes={data.location.cleaningBufferMinutes}
       onCreate={createShowtimeAt}
       onEdit={editShowtime}
+      onMove={moveShowtime}
+      onAddMovie={openMovieSetup}
     />}
 
     {showtimeEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setShowtimeEditorOpen(false)}>
@@ -187,7 +214,7 @@ export default function AdminPage() {
       </form>
     </div>}
 
-    <details className="setup-disclosure">
+    <details className="setup-disclosure" open={setupOpen} onToggle={(event) => setSetupOpen(event.currentTarget.open)}>
       <summary><span><b>Cinema setup</b><small>Add movies or configure auditoriums</small></span><span>Open setup</span></summary>
       <section className="admin-grid setup-grid">
       <form className="panel" onSubmit={createAuditorium}>
@@ -202,7 +229,7 @@ export default function AdminPage() {
       </form>
 
       <div className="stack">
-        <form className="panel" onSubmit={createMovie}>
+        <form className="panel" id="movie-setup" onSubmit={createMovie}>
           <p className="kicker">02 · MOVIE</p><h2>Add a movie</h2>
           <label>Title<input required value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} /></label>
           <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(Number(e.target.value))} /></label>

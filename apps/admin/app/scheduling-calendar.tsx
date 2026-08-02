@@ -32,6 +32,8 @@ interface SchedulingCalendarProps {
   cleaningBufferMinutes: number;
   onCreate: (auditoriumId: string, startsAt: Date) => void;
   onEdit: (showtime: CalendarShowtime) => void;
+  onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
+  onAddMovie: () => void;
 }
 
 const START_HOUR = 10;
@@ -65,8 +67,12 @@ export function SchedulingCalendar({
   cleaningBufferMinutes,
   onCreate,
   onEdit,
+  onMove,
+  onAddMovie,
 }: SchedulingCalendarProps) {
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
+  const [view, setView] = useState<"day" | "week">("day");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
@@ -98,6 +104,38 @@ export function SchedulingCalendar({
     onCreate(auditoriumId, new Date(dayStart.getTime() + roundedMinutes * 60000));
   }
 
+  function timeAtPointer(event: React.DragEvent<HTMLDivElement>, start: Date) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const rawMinutes = ((event.clientX - bounds.left) / bounds.width) * TOTAL_HOURS * 60;
+    const roundedMinutes = Math.max(0, Math.min(TOTAL_HOURS * 60 - 5, Math.round(rawMinutes / 5) * 5));
+    return new Date(start.getTime() + roundedMinutes * 60000);
+  }
+
+  async function dropOnTimeline(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, start: Date) {
+    event.preventDefault();
+    const showtime = showtimes.find((item) => item.id === draggingId);
+    setDraggingId(null);
+    if (!showtime) return;
+    await onMove(showtime, auditoriumId, timeAtPointer(event, start));
+  }
+
+  async function dropOnWeekRoom(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, targetDay: Date) {
+    event.preventDefault();
+    const showtime = showtimes.find((item) => item.id === draggingId);
+    setDraggingId(null);
+    if (!showtime) return;
+    const sourceStart = startOfCinemaDay(new Date(showtime.startsAt));
+    if (new Date(showtime.startsAt).getHours() < START_HOUR) sourceStart.setDate(sourceStart.getDate() - 1);
+    const offsetMinutes = minutesFrom(sourceStart, showtime.startsAt);
+    await onMove(showtime, auditoriumId, new Date(targetDay.getTime() + offsetMinutes * 60000));
+  }
+
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(dayStart);
+    date.setDate(date.getDate() + index);
+    return date;
+  });
+
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
       <div>
@@ -105,11 +143,18 @@ export function SchedulingCalendar({
         <h2>Daily theater schedule</h2>
         <p>Click an open time to add a showing. Click a film to edit it.</p>
       </div>
+      <div className="schedule-actions">
+        <div className="view-switch" aria-label="Schedule view">
+          <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>Day</button>
+          <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>Week</button>
+        </div>
+        <button type="button" className="add-film-button" onClick={onAddMovie}>+ Add film</button>
+      </div>
       <div className="date-controls">
-        <button type="button" className="calendar-nav" onClick={() => changeDay(-1)} aria-label="Previous day">←</button>
+        <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
         <button type="button" className="calendar-today" onClick={() => setSelectedDate(dateInputValue(new Date()))}>Today</button>
         <input aria-label="Schedule date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
-        <button type="button" className="calendar-nav" onClick={() => changeDay(1)} aria-label="Next day">→</button>
+        <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? 7 : 1)} aria-label={`Next ${view}`}>→</button>
       </div>
     </div>
 
@@ -120,7 +165,7 @@ export function SchedulingCalendar({
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
     </div>
 
-    <div className="calendar-scroll">
+    {view === "day" && <div className="calendar-scroll">
       <div className="cinema-calendar" style={{ "--timeline-width": `${TOTAL_HOURS * HOUR_WIDTH}px` } as React.CSSProperties}>
         <div className="calendar-corner"><span>ROOM</span></div>
         <div className="time-ruler">
@@ -131,7 +176,12 @@ export function SchedulingCalendar({
           const roomShowtimes = visibleShowtimes.filter((showtime) => showtime.auditorium.id === auditorium.id);
           return <div className="calendar-row" key={auditorium.id}>
             <div className="room-label"><strong>{auditorium.name}</strong><span>{auditorium.capacity} seats</span></div>
-            <div className="room-timeline" onClick={(event) => createAtPointer(event, auditorium.id)}>
+            <div
+              className={`room-timeline ${draggingId ? "drag-target" : ""}`}
+              onClick={(event) => createAtPointer(event, auditorium.id)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => void dropOnTimeline(event, auditorium.id, dayStart)}
+            >
               {hours.slice(0, -1).map((hour) => <i key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }} />)}
               {roomShowtimes.map((showtime) => {
                 const startMinutes = Math.max(0, minutesFrom(dayStart, showtime.startsAt));
@@ -142,10 +192,17 @@ export function SchedulingCalendar({
                 const status = isPast ? "past" : showtime.onSale ? "on-sale" : "draft";
                 return <button
                   type="button"
+                  draggable={!isPast}
                   className={`showtime-block ${status}`}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
                   onClick={(event) => { event.stopPropagation(); onEdit(showtime); }}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", showtime.id);
+                    setDraggingId(showtime.id);
+                  }}
+                  onDragEnd={() => setDraggingId(null)}
                   title={`Edit ${showtime.movie.title}`}
                 >
                   <strong>{showtime.movie.title}</strong>
@@ -159,6 +216,48 @@ export function SchedulingCalendar({
 
         {!auditoriums.length && <div className="calendar-empty">Create an auditorium before scheduling showtimes.</div>}
       </div>
-    </div>
+    </div>}
+
+    {view === "week" && <div className="week-scroll">
+      <div className="week-calendar">
+        {weekDays.map((date) => {
+          const end = new Date(date.getTime() + TOTAL_HOURS * 60 * 60000);
+          const dayShowtimes = showtimes.filter((showtime) => {
+            const starts = new Date(showtime.startsAt);
+            return starts >= date && starts < end;
+          });
+          return <section className="week-day" key={date.toISOString()}>
+            <header><strong>{date.toLocaleDateString([], { weekday: "short" })}</strong><span>{date.toLocaleDateString([], { month: "short", day: "numeric" })}</span></header>
+            {auditoriums.map((auditorium) => {
+              const roomShowtimes = dayShowtimes.filter((showtime) => showtime.auditorium.id === auditorium.id);
+              return <div
+                className={`week-room ${draggingId ? "drag-target" : ""}`}
+                key={auditorium.id}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => void dropOnWeekRoom(event, auditorium.id, date)}
+              >
+                <b>{auditorium.name}</b>
+                {roomShowtimes.length ? roomShowtimes.map((showtime) => {
+                  const isPast = new Date(showtime.startsAt) < now;
+                  return <button
+                    type="button"
+                    draggable={!isPast}
+                    className={`week-showtime ${isPast ? "past" : showtime.onSale ? "on-sale" : "draft"}`}
+                    key={showtime.id}
+                    onClick={() => onEdit(showtime)}
+                    onDragStart={(event) => {
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", showtime.id);
+                      setDraggingId(showtime.id);
+                    }}
+                    onDragEnd={() => setDraggingId(null)}
+                  ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}</span></button>;
+                }) : <small>Open</small>}
+              </div>;
+            })}
+          </section>;
+        })}
+      </div>
+    </div>}
   </section>;
 }
