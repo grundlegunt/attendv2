@@ -74,6 +74,13 @@ export class CinemaController {
     return this.cinemaService.createMovie(actor, body as ReturnType<typeof createMovieRequestSchema.parse>);
   }
 
+  @Delete("movies/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  archiveMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.archiveMovie(actor, id);
+  }
+
   @Post("showtimes")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)

@@ -115,6 +115,17 @@ export default function AdminPage() {
     } catch (reason) { showError(reason); }
   }
 
+  async function archiveMovie(movie: Movie) {
+    if (!window.confirm(`Remove ${movie.title} (${movie.runtimeMinutes} min) from the film library? Existing showtime and sales history will be preserved.`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/cinema/movies/${movie.id}`, { accessToken: token ?? undefined, method: "DELETE" });
+      if (movieId === movie.id) setMovieId("");
+      await refresh();
+      setNotice(`${movie.title} was removed from the film library. Historical records were preserved.`);
+    } catch (reason) { showError(reason); }
+  }
+
   async function createShowtime(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
@@ -193,17 +204,34 @@ export default function AdminPage() {
       <div><strong>30 + 15</strong><span>Pre-show + cleaning</span></div>
     </section>
 
-    {data && <SchedulingCalendar
+    {data && <div className="schedule-with-inspector"><SchedulingCalendar
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}
       showtimes={data.showtimes}
       preShowBufferMinutes={data.location.preShowBufferMinutes}
-      cleaningBufferMinutes={data.location.cleaningBufferMinutes}
+      cleaningBufferMinutes={Math.max(15, data.location.cleaningBufferMinutes)}
       onCreate={createShowtimeAt}
       onEdit={editShowtime}
       onMove={moveShowtime}
       onAddMovie={openMovieEditor}
-    />}
+      onArchiveMovie={archiveMovie}
+    />
+
+    <aside className="schedule-inspector" aria-label="Selected showtime">
+      {showtimeEditorOpen ? <form id="showtime-editor" onSubmit={createShowtime}>
+        <div className="drawer-heading">
+          <div><p className="kicker">SELECTED SHOWTIME</p><h2>{editingShowtimeId ? data.showtimes.find((item) => item.id === editingShowtimeId)?.movie.title ?? "Edit showing" : "Add showing"}</h2></div>
+          <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
+        </div>
+        <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
+        <label>Auditorium<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
+        <label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
+        <div className="calculation-note">Attend includes {data.location.preShowBufferMinutes} minutes of pre-show, the film runtime, and at least 15 minutes of cleaning. Conflicting placements are rejected.</div>
+        <label className="checkbox"><input type="checkbox" checked={onSale} onChange={(e) => setOnSale(e.target.checked)} /> Open for sale</label>
+        <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
+        <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Close</button>
+      </form> : <div className="inspector-empty"><p className="kicker">SELECTED SHOWTIME</p><h2>Choose a showing</h2><p>Select a block—or click an open time—to edit it here without leaving the calendar.</p></div>}
+    </aside></div>}
 
     {movieEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setMovieEditorOpen(false)}>
       <form className="showtime-drawer" onSubmit={createMovie} onMouseDown={(event) => event.stopPropagation()}>
@@ -215,22 +243,6 @@ export default function AdminPage() {
         <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(event) => setRuntime(Number(event.target.value))} /></label>
         <button className="primary">Add to film library</button>
         <button type="button" className="secondary" onClick={() => setMovieEditorOpen(false)}>Cancel</button>
-      </form>
-    </div>}
-
-    {showtimeEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setShowtimeEditorOpen(false)}>
-      <form className="showtime-drawer" id="showtime-editor" onSubmit={createShowtime} onMouseDown={(event) => event.stopPropagation()}>
-        <div className="drawer-heading">
-          <div><p className="kicker">SHOWTIME</p><h2>{editingShowtimeId ? "Edit showing" : "Add showing"}</h2></div>
-          <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
-        </div>
-        <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data?.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
-        <label>Auditorium<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data?.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
-        <label>Advertised start<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
-        <div className="calculation-note">Attend automatically adds {data?.location.preShowBufferMinutes ?? 30} minutes of pre-show, the film runtime, and {data?.location.cleaningBufferMinutes ?? 15} minutes of cleaning.</div>
-        <label className="checkbox"><input type="checkbox" checked={onSale} onChange={(e) => setOnSale(e.target.checked)} /> Open for sale</label>
-        <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
-        <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Cancel</button>
       </form>
     </div>}
 

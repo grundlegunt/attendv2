@@ -35,6 +35,7 @@ interface SchedulingCalendarProps {
   onEdit: (showtime: CalendarShowtime) => void;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onAddMovie: () => void;
+  onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
 }
 
 const START_HOUR = 10;
@@ -71,6 +72,7 @@ export function SchedulingCalendar({
   onEdit,
   onMove,
   onAddMovie,
+  onArchiveMovie,
 }: SchedulingCalendarProps) {
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
   const [view, setView] = useState<"day" | "week">("day");
@@ -193,7 +195,14 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span></div>)}
+        ><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+          type="button"
+          className="film-archive"
+          aria-label={`Remove ${movie.title} from the film library`}
+          title="Remove from film library"
+          onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >×</button></div>)}
       </div>
     </div>
 

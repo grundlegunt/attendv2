@@ -19,6 +19,7 @@ type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
   private expiryTimer?: ReturnType<typeof setInterval>;
+  private readonly minimumCinemaCleaningMinutes = 15;
 
   onModuleInit() {
     this.expiryTimer = setInterval(() => void this.expireSeatHolds(), 15_000);
@@ -142,6 +143,24 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async archiveMovie(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const movie = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: true } });
+      if (!movie) throw AppError.notFound("Movie not found.");
+      const archived = await tx.movie.update({ where: { id }, data: { active: false } });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "movie.archived",
+        entityType: "Movie", entityId: movie.id, locationId,
+        beforeState: { active: true, title: movie.title, runtimeMinutes: movie.runtimeMinutes },
+        afterState: { active: false },
+      } });
+      return archived;
+    });
+  }
+
   async createShowtime(actor: RequestActor, input: ShowtimeInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(
@@ -164,9 +183,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           startsAt.getTime() + auditorium.location.preShowBufferMinutes * 60000,
         );
         const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60000);
-        const roomReadyAt = new Date(
-          endsAt.getTime() + auditorium.location.cleaningBufferMinutes * 60000,
-        );
+        const cleaningMinutes = Math.max(this.minimumCinemaCleaningMinutes, auditorium.location.cleaningBufferMinutes);
+        const roomReadyAt = new Date(endsAt.getTime() + cleaningMinutes * 60000);
         const priceTier = await this.resolvePriceTier(
           tx,
           auditorium.location.organizationId,
@@ -262,9 +280,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           startsAt.getTime() + auditorium.location.preShowBufferMinutes * 60000,
         );
         const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60000);
-        const roomReadyAt = new Date(
-          endsAt.getTime() + auditorium.location.cleaningBufferMinutes * 60000,
-        );
+        const cleaningMinutes = Math.max(this.minimumCinemaCleaningMinutes, auditorium.location.cleaningBufferMinutes);
+        const roomReadyAt = new Date(endsAt.getTime() + cleaningMinutes * 60000);
         const priceTier = await this.resolvePriceTier(
           tx,
           auditorium.location.organizationId,
