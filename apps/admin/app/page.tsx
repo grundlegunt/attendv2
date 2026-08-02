@@ -61,6 +61,8 @@ export default function AdminPage() {
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
+  const [movieEditorOpen, setMovieEditorOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const previewSeats = useMemo(() => buildSeats(rows, seatsPerRow), [rows, seatsPerRow]);
 
@@ -101,11 +103,15 @@ export default function AdminPage() {
   async function createMovie(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
+      const addedTitle = movieTitle;
       await apiFetch("/cinema/movies", {
         accessToken: token ?? undefined, method: "POST",
         body: JSON.stringify({ title: movieTitle, runtimeMinutes: runtime }),
       });
-      setMovieTitle(""); await refresh();
+      setMovieTitle("");
+      setMovieEditorOpen(false);
+      await refresh();
+      setNotice(`${addedTitle} was added to the film library.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -133,10 +139,11 @@ export default function AdminPage() {
     setShowtimeEditorOpen(true);
   }
 
-  function createShowtimeAt(auditorium: string, date: Date) {
+  function createShowtimeAt(auditorium: string, date: Date, selectedMovieId?: string) {
     const local = new Date(date);
     local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
     setEditingShowtimeId(null);
+    if (selectedMovieId) setMovieId(selectedMovieId);
     setAuditoriumId(auditorium);
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(false);
@@ -157,15 +164,13 @@ export default function AdminPage() {
         }),
       });
       await refresh();
+      setNotice(`${showtime.movie.title} moved to ${nextStartsAt.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.`);
     } catch (reason) {
       showError(reason);
     }
   }
 
-  function openMovieSetup() {
-    setSetupOpen(true);
-    window.setTimeout(() => document.getElementById("movie-setup")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
-  }
+  function openMovieEditor() { setMovieEditorOpen(true); }
 
   if (!employee) {
     return <main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
@@ -180,6 +185,7 @@ export default function AdminPage() {
   return <main className="admin-shell">
     <header><div><p className="kicker">ATTEND · CINEMA CONFIG</p><h1>{data?.location.name ?? "Loading…"}</h1></div><span>{employee.name}</span></header>
     {error && <div className="error-banner">{error}</div>}
+    {notice && <button type="button" className="status-toast" onClick={() => setNotice(null)}>{notice}<span>×</span></button>}
     <section className="stats">
       <div><strong>{data?.location.auditoriums.length ?? 0}</strong><span>Auditoriums</span></div>
       <div><strong>{data?.location.organization.movies.length ?? 0}</strong><span>Movies</span></div>
@@ -189,14 +195,28 @@ export default function AdminPage() {
 
     {data && <SchedulingCalendar
       auditoriums={data.location.auditoriums}
+      movies={data.location.organization.movies}
       showtimes={data.showtimes}
       preShowBufferMinutes={data.location.preShowBufferMinutes}
       cleaningBufferMinutes={data.location.cleaningBufferMinutes}
       onCreate={createShowtimeAt}
       onEdit={editShowtime}
       onMove={moveShowtime}
-      onAddMovie={openMovieSetup}
+      onAddMovie={openMovieEditor}
     />}
+
+    {movieEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setMovieEditorOpen(false)}>
+      <form className="showtime-drawer" onSubmit={createMovie} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="drawer-heading">
+          <div><p className="kicker">FILM LIBRARY</p><h2>Add a film</h2></div>
+          <button type="button" className="drawer-close" onClick={() => setMovieEditorOpen(false)} aria-label="Close film editor">×</button>
+        </div>
+        <label>Title<input required autoFocus value={movieTitle} onChange={(event) => setMovieTitle(event.target.value)} /></label>
+        <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(event) => setRuntime(Number(event.target.value))} /></label>
+        <button className="primary">Add to film library</button>
+        <button type="button" className="secondary" onClick={() => setMovieEditorOpen(false)}>Cancel</button>
+      </form>
+    </div>}
 
     {showtimeEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setShowtimeEditorOpen(false)}>
       <form className="showtime-drawer" id="showtime-editor" onSubmit={createShowtime} onMouseDown={(event) => event.stopPropagation()}>

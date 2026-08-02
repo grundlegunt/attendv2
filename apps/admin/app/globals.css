@@ -26,6 +26,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .schedule-list strong, .schedule-list span { display: block; } .schedule-list span { color: var(--color-text-secondary); font-size: .76rem; }
 .sale-open, .sale-draft { padding: 8px; font-size: .7rem; } .sale-open { color: var(--color-success); } .sale-draft { color: var(--color-accent); }
 .error-banner { margin: 16px 0; padding: 12px; border: 2px solid var(--color-danger); color: #ffb3ad; }
+.status-toast { position: fixed; top: 24px; right: 24px; z-index: 150; display: flex; align-items: center; gap: 18px; max-width: min(420px, calc(100vw - 32px)); padding: 14px 18px; border: 1px solid #55a77c; border-radius: 4px; background: #173526; color: white; box-shadow: 0 12px 36px rgba(0,0,0,.42); font-weight: 800; cursor: pointer; }
+.status-toast span { color: #a9cdb8; font-size: 1.2rem; }
 .schedule-workspace { margin: 24px 0; border: 1px solid #34342f; background: #121311; overflow: hidden; }
 .schedule-toolbar { display: grid; grid-template-columns: minmax(260px, 1fr) auto auto; align-items: flex-end; gap: 24px; padding: 24px; border-bottom: 1px solid #34342f; }
 .schedule-toolbar h2 { margin-bottom: 6px; font-size: clamp(1.7rem, 3vw, 2.5rem); }
@@ -45,6 +47,15 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .legend-swatch.draft { background: #775d26; }
 .legend-swatch.past { background: #474944; }
 .schedule-legend span:last-child { margin-left: auto; }
+.film-library { display: grid; gap: 12px; padding: 16px 24px 18px; border-bottom: 1px solid #34342f; background: #171815; }
+.film-library > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
+.film-library > div:first-child span { color: #aaa99f; font-size: .78rem; }
+.film-library-list { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.film-card { flex: 0 0 auto; display: grid; gap: 3px; min-width: 150px; padding: 11px 13px; border: 1px solid #55564f; border-radius: 3px; background: #242520; color: white; cursor: grab; user-select: none; }
+.film-card:hover { border-color: #f0bd2d; background: #2c2d27; }
+.film-card:active { cursor: grabbing; opacity: .72; }
+.film-card strong { font-family: Georgia, serif; }
+.film-card span { color: #aaa99f; font-size: .7rem; }
 .calendar-scroll { width: 100%; overflow-x: auto; }
 .cinema-calendar { --room-column: 180px; display: grid; grid-template-columns: var(--room-column) var(--timeline-width); min-width: calc(var(--room-column) + var(--timeline-width)); }
 .calendar-corner, .time-ruler { position: sticky; top: 0; z-index: 8; height: 54px; border-bottom: 1px solid #3d3d37; background: #171815; }
