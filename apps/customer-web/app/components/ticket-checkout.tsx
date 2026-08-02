@@ -23,8 +23,13 @@ interface StripeElement {
   destroy(): void;
 }
 
+interface StripeExpressCheckoutElement extends StripeElement {
+  on(event: "confirm", handler: () => void): void;
+}
+
 interface StripeElements {
   create(type: "payment", options?: Record<string, unknown>): StripeElement;
+  create(type: "expressCheckout", options?: Record<string, unknown>): StripeExpressCheckoutElement;
 }
 
 interface StripeClient {
@@ -103,6 +108,7 @@ export function TicketCheckout({
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const paymentElementRef = useRef<StripeElement | null>(null);
+  const expressCheckoutElementRef = useRef<StripeExpressCheckoutElement | null>(null);
 
   useEffect(() => {
     apiFetch<CheckoutConfig>(
@@ -118,10 +124,43 @@ export function TicketCheckout({
       );
   }, [showtimeId]);
 
-  useEffect(
-    () => () => paymentElementRef.current?.destroy(),
-    [],
-  );
+  useEffect(() => () => {
+    expressCheckoutElementRef.current?.destroy();
+    paymentElementRef.current?.destroy();
+  }, []);
+
+  async function confirmAndFinalize(
+    stripe: StripeClient,
+    elements: StripeElements,
+    orderId: string,
+  ) {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+        confirmParams: { receipt_email: email },
+      });
+      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
+      setConfirmation(
+        await apiFetch<TicketConfirmationResponse>(
+          `/ticketing/orders/${orderId}/finalize`,
+          { method: "POST", body: "{}" },
+        ),
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : requestError instanceof Error
+            ? requestError.message
+            : "Payment could not be completed.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
@@ -171,10 +210,21 @@ export function TicketCheckout({
       const paymentElement = elements.create("payment", {
         layout: "tabs",
       });
+      const expressCheckoutElement = elements.create("expressCheckout", {
+        paymentMethods: { applePay: "always" },
+        buttonType: { applePay: "check-out" },
+      });
+      expressCheckoutElement.on("confirm", () => {
+        void confirmAndFinalize(stripe, elements, created.orderId);
+      });
       stripeRef.current = stripe;
       elementsRef.current = elements;
       paymentElementRef.current = paymentElement;
-      window.setTimeout(() => paymentElement.mount("#attend-payment-element"), 0);
+      expressCheckoutElementRef.current = expressCheckoutElement;
+      window.setTimeout(() => {
+        expressCheckoutElement.mount("#attend-express-checkout-element");
+        paymentElement.mount("#attend-payment-element");
+      }, 0);
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -191,32 +241,7 @@ export function TicketCheckout({
   async function pay(event: FormEvent) {
     event.preventDefault();
     if (!checkout || !stripeRef.current || !elementsRef.current) return;
-    setPending(true);
-    setError(null);
-    try {
-      const result = await stripeRef.current.confirmPayment({
-        elements: elementsRef.current,
-        redirect: "if_required",
-        confirmParams: { receipt_email: email },
-      });
-      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
-      setConfirmation(
-        await apiFetch<TicketConfirmationResponse>(
-          `/ticketing/orders/${checkout.orderId}/finalize`,
-          { method: "POST", body: "{}" },
-        ),
-      );
-    } catch (requestError) {
-      setError(
-        requestError instanceof ApiRequestError
-          ? requestError.body.message
-          : requestError instanceof Error
-            ? requestError.message
-            : "Payment could not be completed.",
-      );
-    } finally {
-      setPending(false);
-    }
+    await confirmAndFinalize(stripeRef.current, elementsRef.current, checkout.orderId);
   }
 
   if (confirmation) {
@@ -337,7 +362,8 @@ export function TicketCheckout({
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
           <div className="checkout-panel">
-            <h3>Card or Apple Pay</h3>
+            <h3>Payment</h3>
+            <div id="attend-express-checkout-element" />
             <div id="attend-payment-element" />
           </div>
           <button className="primary" disabled={pending}>

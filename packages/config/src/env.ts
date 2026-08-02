@@ -34,6 +34,11 @@ const envSchema = z.object({
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  // Comma-separated hostnames where Stripe Elements is rendered. Stripe
+  // Connect direct charges require each hostname to be registered against
+  // every connected account (Dashboard registration only covers the
+  // platform account).
+  PAYMENT_METHOD_DOMAINS: z.string().default(""),
 
   // How often the durable refund-reconciliation sweep
   // (TicketingService.reconcilePendingRefunds) runs, in milliseconds. See
