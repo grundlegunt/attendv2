@@ -7,6 +7,7 @@ import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { MenuManager } from "./menu-manager";
 import { ManagementDashboard } from "./management-dashboard";
 import { ManagementControls } from "./management-controls";
+import { SchedulingCalendar, type CalendarShowtime } from "./scheduling-calendar";
 
 interface Auditorium {
   id: string; name: string; capacity: number;
@@ -58,6 +59,7 @@ export default function AdminPage() {
   const [startsAt, setStartsAt] = useState("");
   const [onSale, setOnSale] = useState(true);
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
+  const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
 
   const previewSeats = useMemo(() => buildSeats(rows, seatsPerRow), [rows, seatsPerRow]);
 
@@ -114,11 +116,12 @@ export default function AdminPage() {
         body: JSON.stringify({ movieId, auditoriumId, startsAt: new Date(startsAt).toISOString(), onSale }),
       });
       setEditingShowtimeId(null);
+      setShowtimeEditorOpen(false);
       await refresh();
     } catch (reason) { showError(reason); }
   }
 
-  function editShowtime(showtime: Showtime) {
+  function editShowtime(showtime: CalendarShowtime) {
     const local = new Date(showtime.startsAt);
     local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
     setEditingShowtimeId(showtime.id);
@@ -126,7 +129,17 @@ export default function AdminPage() {
     setAuditoriumId(showtime.auditorium.id);
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(showtime.onSale);
-    document.getElementById("showtime-editor")?.scrollIntoView({ behavior: "smooth" });
+    setShowtimeEditorOpen(true);
+  }
+
+  function createShowtimeAt(auditorium: string, date: Date) {
+    const local = new Date(date);
+    local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
+    setEditingShowtimeId(null);
+    setAuditoriumId(auditorium);
+    setStartsAt(local.toISOString().slice(0, 16));
+    setOnSale(false);
+    setShowtimeEditorOpen(true);
   }
 
   if (!employee) {
@@ -149,7 +162,34 @@ export default function AdminPage() {
       <div><strong>30 + 15</strong><span>Pre-show + cleaning</span></div>
     </section>
 
-    <section className="admin-grid">
+    {data && <SchedulingCalendar
+      auditoriums={data.location.auditoriums}
+      showtimes={data.showtimes}
+      preShowBufferMinutes={data.location.preShowBufferMinutes}
+      cleaningBufferMinutes={data.location.cleaningBufferMinutes}
+      onCreate={createShowtimeAt}
+      onEdit={editShowtime}
+    />}
+
+    {showtimeEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setShowtimeEditorOpen(false)}>
+      <form className="showtime-drawer" id="showtime-editor" onSubmit={createShowtime} onMouseDown={(event) => event.stopPropagation()}>
+        <div className="drawer-heading">
+          <div><p className="kicker">SHOWTIME</p><h2>{editingShowtimeId ? "Edit showing" : "Add showing"}</h2></div>
+          <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
+        </div>
+        <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data?.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
+        <label>Auditorium<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data?.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
+        <label>Advertised start<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
+        <div className="calculation-note">Attend automatically adds {data?.location.preShowBufferMinutes ?? 30} minutes of pre-show, the film runtime, and {data?.location.cleaningBufferMinutes ?? 15} minutes of cleaning.</div>
+        <label className="checkbox"><input type="checkbox" checked={onSale} onChange={(e) => setOnSale(e.target.checked)} /> Open for sale</label>
+        <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
+        <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Cancel</button>
+      </form>
+    </div>}
+
+    <details className="setup-disclosure">
+      <summary><span><b>Cinema setup</b><small>Add movies or configure auditoriums</small></span><span>Open setup</span></summary>
+      <section className="admin-grid setup-grid">
       <form className="panel" onSubmit={createAuditorium}>
         <p className="kicker">01 · AUDITORIUM</p><h2>Structured seat layout</h2>
         <label>Name<input required value={roomName} onChange={(e) => setRoomName(e.target.value)} /></label>
@@ -168,30 +208,9 @@ export default function AdminPage() {
           <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(Number(e.target.value))} /></label>
           <button className="primary">Add movie</button>
         </form>
-        <form className="panel" id="showtime-editor" onSubmit={createShowtime}>
-          <p className="kicker">03 · SHOWTIME</p><h2>Schedule a showing</h2>
-          <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data?.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
-          <label>Auditorium<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data?.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
-          <label>Advertised start<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
-          <label className="checkbox"><input type="checkbox" checked={onSale} onChange={(e) => setOnSale(e.target.checked)} /> Open for sale</label>
-          <button className="primary">{editingShowtimeId ? "Save showtime changes" : "Schedule showtime"}</button>
-          {editingShowtimeId && <button type="button" className="secondary" onClick={() => setEditingShowtimeId(null)}>Cancel edit</button>}
-        </form>
       </div>
-    </section>
-
-    <section className="panel schedule">
-      <p className="kicker">PROGRAM</p><h2>Scheduled showtimes</h2>
-      <p>Each room is occupied from the advertised start through 30 minutes of pre-show, the film runtime, and 15 minutes of cleaning.</p>
-      <div className="schedule-list">{data?.showtimes.map((showtime) => <article key={showtime.id}>
-        <div><strong>{showtime.movie.title}</strong><span>{showtime.auditorium.name}</span></div>
-        <div><strong>{new Date(showtime.startsAt).toLocaleString()}</strong><span>Advertised start</span></div>
-        <div><strong>{new Date(showtime.featureStartsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><span>Feature</span></div>
-        <div><strong>{new Date(showtime.roomReadyAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong><span>Room ready</span></div>
-        <b className={showtime.onSale ? "sale-open" : "sale-draft"}>{showtime.onSale ? "ON SALE" : "DRAFT"}</b>
-        <button type="button" className="secondary" onClick={() => editShowtime(showtime)}>Edit</button>
-      </article>)}</div>
-    </section>
+      </section>
+    </details>
     {token && <MenuManager accessToken={token} />}
     {token && <ManagementDashboard accessToken={token} permissions={employee.permissions} />}
     {token && <ManagementControls accessToken={token} permissions={employee.permissions} />}
