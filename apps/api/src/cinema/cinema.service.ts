@@ -55,7 +55,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     if (!location) throw AppError.notFound("Location not found.");
     const showtimes = await prisma.showtime.findMany({
       where: { auditorium: { locationId }, startsAt: { gte: new Date(Date.now() - 86400000) } },
-      include: { movie: true, auditorium: true },
+      include: { movie: true, auditorium: true, priceTier: true },
       orderBy: { startsAt: "asc" },
     });
     return { location, showtimes };

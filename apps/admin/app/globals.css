@@ -47,23 +47,39 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .legend-swatch.draft { background: #775d26; }
 .legend-swatch.past { background: #474944; }
 .schedule-legend span:last-child { margin-left: auto; }
-.film-library { display: grid; gap: 12px; padding: 16px 24px 18px; border-bottom: 1px solid #34342f; background: #171815; }
-.film-library > div:first-child { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 20px; }
-.film-library > div:first-child span { color: #aaa99f; font-size: .78rem; }
-.film-library-list { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
-.film-card { position: relative; flex: 0 0 auto; display: grid; gap: 3px; min-width: 150px; padding: 11px 42px 11px 13px; border: 1px solid #55564f; border-radius: 3px; background: #242520; color: white; cursor: grab; user-select: none; }
+.film-library { display: grid; grid-template-columns: minmax(220px, .55fr) minmax(500px, 1.45fr); gap: 36px; padding: 28px 32px; border-bottom: 1px solid #34342f; background: #171815; }
+.film-library > div:first-child { display: grid; align-content: start; gap: 8px; }
+.film-library > div:first-child b { font-family: Georgia, serif; font-size: 2rem; }
+.film-library > div:first-child span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
+.film-library-list { display: grid; border-top: 1px solid #55564f; }
+.film-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 100px 110px; align-items: center; gap: 18px; min-width: 0; min-height: 62px; padding: 11px 54px 11px 0; border: 0; border-bottom: 1px solid #55564f; border-radius: 0; background: transparent; color: white; cursor: grab; user-select: none; }
 .film-card:hover { border-color: #f0bd2d; background: #2c2d27; }
 .film-card:active { cursor: grabbing; opacity: .72; }
-.film-card strong { font-family: Georgia, serif; }
+.film-card strong { overflow: hidden; font-family: Georgia, serif; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .film-card span { color: #aaa99f; font-size: .7rem; }
+.film-card::after { content: "Drag to schedule"; color: #aaa99f; font-size: .68rem; text-align: right; }
 .film-archive { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border: 1px solid #55564f; border-radius: 50%; background: #1d1e1a; color: #bdbdb5; font-size: 1rem; line-height: 1; cursor: pointer; }
 .film-archive:hover { border-color: #f05a45; color: #f05a45; }
-.schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr) 420px; align-items: stretch; border: 1px solid #3a3b35; background: #171815; }
+.schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr) 440px; align-items: stretch; border: 1px solid #3a3b35; background: #171815; }
 .schedule-with-inspector .schedule-workspace { min-width: 0; border: 0; }
 .schedule-inspector { min-height: 680px; padding: 28px; border-left: 1px solid #484943; background: #170d14; }
 .schedule-inspector form, .inspector-empty { position: sticky; top: 18px; }
+.schedule-inspector form { max-height: calc(100vh - 36px); overflow-y: auto; padding-right: 6px; }
 .inspector-empty { color: #aaa99f; }
 .inspector-empty h2 { color: white; }
+.inspector-room { margin: 8px 0 0; color: #aaa0a5; font-weight: 700; }
+.timing-summary { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 26px; border-top: 1px solid #654d5c; border-left: 1px solid #654d5c; }
+.timing-summary div { display: grid; gap: 7px; padding: 16px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
+.timing-summary span { color: #ad9fa7; font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; }
+.timing-summary strong { font-size: 1rem; }
+.time-nudges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: -3px 0 18px; }
+.time-nudges button { min-height: 48px; border: 1px solid #806d78; background: transparent; color: white; font-weight: 900; cursor: pointer; }
+.time-nudges button:hover { border-color: #f0bd2d; color: #f0bd2d; }
+.timing-rules { display: grid; gap: 10px; margin: 22px 0; padding: 20px 0 0; border-top: 1px solid #654d5c; color: #c7bbc2; list-style: none; }
+.timing-rules li { font-size: .84rem; }
+.sale-action { width: 100%; min-height: 54px; margin-top: 10px; border: 0; color: white; font-weight: 900; cursor: pointer; }
+.close-sale { background: #f0553e; }
+.open-sale { background: #2f7653; }
 .calendar-scroll { width: 100%; overflow-x: auto; }
 .cinema-calendar { --room-column: 180px; display: grid; grid-template-columns: var(--room-column) var(--timeline-width); min-width: calc(var(--room-column) + var(--timeline-width)); }
 .calendar-corner, .time-ruler { position: sticky; top: 0; z-index: 8; height: 54px; border-bottom: 1px solid #3d3d37; background: #171815; }
@@ -120,6 +136,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .setup-grid { padding: 0 20px 20px; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 1100px) { .schedule-with-inspector { grid-template-columns: 1fr; } .schedule-inspector { min-height: 0; border-top: 1px solid #484943; border-left: 0; } }
+@media (min-width: 1500px) { .admin-shell { padding-right: 24px; padding-left: 24px; } .schedule-with-inspector { grid-template-columns: minmax(0, 1fr) 460px; } }
 @media (max-width: 760px) {
   .admin-shell { padding: 16px; }
   .schedule-toolbar { display: flex; align-items: stretch; flex-direction: column; }
@@ -130,6 +147,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .schedule-legend span:last-child { width: 100%; margin-left: 0; }
   .cinema-calendar { --room-column: 132px; }
   .room-label strong { font-size: 1.05rem; }
+  .film-library { grid-template-columns: 1fr; gap: 18px; padding: 22px 18px; }
+  .film-card { grid-template-columns: minmax(0, 1fr) 70px; }
+  .film-card::after { display: none; }
 }
 .management-stack { display: grid; gap: 1.5rem; margin-top: 1.5rem; }
 .management-heading { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; }

@@ -23,6 +23,7 @@ export interface CalendarShowtime {
   onSale: boolean;
   movie: ScheduleMovie;
   auditorium: ScheduleAuditorium;
+  priceTier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
 }
 
 interface SchedulingCalendarProps {
