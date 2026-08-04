@@ -77,6 +77,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .timing-summary div { display: grid; gap: 7px; padding: 16px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
 .timing-summary span { color: #ad9fa7; font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; }
 .timing-summary strong { font-size: 1rem; }
+.selected-film-details { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 14px; align-items: center; margin: -8px 0 24px; padding: 12px; border: 1px solid #654d5c; background: #21131c; }
+.selected-film-details img, .poster-placeholder { width: 72px; height: 102px; border: 1px solid #654d5c; background: #120b10; object-fit: cover; }
+.poster-placeholder { display: grid; place-items: center; padding: 8px; color: #968991; font-size: .66rem; text-align: center; }
+.selected-film-details strong, .selected-film-details span { display: block; }
+.selected-film-details span { margin-top: 5px; color: #ad9fa7; font-size: .75rem; }
+.film-details-button { margin-top: 12px; padding: 0; border: 0; background: transparent; color: #f0bd2d; font-size: .72rem; font-weight: 900; text-align: left; cursor: pointer; }
+.film-details-button:hover { text-decoration: underline; }
 .time-nudges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: -3px 0 18px; }
 .time-nudges button { min-height: 48px; border: 1px solid #806d78; background: transparent; color: white; font-weight: 900; cursor: pointer; }
 .time-nudges button:hover { border-color: #f0bd2d; color: #f0bd2d; }

@@ -25,7 +25,7 @@ interface PriceTier { id: string; name: string; ticketPriceMinor: number; feeMin
 interface Showtime {
   id: string; startsAt: string; featureStartsAt: string; endsAt: string; roomReadyAt: string; onSale: boolean;
   filmSeries: string | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
-  movie: Movie; auditorium: Auditorium; priceTier: PriceTier;
+  movie: Movie; auditorium: Auditorium; priceTier?: PriceTier | null;
 }
 interface Bootstrap {
   location: {
@@ -182,7 +182,7 @@ export default function AdminPage() {
     setAuditoriumId(showtime.auditorium.id);
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(showtime.onSale);
-    setPriceTierId(showtime.priceTier.id);
+    setPriceTierId(showtime.priceTier?.id ?? data?.location.organization.priceTiers[0]?.id ?? "");
     setFilmSeries(showtime.filmSeries ?? "");
     setPresentation(showtime.presentation ?? "STANDARD");
     setShowtimeEditorOpen(true);
@@ -318,6 +318,14 @@ export default function AdminPage() {
           <div><span>Feature starts</span><strong>{displayTime(selectedTiming.feature)}</strong></div>
           <div><span>Film ends</span><strong>{displayTime(selectedTiming.ends)}</strong></div>
           <div><span>Room ready</span><strong>{displayTime(selectedTiming.ready)}</strong></div>
+        </div>}
+        {selectedMovie && <div className="selected-film-details">
+          {selectedMovie.posterUrl ? <img src={selectedMovie.posterUrl} alt={`${selectedMovie.title} poster`} /> : <div className="poster-placeholder">No poster</div>}
+          <div>
+            <strong>{selectedMovie.title}</strong>
+            <span>{selectedMovie.rating || "Not rated"} · {selectedMovie.runtimeMinutes} min</span>
+            <button type="button" className="film-details-button" onClick={() => openMovieEditor(selectedMovie)}>Edit film details &amp; poster URL</button>
+          </div>
         </div>}
         <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
         <label>Move to room<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>

@@ -30,7 +30,7 @@ export interface CalendarShowtime {
   presentation?: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   movie: ScheduleMovie;
   auditorium: ScheduleAuditorium;
-  priceTier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
+  priceTier?: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string } | null;
 }
 
 interface SchedulingCalendarProps {
@@ -252,6 +252,9 @@ export function SchedulingCalendar({
                   className={`showtime-block ${status}`}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
+                  onPointerDown={(event) => {
+                    if (event.button === 0) onEdit(showtime);
+                  }}
                   onClick={(event) => { event.stopPropagation(); onEdit(showtime); }}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "move";
