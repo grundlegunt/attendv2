@@ -48,6 +48,15 @@ interface SchedulingCalendarProps {
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
 }
 
+function presentationLabel(presentation: NonNullable<CalendarShowtime["presentation"]>) {
+  return {
+    STANDARD: "Standard",
+    OPEN_CAPTIONS: "Open captions",
+    Q_AND_A: "Q&A",
+    SPECIAL_GUEST: "Special guest",
+  }[presentation];
+}
+
 const START_HOUR = 10;
 const TOTAL_HOURS = 18;
 // Keep the full cinema day visible on a typical manager workstation. Blocks
@@ -286,7 +295,7 @@ export function SchedulingCalendar({
                 >
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
-                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${showtime.presentation.replaceAll("_", " ").replace("AND", "&")}` : ""}</small>
+                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                 </button>;
               })}
             </div>
@@ -403,7 +412,7 @@ export function SchedulingCalendar({
               <div>
                 <span>Presentations</span>
                 <div className="film-badges">{presentations.length
-                  ? presentations.map((presentation) => <b key={presentation}>{presentation.replaceAll("_", " ").replace("AND", "&")}</b>)
+                  ? presentations.map((presentation) => <b key={presentation}>{presentationLabel(presentation)}</b>)
                   : <em>No scheduled appearances</em>}</div>
               </div>
             </div>
@@ -414,7 +423,7 @@ export function SchedulingCalendar({
                 <button type="button" onClick={() => onEdit(showtime)}>
                   <span>{new Date(showtime.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatTime(showtime.startsAt)}</span>
                   <strong>{showtime.auditorium.name}</strong>
-                  <small>{showtime.filmSeries || "Regular engagement"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${showtime.presentation.replaceAll("_", " ").replace("AND", "&")}` : ""}</small>
+                  <small>{showtime.filmSeries || "Regular engagement"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                 </button>
               </li>)}</ul> : <p>No upcoming appearances are scheduled.</p>}
             </div>
