@@ -17,7 +17,17 @@ export class ManagementRefundService {
     const [ticketOrders, restaurantTabs] = await Promise.all([
       prisma.ticketOrder.findMany({
         where: { locationId, status: { in: ["PAID", "EXCHANGED"] }, ...(normalized ? { OR: [{ orderNumber: { contains: normalized, mode: "insensitive" } }, { guestEmail: { contains: normalized, mode: "insensitive" } }, { guestName: { contains: normalized, mode: "insensitive" } }] } : {}) },
-        include: { tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true } } } } } }, payment: true, cashTransactions: true },
+        include: {
+          tickets: {
+            include: {
+              showtimeSeat: {
+                include: { seat: true, showtime: { include: { movie: true } } },
+              },
+            },
+          },
+          payment: { include: { refunds: { orderBy: { createdAt: "desc" } } } },
+          cashTransactions: true,
+        },
         orderBy: { createdAt: "desc" }, take: 50,
       }),
       prisma.restaurantTab.findMany({

@@ -35,7 +35,9 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("ATTEND · CINEMA CONFIG")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Reports, controls and audit" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Reports & Finance" }).click();
+  await expect(page.getByRole("heading", { name: "Reports & finance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Revenue overview" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Users & Permissions" }).click();
   await expect(page.getByRole("heading", { name: "Role access" })).toBeVisible();
 });
