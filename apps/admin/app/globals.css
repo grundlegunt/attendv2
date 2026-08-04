@@ -23,7 +23,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .schedule { margin-top: 20px; }
 .schedule > p { color: var(--color-text-secondary); }
 .schedule-list { display: grid; gap: 10px; }
-.schedule-list article { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr) auto auto; gap: 16px; align-items: center; padding: 16px; border: 1px solid var(--color-border); }
+.schedule-list article { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(140px, 1fr) auto auto auto; gap: 16px; align-items: center; padding: 16px; border: 1px solid var(--color-border); }
 .schedule-list strong, .schedule-list span { display: block; } .schedule-list span { color: var(--color-text-secondary); font-size: .76rem; }
 .sale-open, .sale-draft { padding: 8px; font-size: .7rem; } .sale-open { color: var(--color-success); } .sale-draft { color: var(--color-accent); }
 .error-banner { margin: 16px 0; padding: 12px; border: 2px solid var(--color-danger); color: #ffb3ad; }
@@ -251,6 +251,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .role-assignment-list > article, .modifier-summary > article { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); }
 .role-assignment-list .permission-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; margin: 0; }
 .modifier-summary span, .modifier-summary small, .muted { color: var(--muted); }
+.menu-item-editor { margin-top: 20px; padding: 20px; border: 1px solid var(--accent); background: #11120f; }
+.menu-item-editor h3 { margin: 4px 0 0; font-size: 1.45rem; }
+.menu-item-editor .management-heading { margin-bottom: 18px; }
+.menu-item-editor .management-heading .secondary { width: auto; margin: 0; }
 .status-row { display: flex !important; flex-wrap: wrap; gap: 6px !important; margin-top: 7px; }
 .status-chip, .status-alert { width: max-content; padding: 4px 7px; border: 1px solid #536158; color: #a9d7b7; font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; }
 .status-alert { border-color: #a64e49; color: #ffaaa3; }
