@@ -323,6 +323,8 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("moves a showtime while preserving computed turnover timing", async () => {
+    const { prisma } = await import("@cinema/database");
+    const before = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
@@ -330,6 +332,18 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.status).toBe(200);
     expect(res.body.featureStartsAt).toBe("2030-01-02T18:30:00.000Z");
     expect(res.body.roomReadyAt).toBe("2030-01-02T20:45:00.000Z");
+    expect(res.body.priceTier.id).toBe(before.priceTierId);
+    const after = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
+    expect(after.priceTierId).toBe(before.priceTierId);
+  });
+
+  it("includes the required price tier relation in the admin schedule", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(res.status).toBe(200);
+    const showtime = res.body.showtimes.find((item: { id: string }) => item.id === secondShowtimeId);
+    expect(showtime.priceTier.id).toBeTruthy();
   });
 
   it("lists real on-sale showtimes publicly", async () => {

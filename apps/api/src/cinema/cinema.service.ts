@@ -406,13 +406,15 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60000);
         const cleaningMinutes = Math.max(this.minimumCinemaCleaningMinutes, auditorium.location.cleaningBufferMinutes);
         const roomReadyAt = new Date(endsAt.getTime() + cleaningMinutes * 60000);
-        const priceTier = await this.resolvePriceTier(
-          tx,
-          auditorium.location.organizationId,
-          auditorium.location.timezone,
-          startsAt,
-          input.priceTierId,
-        );
+        const priceTier = input.priceTierId === undefined
+          ? { id: existing.priceTierId }
+          : await this.resolvePriceTier(
+              tx,
+              auditorium.location.organizationId,
+              auditorium.location.timezone,
+              startsAt,
+              input.priceTierId,
+            );
         const conflict = await tx.showtime.findFirst({
           where: {
             id: { not: id },
@@ -435,6 +437,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           data: {
             movieId,
             auditoriumId,
+            priceTierId: priceTier.id,
             startsAt,
             featureStartsAt,
             endsAt,
@@ -443,7 +446,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             filmSeries: input.filmSeries === undefined ? existing.filmSeries : input.filmSeries,
             presentation: input.presentation ?? existing.presentation,
           },
-          include: { movie: true, auditorium: true },
+          include: { movie: true, auditorium: true, priceTier: true },
         });
         if (auditoriumId !== existing.auditoriumId) {
           const activeHolds = await tx.seatHold.count({
@@ -476,11 +479,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             beforeState: {
               movieId: existing.movieId,
               auditoriumId: existing.auditoriumId,
+              priceTierId: existing.priceTierId,
               startsAt: existing.startsAt.toISOString(),
             },
             afterState: {
               movieId,
               auditoriumId,
+              priceTierId: priceTier.id,
               startsAt: startsAt.toISOString(),
               roomReadyAt: roomReadyAt.toISOString(),
               filmSeries: input.filmSeries === undefined ? existing.filmSeries : input.filmSeries,

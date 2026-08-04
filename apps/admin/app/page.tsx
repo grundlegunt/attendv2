@@ -26,7 +26,7 @@ interface PriceTier { id: string; name: string; ticketPriceMinor: number; feeMin
 interface Showtime {
   id: string; startsAt: string; featureStartsAt: string; endsAt: string; roomReadyAt: string; onSale: boolean;
   filmSeries: string | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
-  movie: Movie; auditorium: Auditorium; priceTier?: PriceTier | null;
+  movie: Movie; auditorium: Auditorium; priceTier: PriceTier;
 }
 interface Bootstrap {
   location: {
@@ -151,7 +151,7 @@ export default function AdminPage() {
     setAuditoriumId(showtime.auditorium.id);
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(showtime.onSale);
-    setPriceTierId(showtime.priceTier?.id ?? data?.location.organization.priceTiers[0]?.id ?? "");
+    setPriceTierId(showtime.priceTier.id);
     setFilmSeries(showtime.filmSeries ?? "");
     setPresentation(showtime.presentation ?? "STANDARD");
     setShowtimeEditorOpen(true);

@@ -30,7 +30,7 @@ export interface CalendarShowtime {
   presentation?: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   movie: ScheduleMovie;
   auditorium: ScheduleAuditorium;
-  priceTier?: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string } | null;
+  priceTier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
 }
 
 interface SchedulingCalendarProps {
