@@ -172,7 +172,20 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .setup-disclosure > summary span:first-child { display: grid; gap: 4px; }
 .setup-disclosure > summary small, .setup-disclosure > summary span:last-child { color: var(--color-text-secondary); }
 .setup-grid { padding: 0 20px 20px; }
+.cinema-setup-workspace { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 0; margin: 0 20px 20px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.setup-location-rail { padding: 24px 18px; border-right: 1px solid var(--color-border); background: #171815; }
+.setup-rail-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.setup-rail-heading .kicker { margin: 0; }
+.setup-rail-heading a, .setup-rail-heading button { border: 0; background: transparent; color: var(--color-accent); font-weight: 900; text-decoration: none; cursor: pointer; }
+.setup-location-card, .auditorium-options button { display: grid; gap: 6px; width: 100%; padding: 18px; border: 1px solid #45463f; background: #20211e; color: white; text-align: left; cursor: pointer; }
+.setup-location-card.active, .auditorium-options button.active { border-color: var(--color-accent); background: #281824; }
+.setup-location-card strong, .auditorium-options strong { font-family: Georgia, serif; font-size: 1.2rem; }
+.setup-location-card span, .auditorium-options span, .setup-scope-note { color: var(--color-text-secondary); font-size: .76rem; line-height: 1.45; }
+.setup-scope-note { margin-top: 20px; }
 .auditorium-builder { min-width: 0; }
+.cinema-setup-workspace .auditorium-builder { border: 0; }
+.auditorium-picker { margin: -24px -24px 28px; padding: 24px; border-bottom: 1px solid var(--color-border); background: #181916; }
+.auditorium-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .builder-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; }
 .builder-heading label { min-width: 260px; }
 .builder-mode { display: grid; grid-template-columns: 1fr 1fr; margin: 10px 0 24px; border: 1px solid #4a4b45; }
@@ -238,6 +251,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .film-detail-poster { min-height: 0; aspect-ratio: 2 / 3; max-width: 220px; }
   .film-detail-heading { flex-direction: column; }
   .film-programming-summary, .film-appearances ul { grid-template-columns: 1fr; }
+  .cinema-setup-workspace { grid-template-columns: 1fr; margin: 0 0 20px; }
+  .setup-location-rail { border-right: 0; border-bottom: 1px solid var(--color-border); }
   .builder-heading { align-items: stretch; flex-direction: column; }
   .builder-heading label { min-width: 0; }
   .advanced-toolbar { grid-template-columns: 1fr 1fr; }

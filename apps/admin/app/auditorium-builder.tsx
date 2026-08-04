@@ -113,8 +113,9 @@ export function AuditoriumBuilder({ accessToken, auditoriums, onSaved, onError }
   function selectAuditorium(id: string) {
     setEditingId(id);
     const room = auditoriums.find((candidate) => candidate.id === id);
-    if (!room?.seatMap) return;
+    if (!room) return;
     setName(room.name);
+    if (!room.seatMap) return;
     const nextLayout = room.seatMap.layoutJson ?? baseLayout("ADVANCED");
     setLayout(nextLayout);
     setMode(nextLayout.mode);
@@ -129,6 +130,20 @@ export function AuditoriumBuilder({ accessToken, auditoriums, onSaved, onError }
       setSeatsPerRow(Math.max(2, ...room.seatMap.seats.map((seat) => seat.x + 1)));
     }
     setLevelId(nextLayout.levels[0]?.id ?? "main");
+  }
+
+  function startNewAuditorium() {
+    setEditingId("");
+    setName(`Theater ${auditoriums.length + 1}`);
+    setMode("BASIC");
+    setRows(8);
+    setSeatsPerRow(12);
+    setLayout(baseLayout());
+    setSeats(template("center-aisle").seats);
+    setLevelId("main");
+    setSelected([]);
+    history.current = [];
+    future.current = [];
   }
 
   function addLevel() {
@@ -277,8 +292,16 @@ export function AuditoriumBuilder({ accessToken, auditoriums, onSaved, onError }
   }
 
   return <form className="panel auditorium-builder" onSubmit={save}>
-    <div className="builder-heading"><div><p className="kicker">AUDITORIUM + SEAT MAP</p><h2>{editingId ? `Edit ${name}` : "Create an auditorium"}</h2></div>
-      <label>Existing theater<select value={editingId} onChange={(event) => selectAuditorium(event.target.value)}><option value="">New theater</option>{auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label></div>
+    <div className="auditorium-picker">
+      <div className="setup-rail-heading"><p className="kicker">AUDITORIUMS</p><button type="button" onClick={startNewAuditorium}>+ Add</button></div>
+      <div className="auditorium-options">
+        {auditoriums.map((room) => <button type="button" key={room.id} className={editingId === room.id ? "active" : ""} onClick={() => selectAuditorium(room.id)}>
+          <strong>{room.name}</strong><span>{room.capacity} seats</span>
+        </button>)}
+        {!auditoriums.length && <p className="builder-help">No auditoriums yet. Create the first one.</p>}
+      </div>
+    </div>
+    <div className="builder-heading"><div><p className="kicker">LAYOUT DESIGNER</p><h2>{editingId ? name : "Create an auditorium"}</h2><p className="builder-help">{editingId ? `${preview.length} sellable positions` : "Start with a quick grid or build a custom room."}</p></div></div>
     <div className="builder-mode" role="tablist"><button type="button" className={mode === "BASIC" ? "active" : ""} onClick={() => setMode("BASIC")}>Basic layout</button><button type="button" className={mode === "ADVANCED" ? "active" : ""} onClick={() => setMode("ADVANCED")}>Advanced layout</button></div>
     <label>Theater name<input required value={name} onChange={(event) => setName(event.target.value)} /></label>
     {mode === "BASIC" ? <>
