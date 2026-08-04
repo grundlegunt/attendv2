@@ -6,13 +6,18 @@ import {
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   updateMovieRequestSchema,
+  duplicateAuditoriumRequestSchema,
+  updateAuditoriumLayoutRequestSchema,
   updateShowtimeRequestSchema,
+  validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "@cinema/shared";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 
 type AuditoriumInput = ReturnType<typeof createAuditoriumRequestSchema.parse>;
+type AuditoriumLayoutUpdateInput = ReturnType<typeof updateAuditoriumLayoutRequestSchema.parse>;
+type AuditoriumDuplicateInput = ReturnType<typeof duplicateAuditoriumRequestSchema.parse>;
 type MovieInput = ReturnType<typeof createMovieRequestSchema.parse>;
 type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
@@ -65,7 +70,9 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
     const locationId = this.requireLocation(actor);
-    const layoutErrors = validateSeatLayout(input.seats);
+    const layoutErrors = input.layout
+      ? validateAdvancedSeatLayout(input.seats, input.layout)
+      : validateSeatLayout(input.seats);
     if (layoutErrors.length) {
       throw AppError.validationFailed("The seat layout is invalid.", { errors: layoutErrors });
     }
@@ -80,6 +87,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             seatMap: {
               create: {
                 name: input.seatMapName,
+                layoutJson: input.layout as Prisma.InputJsonValue | undefined,
+                revisions: { create: { version: 1, layoutJson: input.layout as Prisma.InputJsonValue | undefined } },
                 seats: {
                   create: input.seats.map((seat) => ({
                     ...seat,
@@ -87,6 +96,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
                     rowLabel: seat.rowLabel.toUpperCase(),
                     tableGroupId: seat.tableGroupId ?? null,
                     tablePosition: seat.tablePosition ?? null,
+                    levelKey: seat.levelKey ?? null,
+                    sectionKey: seat.sectionKey ?? null,
                   })),
                 },
               },
@@ -113,6 +124,91 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       }
       throw error;
     }
+  }
+
+  async updateAuditoriumLayout(actor: RequestActor, id: string, input: AuditoriumLayoutUpdateInput) {
+    const locationId = this.requireLocation(actor);
+    const layoutErrors = validateAdvancedSeatLayout(input.seats, input.layout);
+    if (layoutErrors.length) throw AppError.validationFailed("The seat layout is invalid.", { errors: layoutErrors });
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+        const auditorium = await tx.auditorium.findFirst({
+          where: { id, locationId, active: true },
+          include: { seatMap: true },
+        });
+        if (!auditorium?.seatMap) throw AppError.notFound("Auditorium seat map not found.");
+        const beforeVersion = auditorium.seatMap.version;
+        const nextVersion = beforeVersion + 1;
+        await tx.seat.updateMany({
+          where: { seatMapId: auditorium.seatMap.id, active: true },
+          data: { active: false },
+        });
+        await tx.seatMap.update({
+          where: { id: auditorium.seatMap.id },
+          data: {
+            name: input.seatMapName ?? auditorium.seatMap.name,
+            version: nextVersion,
+            layoutJson: input.layout as Prisma.InputJsonValue,
+            revisions: { create: { version: nextVersion, layoutJson: input.layout as Prisma.InputJsonValue } },
+            seats: { create: input.seats.map((seat) => ({
+              label: seat.label.toUpperCase(), rowLabel: seat.rowLabel.toUpperCase(), number: seat.number,
+              x: seat.x, y: seat.y, type: seat.type, layoutVersion: nextVersion,
+              tableGroupId: seat.tableGroupId ?? null, tablePosition: seat.tablePosition ?? null,
+              levelKey: seat.levelKey ?? null, sectionKey: seat.sectionKey ?? null,
+            })) },
+          },
+        });
+        const updated = await tx.auditorium.update({
+          where: { id },
+          data: { name: input.name ?? auditorium.name, capacity: input.seats.length },
+          include: { seatMap: { include: { seats: { where: { active: true }, orderBy: [{ y: "asc" }, { x: "asc" }] } } } },
+        });
+        await tx.auditEvent.create({ data: {
+          actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
+          action: "auditorium.layout_version_created", entityType: "Auditorium", entityId: id,
+          beforeState: { version: beforeVersion, capacity: auditorium.capacity },
+          afterState: { version: nextVersion, capacity: input.seats.length, mode: input.layout.mode },
+        } });
+        return updated;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw AppError.conflict("A seat already uses that label or coordinate in this layout version.");
+      }
+      throw error;
+    }
+  }
+
+  async duplicateAuditorium(actor: RequestActor, id: string, input: AuditoriumDuplicateInput) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const source = await tx.auditorium.findFirst({
+        where: { id, locationId, active: true },
+        include: { seatMap: { include: { seats: { where: { active: true } } } } },
+      });
+      if (!source?.seatMap) throw AppError.notFound("Auditorium seat map not found.");
+      const copy = await tx.auditorium.create({ data: {
+        locationId, name: input.name, capacity: source.capacity,
+        seatMap: { create: {
+          name: `${input.name} layout`, version: 1,
+          layoutJson: source.seatMap.layoutJson ?? undefined,
+          revisions: { create: { version: 1, layoutJson: source.seatMap.layoutJson ?? undefined } },
+          seats: { create: source.seatMap.seats.map((seat) => ({
+            label: seat.label, rowLabel: seat.rowLabel, number: seat.number, x: seat.x, y: seat.y,
+            type: seat.type, tableGroupId: seat.tableGroupId, tablePosition: seat.tablePosition,
+            levelKey: seat.levelKey, sectionKey: seat.sectionKey,
+          })) },
+        } },
+      }, include: { seatMap: { include: { seats: true } } } });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
+        action: "auditorium.duplicated", entityType: "Auditorium", entityId: copy.id,
+        afterState: { sourceAuditoriumId: source.id, name: copy.name, capacity: copy.capacity },
+      } });
+      return copy;
+    });
   }
 
   async createMovie(actor: RequestActor, input: MovieInput) {

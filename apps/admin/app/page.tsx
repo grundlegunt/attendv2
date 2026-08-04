@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { AuthenticatedEmployee, AuthTokenResponse, SeatInput } from "@cinema/shared";
-import { SeatMap, type SeatMapSeat } from "@cinema/ui";
+import type { AuthenticatedEmployee, AuthTokenResponse, SeatMapLayout } from "@cinema/shared";
+import type { SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { AuditoriumBuilder } from "./auditorium-builder";
 import { MenuManager } from "./menu-manager";
 import { ManagementDashboard } from "./management-dashboard";
 import { ManagementControls } from "./management-controls";
@@ -11,7 +12,7 @@ import { SchedulingCalendar, type CalendarShowtime } from "./scheduling-calendar
 
 interface Auditorium {
   id: string; name: string; capacity: number;
-  seatMap: { seats: SeatMapSeat[] } | null;
+  seatMap: { id: string; name: string; version: number; layoutJson: SeatMapLayout | null; seats: Array<SeatMapSeat & { rowLabel: string; number: number; levelKey?: string | null; sectionKey?: string | null }> } | null;
 }
 interface Movie {
   id: string;
@@ -35,22 +36,6 @@ interface Bootstrap {
   showtimes: Showtime[];
 }
 
-function buildSeats(rows: number, seatsPerRow: number): SeatInput[] {
-  return Array.from({ length: rows }, (_, rowIndex) => {
-    const rowLabel = String.fromCharCode(65 + rowIndex);
-    return Array.from({ length: seatsPerRow }, (_, seatIndex) => {
-      const number = seatIndex + 1;
-      const accessible = rowIndex === rows - 1 && seatIndex < 2;
-      return {
-        label: `${rowLabel}${number}`, rowLabel, number, x: seatIndex, y: rowIndex,
-        type: accessible ? (seatIndex === 0 ? "ADA" as const : "COMPANION" as const) : "STANDARD" as const,
-        tableGroupId: `${rowLabel}-${Math.floor(seatIndex / 2) + 1}`,
-        tablePosition: seatIndex % 2 === 0 ? ("LEFT" as const) : ("RIGHT" as const),
-      };
-    });
-  }).flat();
-}
-
 export default function AdminPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -58,9 +43,6 @@ export default function AdminPage() {
   const [token, setToken] = useState<string | null>(null);
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [roomName, setRoomName] = useState("Theater 1");
-  const [rows, setRows] = useState(8);
-  const [seatsPerRow, setSeatsPerRow] = useState(12);
   const [movieTitle, setMovieTitle] = useState("");
   const [runtime, setRuntime] = useState(120);
   const [movieSynopsis, setMovieSynopsis] = useState("");
@@ -79,8 +61,6 @@ export default function AdminPage() {
   const [setupOpen, setSetupOpen] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-
-  const previewSeats = useMemo(() => buildSeats(rows, seatsPerRow), [rows, seatsPerRow]);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -103,17 +83,6 @@ export default function AdminPage() {
         method: "POST", body: JSON.stringify({ email, password }),
       });
       setEmployee(response.employee); setToken(response.accessToken);
-    } catch (reason) { showError(reason); }
-  }
-
-  async function createAuditorium(event: FormEvent) {
-    event.preventDefault(); setError(null);
-    try {
-      await apiFetch("/cinema/auditoriums", {
-        accessToken: token ?? undefined, method: "POST",
-        body: JSON.stringify({ name: roomName, seatMapName: `${roomName} paired seating`, seats: previewSeats }),
-      });
-      await refresh();
     } catch (reason) { showError(reason); }
   }
 
@@ -362,16 +331,12 @@ export default function AdminPage() {
     <details className="setup-disclosure" open={setupOpen} onToggle={(event) => setSetupOpen(event.currentTarget.open)}>
       <summary><span><b>Cinema setup</b><small>Add movies or configure auditoriums</small></span><span>Open setup</span></summary>
       <section className="admin-grid setup-grid">
-      <form className="panel" onSubmit={createAuditorium}>
-        <p className="kicker">01 · AUDITORIUM</p><h2>Structured seat layout</h2>
-        <label>Name<input required value={roomName} onChange={(e) => setRoomName(e.target.value)} /></label>
-        <div className="two-fields">
-          <label>Rows<input type="number" min="1" max="20" value={rows} onChange={(e) => setRows(Number(e.target.value))} /></label>
-          <label>Seats per row<input type="number" min="2" max="30" step="2" value={seatsPerRow} onChange={(e) => setSeatsPerRow(Number(e.target.value))} /></label>
-        </div>
-        <SeatMap seats={previewSeats} label={`${roomName} preview`} />
-        <button className="primary">Create {rows * seatsPerRow}-seat auditorium</button>
-      </form>
+      {token && <AuditoriumBuilder
+        accessToken={token}
+        auditoriums={data?.location.auditoriums ?? []}
+        onError={showError}
+        onSaved={async (message) => { await refresh(); setNotice(message); }}
+      />}
 
       <div className="stack">
         <form className="panel" id="movie-setup" onSubmit={createMovie}>

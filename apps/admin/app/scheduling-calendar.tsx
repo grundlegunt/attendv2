@@ -117,7 +117,8 @@ export function SchedulingCalendar({
   }
 
   function createAtPointer(event: React.MouseEvent<HTMLDivElement>, auditoriumId: string) {
-    if (event.target !== event.currentTarget) return;
+    const target = event.target as HTMLElement;
+    if (target.closest(".showtime-block") || target.closest(".drop-preview")) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const rawMinutes = ((event.clientX - bounds.left) / bounds.width) * TOTAL_HOURS * 60;
     const roundedMinutes = Math.max(0, Math.min(TOTAL_HOURS * 60 - 5, Math.round(rawMinutes / 5) * 5));
@@ -252,10 +253,12 @@ export function SchedulingCalendar({
                   className={`showtime-block ${status}`}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
-                  onPointerDown={(event) => {
-                    if (event.button === 0) onEdit(showtime);
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onEdit(showtime);
                   }}
-                  onClick={(event) => { event.stopPropagation(); onEdit(showtime); }}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "move";
                     const key = `showtime:${showtime.id}`;
