@@ -442,6 +442,7 @@ describe("Milestone 1 cinema configuration", () => {
       .send({ movieId: movie.body.id, auditoriumId: auditorium.body.id, startsAt: "2031-01-01T18:00:00.000Z", onSale: false })
       .expect(201);
 
+    const { prisma } = await import("@cinema/database");
     const cleanupSeat = await prisma.showtimeSeat.findFirstOrThrow({
       where: { showtimeId: showtime.body.id },
     });
