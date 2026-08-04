@@ -189,7 +189,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .element-inspector strong { width: 100%; text-transform: capitalize; }
 .layout-element.type-not_a_seat { background: repeating-linear-gradient(135deg, #252025, #252025 5px, #3b343b 5px, #3b343b 10px); color: #bbb; }
 .layout-element.type-accessible_platform { border-color: #b7f4e5; background: #21594e; color: white; }
-.builder-actions { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.builder-actions { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; }
 .builder-actions .secondary { min-width: 180px; }
 .compliance-note { margin: 16px 0 0; font-size: .72rem; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }

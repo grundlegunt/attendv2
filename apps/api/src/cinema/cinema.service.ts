@@ -61,7 +61,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
     if (!location) throw AppError.notFound("Location not found.");
     const showtimes = await prisma.showtime.findMany({
-      where: { auditorium: { locationId }, startsAt: { gte: new Date(Date.now() - 86400000) } },
+      where: { auditorium: { locationId, active: true }, startsAt: { gte: new Date(Date.now() - 86400000) } },
       include: { movie: true, auditorium: true, priceTier: true },
       orderBy: { startsAt: "asc" },
     });
@@ -211,6 +211,30 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async deactivateAuditorium(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const auditorium = await tx.auditorium.findFirst({ where: { id, locationId, active: true } });
+      if (!auditorium) throw AppError.notFound("Auditorium not found.");
+      const futureShowtimes = await tx.showtime.count({
+        where: { auditoriumId: id, startsAt: { gte: new Date() } },
+      });
+      if (futureShowtimes) {
+        throw AppError.conflict(
+          `Remove or move ${futureShowtimes} future showtime${futureShowtimes === 1 ? "" : "s"} before deactivating this auditorium.`,
+        );
+      }
+      const deactivated = await tx.auditorium.update({ where: { id }, data: { active: false } });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
+        action: "auditorium.deactivated", entityType: "Auditorium", entityId: id,
+        beforeState: { active: true, name: auditorium.name, capacity: auditorium.capacity },
+        afterState: { active: false },
+      } });
+      return deactivated;
+    });
+  }
+
   async createMovie(actor: RequestActor, input: MovieInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(async (tx) => {
@@ -248,6 +272,14 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (!location) throw AppError.notFound("Location not found.");
       const movie = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: true } });
       if (!movie) throw AppError.notFound("Movie not found.");
+      const futureShowtimes = await tx.showtime.count({
+        where: { movieId: id, startsAt: { gte: new Date() } },
+      });
+      if (futureShowtimes) {
+        throw AppError.conflict(
+          `Remove ${futureShowtimes} future showtime${futureShowtimes === 1 ? "" : "s"} before removing this film from the library.`,
+        );
+      }
       const archived = await tx.movie.update({ where: { id }, data: { active: false } });
       await tx.auditEvent.create({ data: {
         actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "movie.archived",
@@ -497,6 +529,49 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  async removeShowtime(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const showtime = await tx.showtime.findFirst({
+        where: { id, auditorium: { locationId } },
+        include: { movie: true, auditorium: true },
+      });
+      if (!showtime) throw AppError.notFound("Showtime not found.");
+      if (showtime.startsAt <= new Date()) {
+        throw AppError.conflict("Past or already-started showtimes are retained for reporting and cannot be removed.");
+      }
+
+      const [tickets, restaurantTabs, restaurantOrders, seatHolds] = await Promise.all([
+        tx.ticket.count({ where: { showtimeSeat: { showtimeId: id } } }),
+        tx.restaurantTab.count({ where: { showtimeId: id } }),
+        tx.restaurantOrder.count({ where: { showtimeSeat: { showtimeId: id } } }),
+        tx.seatHold.count({ where: { showtimeSeat: { showtimeId: id } } }),
+      ]);
+      if (tickets) {
+        throw AppError.conflict("This showtime has ticket records. Cancel or refund affected tickets instead of removing it.");
+      }
+      if (restaurantTabs || restaurantOrders) {
+        throw AppError.conflict("This showtime has restaurant activity and must be retained for operations and reporting.");
+      }
+      if (seatHolds) {
+        throw AppError.conflict("This showtime has seat-hold history and must be retained. Close sales or cancel affected activity instead.");
+      }
+
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
+        action: "showtime.removed", entityType: "Showtime", entityId: id,
+        beforeState: {
+          movieId: showtime.movieId, movieTitle: showtime.movie.title,
+          auditoriumId: showtime.auditoriumId, auditoriumName: showtime.auditorium.name,
+          startsAt: showtime.startsAt.toISOString(), onSale: showtime.onSale,
+        },
+        afterState: { removed: true },
+      } });
+      await tx.showtime.delete({ where: { id } });
+      return { id, removed: true };
+    });
   }
 
   async nowPlaying(locationId?: string) {

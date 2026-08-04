@@ -97,6 +97,13 @@ export class CinemaController {
     );
   }
 
+  @Delete("auditoriums/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage)
+  deactivateAuditorium(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.deactivateAuditorium(actor, id);
+  }
+
   @Post("movies")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
@@ -151,5 +158,12 @@ export class CinemaController {
       id,
       body as ReturnType<typeof updateShowtimeRequestSchema.parse>,
     );
+  }
+
+  @Delete("showtimes/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  removeShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.removeShowtime(actor, id);
   }
 }

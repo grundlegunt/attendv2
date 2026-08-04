@@ -195,6 +195,23 @@ export default function AdminPage() {
     } catch (reason) { showError(reason); }
   }
 
+  async function removeShowtime() {
+    if (!editingShowtimeId) return;
+    const label = selectedMovie?.title ?? "this showtime";
+    if (!window.confirm(`Remove ${label} from the schedule? This is only allowed for a future showing with no ticket, hold, or restaurant activity.`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/cinema/showtimes/${editingShowtimeId}`, {
+        accessToken: token ?? undefined,
+        method: "DELETE",
+      });
+      setEditingShowtimeId(null);
+      setShowtimeEditorOpen(false);
+      await refresh();
+      setNotice(`${label} was removed from the schedule.`);
+    } catch (reason) { showError(reason); }
+  }
+
   const selectedMovie = data?.location.organization.movies.find((movie) => movie.id === movieId);
   const selectedRoom = data?.location.auditoriums.find((room) => room.id === auditoriumId);
   const selectedTiming = useMemo(() => {
@@ -308,6 +325,7 @@ export default function AdminPage() {
         <ul className="timing-rules"><li>✓ {data.location.preShowBufferMinutes} minutes for doors, ordering, and trailers</li><li>✓ Film runtime begins at feature start</li><li>✓ 15-minute cleaning gap is enforced automatically</li></ul>
         <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
         {editingShowtimeId && <button type="button" className={onSale ? "sale-action close-sale" : "sale-action open-sale"} onClick={() => void changeSaleStatus()}>{onSale ? "Close sales" : "Open sales"}</button>}
+        {editingShowtimeId && <button type="button" className="secondary destructive-outline" onClick={() => void removeShowtime()}>Remove from schedule</button>}
         <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Close</button>
       </form> : <div className="inspector-empty"><p className="kicker">SELECTED SHOWTIME</p><h2>Choose a showing</h2><p>Select a block—or click an open time—to edit it here without leaving the calendar.</p></div>}
     </aside></div>}
