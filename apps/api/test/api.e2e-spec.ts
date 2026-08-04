@@ -278,6 +278,7 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("versions an advanced layout without changing seats on an existing showtime", async () => {
+    const { prisma } = await import("@cinema/database");
     const before = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/cinema/auditoriums/${auditoriumId}/layout`)
