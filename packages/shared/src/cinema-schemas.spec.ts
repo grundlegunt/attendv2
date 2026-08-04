@@ -3,6 +3,8 @@ import {
   startOfLocalDay,
   showtimeWindowsOverlap,
   type PublicShowtime,
+  type SeatMapLayout,
+  validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "./cinema-schemas";
 
@@ -40,6 +42,36 @@ describe("validateSeatLayout", () => {
         { ...base[0]!, label: "B1", x: 0, y: 1, tableGroupId: "B-1", tablePosition: "LEFT" },
       ]),
     ).toContain("Table group B-1 must contain exactly one LEFT and one RIGHT seat."));
+});
+
+describe("validateAdvancedSeatLayout", () => {
+  const layout: SeatMapLayout = {
+    mode: "ADVANCED",
+    canvas: { width: 12, height: 8 },
+    screenPosition: "TOP",
+    seatingStyle: "SINGLE",
+    levels: [
+      { id: "main", name: "Main floor", sortOrder: 0 },
+      { id: "balcony", name: "Balcony", sortOrder: 1 },
+    ],
+    sections: [],
+    elements: [],
+  };
+
+  it("allows the same grid coordinate on separate levels", () => {
+    expect(validateAdvancedSeatLayout([
+      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "main" },
+      { label: "BA1", rowLabel: "BA", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "balcony" },
+    ], layout)).toEqual([]);
+  });
+
+  it("rejects seats and non-seat elements outside the canvas", () => {
+    const errors = validateAdvancedSeatLayout([
+      { label: "A1", rowLabel: "A", number: 1, x: 12, y: 0, type: "STANDARD", levelKey: "main" },
+    ], { ...layout, elements: [{ id: "wall", type: "WALL", levelId: "main", x: 10, y: 0, width: 3, height: 1 }] });
+    expect(errors).toContain("Seat A1 is outside the canvas.");
+    expect(errors).toContain("Layout element wall is outside the canvas.");
+  });
 });
 
 describe("showtimeWindowsOverlap", () => {

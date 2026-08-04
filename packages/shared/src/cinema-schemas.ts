@@ -12,14 +12,65 @@ export const seatInputSchema = z.object({
   type: seatTypeSchema.default("STANDARD"),
   tableGroupId: z.string().trim().min(1).max(40).nullable().optional(),
   tablePosition: tablePositionSchema.nullable().optional(),
+  levelKey: z.string().trim().min(1).max(40).nullable().optional(),
+  sectionKey: z.string().trim().min(1).max(40).nullable().optional(),
 });
 
 export type SeatInput = z.infer<typeof seatInputSchema>;
+
+export const layoutElementTypeSchema = z.enum([
+  "AISLE", "STAIRWAY", "WALL", "DOOR", "EXIT", "EMERGENCY_EXIT",
+  "SERVICE_DOOR", "WHEELCHAIR_SPACE", "TABLE", "LABEL",
+  "NOT_A_SEAT", "ACCESSIBLE_PLATFORM",
+]);
+
+export const seatMapLayoutSchema = z.object({
+  mode: z.enum(["BASIC", "ADVANCED"]),
+  canvas: z.object({ width: z.number().int().min(12).max(200), height: z.number().int().min(8).max(200) }),
+  screenPosition: z.enum(["TOP", "BOTTOM", "LEFT", "RIGHT"]).default("TOP"),
+  seatingStyle: z.enum(["SINGLE", "PAIR", "LOVESEAT", "TABLE_2", "TABLE_4", "BENCH"]).default("SINGLE"),
+  levels: z.array(z.object({
+    id: z.string().trim().min(1).max(40),
+    name: z.string().trim().min(1).max(80),
+    sortOrder: z.number().int().nonnegative(),
+    elevationLabel: z.string().trim().max(80).nullable().optional(),
+  })).min(1).max(12),
+  sections: z.array(z.object({
+    id: z.string().trim().min(1).max(40),
+    levelId: z.string().trim().min(1).max(40),
+    name: z.string().trim().min(1).max(80),
+  })).max(40).default([]),
+  elements: z.array(z.object({
+    id: z.string().trim().min(1).max(80),
+    type: layoutElementTypeSchema,
+    levelId: z.string().trim().min(1).max(40),
+    x: z.number().int().nonnegative(),
+    y: z.number().int().nonnegative(),
+    width: z.number().int().positive().max(100),
+    height: z.number().int().positive().max(100),
+    label: z.string().trim().max(100).nullable().optional(),
+    orientation: z.enum(["HORIZONTAL", "VERTICAL"]).nullable().optional(),
+  })).max(500).default([]),
+});
+
+export type SeatMapLayout = z.infer<typeof seatMapLayoutSchema>;
 
 export const createAuditoriumRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
   seatMapName: z.string().trim().min(1).max(80),
   seats: z.array(seatInputSchema).min(1).max(500),
+  layout: seatMapLayoutSchema.optional(),
+});
+
+export const updateAuditoriumLayoutRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80).optional(),
+  seatMapName: z.string().trim().min(1).max(80).optional(),
+  seats: z.array(seatInputSchema).min(1).max(500),
+  layout: seatMapLayoutSchema,
+});
+
+export const duplicateAuditoriumRequestSchema = z.object({
+  name: z.string().trim().min(1).max(80),
 });
 
 export const createMovieRequestSchema = z.object({
@@ -59,8 +110,8 @@ export function validateSeatLayout(seats: SeatInput[]): string[] {
     if (labels.has(normalizedLabel)) errors.push(`Duplicate seat label: ${seat.label}.`);
     labels.add(normalizedLabel);
 
-    const coordinate = `${seat.x}:${seat.y}`;
-    if (coordinates.has(coordinate)) errors.push(`Duplicate seat coordinate: ${coordinate}.`);
+    const coordinate = `${seat.levelKey ?? "main"}:${seat.x}:${seat.y}`;
+    if (coordinates.has(coordinate)) errors.push(`Duplicate seat coordinate: ${seat.x}:${seat.y}.`);
     coordinates.add(coordinate);
 
     if (Boolean(seat.tableGroupId) !== Boolean(seat.tablePosition)) {
@@ -77,6 +128,30 @@ export function validateSeatLayout(seats: SeatInput[]): string[] {
     const positions = new Set(group.map((seat) => seat.tablePosition));
     if (group.length !== 2 || !positions.has("LEFT") || !positions.has("RIGHT")) {
       errors.push(`Table group ${groupId} must contain exactly one LEFT and one RIGHT seat.`);
+    }
+  }
+  return errors;
+}
+
+export function validateAdvancedSeatLayout(seats: SeatInput[], layout: SeatMapLayout): string[] {
+  const errors = validateSeatLayout(seats);
+  const levelIds = new Set(layout.levels.map((level) => level.id));
+  const sectionIds = new Set(layout.sections.map((section) => section.id));
+  for (const section of layout.sections) {
+    if (!levelIds.has(section.levelId)) errors.push(`Section ${section.name} references a missing level.`);
+  }
+  for (const seat of seats) {
+    if (seat.levelKey && !levelIds.has(seat.levelKey)) errors.push(`Seat ${seat.label} is outside a defined level.`);
+    if (seat.sectionKey && !sectionIds.has(seat.sectionKey)) errors.push(`Seat ${seat.label} references a missing section.`);
+    if (seat.x >= layout.canvas.width || seat.y >= layout.canvas.height) errors.push(`Seat ${seat.label} is outside the canvas.`);
+    if (seat.x >= layout.canvas.width || seat.y >= layout.canvas.height) {
+      errors.push(`Seat ${seat.label} is outside the canvas.`);
+    }
+  }
+  for (const element of layout.elements) {
+    if (!levelIds.has(element.levelId)) errors.push(`Layout element ${element.label ?? element.id} references a missing level.`);
+    if (element.x + element.width > layout.canvas.width || element.y + element.height > layout.canvas.height) {
+      errors.push(`Layout element ${element.label ?? element.id} is outside the canvas.`);
     }
   }
   return errors;

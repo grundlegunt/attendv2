@@ -4,6 +4,8 @@ import {
   createAuditoriumRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  duplicateAuditoriumRequestSchema,
+  updateAuditoriumLayoutRequestSchema,
   updateShowtimeRequestSchema,
 } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -61,6 +63,36 @@ export class CinemaController {
     return this.cinemaService.createAuditorium(
       actor,
       body as ReturnType<typeof createAuditoriumRequestSchema.parse>,
+    );
+  }
+
+  @Patch("auditoriums/:id/layout")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage)
+  updateAuditoriumLayout(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateAuditoriumLayoutRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.updateAuditoriumLayout(
+      actor,
+      id,
+      body as ReturnType<typeof updateAuditoriumLayoutRequestSchema.parse>,
+    );
+  }
+
+  @Post("auditoriums/:id/duplicate")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage)
+  duplicateAuditorium(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(duplicateAuditoriumRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.duplicateAuditorium(
+      actor,
+      id,
+      body as ReturnType<typeof duplicateAuditoriumRequestSchema.parse>,
     );
   }
 
