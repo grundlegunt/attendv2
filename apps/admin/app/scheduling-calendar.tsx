@@ -41,7 +41,9 @@ interface SchedulingCalendarProps {
 
 const START_HOUR = 10;
 const TOTAL_HOURS = 18;
-const HOUR_WIDTH = 112;
+// Keep the full cinema day visible on a typical manager workstation. Blocks
+// remain proportional to runtime, while the inspector stays fixed beside it.
+const HOUR_WIDTH = 58;
 
 function startOfCinemaDay(date: Date) {
   const result = new Date(date);
@@ -181,32 +183,6 @@ export function SchedulingCalendar({
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
     </div>
 
-    <div className="film-library" aria-label="Film library">
-      <div><b>Film library</b><span>Drag a film into an open room time</span></div>
-      <div className="film-library-list">
-        {movies.map((movie) => <div
-          className="film-card"
-          draggable
-          key={movie.id}
-          onDragStart={(event) => {
-            const key = `movie:${movie.id}`;
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData("text/plain", key);
-            setDraggingKey(key);
-          }}
-          onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-          title="Drag this film onto the daily schedule"
-        ><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
-          type="button"
-          className="film-archive"
-          aria-label={`Remove ${movie.title} from the film library`}
-          title="Remove from film library"
-          onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
-          onMouseDown={(event) => event.stopPropagation()}
-        >×</button></div>)}
-      </div>
-    </div>
-
     {view === "day" && <div className="calendar-scroll">
       <div className="cinema-calendar" style={{ "--timeline-width": `${TOTAL_HOURS * HOUR_WIDTH}px` } as React.CSSProperties}>
         <div className="calendar-corner"><span>ROOM</span></div>
@@ -321,5 +297,31 @@ export function SchedulingCalendar({
         })}
       </div>
     </div>}
+
+    <div className="film-library" aria-label="Film library">
+      <div><b>Film library</b><span>Drag a film into an open room time</span></div>
+      <div className="film-library-list">
+        {movies.map((movie) => <div
+          className="film-card"
+          draggable
+          key={movie.id}
+          onDragStart={(event) => {
+            const key = `movie:${movie.id}`;
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData("text/plain", key);
+            setDraggingKey(key);
+          }}
+          onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
+          title="Drag this film onto the daily schedule"
+        ><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+          type="button"
+          className="film-archive"
+          aria-label={`Remove ${movie.title} from the film library`}
+          title="Remove from film library"
+          onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >×</button></div>)}
+      </div>
+    </div>
   </section>;
 }

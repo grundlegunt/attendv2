@@ -47,7 +47,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .legend-swatch.draft { background: #775d26; }
 .legend-swatch.past { background: #474944; }
 .schedule-legend span:last-child { margin-left: auto; }
-.film-library { display: grid; grid-template-columns: minmax(220px, .55fr) minmax(500px, 1.45fr); gap: 36px; padding: 28px 32px; border-bottom: 1px solid #34342f; background: #171815; }
+.film-library { display: grid; grid-template-columns: minmax(220px, .55fr) minmax(500px, 1.45fr); gap: 36px; padding: 28px 32px; border-top: 1px solid #34342f; background: #171815; }
 .film-library > div:first-child { display: grid; align-content: start; gap: 8px; }
 .film-library > div:first-child b { font-family: Georgia, serif; font-size: 2rem; }
 .film-library > div:first-child span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
@@ -60,9 +60,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-card::after { content: "Drag to schedule"; color: #aaa99f; font-size: .68rem; text-align: right; }
 .film-archive { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border: 1px solid #55564f; border-radius: 50%; background: #1d1e1a; color: #bdbdb5; font-size: 1rem; line-height: 1; cursor: pointer; }
 .film-archive:hover { border-color: #f05a45; color: #f05a45; }
-.schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr) 440px; align-items: stretch; border: 1px solid #3a3b35; background: #171815; }
+.schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 20vw, 390px); align-items: stretch; border: 1px solid #3a3b35; background: #171815; }
 .schedule-with-inspector .schedule-workspace { min-width: 0; border: 0; }
-.schedule-inspector { min-height: 680px; padding: 28px; border-left: 1px solid #484943; background: #170d14; }
+.schedule-inspector { min-height: 620px; padding: 24px; border-left: 1px solid #484943; background: #170d14; }
 .schedule-inspector form, .inspector-empty { position: sticky; top: 18px; }
 .schedule-inspector form { max-height: calc(100vh - 36px); overflow-y: auto; padding-right: 6px; }
 .inspector-empty { color: #aaa99f; }
@@ -81,22 +81,22 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .close-sale { background: #f0553e; }
 .open-sale { background: #2f7653; }
 .calendar-scroll { width: 100%; overflow-x: auto; }
-.cinema-calendar { --room-column: 180px; display: grid; grid-template-columns: var(--room-column) var(--timeline-width); min-width: calc(var(--room-column) + var(--timeline-width)); }
+.cinema-calendar { --room-column: 145px; display: grid; grid-template-columns: var(--room-column) var(--timeline-width); min-width: calc(var(--room-column) + var(--timeline-width)); }
 .calendar-corner, .time-ruler { position: sticky; top: 0; z-index: 8; height: 54px; border-bottom: 1px solid #3d3d37; background: #171815; }
 .calendar-corner { left: 0; z-index: 10; display: flex; align-items: flex-end; padding: 0 18px 11px; color: #aaa99f; font-size: .7rem; letter-spacing: .12em; }
 .time-ruler { position: relative; }
-.time-ruler span { position: absolute; bottom: 11px; width: 80px; color: #aaa99f; font-size: .74rem; transform: translateX(-1px); }
+.time-ruler span { position: absolute; bottom: 11px; width: 58px; color: #aaa99f; font-size: .66rem; transform: translateX(-1px); }
 .calendar-row { display: contents; }
-.room-label { position: sticky; left: 0; z-index: 6; min-height: 142px; padding: 25px 18px; border-right: 1px solid #3d3d37; border-bottom: 1px solid #3d3d37; background: #171815; }
+.room-label { position: sticky; left: 0; z-index: 6; min-height: 112px; padding: 20px 14px; border-right: 1px solid #3d3d37; border-bottom: 1px solid #3d3d37; background: #171815; }
 .room-label strong, .room-label span { display: block; }
-.room-label strong { font-family: Georgia, serif; font-size: 1.35rem; }
+.room-label strong { font-family: Georgia, serif; font-size: 1.15rem; }
 .room-label span { margin-top: 7px; color: #92928a; font-size: .82rem; }
-.room-timeline { position: relative; min-height: 142px; border-bottom: 1px solid #3d3d37; background: #121311; cursor: crosshair; }
+.room-timeline { position: relative; min-height: 112px; border-bottom: 1px solid #3d3d37; background: #121311; cursor: crosshair; }
 .drag-target { background-color: #1b211c; box-shadow: inset 0 0 0 2px rgba(240,189,45,.25); }
 .room-timeline > i { position: absolute; inset: 0 auto 0 0; width: 1px; background: #2e302c; pointer-events: none; }
-.showtime-block { position: absolute; top: 16px; bottom: 16px; display: grid; align-content: center; gap: 5px; overflow: hidden; padding: 14px 16px; border: 1px solid #55a77c; border-radius: 4px; background: #2f7653; color: white; text-align: left; box-shadow: 0 6px 16px rgba(0,0,0,.22); cursor: pointer; }
+.showtime-block { position: absolute; top: 12px; bottom: 12px; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 10px 12px; border: 1px solid #55a77c; border-radius: 2px; background: #2f7653; color: white; text-align: left; box-shadow: 0 6px 16px rgba(0,0,0,.22); cursor: pointer; }
 .showtime-block:hover, .showtime-block:focus-visible { filter: brightness(1.12); outline: 2px solid white; outline-offset: 2px; z-index: 3; }
-.showtime-block strong { overflow: hidden; font-family: Georgia, serif; font-size: 1.08rem; text-overflow: ellipsis; white-space: nowrap; }
+.showtime-block strong { overflow: hidden; font-family: Georgia, serif; font-size: .95rem; text-overflow: ellipsis; white-space: nowrap; }
 .showtime-block span, .showtime-block small { overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .showtime-block small { color: rgba(255,255,255,.72); }
 .showtime-block.draft { border-color: #ad8b46; background: #665022; }
