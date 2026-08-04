@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { SeatMapLayout } from "@cinema/shared";
 import type { SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
-import { AuditoriumBuilder } from "../auditorium-builder";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
 import { useAdminSession } from "../admin-session";
 
@@ -53,7 +52,6 @@ export default function AdminPage() {
   const [presentation, setPresentation] = useState<"STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST">("STANDARD");
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -321,28 +319,5 @@ export default function AdminPage() {
       </form>
     </div>}
 
-    <details className="setup-disclosure" open={setupOpen} onToggle={(event) => setSetupOpen(event.currentTarget.open)}>
-      <summary><span><b>Cinema setup</b><small>Add movies or configure auditoriums</small></span><span>Open setup</span></summary>
-      <section className="admin-grid setup-grid">
-      {token && <AuditoriumBuilder
-        accessToken={token}
-        auditoriums={data?.location.auditoriums ?? []}
-        onError={showError}
-        onSaved={async (message) => { await refresh(); setNotice(message); }}
-      />}
-
-      <div className="stack">
-        <form className="panel" id="movie-setup" onSubmit={createMovie}>
-          <p className="kicker">02 · MOVIE</p><h2>Add a movie</h2>
-          <label>Title<input required value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} /></label>
-          <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(Number(e.target.value))} /></label>
-          <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} /></label>
-          <label>Poster URL<input value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} /></label>
-          <label>Synopsis<textarea rows={4} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} /></label>
-          <button className="primary">Add movie</button>
-        </form>
-      </div>
-      </section>
-    </details>
   </main>;
 }
