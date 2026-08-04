@@ -134,12 +134,30 @@ model SeatMap {
 
   name      String
   version   Int      @default(1)
+  // Operational geometry belongs here; sellable positions remain normalized
+  // as Seat records below. Previous geometry is retained in SeatMapRevision.
+  layoutJson Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  seats Seat[]
+  seats     Seat[]
+  revisions SeatMapRevision[]
 
   @@map("seat_maps")
+}
+
+model SeatMapRevision {
+  id        String  @id @default(uuid())
+  seatMapId String
+  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  version    Int
+  layoutJson Json?
+  createdAt  DateTime @default(now())
+
+  @@unique([seatMapId, version])
+  @@index([seatMapId, createdAt])
+  @@map("seat_map_revisions")
 }
 
 model Seat {
@@ -153,6 +171,9 @@ model Seat {
   x        Int
   y        Int
   type     SeatType @default(STANDARD)
+  layoutVersion Int @default(1)
+  levelKey      String?
+  sectionKey    String?
 
   tableGroupId  String?
   tablePosition TablePosition?
@@ -161,9 +182,9 @@ model Seat {
   updatedAt     DateTime       @updatedAt
   showtimeSeats ShowtimeSeat[]
 
-  @@unique([seatMapId, label])
-  @@unique([seatMapId, x, y])
-  @@index([seatMapId, rowLabel, number])
+  @@unique([seatMapId, layoutVersion, label])
+  @@unique([seatMapId, layoutVersion, levelKey, x, y])
+  @@index([seatMapId, layoutVersion, rowLabel, number])
   @@map("seats")
 }
 
@@ -226,6 +247,8 @@ model Showtime {
   endsAt          DateTime
   roomReadyAt     DateTime
   onSale          Boolean         @default(false)
+  filmSeries      String?
+  presentation    String          @default("STANDARD")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]

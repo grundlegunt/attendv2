@@ -1,0 +1,3 @@
+ALTER TABLE "showtimes"
+ADD COLUMN "filmSeries" TEXT,
+ADD COLUMN "presentation" TEXT NOT NULL DEFAULT 'STANDARD';

@@ -1,10 +1,57 @@
 import {
+  createMovieRequestSchema,
+  createShowtimeRequestSchema,
   dedupePublicShowtimes,
   startOfLocalDay,
   showtimeWindowsOverlap,
+  updateShowtimeRequestSchema,
   type PublicShowtime,
+  type SeatMapLayout,
+  validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "./cinema-schemas";
+
+describe("cinema programming requests", () => {
+  const showtime = {
+    movieId: "10000000-0000-4000-8000-000000000001",
+    auditoriumId: "10000000-0000-4000-8000-000000000002",
+    priceTierId: "10000000-0000-4000-8000-000000000003",
+    startsAt: "2026-08-04T18:00:00.000Z",
+  };
+
+  it("accepts movie metadata with either an absolute or app-relative poster URL", () => {
+    expect(createMovieRequestSchema.parse({
+      title: "The Matrix",
+      runtimeMinutes: 136,
+      synopsis: "A programmer discovers the world is not what it seems.",
+      rating: "R",
+      posterUrl: "https://images.example.com/matrix.jpg",
+    }).posterUrl).toContain("images.example.com");
+
+    expect(createMovieRequestSchema.parse({
+      title: "The Matrix",
+      runtimeMinutes: 136,
+      posterUrl: "/posters/matrix.jpg",
+    }).posterUrl).toBe("/posters/matrix.jpg");
+  });
+
+  it("stores film-series and presentation labels on a new showtime", () => {
+    const parsed = createShowtimeRequestSchema.parse({
+      ...showtime,
+      filmSeries: "Summer Classics",
+      presentation: "Q_AND_A",
+    });
+
+    expect(parsed.filmSeries).toBe("Summer Classics");
+    expect(parsed.presentation).toBe("Q_AND_A");
+  });
+
+  it("does not reset sale or presentation values on an unrelated partial update", () => {
+    expect(updateShowtimeRequestSchema.parse({ startsAt: showtime.startsAt })).toEqual({
+      startsAt: showtime.startsAt,
+    });
+  });
+});
 
 describe("startOfLocalDay", () => {
   it("keeps the full current cinema day visible after showtimes begin", () => {
@@ -40,6 +87,36 @@ describe("validateSeatLayout", () => {
         { ...base[0]!, label: "B1", x: 0, y: 1, tableGroupId: "B-1", tablePosition: "LEFT" },
       ]),
     ).toContain("Table group B-1 must contain exactly one LEFT and one RIGHT seat."));
+});
+
+describe("validateAdvancedSeatLayout", () => {
+  const layout: SeatMapLayout = {
+    mode: "ADVANCED",
+    canvas: { width: 12, height: 8 },
+    screenPosition: "TOP",
+    seatingStyle: "SINGLE",
+    levels: [
+      { id: "main", name: "Main floor", sortOrder: 0 },
+      { id: "balcony", name: "Balcony", sortOrder: 1 },
+    ],
+    sections: [],
+    elements: [],
+  };
+
+  it("allows the same grid coordinate on separate levels", () => {
+    expect(validateAdvancedSeatLayout([
+      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "main" },
+      { label: "BA1", rowLabel: "BA", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "balcony" },
+    ], layout)).toEqual([]);
+  });
+
+  it("rejects seats and non-seat elements outside the canvas", () => {
+    const errors = validateAdvancedSeatLayout([
+      { label: "A1", rowLabel: "A", number: 1, x: 12, y: 0, type: "STANDARD", levelKey: "main" },
+    ], { ...layout, elements: [{ id: "wall", type: "WALL", levelId: "main", x: 10, y: 0, width: 3, height: 1 }] });
+    expect(errors).toContain("Seat A1 is outside the canvas.");
+    expect(errors).toContain("Layout element wall is outside the canvas.");
+  });
 });
 
 describe("showtimeWindowsOverlap", () => {

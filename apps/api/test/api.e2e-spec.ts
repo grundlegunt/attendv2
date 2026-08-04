@@ -217,6 +217,7 @@ describe("RBAC permission enforcement", () => {
 describe("Milestone 1 cinema configuration", () => {
   let auditoriumId: string;
   let movieId: string;
+  let firstShowtimeId: string;
   let secondShowtimeId: string;
 
   it("creates an auditorium with a validated paired seat map", async () => {
@@ -273,6 +274,34 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.featureStartsAt).toBe("2030-01-01T18:30:00.000Z");
     expect(res.body.endsAt).toBe("2030-01-01T20:30:00.000Z");
     expect(res.body.roomReadyAt).toBe("2030-01-01T20:45:00.000Z");
+    firstShowtimeId = res.body.id;
+  });
+
+  it("versions an advanced layout without changing seats on an existing showtime", async () => {
+    const { prisma } = await import("@cinema/database");
+    const before = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
+    const res = await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/auditoriums/${auditoriumId}/layout`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        name: "Integration Theater",
+        seatMapName: "Integration advanced layout",
+        layout: {
+          mode: "ADVANCED", canvas: { width: 12, height: 8 }, screenPosition: "TOP", seatingStyle: "SINGLE",
+          levels: [{ id: "main", name: "Main floor", sortOrder: 0 }], sections: [],
+          elements: [{ id: "center-aisle", type: "AISLE", levelId: "main", x: 1, y: 0, width: 1, height: 2 }],
+        },
+        seats: [
+          { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "ADA", levelKey: "main" },
+          { label: "A2", rowLabel: "A", number: 2, x: 2, y: 0, type: "COMPANION", levelKey: "main" },
+        ],
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.seatMap.version).toBe(2);
+    expect(res.body.seatMap.seats.every((seat: { layoutVersion: number }) => seat.layoutVersion === 2)).toBe(true);
+    const after = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
+    expect(after.map((seat) => seat.seatId)).toEqual(before.map((seat) => seat.seatId));
+    expect(await prisma.seat.count({ where: { seatMap: { auditoriumId }, layoutVersion: 1, active: false } })).toBe(2);
   });
 
   it("rejects a showtime before the 15-minute cleaning window has passed", async () => {
@@ -294,6 +323,8 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("moves a showtime while preserving computed turnover timing", async () => {
+    const { prisma } = await import("@cinema/database");
+    const before = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
     const res = await request(app.getHttpServer())
       .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
@@ -301,6 +332,18 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.status).toBe(200);
     expect(res.body.featureStartsAt).toBe("2030-01-02T18:30:00.000Z");
     expect(res.body.roomReadyAt).toBe("2030-01-02T20:45:00.000Z");
+    expect(res.body.priceTier.id).toBe(before.priceTierId);
+    const after = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
+    expect(after.priceTierId).toBe(before.priceTierId);
+  });
+
+  it("includes the required price tier relation in the admin schedule", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(res.status).toBe(200);
+    const showtime = res.body.showtimes.find((item: { id: string }) => item.id === secondShowtimeId);
+    expect(showtime.priceTier.id).toBeTruthy();
   });
 
   it("lists real on-sale showtimes publicly", async () => {
