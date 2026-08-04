@@ -263,6 +263,19 @@ export function AuditoriumBuilder({ accessToken, auditoriums, onSaved, onError }
     } catch (reason) { onError(reason); }
   }
 
+  async function deactivate() {
+    if (!editingId || !window.confirm(`Deactivate ${name}? It will disappear from setup and scheduling. Historical showtimes will be preserved.`)) return;
+    try {
+      await apiFetch(`/cinema/auditoriums/${editingId}`, { accessToken, method: "DELETE" });
+      setEditingId("");
+      setName("Theater 1");
+      setMode("BASIC");
+      setRows(8);
+      setSeatsPerRow(12);
+      await onSaved(`${name} was deactivated. Historical records were preserved.`);
+    } catch (reason) { onError(reason); }
+  }
+
   return <form className="panel auditorium-builder" onSubmit={save}>
     <div className="builder-heading"><div><p className="kicker">AUDITORIUM + SEAT MAP</p><h2>{editingId ? `Edit ${name}` : "Create an auditorium"}</h2></div>
       <label>Existing theater<select value={editingId} onChange={(event) => selectAuditorium(event.target.value)}><option value="">New theater</option>{auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label></div>
@@ -293,7 +306,7 @@ export function AuditoriumBuilder({ accessToken, auditoriums, onSaved, onError }
       </div>
       <div className="capacity-summary"><span>Standard <b>{counts.standard}</b></span><span>Wheelchair <b>{counts.ada}</b></span><span>Companion <b>{counts.companion}</b></span><span>Blocked / non-seat <b>{blockedPositions}</b></span><span>Total admission capacity <b>{preview.length}</b></span></div>
     </>}
-    <div className="builder-actions"><button className="primary">{editingId ? "Save new layout version" : `Create ${preview.length}-seat auditorium`}</button>{editingId && <button type="button" className="secondary" onClick={() => void duplicate()}>Duplicate theater</button>}</div>
+    <div className="builder-actions"><button className="primary">{editingId ? "Save new layout version" : `Create ${preview.length}-seat auditorium`}</button>{editingId && <button type="button" className="secondary" onClick={() => void duplicate()}>Duplicate theater</button>}{editingId && <button type="button" className="secondary destructive-outline" onClick={() => void deactivate()}>Deactivate theater</button>}</div>
     <p className="compliance-note">Attend models the layout supplied by the operator. It does not certify ADA, fire, egress, or building-code compliance.</p>
   </form>;
 }

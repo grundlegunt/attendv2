@@ -412,6 +412,58 @@ describe("Milestone 1 cinema configuration", () => {
     expect(listedShowtimeIds).toContain(created.body.id);
   });
 
+  it("safely removes an untouched future showtime, then archives its movie and auditorium", async () => {
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/auditoriums/${auditoriumId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(409);
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/movies/${movieId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(409);
+
+    const auditorium = await request(app.getHttpServer())
+      .post("/api/v1/cinema/auditoriums")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        name: "Cleanup Theater",
+        seatMapName: "Cleanup layout",
+        seats: [{ label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD" }],
+      })
+      .expect(201);
+    const movie = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Cleanup Feature", runtimeMinutes: 80 })
+      .expect(201);
+    const showtime = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ movieId: movie.body.id, auditoriumId: auditorium.body.id, startsAt: "2031-01-01T18:00:00.000Z", onSale: false })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/showtimes/${showtime.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/movies/${movie.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/auditoriums/${auditorium.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+
+    const bootstrap = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(bootstrap.body.location.auditoriums.some((room: { id: string }) => room.id === auditorium.body.id)).toBe(false);
+    expect(bootstrap.body.location.organization.movies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
+    expect(bootstrap.body.showtimes.some((item: { id: string }) => item.id === showtime.body.id)).toBe(false);
+  });
+
   it("rejects a server role from creating a movie", async () => {
     const login = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")
