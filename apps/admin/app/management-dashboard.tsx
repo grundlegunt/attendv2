@@ -15,7 +15,9 @@ type Settings = { id: string; name: string; timeClockEnabled: boolean; ticketTax
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
 
-export function ManagementDashboard({ accessToken, permissions }: { accessToken: string; permissions: string[] }) {
+type ManagementSection = "reports" | "labor" | "location" | "promotions" | "audit";
+
+export function ManagementDashboard({ accessToken, permissions, section }: { accessToken: string; permissions: string[]; section: ManagementSection }) {
   const [from, setFrom] = useState(dateInput(new Date(Date.now() - 30 * 86_400_000)));
   const [to, setTo] = useState(dateInput(new Date(Date.now() + 86_400_000)));
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
@@ -35,16 +37,16 @@ export function ManagementDashboard({ accessToken, permissions }: { accessToken:
     const range = `from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`;
     try {
       const [nextRevenue, nextLabor, nextAudit, nextSettings] = await Promise.all([
-        canFinancial ? apiFetch<RevenueReport>(`/reports/revenue?${range}`, { accessToken }) : null,
-        canReports ? apiFetch<LaborReport>(`/reports/labor?${range}`, { accessToken }) : null,
-        canAudit ? apiFetch<AuditEvent[]>(`/audit-events?limit=100${auditAction ? `&action=${encodeURIComponent(auditAction)}` : ""}`, { accessToken }) : [],
-        canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
+        section === "reports" && canFinancial ? apiFetch<RevenueReport>(`/reports/revenue?${range}`, { accessToken }) : null,
+        section === "labor" && canReports ? apiFetch<LaborReport>(`/reports/labor?${range}`, { accessToken }) : null,
+        section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?limit=100${auditAction ? `&action=${encodeURIComponent(auditAction)}` : ""}`, { accessToken }) : [],
+        (section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
       setRevenue(nextRevenue); setLabor(nextLabor); setAudit(nextAudit); setSettings(nextSettings);
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
 
-  useEffect(() => { void refresh(); }, [accessToken]);
+  useEffect(() => { void refresh(); }, [accessToken, section]);
 
   async function toggleClock() {
     if (!settings) return;
@@ -68,8 +70,8 @@ export function ManagementDashboard({ accessToken, permissions }: { accessToken:
 
   return <section className="management-stack">
     <div className="panel management-heading">
-      <div><p className="kicker">MANAGEMENT</p><h2>Reports, controls and audit</h2></div>
-      <div className="report-range"><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><button className="primary" onClick={() => void refresh()}>Refresh</button></div>
+      <div><p className="kicker">MANAGEMENT</p><h2>{section === "reports" ? "Reports & finance" : section === "labor" ? "Labor" : section === "location" ? "Location" : section === "promotions" ? "Promotions" : "Audit log"}</h2></div>
+      {(section === "reports" || section === "labor") && <div className="report-range"><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><button className="primary" onClick={() => void refresh()}>Refresh</button></div>}
       {error && <div className="error-banner">{error}</div>}
     </div>
 
@@ -81,8 +83,9 @@ export function ManagementDashboard({ accessToken, permissions }: { accessToken:
 
     {labor && <section className="panel"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span>{(row.workedMinutes / 60).toFixed(2)}</span></div>)}</div></section>}
 
-    {settings && <section className="admin-grid"><div className="panel"><p className="kicker">LOCATION</p><h2>Operating settings</h2><label className="checkbox"><input type="checkbox" checked={settings.timeClockEnabled} onChange={() => void toggleClock()} /> Require staff clock-in at this location</label><p>Ticket tax: {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p></div><form className="panel" onSubmit={(event) => void createPromotion(event)}><p className="kicker">PROMOTIONS</p><h2>Create fixed discount</h2><label>Code<input required value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value })} /></label><label>Name<input required value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} /></label><label>Amount in cents<input type="number" min="1" required value={promotion.amountCents} onChange={(event) => setPromotion({ ...promotion, amountCents: Number(event.target.value) })} /></label><button className="primary">Create promotion</button><ul>{settings.promotions.map((item) => <li key={item.id}><strong>{item.code}</strong> · {item.name} · {item.active ? "Active" : "Inactive"}</li>)}</ul></form></section>}
+    {settings && section === "location" && <section className="panel"><p className="kicker">LOCATION</p><h2>Operating settings</h2><label className="checkbox"><input type="checkbox" checked={settings.timeClockEnabled} onChange={() => void toggleClock()} /> Require staff clock-in at this location</label><p>Ticket tax: {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p></section>}
+    {settings && section === "promotions" && <form className="panel" onSubmit={(event) => void createPromotion(event)}><p className="kicker">PROMOTIONS</p><h2>Create fixed discount</h2><label>Code<input required value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value })} /></label><label>Name<input required value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} /></label><label>Amount in cents<input type="number" min="1" required value={promotion.amountCents} onChange={(event) => setPromotion({ ...promotion, amountCents: Number(event.target.value) })} /></label><button className="primary">Create promotion</button><ul>{settings.promotions.map((item) => <li key={item.id}><strong>{item.code}</strong> · {item.name} · {item.active ? "Active" : "Inactive"}</li>)}</ul></form>}
 
-    {canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2><div className="report-range"><label>Action filter<input value={auditAction} onChange={(event) => setAuditAction(event.target.value)} placeholder="refund, settings, employee…" /></label><button className="secondary" onClick={() => void refresh()}>Apply</button></div><div className="audit-list">{audit.map((event) => <article key={event.id}><div><strong>{event.action}</strong><span>{event.entityType} · {event.entityId}</span></div><time>{new Date(event.occurredAt).toLocaleString()}</time></article>)}</div></section>}
+    {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2><div className="report-range"><label>Action filter<input value={auditAction} onChange={(event) => setAuditAction(event.target.value)} placeholder="refund, settings, employee…" /></label><button className="secondary" onClick={() => void refresh()}>Apply</button></div><div className="audit-list">{audit.map((event) => <article key={event.id}><div><strong>{event.action}</strong><span>{event.entityType} · {event.entityId}</span></div><time>{new Date(event.occurredAt).toLocaleString()}</time></article>)}</div></section>}
   </section>;
 }

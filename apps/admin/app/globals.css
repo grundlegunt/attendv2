@@ -237,3 +237,21 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .permission-list span { display: grid; gap: .15rem; }
 .permission-list small { color: var(--muted); }
 .destructive { background: #7c2020; color: white; border: 0; padding: .7rem 1rem; border-radius: 6px; cursor: pointer; }
+.admin-topbar { position: sticky; top: 0; z-index: 80; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: rgba(12, 12, 12, .96); backdrop-filter: blur(12px); }
+.admin-topbar > div { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+.admin-brand { display: flex; align-items: baseline; gap: 9px; color: white; text-decoration: none; }
+.admin-brand span { color: var(--accent); font-size: .72rem; font-weight: 900; letter-spacing: .18em; }
+.admin-brand strong { font-family: Georgia, serif; font-size: 1.35rem; }
+.admin-nav { position: sticky; top: 64px; z-index: 75; display: flex; gap: 4px; padding: 8px 24px; border-bottom: 1px solid var(--line); background: rgba(18, 18, 18, .97); overflow-x: auto; }
+.admin-nav a { flex: 0 0 auto; padding: 9px 11px; border: 1px solid transparent; color: var(--muted); font-size: .75rem; font-weight: 800; text-decoration: none; white-space: nowrap; }
+.admin-nav a:hover { color: white; border-color: var(--line); }
+.admin-nav a.active { border-color: var(--accent); color: var(--accent); }
+.admin-route-page { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
+.role-assignment-list, .modifier-summary { display: grid; gap: 12px; margin: 16px 0 24px; }
+.role-assignment-list > article, .modifier-summary > article { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); }
+.role-assignment-list .permission-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; margin: 0; }
+.modifier-summary span, .modifier-summary small, .muted { color: var(--muted); }
+.status-row { display: flex !important; flex-wrap: wrap; gap: 6px !important; margin-top: 7px; }
+.status-chip, .status-alert { width: max-content; padding: 4px 7px; border: 1px solid #536158; color: #a9d7b7; font-size: .66rem; letter-spacing: .04em; text-transform: uppercase; }
+.status-alert { border-color: #a64e49; color: #ffaaa3; }
+@media (max-width: 760px) { .admin-topbar { padding: 10px 16px; } .admin-topbar > div > span { display: none; } .admin-nav { top: 64px; padding: 7px 12px; } .admin-route-page { padding: 16px; } }
