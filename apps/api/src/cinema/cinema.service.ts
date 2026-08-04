@@ -5,6 +5,7 @@ import {
   createAuditoriumRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  updateMovieRequestSchema,
   updateShowtimeRequestSchema,
   validateSeatLayout,
 } from "@cinema/shared";
@@ -14,6 +15,7 @@ import { AppError } from "../common/app-error";
 type AuditoriumInput = ReturnType<typeof createAuditoriumRequestSchema.parse>;
 type MovieInput = ReturnType<typeof createMovieRequestSchema.parse>;
 type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
+type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
 
 @Injectable()
@@ -161,6 +163,28 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async updateMovie(actor: RequestActor, id: string, input: MovieUpdateInput) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const existing = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: true } });
+      if (!existing) throw AppError.notFound("Movie not found.");
+      const movie = await tx.movie.update({ where: { id }, data: input });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE,
+        actorId: actor.sub,
+        action: "movie.updated",
+        entityType: "Movie",
+        entityId: movie.id,
+        locationId,
+        beforeState: { title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes, rating: existing.rating, posterUrl: existing.posterUrl },
+        afterState: { title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating, posterUrl: movie.posterUrl },
+      } });
+      return movie;
+    });
+  }
+
   async createShowtime(actor: RequestActor, input: ShowtimeInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(
@@ -218,6 +242,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             endsAt,
             roomReadyAt,
             onSale: input.onSale,
+            filmSeries: input.filmSeries ?? null,
+            presentation: input.presentation,
           },
           include: { movie: true, auditorium: true },
         });
@@ -243,6 +269,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               startsAt: startsAt.toISOString(),
               roomReadyAt: roomReadyAt.toISOString(),
               onSale: input.onSale,
+              filmSeries: input.filmSeries ?? null,
+              presentation: input.presentation,
             },
           },
         });
@@ -316,6 +344,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             endsAt,
             roomReadyAt,
             onSale: input.onSale ?? existing.onSale,
+            filmSeries: input.filmSeries === undefined ? existing.filmSeries : input.filmSeries,
+            presentation: input.presentation ?? existing.presentation,
           },
           include: { movie: true, auditorium: true },
         });
@@ -357,6 +387,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               auditoriumId,
               startsAt: startsAt.toISOString(),
               roomReadyAt: roomReadyAt.toISOString(),
+              filmSeries: input.filmSeries === undefined ? existing.filmSeries : input.filmSeries,
+              presentation: input.presentation ?? existing.presentation,
             },
           },
         });

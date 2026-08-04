@@ -226,6 +226,8 @@ model Showtime {
   endsAt          DateTime
   roomReadyAt     DateTime
   onSale          Boolean         @default(false)
+  filmSeries      String?
+  presentation    String          @default("STANDARD")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]

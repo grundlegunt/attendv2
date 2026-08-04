@@ -13,10 +13,18 @@ interface Auditorium {
   id: string; name: string; capacity: number;
   seatMap: { seats: SeatMapSeat[] } | null;
 }
-interface Movie { id: string; title: string; runtimeMinutes: number; }
+interface Movie {
+  id: string;
+  title: string;
+  runtimeMinutes: number;
+  synopsis?: string | null;
+  rating?: string | null;
+  posterUrl?: string | null;
+}
 interface PriceTier { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string; }
 interface Showtime {
   id: string; startsAt: string; featureStartsAt: string; endsAt: string; roomReadyAt: string; onSale: boolean;
+  filmSeries: string | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   movie: Movie; auditorium: Auditorium; priceTier: PriceTier;
 }
 interface Bootstrap {
@@ -55,11 +63,17 @@ export default function AdminPage() {
   const [seatsPerRow, setSeatsPerRow] = useState(12);
   const [movieTitle, setMovieTitle] = useState("");
   const [runtime, setRuntime] = useState(120);
+  const [movieSynopsis, setMovieSynopsis] = useState("");
+  const [movieRating, setMovieRating] = useState("");
+  const [moviePosterUrl, setMoviePosterUrl] = useState("");
+  const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
   const [movieId, setMovieId] = useState("");
   const [auditoriumId, setAuditoriumId] = useState("");
   const [startsAt, setStartsAt] = useState("");
   const [onSale, setOnSale] = useState(true);
   const [priceTierId, setPriceTierId] = useState("");
+  const [filmSeries, setFilmSeries] = useState("");
+  const [presentation, setPresentation] = useState<"STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST">("STANDARD");
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
@@ -107,14 +121,24 @@ export default function AdminPage() {
     event.preventDefault(); setError(null);
     try {
       const addedTitle = movieTitle;
-      await apiFetch("/cinema/movies", {
-        accessToken: token ?? undefined, method: "POST",
-        body: JSON.stringify({ title: movieTitle, runtimeMinutes: runtime }),
+      await apiFetch(editingMovieId ? `/cinema/movies/${editingMovieId}` : "/cinema/movies", {
+        accessToken: token ?? undefined, method: editingMovieId ? "PATCH" : "POST",
+        body: JSON.stringify({
+          title: movieTitle,
+          runtimeMinutes: runtime,
+          synopsis: movieSynopsis.trim() || null,
+          rating: movieRating.trim() || null,
+          posterUrl: moviePosterUrl.trim() || null,
+        }),
       });
       setMovieTitle("");
+      setMovieSynopsis("");
+      setMovieRating("");
+      setMoviePosterUrl("");
+      setEditingMovieId(null);
       setMovieEditorOpen(false);
       await refresh();
-      setNotice(`${addedTitle} was added to the film library.`);
+      setNotice(`${addedTitle} was ${editingMovieId ? "updated" : "added to the film library"}.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -134,7 +158,15 @@ export default function AdminPage() {
     try {
       await apiFetch(editingShowtimeId ? `/cinema/showtimes/${editingShowtimeId}` : "/cinema/showtimes", {
         accessToken: token ?? undefined, method: editingShowtimeId ? "PATCH" : "POST",
-        body: JSON.stringify({ movieId, auditoriumId, priceTierId: priceTierId || undefined, startsAt: new Date(startsAt).toISOString(), onSale }),
+        body: JSON.stringify({
+          movieId,
+          auditoriumId,
+          priceTierId: priceTierId || undefined,
+          startsAt: new Date(startsAt).toISOString(),
+          onSale,
+          filmSeries: filmSeries.trim() || null,
+          presentation,
+        }),
       });
       setEditingShowtimeId(null);
       setShowtimeEditorOpen(false);
@@ -151,6 +183,8 @@ export default function AdminPage() {
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(showtime.onSale);
     setPriceTierId(showtime.priceTier.id);
+    setFilmSeries(showtime.filmSeries ?? "");
+    setPresentation(showtime.presentation ?? "STANDARD");
     setShowtimeEditorOpen(true);
   }
 
@@ -163,6 +197,8 @@ export default function AdminPage() {
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(false);
     setPriceTierId(data?.location.organization.priceTiers[0]?.id ?? "");
+    setFilmSeries("");
+    setPresentation("STANDARD");
     setShowtimeEditorOpen(true);
   }
 
@@ -225,7 +261,15 @@ export default function AdminPage() {
     }
   }
 
-  function openMovieEditor() { setMovieEditorOpen(true); }
+  function openMovieEditor(movie?: Movie) {
+    setEditingMovieId(movie?.id ?? null);
+    setMovieTitle(movie?.title ?? "");
+    setRuntime(movie?.runtimeMinutes ?? 120);
+    setMovieSynopsis(movie?.synopsis ?? "");
+    setMovieRating(movie?.rating ?? "");
+    setMoviePosterUrl(movie?.posterUrl ?? "");
+    setMovieEditorOpen(true);
+  }
 
   if (!employee) {
     return <main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
@@ -249,6 +293,7 @@ export default function AdminPage() {
     </section>
 
     {data && <div className="schedule-with-inspector"><SchedulingCalendar
+      locationName={data.location.name}
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}
       showtimes={data.showtimes}
@@ -257,7 +302,8 @@ export default function AdminPage() {
       onCreate={createShowtimeAt}
       onEdit={editShowtime}
       onMove={moveShowtime}
-      onAddMovie={openMovieEditor}
+      onAddMovie={() => openMovieEditor()}
+      onEditMovie={openMovieEditor}
       onArchiveMovie={archiveMovie}
     />
 
@@ -279,6 +325,8 @@ export default function AdminPage() {
         <div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15 min</button><button type="button" onClick={() => shiftShowtime(-5)}>−5 min</button><button type="button" onClick={() => shiftShowtime(5)}>+5 min</button><button type="button" onClick={() => shiftShowtime(15)}>+15 min</button></div>
         <label>Sale status<select value={onSale ? "open" : "draft"} onChange={(event) => setOnSale(event.target.value === "open")}><option value="open">Open for sale</option><option value="draft">Closed draft</option></select></label>
         <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
+        <label>Film series<input value={filmSeries} onChange={(event) => setFilmSeries(event.target.value)} placeholder="Optional, e.g. Summer Classics" /></label>
+        <label>Presentation<select value={presentation} onChange={(event) => setPresentation(event.target.value as typeof presentation)}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
         <div className="calculation-note">Attend includes {data.location.preShowBufferMinutes} minutes of pre-show, the film runtime, and at least 15 minutes of cleaning. Conflicting placements are rejected.</div>
         <ul className="timing-rules"><li>✓ {data.location.preShowBufferMinutes} minutes for doors, ordering, and trailers</li><li>✓ Film runtime begins at feature start</li><li>✓ 15-minute cleaning gap is enforced automatically</li></ul>
         <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
@@ -290,12 +338,15 @@ export default function AdminPage() {
     {movieEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setMovieEditorOpen(false)}>
       <form className="showtime-drawer" onSubmit={createMovie} onMouseDown={(event) => event.stopPropagation()}>
         <div className="drawer-heading">
-          <div><p className="kicker">FILM LIBRARY</p><h2>Add a film</h2></div>
+          <div><p className="kicker">FILM LIBRARY</p><h2>{editingMovieId ? "Edit film" : "Add a film"}</h2></div>
           <button type="button" className="drawer-close" onClick={() => setMovieEditorOpen(false)} aria-label="Close film editor">×</button>
         </div>
         <label>Title<input required autoFocus value={movieTitle} onChange={(event) => setMovieTitle(event.target.value)} /></label>
         <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(event) => setRuntime(Number(event.target.value))} /></label>
-        <button className="primary">Add to film library</button>
+        <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} placeholder="PG, PG-13, R…" /></label>
+        <label>Poster URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="https://… or /posters/film.png" /></label>
+        <label>Synopsis<textarea rows={6} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} placeholder="Short customer-facing film description" /></label>
+        <button className="primary">{editingMovieId ? "Save film" : "Add to film library"}</button>
         <button type="button" className="secondary" onClick={() => setMovieEditorOpen(false)}>Cancel</button>
       </form>
     </div>}
@@ -319,6 +370,9 @@ export default function AdminPage() {
           <p className="kicker">02 · MOVIE</p><h2>Add a movie</h2>
           <label>Title<input required value={movieTitle} onChange={(e) => setMovieTitle(e.target.value)} /></label>
           <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(e) => setRuntime(Number(e.target.value))} /></label>
+          <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} /></label>
+          <label>Poster URL<input value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} /></label>
+          <label>Synopsis<textarea rows={4} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} /></label>
           <button className="primary">Add movie</button>
         </form>
       </div>

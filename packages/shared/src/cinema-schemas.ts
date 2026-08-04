@@ -27,15 +27,27 @@ export const createMovieRequestSchema = z.object({
   synopsis: z.string().trim().max(2000).nullable().optional(),
   runtimeMinutes: z.number().int().min(1).max(600),
   rating: z.string().trim().max(20).nullable().optional(),
-  posterUrl: z.string().url().nullable().optional(),
+  posterUrl: z.union([
+    z.string().trim().url("Poster URL must be a valid URL."),
+    z.string().trim().regex(/^\/(?!\/)/, "Poster path must begin with a single slash."),
+  ]).nullable().optional(),
 });
 
-export const createShowtimeRequestSchema = z.object({
+export const showtimePresentationSchema = z.enum(["STANDARD", "OPEN_CAPTIONS", "Q_AND_A", "SPECIAL_GUEST"]);
+
+const showtimeFieldsSchema = z.object({
   movieId: z.string().uuid(),
   auditoriumId: z.string().uuid(),
   priceTierId: z.string().uuid().optional(),
   startsAt: z.string().datetime({ offset: true }),
+  onSale: z.boolean(),
+  filmSeries: z.string().trim().max(120).nullable().optional(),
+  presentation: showtimePresentationSchema,
+});
+
+export const createShowtimeRequestSchema = showtimeFieldsSchema.extend({
   onSale: z.boolean().default(false),
+  presentation: showtimePresentationSchema.default("STANDARD"),
 });
 
 export const updateMovieRequestSchema = createMovieRequestSchema.partial().refine(
@@ -43,7 +55,7 @@ export const updateMovieRequestSchema = createMovieRequestSchema.partial().refin
   "At least one movie field is required.",
 );
 
-export const updateShowtimeRequestSchema = createShowtimeRequestSchema.partial().refine(
+export const updateShowtimeRequestSchema = showtimeFieldsSchema.partial().refine(
   (value) => Object.keys(value).length > 0,
   "At least one showtime field is required.",
 );

@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+import { downloadScheduleWorkbook } from "./schedule-export";
+
 export interface ScheduleAuditorium {
   id: string;
   name: string;
@@ -12,6 +14,9 @@ export interface ScheduleMovie {
   id: string;
   title: string;
   runtimeMinutes: number;
+  synopsis?: string | null;
+  rating?: string | null;
+  posterUrl?: string | null;
 }
 
 export interface CalendarShowtime {
@@ -21,12 +26,15 @@ export interface CalendarShowtime {
   endsAt: string;
   roomReadyAt: string;
   onSale: boolean;
+  filmSeries?: string | null;
+  presentation?: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   movie: ScheduleMovie;
   auditorium: ScheduleAuditorium;
   priceTier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
 }
 
 interface SchedulingCalendarProps {
+  locationName: string;
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
   showtimes: CalendarShowtime[];
@@ -36,6 +44,7 @@ interface SchedulingCalendarProps {
   onEdit: (showtime: CalendarShowtime) => void;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onAddMovie: () => void;
+  onEditMovie: (movie: ScheduleMovie) => void;
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
 }
 
@@ -66,6 +75,7 @@ function minutesFrom(start: Date, value: string | Date) {
 }
 
 export function SchedulingCalendar({
+  locationName,
   auditoriums,
   movies,
   showtimes,
@@ -75,12 +85,14 @@ export function SchedulingCalendar({
   onEdit,
   onMove,
   onAddMovie,
+  onEditMovie,
   onArchiveMovie,
 }: SchedulingCalendarProps) {
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
   const [view, setView] = useState<"day" | "week">("day");
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
+  const [exporting, setExporting] = useState(false);
   const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
@@ -166,6 +178,14 @@ export function SchedulingCalendar({
           <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>Day</button>
           <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>Week</button>
         </div>
+        <button type="button" className="export-schedule-button" disabled={exporting} onClick={async () => {
+          setExporting(true);
+          try {
+            await downloadScheduleWorkbook({ locationName, selectedDate, view, auditoriums, showtimes });
+          } finally {
+            setExporting(false);
+          }
+        }}>{exporting ? "Preparing…" : "Export Excel"}</button>
         <button type="button" className="add-film-button" onClick={onAddMovie}>+ Add film</button>
       </div>
       <div className="date-controls">
@@ -244,7 +264,7 @@ export function SchedulingCalendar({
                 >
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
-                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}</small>
+                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${showtime.presentation.replaceAll("_", " ").replace("AND", "&")}` : ""}</small>
                 </button>;
               })}
             </div>
@@ -313,7 +333,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}

@@ -12,7 +12,8 @@ h1 { font-size: clamp(2rem, 4vw, 3.5rem); }
 .stack { display: grid; gap: 20px; align-content: start; }
 .panel { padding: 24px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 label { display: grid; gap: 8px; margin-bottom: 16px; color: var(--color-text-secondary); font-weight: 700; }
-input, select { width: 100%; min-height: 50px; padding: 10px 12px; border: 2px solid var(--color-border); background: var(--color-bg); color: var(--color-text-primary); font-size: 1rem; }
+input, select, textarea { width: 100%; min-height: 50px; padding: 10px 12px; border: 2px solid var(--color-border); background: var(--color-bg); color: var(--color-text-primary); font: inherit; font-size: 1rem; }
+textarea { resize: vertical; }
 .two-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .checkbox { display: flex; grid-template-columns: auto 1fr; align-items: center; } .checkbox input { width: 24px; min-height: 24px; }
 button.primary { width: 100%; min-height: 54px; border: 0; background: var(--color-accent); color: #000; font-weight: 900; cursor: pointer; }
@@ -38,6 +39,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .view-switch button { min-height: 42px; padding: 0 16px; border: 0; background: transparent; color: #aaa99f; font-weight: 800; cursor: pointer; }
 .view-switch button.active { background: #f0bd2d; color: #080808; }
 .add-film-button { min-height: 44px; padding: 0 16px; border: 1px solid #f0bd2d; background: transparent; color: #f0bd2d; font-weight: 900; cursor: pointer; }
+.export-schedule-button { min-height: 44px; padding: 0 16px; border: 1px solid #55564f; background: #242520; color: var(--color-text-primary); font-weight: 900; cursor: pointer; }
+.export-schedule-button:hover { border-color: #f0bd2d; color: #f0bd2d; }
+.export-schedule-button:disabled { cursor: wait; opacity: .65; }
 .date-controls input { width: auto; min-height: 44px; border-width: 1px; }
 .calendar-nav, .calendar-today { min-height: 44px; padding: 0 14px; border: 1px solid #45463f; background: #1b1c19; color: var(--color-text-primary); font-weight: 800; cursor: pointer; }
 .calendar-nav { width: 44px; padding: 0; font-size: 1.2rem; }
@@ -52,7 +56,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-library > div:first-child b { font-family: Georgia, serif; font-size: 2rem; }
 .film-library > div:first-child span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
 .film-library-list { display: grid; border-top: 1px solid #55564f; }
-.film-card { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 100px 110px; align-items: center; gap: 18px; min-width: 0; min-height: 62px; padding: 11px 54px 11px 0; border: 0; border-bottom: 1px solid #55564f; border-radius: 0; background: transparent; color: white; cursor: grab; user-select: none; }
+.film-card { position: relative; display: grid; grid-template-columns: 50px minmax(0, 1fr) 100px 110px; align-items: center; gap: 18px; min-width: 0; min-height: 62px; padding: 11px 54px 11px 0; border: 0; border-bottom: 1px solid #55564f; border-radius: 0; background: transparent; color: white; cursor: grab; user-select: none; }
+.film-edit { border: 0; background: transparent; color: #f0bd2d; font-size: .7rem; font-weight: 900; cursor: pointer; }
 .film-card:hover { border-color: #f0bd2d; background: #2c2d27; }
 .film-card:active { cursor: grabbing; opacity: .72; }
 .film-card strong { overflow: hidden; font-family: Georgia, serif; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }

@@ -1,10 +1,55 @@
 import {
+  createMovieRequestSchema,
+  createShowtimeRequestSchema,
   dedupePublicShowtimes,
   startOfLocalDay,
   showtimeWindowsOverlap,
+  updateShowtimeRequestSchema,
   type PublicShowtime,
   validateSeatLayout,
 } from "./cinema-schemas";
+
+describe("cinema programming requests", () => {
+  const showtime = {
+    movieId: "10000000-0000-4000-8000-000000000001",
+    auditoriumId: "10000000-0000-4000-8000-000000000002",
+    priceTierId: "10000000-0000-4000-8000-000000000003",
+    startsAt: "2026-08-04T18:00:00.000Z",
+  };
+
+  it("accepts movie metadata with either an absolute or app-relative poster URL", () => {
+    expect(createMovieRequestSchema.parse({
+      title: "The Matrix",
+      runtimeMinutes: 136,
+      synopsis: "A programmer discovers the world is not what it seems.",
+      rating: "R",
+      posterUrl: "https://images.example.com/matrix.jpg",
+    }).posterUrl).toContain("images.example.com");
+
+    expect(createMovieRequestSchema.parse({
+      title: "The Matrix",
+      runtimeMinutes: 136,
+      posterUrl: "/posters/matrix.jpg",
+    }).posterUrl).toBe("/posters/matrix.jpg");
+  });
+
+  it("stores film-series and presentation labels on a new showtime", () => {
+    const parsed = createShowtimeRequestSchema.parse({
+      ...showtime,
+      filmSeries: "Summer Classics",
+      presentation: "Q_AND_A",
+    });
+
+    expect(parsed.filmSeries).toBe("Summer Classics");
+    expect(parsed.presentation).toBe("Q_AND_A");
+  });
+
+  it("does not reset sale or presentation values on an unrelated partial update", () => {
+    expect(updateShowtimeRequestSchema.parse({ startsAt: showtime.startsAt })).toEqual({
+      startsAt: showtime.startsAt,
+    });
+  });
+});
 
 describe("startOfLocalDay", () => {
   it("keeps the full current cinema day visible after showtimes begin", () => {

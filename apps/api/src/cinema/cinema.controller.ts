@@ -4,6 +4,7 @@ import {
   createAuditoriumRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  updateMovieRequestSchema,
   updateShowtimeRequestSchema,
 } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -72,6 +73,17 @@ export class CinemaController {
     @Body(new ZodValidationPipe(createMovieRequestSchema)) body: unknown,
   ) {
     return this.cinemaService.createMovie(actor, body as ReturnType<typeof createMovieRequestSchema.parse>);
+  }
+
+  @Patch("movies/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  updateMovie(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateMovieRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.updateMovie(actor, id, body as ReturnType<typeof updateMovieRequestSchema.parse>);
   }
 
   @Delete("movies/:id")
