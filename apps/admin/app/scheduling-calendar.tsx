@@ -93,6 +93,7 @@ export function SchedulingCalendar({
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
   const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
@@ -166,6 +167,21 @@ export function SchedulingCalendar({
     date.setDate(date.getDate() + index);
     return date;
   });
+
+  const selectedLibraryMovie = movies.find((movie) => movie.id === selectedMovieId) ?? null;
+  const selectedMovieShowtimes = selectedLibraryMovie
+    ? showtimes
+      .filter((showtime) => showtime.movie.id === selectedLibraryMovie.id)
+      .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime())
+    : [];
+  const upcomingMovieShowtimes = selectedMovieShowtimes
+    .filter((showtime) => new Date(showtime.startsAt) >= now)
+    .slice(0, 6);
+  const filmSeries = Array.from(new Set(selectedMovieShowtimes
+    .map((showtime) => showtime.filmSeries?.trim())
+    .filter((value): value is string => Boolean(value))));
+  const presentations = Array.from(new Set(selectedMovieShowtimes
+    .map((showtime) => showtime.presentation ?? "STANDARD")));
 
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
@@ -270,7 +286,7 @@ export function SchedulingCalendar({
                 >
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
-                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${showtime.presentation.replaceAll("_", " ").replace("AND", "&")}` : ""}</small>
+                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${showtime.presentation.replaceAll("_", " ").replace("AND", "&")}` : ""}</small>
                 </button>;
               })}
             </div>
@@ -315,7 +331,7 @@ export function SchedulingCalendar({
                       setDraggingKey(key);
                     }}
                     onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-                  ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}</span></button>;
+                  ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}{showtime.filmSeries ? ` · ${showtime.filmSeries}` : ""}</span></button>;
                 }) : <small>Open</small>}
               </div>;
             })}
@@ -325,12 +341,23 @@ export function SchedulingCalendar({
     </div>}
 
     <div className="film-library" aria-label="Film library">
-      <div><b>Film library</b><span>Drag a film into an open room time</span></div>
+      <div className="film-library-heading"><b>Film library</b><span>Click a film for its details. Drag it into an open room time to schedule it.</span></div>
+      <div className="film-library-content">
       <div className="film-library-list">
         {movies.map((movie) => <div
-          className="film-card"
+          className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
           draggable
           key={movie.id}
+          role="button"
+          tabIndex={0}
+          aria-pressed={selectedMovieId === movie.id}
+          onClick={() => setSelectedMovieId(movie.id)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setSelectedMovieId(movie.id);
+            }
+          }}
           onDragStart={(event) => {
             const key = `movie:${movie.id}`;
             event.dataTransfer.effectAllowed = "copy";
@@ -347,6 +374,57 @@ export function SchedulingCalendar({
           onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
           onMouseDown={(event) => event.stopPropagation()}
         >×</button></div>)}
+      </div>
+      <section className="film-library-detail" aria-live="polite">
+        {selectedLibraryMovie ? <>
+          <div className="film-detail-poster">
+            {selectedLibraryMovie.posterUrl
+              ? <img src={selectedLibraryMovie.posterUrl} alt={`${selectedLibraryMovie.title} poster`} />
+              : <span>Poster not added</span>}
+          </div>
+          <div className="film-detail-copy">
+            <div className="film-detail-heading">
+              <div>
+                <p className="kicker">SELECTED FILM</p>
+                <h3>{selectedLibraryMovie.title}</h3>
+              </div>
+              <button type="button" className="film-detail-edit" onClick={() => onEditMovie(selectedLibraryMovie)}>Edit film details</button>
+            </div>
+            <p className="film-detail-meta">{selectedLibraryMovie.rating || "Not rated"} · {selectedLibraryMovie.runtimeMinutes} min</p>
+            <p className="film-detail-synopsis">{selectedLibraryMovie.synopsis || "No synopsis has been added yet."}</p>
+
+            <div className="film-programming-summary">
+              <div>
+                <span>Film series / special event</span>
+                <div className="film-badges">{filmSeries.length
+                  ? filmSeries.map((series) => <b key={series}>{series}</b>)
+                  : <em>Not assigned on any scheduled appearance</em>}</div>
+              </div>
+              <div>
+                <span>Presentations</span>
+                <div className="film-badges">{presentations.length
+                  ? presentations.map((presentation) => <b key={presentation}>{presentation.replaceAll("_", " ").replace("AND", "&")}</b>)
+                  : <em>No scheduled appearances</em>}</div>
+              </div>
+            </div>
+
+            <div className="film-appearances">
+              <h4>Upcoming appearances</h4>
+              {upcomingMovieShowtimes.length ? <ul>{upcomingMovieShowtimes.map((showtime) => <li key={showtime.id}>
+                <button type="button" onClick={() => onEdit(showtime)}>
+                  <span>{new Date(showtime.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatTime(showtime.startsAt)}</span>
+                  <strong>{showtime.auditorium.name}</strong>
+                  <small>{showtime.filmSeries || "Regular engagement"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${showtime.presentation.replaceAll("_", " ").replace("AND", "&")}` : ""}</small>
+                </button>
+              </li>)}</ul> : <p>No upcoming appearances are scheduled.</p>}
+            </div>
+          </div>
+        </> : <div className="film-detail-empty">
+          <p className="kicker">FILM DETAILS</p>
+          <h3>Select a film</h3>
+          <p>Its poster, synopsis, event or series labels, presentation types, and upcoming appearances will appear here.</p>
+        </div>}
+      </section>
       </div>
     </div>
   </section>;

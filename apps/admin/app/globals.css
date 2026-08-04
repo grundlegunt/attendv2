@@ -52,19 +52,45 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .legend-swatch.past { background: #474944; }
 .schedule-legend span:last-child { margin-left: auto; }
 .film-library { display: grid; grid-template-columns: minmax(220px, .55fr) minmax(500px, 1.45fr); gap: 36px; padding: 28px 32px; border-top: 1px solid #34342f; background: #171815; }
-.film-library > div:first-child { display: grid; align-content: start; gap: 8px; }
-.film-library > div:first-child b { font-family: Georgia, serif; font-size: 2rem; }
-.film-library > div:first-child span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
+.film-library-heading { display: grid; align-content: start; gap: 8px; }
+.film-library-heading b { font-family: Georgia, serif; font-size: 2rem; }
+.film-library-heading span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
+.film-library-content { display: grid; gap: 28px; min-width: 0; }
 .film-library-list { display: grid; border-top: 1px solid #55564f; }
 .film-card { position: relative; display: grid; grid-template-columns: 50px minmax(0, 1fr) 100px 110px; align-items: center; gap: 18px; min-width: 0; min-height: 62px; padding: 11px 54px 11px 0; border: 0; border-bottom: 1px solid #55564f; border-radius: 0; background: transparent; color: white; cursor: grab; user-select: none; }
 .film-edit { border: 0; background: transparent; color: #f0bd2d; font-size: .7rem; font-weight: 900; cursor: pointer; }
 .film-card:hover { border-color: #f0bd2d; background: #2c2d27; }
+.film-card.selected { border-color: #f0bd2d; background: #2c2d27; box-shadow: inset 3px 0 #f0bd2d; }
+.film-card:focus-visible { outline: 2px solid #f0bd2d; outline-offset: 2px; }
 .film-card:active { cursor: grabbing; opacity: .72; }
 .film-card strong { overflow: hidden; font-family: Georgia, serif; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .film-card span { color: #aaa99f; font-size: .7rem; }
 .film-card::after { content: "Drag to schedule"; color: #aaa99f; font-size: .68rem; text-align: right; }
 .film-archive { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border: 1px solid #55564f; border-radius: 50%; background: #1d1e1a; color: #bdbdb5; font-size: 1rem; line-height: 1; cursor: pointer; }
 .film-archive:hover { border-color: #f05a45; color: #f05a45; }
+.film-library-detail { display: grid; grid-template-columns: minmax(150px, 210px) minmax(0, 1fr); gap: 26px; min-height: 260px; padding: 24px; border: 1px solid #45463f; background: #20211d; }
+.film-detail-poster { display: grid; place-items: center; min-height: 250px; overflow: hidden; border: 1px solid #4d4e47; background: #11120f; color: #77786f; font-size: .75rem; text-align: center; }
+.film-detail-poster img { width: 100%; height: 100%; max-height: 320px; object-fit: cover; }
+.film-detail-copy { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.film-detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.film-detail-heading h3, .film-detail-empty h3 { margin: 4px 0 0; font-family: Georgia, serif; font-size: clamp(1.5rem, 2.8vw, 2.25rem); }
+.film-detail-edit { padding: 10px 13px; border: 1px solid #77786f; background: transparent; color: white; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.film-detail-edit:hover { border-color: #f0bd2d; color: #f0bd2d; }
+.film-detail-meta { margin: 0; color: #c0c0b8; font-weight: 800; }
+.film-detail-synopsis { max-width: 800px; margin: 0; color: #aaa99f; line-height: 1.55; }
+.film-programming-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 6px; padding: 16px 0; border-top: 1px solid #45463f; border-bottom: 1px solid #45463f; }
+.film-programming-summary > div { display: grid; align-content: start; gap: 8px; }
+.film-programming-summary span { color: #aaa99f; font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.film-badges { display: flex; flex-wrap: wrap; gap: 7px; }
+.film-badges b { padding: 5px 8px; border: 1px solid #826d31; background: #3b321b; color: #f3cf63; font-size: .68rem; text-transform: capitalize; }
+.film-badges em { color: #77786f; font-size: .72rem; font-style: normal; }
+.film-appearances h4 { margin: 2px 0 8px; font-size: .82rem; letter-spacing: .06em; text-transform: uppercase; }
+.film-appearances ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.film-appearances button { display: grid; gap: 3px; width: 100%; padding: 10px; border: 1px solid #45463f; background: #181915; color: white; text-align: left; cursor: pointer; }
+.film-appearances button:hover { border-color: #f0bd2d; }
+.film-appearances button span, .film-appearances button small { color: #aaa99f; font-size: .68rem; }
+.film-appearances > p { margin: 0; color: #77786f; font-size: .76rem; }
+.film-detail-empty { grid-column: 1 / -1; align-self: center; max-width: 620px; color: #aaa99f; }
 .schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr) clamp(340px, 20vw, 390px); align-items: stretch; border: 1px solid #3a3b35; background: #171815; }
 .schedule-with-inspector .schedule-workspace { min-width: 0; border: 0; }
 .schedule-inspector { min-height: 620px; padding: 24px; border-left: 1px solid #484943; background: #170d14; }
@@ -208,6 +234,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .film-library { grid-template-columns: 1fr; gap: 18px; padding: 22px 18px; }
   .film-card { grid-template-columns: minmax(0, 1fr) 70px; }
   .film-card::after { display: none; }
+  .film-library-detail { grid-template-columns: 1fr; }
+  .film-detail-poster { min-height: 0; aspect-ratio: 2 / 3; max-width: 220px; }
+  .film-detail-heading { flex-direction: column; }
+  .film-programming-summary, .film-appearances ul { grid-template-columns: 1fr; }
   .builder-heading { align-items: stretch; flex-direction: column; }
   .builder-heading label { min-width: 0; }
   .advanced-toolbar { grid-template-columns: 1fr 1fr; }
