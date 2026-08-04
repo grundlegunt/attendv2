@@ -543,11 +543,18 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         throw AppError.conflict("Past or already-started showtimes are retained for reporting and cannot be removed.");
       }
 
-      const [tickets, restaurantTabs, restaurantOrders, seatHolds] = await Promise.all([
+      const now = new Date();
+      const [tickets, restaurantTabs, restaurantOrders, activeSeatHolds] = await Promise.all([
         tx.ticket.count({ where: { showtimeSeat: { showtimeId: id } } }),
         tx.restaurantTab.count({ where: { showtimeId: id } }),
         tx.restaurantOrder.count({ where: { showtimeSeat: { showtimeId: id } } }),
-        tx.seatHold.count({ where: { showtimeSeat: { showtimeId: id } } }),
+        tx.seatHold.count({
+          where: {
+            showtimeSeat: { showtimeId: id },
+            releasedAt: null,
+            expiresAt: { gt: now },
+          },
+        }),
       ]);
       if (tickets) {
         throw AppError.conflict("This showtime has ticket records. Cancel or refund affected tickets instead of removing it.");
@@ -555,8 +562,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (restaurantTabs || restaurantOrders) {
         throw AppError.conflict("This showtime has restaurant activity and must be retained for operations and reporting.");
       }
-      if (seatHolds) {
-        throw AppError.conflict("This showtime has seat-hold history and must be retained. Close sales or cancel affected activity instead.");
+      if (activeSeatHolds) {
+        throw AppError.conflict("This showtime has active seat holds. Close sales and wait for the holds to expire before removing it.");
       }
 
       await tx.auditEvent.create({ data: {

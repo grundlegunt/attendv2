@@ -442,6 +442,28 @@ describe("Milestone 1 cinema configuration", () => {
       .send({ movieId: movie.body.id, auditoriumId: auditorium.body.id, startsAt: "2031-01-01T18:00:00.000Z", onSale: false })
       .expect(201);
 
+    const { prisma } = await import("@cinema/database");
+    const cleanupSeat = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { showtimeId: showtime.body.id },
+    });
+    const cleanupHold = await prisma.seatHold.create({
+      data: {
+        showtimeSeatId: cleanupSeat.id,
+        holdToken: `cleanup-${Date.now()}`,
+        holderKey: "cleanup-holder",
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/showtimes/${showtime.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(409);
+    await prisma.seatHold.update({
+      where: { id: cleanupHold.id },
+      data: { expiresAt: new Date(Date.now() - 60_000) },
+    });
+
     await request(app.getHttpServer())
       .delete(`/api/v1/cinema/showtimes/${showtime.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
