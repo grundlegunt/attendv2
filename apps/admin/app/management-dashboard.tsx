@@ -61,7 +61,10 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   }
 
   async function exportHours() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
+      (process.env.NODE_ENV === "production"
+        ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
+        : "http://localhost:4000/api/v1");
     const response = await fetch(`${apiUrl}/reports/labor.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!response.ok) { setError("The hours export could not be created."); return; }
     const url = URL.createObjectURL(await response.blob());
