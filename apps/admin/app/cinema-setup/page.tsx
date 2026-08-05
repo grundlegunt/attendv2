@@ -32,7 +32,7 @@ interface Bootstrap {
 }
 
 export default function CinemaSetupPage() {
-  const { accessToken } = useAdminSession();
+  const { accessToken, signOut } = useAdminSession();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -40,6 +40,7 @@ export default function CinemaSetupPage() {
   const [seriesDescription, setSeriesDescription] = useState("");
   const [seriesArtworkUrl, setSeriesArtworkUrl] = useState("");
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
+  const [seriesSaving, setSeriesSaving] = useState(false);
 
   async function refresh() {
     if (!accessToken) return;
@@ -49,6 +50,10 @@ export default function CinemaSetupPage() {
   useEffect(() => { refresh().catch(showError); }, [accessToken]);
 
   function showError(reason: unknown) {
+    if (reason instanceof ApiRequestError && reason.status === 401) {
+      setError("Your admin session expired. Sign in again, then retry the action.");
+      return;
+    }
     setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
   }
 
@@ -69,12 +74,23 @@ export default function CinemaSetupPage() {
   async function saveSeries(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    setNotice(null);
+    const name = seriesName.trim();
+    if (!name) {
+      setError("Enter a name for the film series.");
+      return;
+    }
+    if (!accessToken) {
+      setError("Sign in again before adding a film series.");
+      return;
+    }
+    setSeriesSaving(true);
     try {
       await apiFetch(editingSeriesId ? `/cinema/film-series/${editingSeriesId}` : "/cinema/film-series", {
-        accessToken: accessToken ?? undefined,
+        accessToken,
         method: editingSeriesId ? "PATCH" : "POST",
         body: JSON.stringify({
-          name: seriesName.trim(),
+          name,
           description: seriesDescription.trim() || null,
           artworkUrl: seriesArtworkUrl.trim() || null,
         }),
@@ -83,7 +99,11 @@ export default function CinemaSetupPage() {
       resetSeriesForm();
       await refresh();
       setNotice(`Film series ${action}. It is now available when scheduling a showtime.`);
-    } catch (reason) { showError(reason); }
+    } catch (reason) {
+      showError(reason);
+    } finally {
+      setSeriesSaving(false);
+    }
   }
 
   async function archiveSeries(series: FilmSeries) {
@@ -101,7 +121,7 @@ export default function CinemaSetupPage() {
     <section className="admin-heading">
       <div><p className="kicker">LOCATION CONFIGURATION</p><h1>Cinema Setup</h1><p>Choose a location, then build and maintain its auditoriums and seat maps.</p></div>
     </section>
-    {error && <div className="error">{error}</div>}
+    {error && <div className="error">{error}{error.startsWith("Your admin session expired") && <button type="button" className="secondary" onClick={signOut}>Sign in again</button>}</div>}
     {notice && <div className="notice">{notice}</div>}
     <section className="cinema-setup-workspace">
       <aside className="setup-location-rail" aria-label="Locations">
@@ -129,7 +149,7 @@ export default function CinemaSetupPage() {
         <label>Name<input required value={seriesName} onChange={(event) => setSeriesName(event.target.value)} placeholder="Summer Classics" /></label>
         <label>Description<textarea rows={4} value={seriesDescription} onChange={(event) => setSeriesDescription(event.target.value)} placeholder="Customer-facing description of the series or event" /></label>
         <label>Artwork URL<input value={seriesArtworkUrl} onChange={(event) => setSeriesArtworkUrl(event.target.value)} placeholder="https://…" /></label>
-        <div className="film-series-form-actions"><button className="primary">{editingSeriesId ? "Save series" : "Add series"}</button>{editingSeriesId && <button type="button" className="secondary" onClick={resetSeriesForm}>Cancel</button>}</div>
+        <div className="film-series-form-actions"><button className="primary" disabled={seriesSaving}>{seriesSaving ? (editingSeriesId ? "Saving…" : "Creating…") : (editingSeriesId ? "Save series" : "Add series")}</button>{editingSeriesId && <button type="button" className="secondary" onClick={resetSeriesForm} disabled={seriesSaving}>Cancel</button>}</div>
       </form>
       <div className="film-series-list">
         {(data?.location.organization.filmSeries ?? []).filter((series) => series.active).map((series) => <article key={series.id}>
