@@ -39,7 +39,11 @@ export function MovieTile({
       </Link>
       <div className="program-tile__info">
         <div className="program-tile__badges">
-          {series.map((entry) => <span key={entry.id}>{entry.name}</span>)}
+          {series.map((entry) => (
+            <Link key={entry.id} href={`/film-series/${entry.id}`}>
+              {entry.name}
+            </Link>
+          ))}
           {formats.map((format) => <span key={format}>{format}</span>)}
         </div>
         <div className="program-tile__title">

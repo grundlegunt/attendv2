@@ -110,7 +110,8 @@
 .program-tile__image:hover > img { transform: scale(1.025); }
 .program-tile__info { min-width: 0; padding: 18px 20px 20px; border-top: 1px solid var(--color-border); }
 .program-tile__badges { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
-.program-tile__badges span { padding: 7px 9px; background: rgba(8,6,8,.88); border: 1px solid rgba(255,255,255,.18); font-size: .66rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.program-tile__badges span, .program-tile__badges a { padding: 7px 9px; background: rgba(8,6,8,.88); border: 1px solid rgba(255,255,255,.18); color: inherit; font-size: .66rem; font-weight: 900; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; }
+.program-tile__badges a:hover, .program-tile__badges a:focus-visible { border-color: var(--color-accent); color: var(--color-accent); }
 .program-tile__title span { color: var(--color-accent); font-size: .72rem; font-weight: 800; letter-spacing: .13em; }
 .program-tile__title h2 { margin: 8px 0 0; font: 800 clamp(1.55rem, 6cqi, 2.5rem)/1 var(--font-family-display); overflow-wrap: normal; text-wrap: balance; text-transform: uppercase; }
 .program-tile__title h2 a { color: inherit; text-decoration: none; }
