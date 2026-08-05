@@ -349,6 +349,12 @@ describe("Milestone 1 cinema configuration", () => {
   it("lists real on-sale showtimes publicly", async () => {
     const res = await request(app.getHttpServer()).get("/api/v1/cinema/now-playing");
     expect(res.status).toBe(200);
+    expect(res.body.location).toEqual(expect.objectContaining({
+      id: expect.any(String),
+      name: expect.any(String),
+      timezone: expect.any(String),
+    }));
+    expect(res.body.location).toHaveProperty("address");
     expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
   });
 

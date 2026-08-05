@@ -731,7 +731,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
 
     return {
-      location: { id: location.id, name: location.name, timezone: location.timezone },
+      location: {
+        id: location.id,
+        name: location.name,
+        address: location.address,
+        timezone: location.timezone,
+      },
       movies: sortedMovies.map((movie) => ({
         ...movie,
         showtimes: movie.showtimes.map((showtime) => ({

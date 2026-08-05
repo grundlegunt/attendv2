@@ -1,16 +1,20 @@
 import type { ReactNode } from "react";
 import "@cinema/ui/theme.css";
 import "./globals.css";
+import { SiteHeader } from "./components/site-header";
 
 export const metadata = {
-  title: "Ridgeline Dine-In Cinema",
+  title: "Attend Cinema",
   description: "Reserved seating, tickets, and dine-in service.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme="cinematic">
-      <body>{children}</body>
+      <body>
+        <SiteHeader />
+        {children}
+      </body>
     </html>
   );
 }

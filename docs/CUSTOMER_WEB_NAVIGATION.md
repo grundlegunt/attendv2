@@ -1,5 +1,18 @@
 # Attend — Customer Website Navigation
 
+## Implemented foundation
+
+The customer website now has a persistent top navigation with four deliberately scoped destinations:
+
+- `/showtimes` — the existing now-playing, seat-selection, and checkout journey.
+- `/account` — customer sign-in/registration and live restaurant-tab access, moved out of the showtimes page.
+- `/directions` — the active cinema's saved name and address, with a link to open turn-by-turn directions.
+- `/private-events` — an informational overview that directs guests to contact the cinema; it does not imply an online reservation workflow.
+
+The root route redirects to `/showtimes`. The public now-playing response includes the saved location address so Directions does not depend on hard-coded cinema information.
+
+Coming Soon, Film Series, named festival/event pages, and Open Captions filtering remain deferred until their data-model decisions are made.
+
 ## Reference
 
 Nitehawk Cinema's site navigation is the reference point for what a real independent-cinema customer site offers beyond a bare showtime list: Buy Tickets, Coming Soon, Film Series, Dining & Bar, Just Announced, a named festival/event, Merch, Private Events, Directions, Open Captions. Nitehawk presents this as a side menu; for Attend, use a **persistent top nav** instead (matches the existing dark/gold cinematic direction better than a slide-out side panel, and keeps the page's vertical space for the showtime list).
