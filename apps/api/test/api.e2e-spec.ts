@@ -1998,6 +1998,37 @@ describe("Milestone 5 seat-linked dining tabs", () => {
 });
 
 describe("Milestone 6 server POS and menus", () => {
+  it("publishes only active, available menu items with dietary tags and movie specials", async () => {
+    const { prisma } = await import("@cinema/database");
+    const burger = await prisma.menuItem.findFirstOrThrow({ where: { name: "Cheeseburger" } });
+    const movie = await prisma.movie.findFirstOrThrow({ where: { title: "Integration Feature" } });
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/restaurant-menu/items/${burger.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ isGlutenFree: true })
+      .expect(200);
+    await prisma.moviePairing.upsert({
+      where: { movieId_menuItemId: { movieId: movie.id, menuItemId: burger.id } },
+      update: {},
+      create: { movieId: movie.id, menuItemId: burger.id },
+    });
+
+    const published = await request(app.getHttpServer()).get("/api/v1/cinema/menu").expect(200);
+    const items = published.body.categories.flatMap((category: { items: unknown[] }) => category.items) as Array<{ id: string; isGlutenFree: boolean }>;
+    expect(items).toContainEqual(expect.objectContaining({ id: burger.id, isGlutenFree: true }));
+    expect(published.body.movieSpecials).toContainEqual(expect.objectContaining({
+      movieId: movie.id,
+      items: expect.arrayContaining([expect.objectContaining({ id: burger.id })]),
+    }));
+
+    await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: true } });
+    const unavailable = await request(app.getHttpServer()).get("/api/v1/cinema/menu").expect(200);
+    expect(unavailable.body.categories.flatMap((category: { items: Array<{ id: string }> }) => category.items).some((item: { id: string }) => item.id === burger.id)).toBe(false);
+    expect(unavailable.body.movieSpecials.some((special: { movieId: string }) => special.movieId === movie.id)).toBe(false);
+    await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: false } });
+  });
+
   it("opens a walk-in tab and sends items to the correct kitchen and bar stations", async () => {
     const menu = await request(app.getHttpServer())
       .get("/api/v1/restaurant-menu")

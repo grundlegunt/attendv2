@@ -15,6 +15,7 @@ import {
   validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "@cinema/shared";
+import type { PublicDiningMenuResponse } from "@cinema/shared";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 
@@ -809,6 +810,68 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           ...showtime,
           startsAt: showtime.startsAt.toISOString(),
         })),
+      })),
+    };
+  }
+
+  async publicDiningMenu(locationId?: string): Promise<PublicDiningMenuResponse> {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
+      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const [categories, movies] = await Promise.all([
+      prisma.menuCategory.findMany({
+        where: { locationId: location.id, active: true },
+        select: {
+          id: true,
+          name: true,
+          items: {
+            where: { active: true, is86d: false },
+            select: {
+              id: true, name: true, description: true, imageUrl: true,
+              priceCents: true, isVegan: true, isGlutenFree: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          },
+        },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.movie.findMany({
+        where: {
+          organizationId: location.organizationId,
+          active: true,
+          pairings: { some: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } } },
+        },
+        select: {
+          id: true,
+          title: true,
+          posterUrl: true,
+          pairings: {
+            where: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } },
+            select: {
+              menuItem: {
+                select: {
+                  id: true, name: true, description: true, imageUrl: true,
+                  priceCents: true, isVegan: true, isGlutenFree: true,
+                },
+              },
+            },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+        orderBy: { title: "asc" },
+      }),
+    ]);
+
+    return {
+      location: { id: location.id, name: location.name, address: location.address },
+      categories,
+      movieSpecials: movies.map((movie) => ({
+        movieId: movie.id,
+        movieTitle: movie.title,
+        posterUrl: movie.posterUrl,
+        items: movie.pairings.map((pairing) => pairing.menuItem),
       })),
     };
   }

@@ -14,6 +14,8 @@ interface Menu {
       description: string | null;
       imageUrl: string | null;
       priceCents: number;
+      isVegan: boolean;
+      isGlutenFree: boolean;
       sortOrder: number;
       active: boolean;
       is86d: boolean;
@@ -44,6 +46,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [price, setPrice] = useState(0);
+  const [isVegan, setIsVegan] = useState(false);
+  const [isGlutenFree, setIsGlutenFree] = useState(false);
   const [categoryId, setCategoryId] = useState("");
   const [stationId, setStationId] = useState("");
   const [message, setMessage] = useState("");
@@ -71,6 +75,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editStationId, setEditStationId] = useState("");
   const [editSortOrder, setEditSortOrder] = useState(0);
   const [editActive, setEditActive] = useState(true);
+  const [editIsVegan, setEditIsVegan] = useState(false);
+  const [editIsGlutenFree, setEditIsGlutenFree] = useState(false);
 
   const refresh = useCallback(() => {
     apiFetch<Menu>("/restaurant-menu/admin", { accessToken })
@@ -117,6 +123,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           description: description || undefined,
           imageUrl: imageUrl || undefined,
           priceCents: Math.round(price * 100),
+          isVegan,
+          isGlutenFree,
           sortOrder:
             menu?.categories.find((category) => category.id === categoryId)
               ?.items.length ?? 0,
@@ -126,6 +134,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       setName("");
       setDescription("");
       setPrice(0);
+      setIsVegan(false);
+      setIsGlutenFree(false);
       setMessage("Menu item created.");
       refresh();
     } catch (error) {
@@ -255,6 +265,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     setEditStationId(item.kitchenStation.id);
     setEditSortOrder(item.sortOrder);
     setEditActive(item.active);
+    setEditIsVegan(item.isVegan);
+    setEditIsGlutenFree(item.isGlutenFree);
   }
 
   async function saveItem(event: FormEvent) {
@@ -272,6 +284,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           kitchenStationId: editStationId,
           sortOrder: editSortOrder,
           active: editActive,
+          isVegan: editIsVegan,
+          isGlutenFree: editIsGlutenFree,
         }),
       });
       setEditingItem(null);
@@ -385,6 +399,16 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             Image URL
             <input type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://…" />
           </label>
+          <div className="two-fields">
+            <label className="checkbox">
+              <input type="checkbox" checked={isVegan} onChange={(event) => setIsVegan(event.target.checked)} />
+              <span>Vegan</span>
+            </label>
+            <label className="checkbox">
+              <input type="checkbox" checked={isGlutenFree} onChange={(event) => setIsGlutenFree(event.target.checked)} />
+              <span>Gluten-free</span>
+            </label>
+          </div>
           <label>
             Category
             <select
@@ -536,6 +560,16 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
               />
               <span>Active and visible on the menu</span>
             </label>
+            <div className="two-fields">
+              <label className="checkbox">
+                <input type="checkbox" checked={editIsVegan} onChange={(event) => setEditIsVegan(event.target.checked)} />
+                <span>Vegan</span>
+              </label>
+              <label className="checkbox">
+                <input type="checkbox" checked={editIsGlutenFree} onChange={(event) => setEditIsGlutenFree(event.target.checked)} />
+                <span>Gluten-free</span>
+              </label>
+            </div>
             <button className="primary">Save item</button>
           </form>
         )}

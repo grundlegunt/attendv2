@@ -7,7 +7,9 @@ const links = [
   { href: "/showtimes", label: "Showtimes" },
   { href: "/coming-soon", label: "Coming Soon" },
   { href: "/film-series", label: "Film Series" },
+  { href: "/dining-bar", label: "Dining & Bar" },
   { href: "/account", label: "Account" },
+  { href: "/about", label: "About" },
   { href: "/directions", label: "Directions" },
   { href: "/private-events", label: "Private Events" },
 ];
