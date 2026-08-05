@@ -36,15 +36,17 @@ export function MovieTile({
     <article className="program-tile">
       <Link className="program-tile__image" href={`/movie/${movie.id}`}>
         {movie.posterUrl && <img src={movie.posterUrl} alt="" />}
+      </Link>
+      <div className="program-tile__info">
         <div className="program-tile__badges">
           {series.map((entry) => <span key={entry.id}>{entry.name}</span>)}
           {formats.map((format) => <span key={format}>{format}</span>)}
         </div>
         <div className="program-tile__title">
           <span>{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</span>
-          <h2>{movie.title}</h2>
+          <h2><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
         </div>
-      </Link>
+      </div>
       <div className="program-tile__showtimes">
         {showtimes.map((showtime) => {
           const isPast = new Date(showtime.startsAt).getTime() <= Date.now();
