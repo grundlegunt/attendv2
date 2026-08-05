@@ -59,7 +59,7 @@
 .program-heading p, .movie-copy > p, .loading-copy { color: var(--color-text-secondary); }
 .movie-grid { display: grid; gap: 28px; }
 .movie-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); align-items: start; }
-.program-tile { overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.program-tile { container-type: inline-size; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .program-tile__image { position: relative; display: block; aspect-ratio: 2 / 3; overflow: hidden; background: #121216; color: var(--color-text-primary); text-decoration: none; }
 .program-tile__image > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: transform .35s ease; }
 .program-tile__image:hover > img { transform: scale(1.025); }
@@ -67,7 +67,7 @@
 .program-tile__badges { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .program-tile__badges span { padding: 7px 9px; background: rgba(8,6,8,.88); border: 1px solid rgba(255,255,255,.18); font-size: .66rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
 .program-tile__title span { color: var(--color-accent); font-size: .72rem; font-weight: 800; letter-spacing: .13em; }
-.program-tile__title h2 { margin: 8px 0 0; font: 800 clamp(1.7rem, 3vw, 2.5rem)/1 var(--font-family-display); overflow-wrap: anywhere; text-transform: uppercase; }
+.program-tile__title h2 { margin: 8px 0 0; font: 800 clamp(1.55rem, 6cqi, 2.5rem)/1 var(--font-family-display); overflow-wrap: normal; text-wrap: balance; text-transform: uppercase; }
 .program-tile__title h2 a { color: inherit; text-decoration: none; }
 .program-tile__showtimes { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--color-border); }
 .program-tile__showtimes button { padding: 15px; border: 0; background: var(--color-bg-elevated); color: var(--color-text-primary); text-align: left; cursor: pointer; }
