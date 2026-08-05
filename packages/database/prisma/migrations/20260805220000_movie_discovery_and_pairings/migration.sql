@@ -11,8 +11,8 @@ ALTER TABLE "menu_items"
   ADD COLUMN "imageUrl" TEXT;
 
 CREATE TABLE "movie_pairings" (
-  "movieId" UUID NOT NULL,
-  "menuItemId" UUID NOT NULL,
+  "movieId" TEXT NOT NULL,
+  "menuItemId" TEXT NOT NULL,
   "sortOrder" INTEGER NOT NULL DEFAULT 0,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "movie_pairings_pkey" PRIMARY KEY ("movieId", "menuItemId"),

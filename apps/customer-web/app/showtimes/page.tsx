@@ -32,7 +32,14 @@ export default function ShowtimesPage() {
     )).sort(),
     [program, nowPlayingMovies],
   );
-  const activeDate = selectedDate ?? availableDates[0] ?? null;
+  const activeDate = useMemo(() => {
+    if (selectedDate) return selectedDate;
+    if (!program) return availableDates[0] ?? null;
+    const today = localDateKey(new Date(), program.location.timezone);
+    return availableDates.includes(today)
+      ? today
+      : availableDates.find((date) => date > today) ?? availableDates[0] ?? null;
+  }, [availableDates, program, selectedDate]);
 
   const moviesForActiveDate = useMemo(() => {
     if (!program || !activeDate) return [];

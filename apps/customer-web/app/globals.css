@@ -1,3 +1,4 @@
+:root, [data-theme="cinematic"] { --color-accent: #fe2c54; --color-accent-muted: #a91d39; }
 .cinema-shell { min-height: 100vh; padding: 24px clamp(20px, 5vw, 72px) 72px; background: radial-gradient(circle at top right, #32131d, var(--color-bg) 45%); }
 .site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--color-border); background: rgba(13, 10, 12, .94); backdrop-filter: blur(16px); }
 .site-header__inner { display: flex; justify-content: space-between; align-items: center; gap: 28px; max-width: 1680px; margin: 0 auto; padding: 14px clamp(20px, 5vw, 72px); }
@@ -61,7 +62,7 @@
 .program-tile { overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .program-tile__image { position: relative; display: block; min-height: 470px; overflow: hidden; background: linear-gradient(145deg, #4c1024, #121216); color: var(--color-text-primary); text-decoration: none; }
 .program-tile__image::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.05) 35%, rgba(7,5,7,.94)); }
-.program-tile__image > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
+.program-tile__image > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transition: transform .35s ease; }
 .program-tile__image:hover > img { transform: scale(1.025); }
 .program-tile__badges { position: absolute; z-index: 2; top: 18px; left: 18px; right: 18px; display: flex; flex-wrap: wrap; gap: 7px; }
 .program-tile__badges span { padding: 7px 9px; background: rgba(8,6,8,.88); border: 1px solid rgba(255,255,255,.18); font-size: .66rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
@@ -80,7 +81,7 @@
 .movie-detail { padding-top: 54px; }
 .movie-detail__hero { display: grid; grid-template-columns: minmax(240px, 380px) 1fr; gap: clamp(32px, 6vw, 88px); align-items: start; }
 .movie-detail__poster { min-height: 520px; display: grid; place-items: center; overflow: hidden; background: #1b171b; color: var(--color-accent); font: 2rem var(--font-family-display); }
-.movie-detail__poster img { width: 100%; height: 100%; object-fit: cover; }
+.movie-detail__poster img { width: 100%; height: 100%; object-fit: contain; }
 .movie-detail__trailer { display: block; text-align: center; }
 .movie-detail__copy h1 { margin: 8px 0 28px; font: clamp(3rem, 8vw, 7rem)/.9 var(--font-family-display); }
 .detail-date-bar { display: flex; flex-wrap: wrap; gap: 8px; }
