@@ -138,3 +138,15 @@ The deployed Next.js customer experience uses a two-second PostgreSQL-backed
 poll for live fanout. Redis pub/sub and a WebSocket transport remain an
 optional latency/scale optimization; neither is authoritative and neither is
 required for seat correctness.
+
+## Theater branding
+
+Owners and general managers can edit their location's customer-facing name,
+logo, and color palette from the admin app's **Branding** page. Changes are
+stored per location, applied to the customer site without a code deployment,
+and recorded as `location.branding_updated` audit events. The admin app can
+remain on Attend's neutral operator theme or opt into the same customer colors.
+
+The public customer site reads branding from `GET /cinema/branding`; authorized
+staff use `GET` and `PATCH /management/branding`. Seeded Meridian environments
+start with the `#fe2c54` accent previously embedded in customer-site CSS.

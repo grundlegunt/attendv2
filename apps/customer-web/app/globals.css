@@ -1,8 +1,8 @@
-:root, [data-theme="cinematic"] { --color-accent: #fe2c54; --color-accent-muted: #a91d39; }
-.cinema-shell { min-height: 100vh; padding: 24px clamp(20px, 5vw, 72px) 72px; background: radial-gradient(circle at top right, #32131d, var(--color-bg) 45%); }
+.cinema-shell { min-height: 100vh; padding: 24px clamp(20px, 5vw, 72px) 72px; background: radial-gradient(circle at top right, var(--color-accent-muted), var(--color-bg) 45%); }
 .site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--color-border); background: rgba(13, 10, 12, .94); backdrop-filter: blur(16px); }
 .site-header__inner { display: flex; justify-content: space-between; align-items: center; gap: 28px; max-width: 1680px; margin: 0 auto; padding: 14px clamp(20px, 5vw, 72px); }
 .site-brand { display: grid; gap: 2px; color: var(--color-text-primary); text-decoration: none; }
+.site-brand img { display: block; max-width: 190px; max-height: 64px; object-fit: contain; }
 .site-brand span { color: var(--color-accent); font-size: .64rem; font-weight: 800; letter-spacing: .2em; }
 .site-brand strong { font: clamp(1.3rem, 3vw, 2rem) var(--font-family-display); }
 .site-nav { display: flex; gap: 6px; overflow-x: auto; }

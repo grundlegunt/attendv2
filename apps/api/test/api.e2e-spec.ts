@@ -390,6 +390,33 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
   });
 
+  it("publishes location branding and audits authorized theme updates", async () => {
+    const initial = await request(app.getHttpServer()).get("/api/v1/cinema/branding").expect(200);
+    expect(initial.body.branding).toEqual(expect.objectContaining({ accentColor: "#fe2c54", displayName: "Cinema" }));
+
+    await request(app.getHttpServer()).patch("/api/v1/management/branding").send(initial.body.branding).expect(401);
+    const serverLogin = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `server@${SEED_SUFFIX}`, password: SEED_PASSWORD })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch("/api/v1/management/branding")
+      .set("Authorization", `Bearer ${serverLogin.body.accessToken}`)
+      .send(initial.body.branding)
+      .expect(403);
+    const updated = await request(app.getHttpServer())
+      .patch("/api/v1/management/branding")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ...initial.body.branding, eyebrow: "MERIDIAN CINEMA", accentColor: "#123abc", adminTheme: "MATCH_CUSTOMER" })
+      .expect(200);
+    expect(updated.body.branding).toEqual(expect.objectContaining({ eyebrow: "MERIDIAN CINEMA", accentColor: "#123abc", adminTheme: "MATCH_CUSTOMER" }));
+
+    const published = await request(app.getHttpServer()).get("/api/v1/cinema/branding").expect(200);
+    expect(published.body.branding.accentColor).toBe("#123abc");
+    const { prisma } = await import("@cinema/database");
+    expect(await prisma.auditEvent.count({ where: { action: "location.branding_updated" } })).toBe(1);
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")

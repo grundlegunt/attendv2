@@ -3,6 +3,7 @@ import "@cinema/ui/theme.css";
 import "./globals.css";
 import { AdminNav } from "./admin-nav";
 import { AdminSessionProvider } from "./admin-session";
+import { AdminBrandingTheme } from "./admin-branding-theme";
 
 export const metadata = {
   title: "Manager Dashboard — Ridgeline Dine-In Cinema",
@@ -12,7 +13,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme="pos">
-      <body><AdminSessionProvider><AdminNav />{children}</AdminSessionProvider></body>
+      <body><AdminSessionProvider><AdminBrandingTheme /><AdminNav />{children}</AdminSessionProvider></body>
     </html>
   );
 }

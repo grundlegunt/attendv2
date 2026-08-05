@@ -28,6 +28,7 @@ export enum Permission {
 
   // --- Audit (enforced starting Milestone 0) ---
   AuditLogView = "audit.log.view",
+  BrandingManage = "branding.manage",
 
   // --- Seating / ticketing (Milestone 1-4) ---
   AuditoriumManage = "auditorium.manage",

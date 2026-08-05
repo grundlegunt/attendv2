@@ -15,6 +15,7 @@ import {
   validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "@cinema/shared";
+import type { LocationBranding } from "@cinema/shared";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 
@@ -32,6 +33,27 @@ type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
   private expiryTimer?: ReturnType<typeof setInterval>;
   private readonly minimumCinemaCleaningMinutes = 15;
+  private readonly defaultBranding: LocationBranding = {
+    eyebrow: "ATTEND", displayName: "Cinema", logoUrl: null,
+    accentColor: "#d4af37", accentMutedColor: "#8a7326",
+    backgroundColor: "#0b0b0d", elevatedColor: "#16161a",
+    textPrimaryColor: "#f5f3ee", textSecondaryColor: "#a8a49c", adminTheme: "NEUTRAL",
+  };
+
+  private publicBrandingFields(branding: LocationBranding): LocationBranding {
+    return {
+      eyebrow: branding.eyebrow,
+      displayName: branding.displayName,
+      logoUrl: branding.logoUrl,
+      accentColor: branding.accentColor,
+      accentMutedColor: branding.accentMutedColor,
+      backgroundColor: branding.backgroundColor,
+      elevatedColor: branding.elevatedColor,
+      textPrimaryColor: branding.textPrimaryColor,
+      textSecondaryColor: branding.textSecondaryColor,
+      adminTheme: branding.adminTheme,
+    };
+  }
 
   onModuleInit() {
     this.expiryTimer = setInterval(() => void this.expireSeatHolds(), 15_000);
@@ -810,6 +832,17 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           startsAt: showtime.startsAt.toISOString(),
         })),
       })),
+    };
+  }
+
+  async publicBranding(locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true }, include: { branding: true } })
+      : await prisma.location.findFirst({ where: { active: true }, include: { branding: true }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    return {
+      locationName: location.name,
+      branding: this.publicBrandingFields(location.branding ?? this.defaultBranding),
     };
   }
 

@@ -2,9 +2,65 @@ import { Injectable } from "@nestjs/common";
 import { hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
 import { prisma } from "@cinema/database";
 import { AppError } from "../common/app-error";
+import type { LocationBranding } from "@cinema/shared";
+
+const defaultBranding: LocationBranding = {
+  eyebrow: "ATTEND", displayName: "Cinema", logoUrl: null,
+  accentColor: "#d4af37", accentMutedColor: "#8a7326",
+  backgroundColor: "#0b0b0d", elevatedColor: "#16161a",
+  textPrimaryColor: "#f5f3ee", textSecondaryColor: "#a8a49c", adminTheme: "NEUTRAL",
+};
+
+function publicBrandingFields(branding: LocationBranding): LocationBranding {
+  return {
+    eyebrow: branding.eyebrow,
+    displayName: branding.displayName,
+    logoUrl: branding.logoUrl,
+    accentColor: branding.accentColor,
+    accentMutedColor: branding.accentMutedColor,
+    backgroundColor: branding.backgroundColor,
+    elevatedColor: branding.elevatedColor,
+    textPrimaryColor: branding.textPrimaryColor,
+    textSecondaryColor: branding.textSecondaryColor,
+    adminTheme: branding.adminTheme,
+  };
+}
 
 @Injectable()
 export class ManagementService {
+  async branding(locationId: string) {
+    const location = await prisma.location.findUnique({ where: { id: locationId }, include: { branding: true } });
+    if (!location) throw AppError.notFound("Location not found.");
+    return {
+      locationName: location.name,
+      branding: publicBrandingFields(location.branding ?? defaultBranding),
+    };
+  }
+
+  async updateBranding(input: LocationBranding & { locationId: string; employeeId: string }) {
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: input.locationId }, include: { branding: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const data = {
+        eyebrow: input.eyebrow, displayName: input.displayName, logoUrl: input.logoUrl,
+        accentColor: input.accentColor.toLowerCase(), accentMutedColor: input.accentMutedColor.toLowerCase(),
+        backgroundColor: input.backgroundColor.toLowerCase(), elevatedColor: input.elevatedColor.toLowerCase(),
+        textPrimaryColor: input.textPrimaryColor.toLowerCase(), textSecondaryColor: input.textSecondaryColor.toLowerCase(),
+        adminTheme: input.adminTheme,
+      };
+      const updated = await tx.locationBranding.upsert({ where: { locationId: input.locationId }, update: data, create: { locationId: input.locationId, ...data } });
+      await tx.auditEvent.create({ data: {
+        actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
+        action: "location.branding_updated", entityType: "LocationBranding", entityId: updated.id,
+        beforeState: location.branding ?? defaultBranding, afterState: updated,
+      } });
+      return {
+        locationName: location.name,
+        branding: publicBrandingFields(updated),
+      };
+    });
+  }
+
   async settings(locationId: string) {
     return prisma.location.findUniqueOrThrow({
       where: { id: locationId },

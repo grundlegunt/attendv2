@@ -100,8 +100,34 @@ model Location {
   cashTransactions   CashTransaction[]
   promotions         Promotion[]
   shifts             Shift[]
+  branding           LocationBranding?
 
   @@map("locations")
+}
+
+enum BrandingAdminTheme {
+  NEUTRAL
+  MATCH_CUSTOMER
+}
+
+model LocationBranding {
+  id                 String             @id @default(uuid())
+  locationId         String             @unique
+  location           Location           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  eyebrow            String             @default("ATTEND")
+  displayName        String             @default("Cinema")
+  logoUrl            String?
+  accentColor        String             @default("#d4af37")
+  accentMutedColor   String             @default("#8a7326")
+  backgroundColor    String             @default("#0b0b0d")
+  elevatedColor      String             @default("#16161a")
+  textPrimaryColor   String             @default("#f5f3ee")
+  textSecondaryColor String             @default("#a8a49c")
+  adminTheme         BrandingAdminTheme @default(NEUTRAL)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@map("location_branding")
 }
 
 // ---------------------------------------------------------------------------

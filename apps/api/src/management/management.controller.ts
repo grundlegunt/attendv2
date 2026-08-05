@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
+import { updateLocationBrandingRequestSchema } from "@cinema/shared";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
@@ -31,6 +32,14 @@ export class ManagementController {
 
   @Patch("settings/location") @RequirePermissions(Permission.TicketPriceEdit)
   updateLocation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(locationSchema)) body: unknown) { return this.management.updateLocation({ ...locationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Get("branding") @RequirePermissions(Permission.BrandingManage)
+  branding(@CurrentActor() actor: RequestActor) { return this.management.branding(this.location(actor)); }
+
+  @Patch("branding") @RequirePermissions(Permission.BrandingManage)
+  updateBranding(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(updateLocationBrandingRequestSchema)) body: unknown) {
+    return this.management.updateBranding({ ...updateLocationBrandingRequestSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub });
+  }
 
   @Post("settings/tax-rules") @RequirePermissions(Permission.MenuEdit)
   tax(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

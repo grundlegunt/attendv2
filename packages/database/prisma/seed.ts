@@ -80,6 +80,18 @@ export async function seedDatabase(
     },
   });
 
+  await prisma.locationBranding.upsert({
+    where: { locationId: location.id },
+    update: {},
+    create: {
+      locationId: location.id,
+      eyebrow: "MERIDIAN",
+      displayName: "Cinema",
+      accentColor: "#fe2c54",
+      accentMutedColor: "#a91d39",
+    },
+  });
+
   log("Seeding permission catalog...");
   for (const key of Object.values(Permission)) {
     await prisma.permission.upsert({ where: { key }, update: {}, create: { key, description: key } });
