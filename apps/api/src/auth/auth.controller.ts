@@ -6,7 +6,7 @@ import {
   staffLoginRequestSchema,
   AuthTokenResponse,
 } from "@cinema/shared";
-import { loadEnv } from "@cinema/config/env";
+import { loadEnv } from "@cinema/config";
 import { AuthService } from "./auth.service";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";

@@ -8,7 +8,7 @@ import {
   InvalidTokenError,
   TokenPair,
 } from "@cinema/auth";
-import { loadEnv } from "@cinema/config/env";
+import { loadEnv } from "@cinema/config";
 import {
   AuthenticatedCustomer,
   AuthenticatedEmployee,

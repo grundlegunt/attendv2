@@ -38,7 +38,9 @@ main.auth-shell {
   color: var(--color-text-secondary);
 }
 
-.field input {
+.field input,
+.field select,
+.field textarea {
   background: var(--color-bg);
   border: 2px solid var(--color-border);
   border-radius: var(--radius-sm);
@@ -48,9 +50,101 @@ main.auth-shell {
   min-height: var(--tap-target-min);
 }
 
-.field input:focus {
+.field textarea {
+  resize: vertical;
+}
+
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
   outline: 3px solid var(--color-accent);
   outline-offset: 1px;
+}
+
+.admin-shell {
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-5);
+}
+
+.admin-header h1,
+.panel h2,
+.movie-row h3 {
+  margin-top: 0;
+}
+
+.admin-header p,
+.muted,
+.movie-row p {
+  color: var(--color-text-secondary);
+}
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 460px);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.panel {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.movie-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.movie-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-3) 0;
+}
+
+.movie-row h3,
+.movie-row p {
+  margin-bottom: var(--space-1);
+}
+
+.status-badge {
+  align-self: flex-start;
+  white-space: nowrap;
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.75rem;
+}
+
+.empty-state {
+  color: var(--color-text-secondary);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4);
+}
+
+.audit-panel {
+  margin-top: var(--space-4);
+  overflow-x: auto;
+}
+
+@media (max-width: 800px) {
+  .admin-grid,
+  .field-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 button.primary {

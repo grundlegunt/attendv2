@@ -21,6 +21,7 @@ export class AuditController {
   async list(@CurrentActor() _actor: RequestActor, @Query("limit") limit?: string) {
     const take = Math.min(Number(limit) || 50, 200);
     return prisma.auditEvent.findMany({
+      where: { locationId: _actor.locationId },
       orderBy: { occurredAt: "desc" },
       take,
     });

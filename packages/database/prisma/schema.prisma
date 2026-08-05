@@ -1,8 +1,6 @@
-// Milestone 0 schema.
-// Scope: Organization/Location, staff identity + RBAC, customer identity, audit log.
-// Ticketing, seating, payments, and restaurant entities are added starting
-// in Milestone 1 per /docs/IMPLEMENTATION_PLAN.md — do not add them here
-// ahead of schedule (see AGENTS.md §1: build in vertical slices).
+// Milestone 0 foundation plus the Milestone 1 Movie vertical slice.
+// Auditorium, seating, showtime, ticketing, payment, and restaurant entities
+// remain deferred to their documented slices (see AGENTS.md §1).
 //
 // Conventions (see /docs/DATA_MODEL.md):
 //  - UUID primary keys.
@@ -32,8 +30,39 @@ model Organization {
 
   locations Location[]
   roles     Role[]
+  movies    Movie[]
 
   @@map("organizations")
+}
+
+// ---------------------------------------------------------------------------
+// Cinema programming (Milestone 1, Movie vertical slice)
+// ---------------------------------------------------------------------------
+
+enum MovieStatus {
+  NOW_PLAYING
+  COMING_SOON
+  SPECIAL_EVENT
+  ARCHIVED
+}
+
+model Movie {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  title          String
+  rating         String?
+  runtimeMinutes Int
+  synopsis       String?
+  posterImageUrl String?
+  status         MovieStatus  @default(COMING_SOON)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, status, title])
+  @@map("movies")
 }
 
 model Location {

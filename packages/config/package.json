@@ -2,9 +2,10 @@
   "name": "@cinema/config",
   "private": true,
   "version": "0.1.0",
-  "main": "./index.ts",
-  "types": "./index.ts",
+  "main": "./src/env.ts",
+  "types": "./src/env.ts",
   "exports": {
+    ".": "./src/env.ts",
     "./tsconfig-base.json": "./tsconfig-base.json",
     "./env": "./src/env.ts",
     "./eslint": "./eslint-preset.cjs"

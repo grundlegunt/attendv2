@@ -4,8 +4,9 @@ Cinema ticketing and seat-linked restaurant POS for an independent dine-in
 theater. Start with `/docs/PRODUCT_SPEC.md` and `AGENTS.md` before touching
 code — they're the source of truth this repo is built against.
 
-Current status: **Milestone 0** (repository, environments, auth, CI
-foundations) per `/docs/IMPLEMENTATION_PLAN.md`.
+Current status: **Milestone 1 in progress**. Milestone 0 is locally verified,
+and the Movie data/API/admin creation vertical slice is implemented. Auditorium,
+seat-layout, price-tier, showtime, and customer-listing work remains.
 
 ## Repository layout
 
@@ -50,6 +51,22 @@ cp apps/staff-pos/.env.local.example apps/staff-pos/.env.local
 cp apps/kds/.env.local.example apps/kds/.env.local
 cp apps/admin/.env.local.example apps/admin/.env.local
 ```
+
+### Migration transition from `prisma db push`
+
+The committed baseline migration is the source of truth for a **fresh database**. Point
+`DATABASE_URL` at an empty database, then run `pnpm db:migrate` followed by
+`pnpm db:seed` as shown above.
+
+An **existing development database previously created with `prisma db push`** has
+schema objects but no matching Prisma migration history, so applying the baseline
+directly will fail. Back up that database and verify the backup before attempting any
+recovery. The safest recovery path is to leave the existing database untouched, create
+a new empty development database, apply the migrations and seed there, and transfer
+only data that must be retained through a separately reviewed export/import process.
+Do not run `prisma migrate reset`, drop the existing schema, or mark the baseline as
+applied without first reconciling and verifying the complete schema; those shortcuts
+can destroy data or leave the migration history inconsistent with the database.
 
 ## Running it
 
@@ -106,7 +123,8 @@ Per `/docs/IMPLEMENTATION_PLAN.md`'s Milestone 0 completion criteria:
 - [x] All four frontend app shells, each with a real login screen against the live API.
 - [x] Unit tests: password hashing, JWT issuance (`packages/auth`) — 8/8 passing, verified.
 - [x] Integration tests: health check, staff/customer auth flows, RBAC enforcement (allow + deny), input validation — written against a real Postgres instance.
-- [ ] **CI pipeline verified green.** The GitHub Actions workflow (`.github/workflows/ci.yml`) is written and should run correctly once pushed (GitHub-hosted runners have normal internet access for Prisma's engine download); it has not been executed, since this repository has not yet been pushed to GitHub from this environment.
-- [ ] **Full local live-boot verification.** The sandbox this repository was built in blocks outbound access to Prisma's engine CDN (`binaries.prisma.sh`) at the network-proxy level, which prevented `prisma generate` from completing here. Everything that doesn't depend on the generated Prisma client (packages/config, packages/shared, packages/auth, and their tests) was verified directly. `packages/database` and `apps/api` were verified by careful review and by confirming the *only* failure was the expected "Prisma client not generated" error — not a code defect. On a normal developer machine or in CI, `pnpm install && pnpm db:migrate && pnpm db:seed` followed by the integration test suite should complete this verification for real.
+- [ ] **CI pipeline verified green.** The GitHub Actions workflow (`.github/workflows/ci.yml`) exists, but it has not been executed from this environment; its result remains unknown until it runs on GitHub.
+- [x] **Automated local verification.** Prisma Client generation, lint, strict typecheck, unit tests, production builds, committed migration deployment to a fresh real PostgreSQL database, and the health/auth/RBAC/Movie API integration suite have been run successfully.
+- [ ] **Manual live API/admin smoke test.** A multi-process browser walkthrough of Movie creation has not been performed. GitHub Actions also remains unverified until the workflow is run on GitHub.
 
 See `/docs/OPEN_QUESTIONS.md` for the full list of assumptions and pending decisions.

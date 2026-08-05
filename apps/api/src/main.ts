@@ -2,7 +2,7 @@ import "reflect-metadata";
 import "dotenv/config";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
-import { loadEnv } from "@cinema/config/env";
+import { loadEnv } from "@cinema/config";
 import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "./common/http-exception.filter";
 import { StructuredLogger } from "./common/logger.service";

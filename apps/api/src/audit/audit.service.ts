@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { AuditActorType, prisma } from "@cinema/database";
+import { AuditActorType, Prisma, prisma } from "@cinema/database";
 
 export interface RecordAuditEventInput {
   actorType: AuditActorType;
@@ -8,8 +8,8 @@ export interface RecordAuditEventInput {
   entityType: string;
   entityId: string;
   locationId?: string;
-  beforeState?: Record<string, unknown>;
-  afterState?: Record<string, unknown>;
+  beforeState?: Prisma.InputJsonObject;
+  afterState?: Prisma.InputJsonObject;
 }
 
 /**
@@ -21,7 +21,7 @@ export interface RecordAuditEventInput {
  */
 @Injectable()
 export class AuditService {
-  async record(input: RecordAuditEventInput, client: { auditEvent: typeof prisma.auditEvent } = prisma) {
+  async record(input: RecordAuditEventInput, client: Pick<Prisma.TransactionClient, "auditEvent"> = prisma) {
     await client.auditEvent.create({
       data: {
         actorType: input.actorType,

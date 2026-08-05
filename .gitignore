@@ -1,4 +1,5 @@
 node_modules/
+.pnpm-store/
 dist/
 .next/
 .turbo/
@@ -12,4 +13,3 @@ npm-debug.log*
 pnpm-debug.log*
 generated/
 _tmp_*
-

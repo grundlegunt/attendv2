@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Request } from "express";
 import { InvalidTokenError, verifyAccessToken } from "@cinema/auth";
-import { loadEnv } from "@cinema/config/env";
+import { loadEnv } from "@cinema/config";
 import { AppError } from "../../common/app-error";
 
 /**
