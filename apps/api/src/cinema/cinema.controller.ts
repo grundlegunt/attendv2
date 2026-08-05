@@ -2,11 +2,13 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import { Permission } from "@cinema/auth";
 import {
   createAuditoriumRequestSchema,
+  createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
+  updateFilmSeriesRequestSchema,
   updateShowtimeRequestSchema,
 } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -130,6 +132,41 @@ export class CinemaController {
   @RequirePermissions(Permission.MovieManage)
   archiveMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
     return this.cinemaService.archiveMovie(actor, id);
+  }
+
+  @Post("film-series")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  createFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(createFilmSeriesRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.createFilmSeries(
+      actor,
+      body as ReturnType<typeof createFilmSeriesRequestSchema.parse>,
+    );
+  }
+
+  @Patch("film-series/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  updateFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateFilmSeriesRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.updateFilmSeries(
+      actor,
+      id,
+      body as ReturnType<typeof updateFilmSeriesRequestSchema.parse>,
+    );
+  }
+
+  @Delete("film-series/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  archiveFilmSeries(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.archiveFilmSeries(actor, id);
   }
 
   @Post("showtimes")

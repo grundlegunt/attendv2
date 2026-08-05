@@ -20,15 +20,16 @@ interface Movie {
   posterUrl?: string | null;
 }
 interface PriceTier { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string; }
+interface FilmSeries { id: string; name: string; description?: string | null; artworkUrl?: string | null; active: boolean; }
 interface Showtime {
   id: string; startsAt: string; featureStartsAt: string; endsAt: string; roomReadyAt: string; onSale: boolean;
-  filmSeries: string | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
+  filmSeries: FilmSeries | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   movie: Movie; auditorium: Auditorium; priceTier: PriceTier;
 }
 interface Bootstrap {
   location: {
     id: string; name: string; preShowBufferMinutes: number; cleaningBufferMinutes: number;
-    auditoriums: Auditorium[]; organization: { movies: Movie[]; priceTiers: PriceTier[] };
+    auditoriums: Auditorium[]; organization: { movies: Movie[]; priceTiers: PriceTier[]; filmSeries: FilmSeries[] };
   };
   showtimes: Showtime[];
 }
@@ -48,7 +49,7 @@ export default function AdminPage() {
   const [startsAt, setStartsAt] = useState("");
   const [onSale, setOnSale] = useState(true);
   const [priceTierId, setPriceTierId] = useState("");
-  const [filmSeries, setFilmSeries] = useState("");
+  const [filmSeriesId, setFilmSeriesId] = useState("");
   const [presentation, setPresentation] = useState<"STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST">("STANDARD");
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
@@ -116,7 +117,7 @@ export default function AdminPage() {
           priceTierId: priceTierId || undefined,
           startsAt: new Date(startsAt).toISOString(),
           onSale,
-          filmSeries: filmSeries.trim() || null,
+          filmSeriesId: filmSeriesId || null,
           presentation,
         }),
       });
@@ -135,7 +136,7 @@ export default function AdminPage() {
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(showtime.onSale);
     setPriceTierId(showtime.priceTier.id);
-    setFilmSeries(showtime.filmSeries ?? "");
+    setFilmSeriesId(showtime.filmSeries?.id ?? "");
     setPresentation(showtime.presentation ?? "STANDARD");
     setShowtimeEditorOpen(true);
   }
@@ -149,7 +150,7 @@ export default function AdminPage() {
     setStartsAt(local.toISOString().slice(0, 16));
     setOnSale(false);
     setPriceTierId(data?.location.organization.priceTiers[0]?.id ?? "");
-    setFilmSeries("");
+    setFilmSeriesId("");
     setPresentation("STANDARD");
     setShowtimeEditorOpen(true);
   }
@@ -292,7 +293,7 @@ export default function AdminPage() {
         <div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15 min</button><button type="button" onClick={() => shiftShowtime(-5)}>−5 min</button><button type="button" onClick={() => shiftShowtime(5)}>+5 min</button><button type="button" onClick={() => shiftShowtime(15)}>+15 min</button></div>
         <label>Sale status<select value={onSale ? "open" : "draft"} onChange={(event) => setOnSale(event.target.value === "open")}><option value="open">Open for sale</option><option value="draft">Closed draft</option></select></label>
         <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
-        <label>Film series<input value={filmSeries} onChange={(event) => setFilmSeries(event.target.value)} placeholder="Optional, e.g. Summer Classics" /></label>
+        <label>Film series<select value={filmSeriesId} onChange={(event) => setFilmSeriesId(event.target.value)}><option value="">Regular engagement</option>{data.location.organization.filmSeries.filter((series) => series.active).map((series) => <option key={series.id} value={series.id}>{series.name}</option>)}</select></label>
         <label>Presentation<select value={presentation} onChange={(event) => setPresentation(event.target.value as typeof presentation)}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
         <div className="calculation-note">Attend includes {data.location.preShowBufferMinutes} minutes of pre-show, the film runtime, and at least 15 minutes of cleaning. Conflicting placements are rejected.</div>
         <ul className="timing-rules"><li>✓ {data.location.preShowBufferMinutes} minutes for doors, ordering, and trailers</li><li>✓ Film runtime begins at feature start</li><li>✓ 15-minute cleaning gap is enforced automatically</li></ul>
