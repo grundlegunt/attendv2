@@ -14,6 +14,7 @@ import { CurrentActor } from "./decorators/current-actor.decorator";
 import { RequestActor } from "./types";
 import { TokenPair } from "@cinema/auth";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
+import { AppError } from "../common/app-error";
 
 function toTokenResponse(tokens: TokenPair): AuthTokenResponse {
   const env = loadEnv();
@@ -100,6 +101,14 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   async customerLogout(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
     await this.authService.customerLogout(actor.sub);
+  }
+
+  @Get("customers/me")
+  @UseGuards(JwtAuthGuard)
+  async customerMe(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
+    return this.authService.customerAccount(actor.sub);
   }
 }
