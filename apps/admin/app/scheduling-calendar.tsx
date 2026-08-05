@@ -19,6 +19,14 @@ export interface ScheduleMovie {
   posterUrl?: string | null;
 }
 
+export interface ScheduleFilmSeries {
+  id: string;
+  name: string;
+  description?: string | null;
+  artworkUrl?: string | null;
+  active: boolean;
+}
+
 export interface CalendarShowtime {
   id: string;
   startsAt: string;
@@ -26,7 +34,7 @@ export interface CalendarShowtime {
   endsAt: string;
   roomReadyAt: string;
   onSale: boolean;
-  filmSeries?: string | null;
+  filmSeries?: ScheduleFilmSeries | null;
   presentation?: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   movie: ScheduleMovie;
   auditorium: ScheduleAuditorium;
@@ -186,9 +194,8 @@ export function SchedulingCalendar({
   const upcomingMovieShowtimes = selectedMovieShowtimes
     .filter((showtime) => new Date(showtime.startsAt) >= now)
     .slice(0, 6);
-  const filmSeries = Array.from(new Set(selectedMovieShowtimes
-    .map((showtime) => showtime.filmSeries?.trim())
-    .filter((value): value is string => Boolean(value))));
+  const filmSeries = Array.from(new Map(selectedMovieShowtimes
+    .flatMap((showtime) => showtime.filmSeries ? [[showtime.filmSeries.id, showtime.filmSeries] as const] : [])).values());
   const presentations = Array.from(new Set(selectedMovieShowtimes
     .map((showtime) => showtime.presentation ?? "STANDARD")));
 
@@ -295,7 +302,7 @@ export function SchedulingCalendar({
                 >
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
-                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
+                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                 </button>;
               })}
             </div>
@@ -340,7 +347,7 @@ export function SchedulingCalendar({
                       setDraggingKey(key);
                     }}
                     onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-                  ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}{showtime.filmSeries ? ` · ${showtime.filmSeries}` : ""}</span></button>;
+                  ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}</span></button>;
                 }) : <small>Open</small>}
               </div>;
             })}
@@ -406,7 +413,7 @@ export function SchedulingCalendar({
               <div>
                 <span>Film series / special event</span>
                 <div className="film-badges">{filmSeries.length
-                  ? filmSeries.map((series) => <b key={series}>{series}</b>)
+                  ? filmSeries.map((series) => <b key={series.id} title={series.description ?? undefined}>{series.name}</b>)
                   : <em>Not assigned on any scheduled appearance</em>}</div>
               </div>
               <div>
@@ -423,7 +430,7 @@ export function SchedulingCalendar({
                 <button type="button" onClick={() => onEdit(showtime)}>
                   <span>{new Date(showtime.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatTime(showtime.startsAt)}</span>
                   <strong>{showtime.auditorium.name}</strong>
-                  <small>{showtime.filmSeries || "Regular engagement"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
+                  <small>{showtime.filmSeries?.name || "Regular engagement"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                 </button>
               </li>)}</ul> : <p>No upcoming appearances are scheduled.</p>}
             </div>

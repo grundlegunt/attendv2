@@ -33,10 +33,28 @@ model Organization {
   locations        Location[]
   roles            Role[]
   movies           Movie[]
+  filmSeries       FilmSeries[]
   priceTiers       PriceTier[]
   paymentCustomers PaymentCustomer[]
 
   @@map("organizations")
+}
+
+model FilmSeries {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  description    String?
+  artworkUrl     String?
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  showtimes      Showtime[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+  @@map("film_series")
 }
 
 model Location {
@@ -247,7 +265,8 @@ model Showtime {
   endsAt          DateTime
   roomReadyAt     DateTime
   onSale          Boolean         @default(false)
-  filmSeries      String?
+  filmSeriesId    String?
+  filmSeries      FilmSeries?     @relation(fields: [filmSeriesId], references: [id], onDelete: Restrict)
   presentation    String          @default("STANDARD")
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt

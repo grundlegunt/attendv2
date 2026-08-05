@@ -3,11 +3,13 @@ import { randomUUID } from "node:crypto";
 import { AuditActorType, Prisma, prisma } from "@cinema/database";
 import {
   createAuditoriumRequestSchema,
+  createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
+  updateFilmSeriesRequestSchema,
   updateShowtimeRequestSchema,
   validateAdvancedSeatLayout,
   validateSeatLayout,
@@ -18,6 +20,8 @@ import { AppError } from "../common/app-error";
 type AuditoriumInput = ReturnType<typeof createAuditoriumRequestSchema.parse>;
 type AuditoriumLayoutUpdateInput = ReturnType<typeof updateAuditoriumLayoutRequestSchema.parse>;
 type AuditoriumDuplicateInput = ReturnType<typeof duplicateAuditoriumRequestSchema.parse>;
+type FilmSeriesInput = ReturnType<typeof createFilmSeriesRequestSchema.parse>;
+type FilmSeriesUpdateInput = ReturnType<typeof updateFilmSeriesRequestSchema.parse>;
 type MovieInput = ReturnType<typeof createMovieRequestSchema.parse>;
 type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
@@ -54,6 +58,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         organization: {
           include: {
             movies: { where: { active: true }, orderBy: { title: "asc" } },
+            filmSeries: { orderBy: [{ active: "desc" }, { name: "asc" }] },
             priceTiers: { where: { active: true }, orderBy: { ticketPriceMinor: "asc" } },
           },
         },
@@ -62,7 +67,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     if (!location) throw AppError.notFound("Location not found.");
     const showtimes = await prisma.showtime.findMany({
       where: { auditorium: { locationId, active: true }, startsAt: { gte: new Date(Date.now() - 86400000) } },
-      include: { movie: true, auditorium: true, priceTier: true },
+      include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
       orderBy: { startsAt: "asc" },
     });
     return { location, showtimes };
@@ -313,6 +318,72 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async createFilmSeries(actor: RequestActor, input: FilmSeriesInput) {
+    const locationId = this.requireLocation(actor);
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const location = await tx.location.findUnique({
+          where: { id: locationId },
+          select: { organizationId: true },
+        });
+        if (!location) throw AppError.notFound("Location not found.");
+        const filmSeries = await tx.filmSeries.create({
+          data: {
+            organizationId: location.organizationId,
+            name: input.name,
+            description: input.description ?? null,
+            artworkUrl: input.artworkUrl ?? null,
+          },
+        });
+        await tx.auditEvent.create({ data: {
+          actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
+          action: "film_series.created", entityType: "FilmSeries", entityId: filmSeries.id,
+          afterState: { name: filmSeries.name, active: filmSeries.active },
+        } });
+        return filmSeries;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw AppError.conflict("A film series already uses that name.");
+      }
+      throw error;
+    }
+  }
+
+  async updateFilmSeries(actor: RequestActor, id: string, input: FilmSeriesUpdateInput) {
+    const locationId = this.requireLocation(actor);
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const location = await tx.location.findUnique({
+          where: { id: locationId },
+          select: { organizationId: true },
+        });
+        if (!location) throw AppError.notFound("Location not found.");
+        const existing = await tx.filmSeries.findFirst({
+          where: { id, organizationId: location.organizationId },
+        });
+        if (!existing) throw AppError.notFound("Film series not found.");
+        const filmSeries = await tx.filmSeries.update({ where: { id }, data: input });
+        await tx.auditEvent.create({ data: {
+          actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
+          action: "film_series.updated", entityType: "FilmSeries", entityId: filmSeries.id,
+          beforeState: { name: existing.name, description: existing.description, artworkUrl: existing.artworkUrl, active: existing.active },
+          afterState: { name: filmSeries.name, description: filmSeries.description, artworkUrl: filmSeries.artworkUrl, active: filmSeries.active },
+        } });
+        return filmSeries;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw AppError.conflict("A film series already uses that name.");
+      }
+      throw error;
+    }
+  }
+
+  async archiveFilmSeries(actor: RequestActor, id: string) {
+    return this.updateFilmSeries(actor, id, { active: false });
+  }
+
   async createShowtime(actor: RequestActor, input: ShowtimeInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(
@@ -329,6 +400,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           where: { id: input.movieId, organizationId: auditorium.location.organizationId, active: true },
         });
         if (!movie) throw AppError.notFound("Movie not found.");
+
+        const filmSeries = input.filmSeriesId
+          ? await tx.filmSeries.findFirst({
+              where: { id: input.filmSeriesId, organizationId: auditorium.location.organizationId, active: true },
+            })
+          : null;
+        if (input.filmSeriesId && !filmSeries) throw AppError.notFound("Film series not found.");
 
         const startsAt = new Date(input.startsAt);
         const featureStartsAt = new Date(
@@ -370,10 +448,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             endsAt,
             roomReadyAt,
             onSale: input.onSale,
-            filmSeries: input.filmSeries ?? null,
+            filmSeriesId: filmSeries?.id ?? null,
             presentation: input.presentation,
           },
-          include: { movie: true, auditorium: true },
+          include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         });
         const seats = await tx.seat.findMany({
           where: { seatMap: { auditoriumId: auditorium.id }, active: true },
@@ -397,7 +475,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               startsAt: startsAt.toISOString(),
               roomReadyAt: roomReadyAt.toISOString(),
               onSale: input.onSale,
-              filmSeries: input.filmSeries ?? null,
+              filmSeriesId: filmSeries?.id ?? null,
               presentation: input.presentation,
             },
           },
@@ -430,6 +508,14 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           where: { id: movieId, organizationId: auditorium.location.organizationId, active: true },
         });
         if (!movie) throw AppError.notFound("Movie not found.");
+
+        const filmSeriesId = input.filmSeriesId === undefined ? existing.filmSeriesId : input.filmSeriesId;
+        if (filmSeriesId && filmSeriesId !== existing.filmSeriesId) {
+          const filmSeries = await tx.filmSeries.findFirst({
+            where: { id: filmSeriesId, organizationId: auditorium.location.organizationId, active: true },
+          });
+          if (!filmSeries) throw AppError.notFound("Film series not found.");
+        }
 
         const startsAt = input.startsAt ? new Date(input.startsAt) : existing.startsAt;
         const featureStartsAt = new Date(
@@ -475,10 +561,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             endsAt,
             roomReadyAt,
             onSale: input.onSale ?? existing.onSale,
-            filmSeries: input.filmSeries === undefined ? existing.filmSeries : input.filmSeries,
+            filmSeriesId,
             presentation: input.presentation ?? existing.presentation,
           },
-          include: { movie: true, auditorium: true, priceTier: true },
+          include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         });
         if (auditoriumId !== existing.auditoriumId) {
           const activeHolds = await tx.seatHold.count({
@@ -520,7 +606,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               priceTierId: priceTier.id,
               startsAt: startsAt.toISOString(),
               roomReadyAt: roomReadyAt.toISOString(),
-              filmSeries: input.filmSeries === undefined ? existing.filmSeries : input.filmSeries,
+              filmSeriesId,
               presentation: input.presentation ?? existing.presentation,
             },
           },

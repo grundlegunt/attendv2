@@ -1,10 +1,12 @@
 import {
+  createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   dedupePublicShowtimes,
   startOfLocalDay,
   showtimeWindowsOverlap,
   updateShowtimeRequestSchema,
+  updateFilmSeriesRequestSchema,
   type PublicShowtime,
   type SeatMapLayout,
   validateAdvancedSeatLayout,
@@ -35,15 +37,26 @@ describe("cinema programming requests", () => {
     }).posterUrl).toBe("/posters/matrix.jpg");
   });
 
-  it("stores film-series and presentation labels on a new showtime", () => {
+  it("stores a managed film-series assignment and presentation on a new showtime", () => {
+    const filmSeriesId = "10000000-0000-4000-8000-000000000004";
     const parsed = createShowtimeRequestSchema.parse({
       ...showtime,
-      filmSeries: "Summer Classics",
+      filmSeriesId,
       presentation: "Q_AND_A",
     });
 
-    expect(parsed.filmSeries).toBe("Summer Classics");
+    expect(parsed.filmSeriesId).toBe(filmSeriesId);
     expect(parsed.presentation).toBe("Q_AND_A");
+  });
+
+  it("validates film-series create, edit, and archive payloads", () => {
+    expect(createFilmSeriesRequestSchema.parse({
+      name: "Summer Classics",
+      description: "A repertory season.",
+      artworkUrl: "/series/summer-classics.jpg",
+    }).name).toBe("Summer Classics");
+    expect(updateFilmSeriesRequestSchema.parse({ active: false })).toEqual({ active: false });
+    expect(() => updateFilmSeriesRequestSchema.parse({})).toThrow();
   });
 
   it("does not reset sale or presentation values on an unrelated partial update", () => {

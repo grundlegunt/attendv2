@@ -84,6 +84,24 @@ export const createMovieRequestSchema = z.object({
   ]).nullable().optional(),
 });
 
+const artworkUrlSchema = z.union([
+  z.string().trim().url("Artwork URL must be a valid URL."),
+  z.string().trim().regex(/^\/(?!\/)/, "Artwork path must begin with a single slash."),
+]);
+
+export const createFilmSeriesRequestSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(2000).nullable().optional(),
+  artworkUrl: artworkUrlSchema.nullable().optional(),
+});
+
+export const updateFilmSeriesRequestSchema = createFilmSeriesRequestSchema.partial().extend({
+  active: z.boolean().optional(),
+}).refine(
+  (value) => Object.keys(value).length > 0,
+  "At least one film-series field is required.",
+);
+
 export const showtimePresentationSchema = z.enum(["STANDARD", "OPEN_CAPTIONS", "Q_AND_A", "SPECIAL_GUEST"]);
 
 const showtimeFieldsSchema = z.object({
@@ -92,7 +110,7 @@ const showtimeFieldsSchema = z.object({
   priceTierId: z.string().uuid().optional(),
   startsAt: z.string().datetime({ offset: true }),
   onSale: z.boolean(),
-  filmSeries: z.string().trim().max(120).nullable().optional(),
+  filmSeriesId: z.string().uuid().nullable().optional(),
   presentation: showtimePresentationSchema,
 });
 
