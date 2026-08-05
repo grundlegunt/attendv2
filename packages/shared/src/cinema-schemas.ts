@@ -267,3 +267,21 @@ export interface NowPlayingMovie {
   posterUrl: string | null;
   showtimes: PublicShowtime[];
 }
+
+export type ShowtimePresentation = z.infer<typeof showtimePresentationSchema>;
+
+export interface PublicFilmSeriesShowtime extends PublicShowtime {
+  presentation: ShowtimePresentation;
+}
+
+export interface PublicFilmSeriesMovie extends Omit<NowPlayingMovie, "showtimes"> {
+  showtimes: PublicFilmSeriesShowtime[];
+}
+
+export interface PublicFilmSeries {
+  id: string;
+  name: string;
+  description: string | null;
+  artworkUrl: string | null;
+  movies: PublicFilmSeriesMovie[];
+}

@@ -6,6 +6,7 @@ import {
   createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  showtimePresentationSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
@@ -744,6 +745,91 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           startsAt: showtime.startsAt.toISOString(),
         })),
       })),
+    };
+  }
+
+  async publicFilmSeries(locationId?: string) {
+    const now = new Date();
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
+      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const series = await prisma.filmSeries.findMany({
+      where: {
+        organizationId: location.organizationId,
+        active: true,
+        showtimes: {
+          some: {
+            onSale: true,
+            startsAt: { gte: now },
+            auditorium: { locationId: location.id, active: true },
+          },
+        },
+      },
+      include: {
+        showtimes: {
+          where: {
+            onSale: true,
+            startsAt: { gte: now },
+            auditorium: { locationId: location.id, active: true },
+            movie: { active: true },
+          },
+          select: {
+            id: true,
+            startsAt: true,
+            presentation: true,
+            movie: {
+              select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true },
+            },
+            auditorium: { select: { id: true, name: true, capacity: true } },
+            priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
+          },
+          orderBy: { startsAt: "asc" },
+        },
+      },
+    });
+
+    return {
+      location: { id: location.id, name: location.name, address: location.address, timezone: location.timezone },
+      series: series
+        .map((entry) => {
+          const movies = new Map<string, {
+            id: string; title: string; synopsis: string | null; runtimeMinutes: number;
+            rating: string | null; posterUrl: string | null; showtimes: Array<{
+              id: string; startsAt: string; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
+              auditorium: { id: string; name: string; capacity: number };
+              priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
+            }>;
+          }>();
+          for (const showtime of entry.showtimes) {
+            const movie = movies.get(showtime.movie.id) ?? { ...showtime.movie, showtimes: [] };
+            movie.showtimes.push({
+              id: showtime.id,
+              startsAt: showtime.startsAt.toISOString(),
+              presentation: showtimePresentationSchema.parse(showtime.presentation),
+              auditorium: showtime.auditorium,
+              priceTier: showtime.priceTier,
+            });
+            movies.set(movie.id, movie);
+          }
+          return {
+            id: entry.id,
+            name: entry.name,
+            description: entry.description,
+            artworkUrl: entry.artworkUrl,
+            movies: Array.from(movies.values()),
+            firstShowtimeAt: entry.showtimes[0]?.startsAt.getTime() ?? Infinity,
+          };
+        })
+        .sort((a, b) => a.firstShowtimeAt - b.firstShowtimeAt)
+        .map((entry) => ({
+          id: entry.id,
+          name: entry.name,
+          description: entry.description,
+          artworkUrl: entry.artworkUrl,
+          movies: entry.movies,
+        })),
     };
   }
 
