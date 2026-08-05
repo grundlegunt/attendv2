@@ -18,18 +18,22 @@ interface Movie {
   synopsis?: string | null;
   rating?: string | null;
   posterUrl?: string | null;
+  director?: string | null; starring?: string | null; trailerUrl?: string | null; releaseYear?: number | null;
+  pairings?: Array<{ menuItemId: string; sortOrder: number }>;
 }
 interface PriceTier { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string; }
 interface FilmSeries { id: string; name: string; description?: string | null; artworkUrl?: string | null; active: boolean; }
 interface Showtime {
   id: string; startsAt: string; featureStartsAt: string; endsAt: string; roomReadyAt: string; onSale: boolean;
   filmSeries: FilmSeries | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
+  format?: string | null;
   movie: Movie; auditorium: Auditorium; priceTier: PriceTier;
 }
 interface Bootstrap {
   location: {
     id: string; name: string; preShowBufferMinutes: number; cleaningBufferMinutes: number;
     auditoriums: Auditorium[]; organization: { movies: Movie[]; priceTiers: PriceTier[]; filmSeries: FilmSeries[] };
+    menuCategories: Array<{ id: string; name: string; items: Array<{ id: string; name: string; imageUrl?: string | null }> }>;
   };
   showtimes: Showtime[];
 }
@@ -43,6 +47,11 @@ export default function AdminPage() {
   const [movieSynopsis, setMovieSynopsis] = useState("");
   const [movieRating, setMovieRating] = useState("");
   const [moviePosterUrl, setMoviePosterUrl] = useState("");
+  const [movieDirector, setMovieDirector] = useState("");
+  const [movieStarring, setMovieStarring] = useState("");
+  const [movieTrailerUrl, setMovieTrailerUrl] = useState("");
+  const [movieReleaseYear, setMovieReleaseYear] = useState<number | "">("");
+  const [pairingMenuItemIds, setPairingMenuItemIds] = useState<string[]>([]);
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
   const [movieId, setMovieId] = useState("");
   const [auditoriumId, setAuditoriumId] = useState("");
@@ -51,6 +60,7 @@ export default function AdminPage() {
   const [priceTierId, setPriceTierId] = useState("");
   const [filmSeriesId, setFilmSeriesId] = useState("");
   const [presentation, setPresentation] = useState<"STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST">("STANDARD");
+  const [showtimeFormat, setShowtimeFormat] = useState("");
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
@@ -82,12 +92,18 @@ export default function AdminPage() {
           synopsis: movieSynopsis.trim() || null,
           rating: movieRating.trim() || null,
           posterUrl: moviePosterUrl.trim() || null,
+          director: movieDirector.trim() || null,
+          starring: movieStarring.trim() || null,
+          trailerUrl: movieTrailerUrl.trim() || null,
+          releaseYear: movieReleaseYear === "" ? null : movieReleaseYear,
+          pairingMenuItemIds,
         }),
       });
       setMovieTitle("");
       setMovieSynopsis("");
       setMovieRating("");
       setMoviePosterUrl("");
+      setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
       setEditingMovieId(null);
       setMovieEditorOpen(false);
       await refresh();
@@ -119,6 +135,7 @@ export default function AdminPage() {
           onSale,
           filmSeriesId: filmSeriesId || null,
           presentation,
+          format: showtimeFormat.trim() || null,
         }),
       });
       setEditingShowtimeId(null);
@@ -138,6 +155,7 @@ export default function AdminPage() {
     setPriceTierId(showtime.priceTier.id);
     setFilmSeriesId(showtime.filmSeries?.id ?? "");
     setPresentation(showtime.presentation ?? "STANDARD");
+    setShowtimeFormat(showtime.format ?? "");
     setShowtimeEditorOpen(true);
   }
 
@@ -152,6 +170,7 @@ export default function AdminPage() {
     setPriceTierId(data?.location.organization.priceTiers[0]?.id ?? "");
     setFilmSeriesId("");
     setPresentation("STANDARD");
+    setShowtimeFormat("");
     setShowtimeEditorOpen(true);
   }
 
@@ -238,6 +257,11 @@ export default function AdminPage() {
     setMovieSynopsis(movie?.synopsis ?? "");
     setMovieRating(movie?.rating ?? "");
     setMoviePosterUrl(movie?.posterUrl ?? "");
+    setMovieDirector(movie?.director ?? "");
+    setMovieStarring(movie?.starring ?? "");
+    setMovieTrailerUrl(movie?.trailerUrl ?? "");
+    setMovieReleaseYear(movie?.releaseYear ?? "");
+    setPairingMenuItemIds(movie?.pairings?.map((pairing) => pairing.menuItemId) ?? []);
     setMovieEditorOpen(true);
   }
 
@@ -295,6 +319,7 @@ export default function AdminPage() {
         <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
         <label>Film series<select value={filmSeriesId} onChange={(event) => setFilmSeriesId(event.target.value)}><option value="">Regular engagement</option>{data.location.organization.filmSeries.filter((series) => series.active).map((series) => <option key={series.id} value={series.id}>{series.name}</option>)}</select></label>
         <label>Presentation<select value={presentation} onChange={(event) => setPresentation(event.target.value as typeof presentation)}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
+        <label>Screening format<input value={showtimeFormat} onChange={(event) => setShowtimeFormat(event.target.value)} placeholder="DCP, 35mm, 70mm…" /></label>
         <div className="calculation-note">Attend includes {data.location.preShowBufferMinutes} minutes of pre-show, the film runtime, and at least 15 minutes of cleaning. Conflicting placements are rejected.</div>
         <ul className="timing-rules"><li>✓ {data.location.preShowBufferMinutes} minutes for doors, ordering, and trailers</li><li>✓ Film runtime begins at feature start</li><li>✓ 15-minute cleaning gap is enforced automatically</li></ul>
         <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
@@ -314,7 +339,12 @@ export default function AdminPage() {
         <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(event) => setRuntime(Number(event.target.value))} /></label>
         <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} placeholder="PG, PG-13, R…" /></label>
         <label>Poster URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="https://… or /posters/film.png" /></label>
+        <label>Director<input value={movieDirector} onChange={(event) => setMovieDirector(event.target.value)} /></label>
+        <label>Starring<input value={movieStarring} onChange={(event) => setMovieStarring(event.target.value)} placeholder="Comma-separated cast" /></label>
+        <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>
+        <label>Release year<input type="number" min="1888" max="2200" value={movieReleaseYear} onChange={(event) => setMovieReleaseYear(event.target.value ? Number(event.target.value) : "")} /></label>
         <label>Synopsis<textarea rows={6} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} placeholder="Short customer-facing film description" /></label>
+        <fieldset><legend>Paired food &amp; drink</legend>{data?.location.menuCategories.flatMap((category) => category.items.map((item) => <label className="checkbox" key={item.id}><input type="checkbox" checked={pairingMenuItemIds.includes(item.id)} onChange={(event) => setPairingMenuItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.name} · {category.name}</span></label>))}</fieldset>
         <button className="primary">{editingMovieId ? "Save film" : "Add to film library"}</button>
         <button type="button" className="secondary" onClick={() => setMovieEditorOpen(false)}>Cancel</button>
       </form>

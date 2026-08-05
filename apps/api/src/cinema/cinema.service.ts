@@ -58,10 +58,19 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         },
         organization: {
           include: {
-            movies: { where: { active: true }, orderBy: { title: "asc" } },
+            movies: {
+              where: { active: true },
+              include: { pairings: { orderBy: { sortOrder: "asc" } } },
+              orderBy: { title: "asc" },
+            },
             filmSeries: { orderBy: [{ active: "desc" }, { name: "asc" }] },
             priceTiers: { where: { active: true }, orderBy: { ticketPriceMinor: "asc" } },
           },
+        },
+        menuCategories: {
+          where: { active: true },
+          include: { items: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] } },
+          orderBy: { sortOrder: "asc" },
         },
       },
     });
@@ -246,6 +255,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUnique({ where: { id: locationId } });
       if (!location) throw AppError.notFound("Location not found.");
+      await this.validatePairingMenuItems(tx, locationId, input.pairingMenuItemIds);
       const movie = await tx.movie.create({
         data: {
           organizationId: location.organizationId,
@@ -254,6 +264,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           runtimeMinutes: input.runtimeMinutes,
           rating: input.rating ?? null,
           posterUrl: input.posterUrl ?? null,
+          director: input.director ?? null,
+          starring: input.starring ?? null,
+          trailerUrl: input.trailerUrl ?? null,
+          releaseYear: input.releaseYear ?? null,
+          pairings: {
+            create: input.pairingMenuItemIds.map((menuItemId, sortOrder) => ({ menuItemId, sortOrder })),
+          },
         },
       });
       await tx.auditEvent.create({
@@ -264,7 +281,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           entityType: "Movie",
           entityId: movie.id,
           locationId,
-          afterState: { title: movie.title, runtimeMinutes: movie.runtimeMinutes },
+          afterState: {
+            title: movie.title, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating,
+            posterUrl: movie.posterUrl, director: movie.director, starring: movie.starring,
+            trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
+            pairingMenuItemIds: input.pairingMenuItemIds,
+          },
         },
       });
       return movie;
@@ -304,7 +326,20 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (!location) throw AppError.notFound("Location not found.");
       const existing = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: true } });
       if (!existing) throw AppError.notFound("Movie not found.");
-      const movie = await tx.movie.update({ where: { id }, data: input });
+      const { pairingMenuItemIds, ...movieFields } = input;
+      if (pairingMenuItemIds) await this.validatePairingMenuItems(tx, locationId, pairingMenuItemIds);
+      const movie = await tx.movie.update({
+        where: { id },
+        data: {
+          ...movieFields,
+          ...(pairingMenuItemIds ? {
+            pairings: {
+              deleteMany: {},
+              create: pairingMenuItemIds.map((menuItemId, sortOrder) => ({ menuItemId, sortOrder })),
+            },
+          } : {}),
+        },
+      });
       await tx.auditEvent.create({ data: {
         actorType: AuditActorType.EMPLOYEE,
         actorId: actor.sub,
@@ -312,11 +347,35 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         entityType: "Movie",
         entityId: movie.id,
         locationId,
-        beforeState: { title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes, rating: existing.rating, posterUrl: existing.posterUrl },
-        afterState: { title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating, posterUrl: movie.posterUrl },
+        beforeState: {
+          title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes,
+          rating: existing.rating, posterUrl: existing.posterUrl, director: existing.director,
+          starring: existing.starring, trailerUrl: existing.trailerUrl, releaseYear: existing.releaseYear,
+        },
+        afterState: {
+          title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes,
+          rating: movie.rating, posterUrl: movie.posterUrl, director: movie.director,
+          starring: movie.starring, trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
+          ...(pairingMenuItemIds ? { pairingMenuItemIds } : {}),
+        },
       } });
       return movie;
     });
+  }
+
+  private async validatePairingMenuItems(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    menuItemIds: string[],
+  ) {
+    if (!menuItemIds.length) return;
+    if (new Set(menuItemIds).size !== menuItemIds.length) {
+      throw AppError.validationFailed("A menu item can only be paired once.");
+    }
+    const count = await tx.menuItem.count({
+      where: { id: { in: menuItemIds }, active: true, menuCategory: { locationId } },
+    });
+    if (count !== menuItemIds.length) throw AppError.notFound("One or more pairing menu items were not found.");
   }
 
   async createFilmSeries(actor: RequestActor, input: FilmSeriesInput) {
@@ -451,6 +510,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             onSale: input.onSale,
             filmSeriesId: filmSeries?.id ?? null,
             presentation: input.presentation,
+            format: input.format ?? null,
           },
           include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         });
@@ -478,6 +538,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               onSale: input.onSale,
               filmSeriesId: filmSeries?.id ?? null,
               presentation: input.presentation,
+              format: input.format ?? null,
             },
           },
         });
@@ -564,6 +625,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             onSale: input.onSale ?? existing.onSale,
             filmSeriesId,
             presentation: input.presentation ?? existing.presentation,
+            format: input.format === undefined ? existing.format : input.format,
           },
           include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         });
@@ -609,6 +671,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               roomReadyAt: roomReadyAt.toISOString(),
               filmSeriesId,
               presentation: input.presentation ?? existing.presentation,
+              format: input.format === undefined ? existing.format : input.format,
             },
           },
         });
@@ -709,6 +772,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           select: {
             id: true,
             startsAt: true,
+            format: true,
+            filmSeries: { select: { id: true, name: true } },
             auditorium: { select: { id: true, name: true, capacity: true } },
             priceTier: {
               select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true },
@@ -748,6 +813,59 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async publicMovieDetail(id: string, locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
+      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const movie = await prisma.movie.findFirst({
+      where: { id, organizationId: location.organizationId, active: true },
+      include: {
+        showtimes: {
+          where: { onSale: true, startsAt: { gte: new Date() }, auditorium: { locationId: location.id } },
+          select: {
+            id: true,
+            startsAt: true,
+            format: true,
+            filmSeries: { select: { id: true, name: true } },
+            auditorium: { select: { id: true, name: true, capacity: true } },
+            priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
+          },
+          orderBy: { startsAt: "asc" },
+        },
+        pairings: {
+          where: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id } } },
+          include: { menuItem: true },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    });
+    if (!movie) throw AppError.notFound("Movie not found.");
+    return {
+      location: { id: location.id, name: location.name, timezone: location.timezone },
+      movie: {
+        id: movie.id,
+        title: movie.title,
+        synopsis: movie.synopsis,
+        runtimeMinutes: movie.runtimeMinutes,
+        rating: movie.rating,
+        posterUrl: movie.posterUrl,
+        director: movie.director,
+        starring: movie.starring,
+        trailerUrl: movie.trailerUrl,
+        releaseYear: movie.releaseYear,
+        showtimes: movie.showtimes.map((showtime) => ({ ...showtime, startsAt: showtime.startsAt.toISOString() })),
+        pairings: movie.pairings.map(({ menuItem }) => ({
+          id: menuItem.id,
+          name: menuItem.name,
+          description: menuItem.description,
+          imageUrl: menuItem.imageUrl,
+          priceCents: menuItem.priceCents,
+        })),
+      },
+    };
+  }
+
   async publicFilmSeries(locationId?: string) {
     const now = new Date();
     const location = locationId
@@ -779,8 +897,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             id: true,
             startsAt: true,
             presentation: true,
+            format: true,
             movie: {
-              select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true },
+              select: {
+                id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true,
+                director: true, starring: true, trailerUrl: true, releaseYear: true,
+              },
             },
             auditorium: { select: { id: true, name: true, capacity: true } },
             priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
@@ -796,8 +918,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         .map((entry) => {
           const movies = new Map<string, {
             id: string; title: string; synopsis: string | null; runtimeMinutes: number;
-            rating: string | null; posterUrl: string | null; showtimes: Array<{
+            rating: string | null; posterUrl: string | null; director: string | null;
+            starring: string | null; trailerUrl: string | null; releaseYear: number | null; showtimes: Array<{
               id: string; startsAt: string; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
+              format: string | null; filmSeries: { id: string; name: string } | null;
               auditorium: { id: string; name: string; capacity: number };
               priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
             }>;
@@ -808,6 +932,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               id: showtime.id,
               startsAt: showtime.startsAt.toISOString(),
               presentation: showtimePresentationSchema.parse(showtime.presentation),
+              format: showtime.format,
+              filmSeries: { id: entry.id, name: entry.name },
               auditorium: showtime.auditorium,
               priceTier: showtime.priceTier,
             });

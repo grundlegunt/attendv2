@@ -5,7 +5,7 @@ const password = "DevPassword123!";
 test("customer browses a live program and safely holds a seat", async ({ page }) => {
   await page.goto("http://127.0.0.1:3000");
   await expect(page.getByText("NOW PLAYING")).toBeVisible();
-  const showtime = page.locator(".showtime-list button:not([disabled])").first();
+  const showtime = page.locator(".program-tile__showtimes button:not([disabled])").first();
   await expect(showtime).toBeVisible();
   await showtime.click();
   const seatMap = page.getByRole("region", { name: /seating chart/i });

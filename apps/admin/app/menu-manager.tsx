@@ -12,6 +12,7 @@ interface Menu {
       id: string;
       name: string;
       description: string | null;
+      imageUrl: string | null;
       priceCents: number;
       sortOrder: number;
       active: boolean;
@@ -41,6 +42,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [menu, setMenu] = useState<Menu | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [price, setPrice] = useState(0);
   const [categoryId, setCategoryId] = useState("");
   const [stationId, setStationId] = useState("");
@@ -64,6 +66,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
+  const [editImageUrl, setEditImageUrl] = useState("");
   const [editPrice, setEditPrice] = useState(0);
   const [editStationId, setEditStationId] = useState("");
   const [editSortOrder, setEditSortOrder] = useState(0);
@@ -81,7 +84,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             response.categories.flatMap((category) => category.items)[0]?.id ||
             "",
         );
-        setModifierGroupId(
+      setModifierGroupId(
           (value) =>
             value ||
             response.categories.flatMap((category) =>
@@ -112,12 +115,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           kitchenStationId: stationId,
           name,
           description: description || undefined,
+          imageUrl: imageUrl || undefined,
           priceCents: Math.round(price * 100),
           sortOrder:
             menu?.categories.find((category) => category.id === categoryId)
               ?.items.length ?? 0,
         }),
       });
+      setImageUrl("");
       setName("");
       setDescription("");
       setPrice(0);
@@ -245,6 +250,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     setEditingItem(item);
     setEditName(item.name);
     setEditDescription(item.description ?? "");
+    setEditImageUrl(item.imageUrl ?? "");
     setEditPrice(item.priceCents / 100);
     setEditStationId(item.kitchenStation.id);
     setEditSortOrder(item.sortOrder);
@@ -261,6 +267,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         body: JSON.stringify({
           name: editName,
           description: editDescription || null,
+          imageUrl: editImageUrl || null,
           priceCents: Math.round(editPrice * 100),
           kitchenStationId: editStationId,
           sortOrder: editSortOrder,
@@ -375,6 +382,10 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             />
           </label>
           <label>
+            Image URL
+            <input type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://…" />
+          </label>
+          <label>
             Category
             <select
               value={categoryId}
@@ -484,6 +495,10 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                 value={editDescription}
                 onChange={(event) => setEditDescription(event.target.value)}
               />
+            </label>
+            <label>
+              Image URL
+              <input type="url" value={editImageUrl} onChange={(event) => setEditImageUrl(event.target.value)} placeholder="https://…" />
             </label>
             <div className="two-fields">
               <label>

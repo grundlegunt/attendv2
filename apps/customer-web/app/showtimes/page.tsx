@@ -4,21 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import type { NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SeatPicker } from "../components/seat-picker";
+import { localDateKey, MovieTile } from "../components/movie-tile";
 
 interface NowPlayingResponse {
   location: { id: string; name: string; address: string | null; timezone: string };
   movies: NowPlayingMovie[];
-}
-
-function localDateKey(value: string, timeZone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date(value));
-  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${values.year}-${values.month}-${values.day}`;
 }
 
 export default function ShowtimesPage() {
@@ -27,17 +17,33 @@ export default function ShowtimesPage() {
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
+  const nowPlayingMovies = useMemo(() => {
+    if (!program) return [];
+    const today = localDateKey(new Date(), program.location.timezone);
+    return program.movies.filter((movie) => {
+      const firstDate = movie.showtimes[0] ? localDateKey(movie.showtimes[0].startsAt, program.location.timezone) : null;
+      return firstDate !== null && firstDate <= today;
+    });
+  }, [program]);
+
   const availableDates = useMemo(
     () => Array.from(new Set(
-      program?.movies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, program.location.timezone))) ?? [],
+      nowPlayingMovies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, program!.location.timezone))),
     )).sort(),
-    [program],
+    [program, nowPlayingMovies],
   );
-  const activeDate = selectedDate ?? availableDates[0] ?? null;
+  const activeDate = useMemo(() => {
+    if (selectedDate) return selectedDate;
+    if (!program) return availableDates[0] ?? null;
+    const today = localDateKey(new Date(), program.location.timezone);
+    return availableDates.includes(today)
+      ? today
+      : availableDates.find((date) => date > today) ?? availableDates[0] ?? null;
+  }, [availableDates, program, selectedDate]);
 
   const moviesForActiveDate = useMemo(() => {
     if (!program || !activeDate) return [];
-    return program.movies
+    return nowPlayingMovies
       .map((movie) => ({
         movie,
         showtimes: movie.showtimes
@@ -49,7 +55,7 @@ export default function ShowtimesPage() {
         (a, b) =>
           new Date(a.showtimes[0]!.startsAt).getTime() - new Date(b.showtimes[0]!.startsAt).getTime(),
       );
-  }, [program, activeDate]);
+  }, [program, activeDate, nowPlayingMovies]);
 
   useEffect(() => {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
@@ -91,38 +97,16 @@ export default function ShowtimesPage() {
         <>
           {programError && <div className="error-banner">{programError}</div>}
           {!program && !programError && <p className="loading-copy">Loading the program…</p>}
-          {program && program.movies.length === 0 && <p className="loading-copy">No showtimes are on sale yet.</p>}
+          {program && nowPlayingMovies.length === 0 && <p className="loading-copy">No movies are playing today.</p>}
 
           <section className="movie-grid">
-            {moviesForActiveDate.map(({ movie, showtimes }) => (
-              <article className="movie-card" key={movie.id}>
-                <div className="poster-frame">
-                  {movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}
-                </div>
-                <div className="movie-copy">
-                  <p className="movie-meta">{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</p>
-                  <h2>{movie.title}</h2>
-                  {movie.synopsis && <p>{movie.synopsis}</p>}
-                  <div className="showtime-list">
-                    {showtimes.map((showtime) => {
-                      const isPast = new Date(showtime.startsAt).getTime() <= Date.now();
-                      return (
-                        <button
-                          key={showtime.id}
-                          className={isPast ? "past" : undefined}
-                          disabled={isPast}
-                          aria-disabled={isPast}
-                          onClick={() => setSelectedShowtimeId(showtime.id)}
-                        >
-                          <strong>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</strong>
-                          <span>{showtime.auditorium.name}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </article>
-            ))}
+            {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
+              key={movie.id}
+              movie={movie}
+              showtimes={showtimes}
+              timeZone={program!.location.timezone}
+              onSelectShowtime={setSelectedShowtimeId}
+            />)}
           </section>
         </>
       )}

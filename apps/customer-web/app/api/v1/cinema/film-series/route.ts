@@ -25,7 +25,8 @@ export async function GET(request: Request) {
           id: true,
           startsAt: true,
           presentation: true,
-          movie: { select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true } },
+          format: true,
+          movie: { select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, director: true, starring: true, trailerUrl: true, releaseYear: true } },
           auditorium: { select: { id: true, name: true, capacity: true } },
           priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
         },
@@ -42,6 +43,8 @@ export async function GET(request: Request) {
         id: showtime.id,
         startsAt: showtime.startsAt.toISOString(),
         presentation: showtimePresentationSchema.parse(showtime.presentation),
+        format: showtime.format,
+        filmSeries: { id: entry.id, name: entry.name },
         auditorium: showtime.auditorium,
         priceTier: showtime.priceTier,
       });
