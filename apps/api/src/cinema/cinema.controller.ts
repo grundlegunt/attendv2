@@ -28,6 +28,11 @@ export class CinemaController {
     return this.cinemaService.nowPlaying(locationId);
   }
 
+  @Get("film-series")
+  filmSeries(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicFilmSeries(locationId);
+  }
+
   @Get("showtimes/:id/seats")
   seatAvailability(@Param("id") id: string, @Query("holderKey") holderKey?: string) {
     return this.cinemaService.seatAvailability(id, holderKey);

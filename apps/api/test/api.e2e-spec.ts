@@ -346,6 +346,38 @@ describe("Milestone 1 cinema configuration", () => {
     expect(showtime.priceTier.id).toBeTruthy();
   });
 
+  it("lists active film series with their explicitly assigned future showtimes", async () => {
+    const series = await request(app.getHttpServer())
+      .post("/api/v1/cinema/film-series")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        name: "Public Classics",
+        description: "A managed repertory program.",
+        artworkUrl: "https://example.com/public-classics.jpg",
+      });
+    expect(series.status).toBe(201);
+
+    const assigned = await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ filmSeriesId: series.body.id, presentation: "Q_AND_A" });
+    expect(assigned.status).toBe(200);
+
+    const res = await request(app.getHttpServer()).get("/api/v1/cinema/film-series");
+    expect(res.status).toBe(200);
+    const publicSeries = res.body.series.find((entry: { id: string }) => entry.id === series.body.id);
+    expect(publicSeries).toEqual(expect.objectContaining({
+      name: "Public Classics",
+      description: "A managed repertory program.",
+      artworkUrl: "https://example.com/public-classics.jpg",
+    }));
+    const movie = publicSeries.movies.find((entry: { id: string }) => entry.id === movieId);
+    expect(movie.title).toBe("Integration Feature");
+    expect(movie.showtimes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: secondShowtimeId, presentation: "Q_AND_A" }),
+    ]));
+  });
+
   it("lists real on-sale showtimes publicly", async () => {
     const res = await request(app.getHttpServer()).get("/api/v1/cinema/now-playing");
     expect(res.status).toBe(200);

@@ -2,16 +2,17 @@
 
 ## Implemented foundation
 
-The customer website now has a persistent top navigation with four deliberately scoped destinations:
+The customer website now has a persistent top navigation with five deliberately scoped destinations:
 
 - `/showtimes` — the existing now-playing, seat-selection, and checkout journey.
 - `/account` — customer sign-in/registration and live restaurant-tab access, moved out of the showtimes page.
 - `/directions` — the active cinema's saved name and address, with a link to open turn-by-turn directions.
 - `/private-events` — an informational overview that directs guests to contact the cinema; it does not imply an online reservation workflow.
+- `/film-series` — active, managed film series with their artwork, descriptions, films, explicitly assigned future showtimes, presentation labels, and the existing seat-selection flow.
 
 The root route redirects to `/showtimes`. The public now-playing response includes the saved location address so Directions does not depend on hard-coded cinema information.
 
-Coming Soon, Film Series, named festival/event pages, and Open Captions filtering remain deferred until their data-model decisions are made.
+Coming Soon, named festival/event pages, and Open Captions filtering remain deferred until their data-model decisions are made.
 
 ## Reference
 
@@ -19,7 +20,7 @@ Nitehawk Cinema's site navigation is the reference point for what a real indepen
 
 ## Current state
 
-`apps/customer-web` is a single page (`apps/customer-web/app/page.tsx`) with no sub-routes at all. The header is just a site name and an "Account" button that toggles a panel in place — there is no navigation to anything else, because nothing else exists yet: no Coming Soon page, no menu/dining page, no directions page, no private-events page.
+`apps/customer-web` has routed Showtimes, Account, Directions, Private Events, and Film Series pages under one persistent header. The root route redirects to Showtimes.
 
 ## What Attend can support today vs. what needs new groundwork
 
@@ -36,7 +37,8 @@ Don't build nav items that point at features the backend has no concept of. Spli
 
 - **Coming Soon.** `Movie` has no release-date or "coming soon" concept at all today — only `title`/`synopsis`/`runtimeMinutes`/`rating`/`posterUrl`/`active`. There's no way to distinguish "this movie has no showtimes yet because it hasn't opened" from any other reason a movie might have zero showtimes. Building this page means first deciding how "coming soon" is represented (a release date field? an explicit status enum?) — that's a schema decision, flag it rather than inferring one on your own.
 - **Dining & Bar.** Check whether a customer-facing, standalone menu browse page already makes sense given the restaurant ordering flow (`apps/customer-web/app/components/live-restaurant-tab.tsx` is for an active tab, not a browsable menu) — if not, this is "read the existing menu API and render it read-only," which is low-risk, but confirm there isn't already a page for it before adding one.
-- **Film Series / Just Announced / a named festival.** None of these map to anything in the data model — there's no concept of a curated grouping or collection of showtimes/movies distinct from the plain movie list. This is a real feature (some kind of `Collection`/`Series` grouping), not a nav-and-filter task. Don't build a fake version of it with hardcoded movie IDs; either scope it as a real feature or leave it out of the first pass.
+- **Film Series.** This decision is now resolved through managed `FilmSeries` records and explicit showtime assignments. The public page must continue to use those records rather than hardcoded movie IDs or title matching.
+- **Just Announced / a named festival.** These still need a product decision about whether they reuse film series, introduce a broader collection/event concept, or use another explicit model. Do not infer that decision from names or dates.
 - **Merch, Open Captions.** Merch is presumably an external link or a simple static page (confirm with the operator before building anything transactional). "Open Captions" on Nitehawk's site is a screening attribute filter — Attend's `Showtime` model has no accessibility/format attribute today, so this would need the same kind of schema work as Coming Soon before it's a real filter rather than a label with nothing behind it.
 
 ## Guardrails
