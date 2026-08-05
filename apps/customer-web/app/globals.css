@@ -1,12 +1,31 @@
 .cinema-shell { min-height: 100vh; padding: 24px clamp(20px, 5vw, 72px) 72px; background: radial-gradient(circle at top right, #32131d, var(--color-bg) 45%); }
-.site-header { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-bottom: 24px; border-bottom: 1px solid var(--color-border); }
-.site-header h1, .program-heading h2, .movie-copy h3 { font-family: var(--font-family-display); margin: 0; }
-.site-header h1 { font-size: clamp(1.5rem, 4vw, 2.6rem); }
+.site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--color-border); background: rgba(13, 10, 12, .94); backdrop-filter: blur(16px); }
+.site-header__inner { display: flex; justify-content: space-between; align-items: center; gap: 28px; max-width: 1680px; margin: 0 auto; padding: 14px clamp(20px, 5vw, 72px); }
+.site-brand { display: grid; gap: 2px; color: var(--color-text-primary); text-decoration: none; }
+.site-brand span { color: var(--color-accent); font-size: .64rem; font-weight: 800; letter-spacing: .2em; }
+.site-brand strong { font: clamp(1.3rem, 3vw, 2rem) var(--font-family-display); }
+.site-nav { display: flex; gap: 6px; overflow-x: auto; }
+.site-nav a { padding: 12px 14px 10px; border-bottom: 2px solid transparent; color: var(--color-text-secondary); font-size: .82rem; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.site-nav a:hover, .site-nav a[aria-current="page"] { border-color: var(--color-accent); color: var(--color-text-primary); }
+.program-heading h1, .movie-copy h3 { font-family: var(--font-family-display); margin: 0; }
 .eyebrow, .movie-meta { color: var(--color-accent); font-size: .72rem; font-weight: 800; letter-spacing: .18em; }
 .account-button, .showtime-list button { border: 1px solid var(--color-accent); background: transparent; color: var(--color-text-primary); padding: 12px 16px; cursor: pointer; }
 .account-panel { max-width: 420px; margin: 20px 0 0 auto; padding: 20px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .program-heading { padding: 64px 0 28px; }
-.program-heading h2 { font-size: clamp(2.4rem, 7vw, 5rem); }
+.program-heading h1 { font-size: clamp(2.4rem, 7vw, 5rem); }
+.route-page { box-sizing: border-box; max-width: 1320px; margin: 0 auto; }
+.route-heading { max-width: 760px; padding: 64px 0 34px; }
+.route-heading h1 { margin: 8px 0 14px; font: clamp(3rem, 8vw, 6.5rem) var(--font-family-display); line-height: .95; }
+.route-heading p, .secondary-copy { color: var(--color-text-secondary); }
+.content-panel { padding: clamp(24px, 4vw, 42px); border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.content-panel h2, .event-note h2 { margin: 8px 0 12px; font: clamp(1.6rem, 3vw, 2.5rem) var(--font-family-display); }
+.account-grid, .event-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.account-grid { grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); align-items: start; }
+.location-card { max-width: 680px; }
+.location-card address { margin: 12px 0 26px; color: var(--color-text-secondary); font-size: 1.2rem; font-style: normal; line-height: 1.55; }
+.primary-link { display: inline-block; padding: 13px 18px; background: var(--color-accent); color: #130d11; font-weight: 800; text-decoration: none; }
+.event-number { color: var(--color-accent); font-size: .72rem; font-weight: 800; letter-spacing: .16em; }
+.event-note { max-width: 840px; margin-top: 24px; padding: clamp(24px, 4vw, 42px); border-left: 3px solid var(--color-accent); background: rgba(255,255,255,.025); }
 .date-bar { display: grid; grid-template-columns: repeat(7, minmax(92px, 1fr)); margin: 0 0 28px; border: 1px solid var(--color-border); overflow-x: auto; }
 .date-bar button { min-height: 76px; padding: 10px 14px; border: 0; border-right: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); cursor: pointer; }
 .date-bar button:last-child { border-right: 0; }
@@ -47,6 +66,7 @@ button.link { padding: 14px 0 0; border: 0; background: none; color: var(--color
 .seat-picker__summary .primary { width: auto; min-width: 190px; }
 @media (max-width: 700px) { .movie-card { grid-template-columns: 1fr; } .poster-frame { min-height: 300px; } }
 @media (max-width: 700px) { .seat-picker__header { grid-template-columns: 1fr; } .seat-picker__summary { align-items: stretch; flex-direction: column; } .seat-picker__summary .primary { width: 100%; } }
+@media (max-width: 820px) { .site-header__inner { align-items: flex-start; flex-direction: column; gap: 8px; } .site-nav { width: 100%; } .site-nav a { padding-left: 0; padding-right: 18px; } .account-grid, .event-grid { grid-template-columns: 1fr; } }
 .ticket-checkout, .ticket-confirmation { max-width: 920px; margin: 0 auto; }
 .checkout-heading { padding: 28px 0; border-bottom: 1px solid var(--color-border); }
 .checkout-heading h2, .ticket-confirmation h2 { margin: 6px 0; font: clamp(2.2rem, 6vw, 4.8rem) var(--font-family-display); }

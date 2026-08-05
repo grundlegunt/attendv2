@@ -13,7 +13,7 @@ export async function GET(request: Request) {
     orderBy: { title: "asc" },
   });
   return NextResponse.json({
-    location: { id: location.id, name: location.name, timezone: location.timezone },
+    location: { id: location.id, name: location.name, address: location.address, timezone: location.timezone },
     movies: movies.map((movie) => ({
       ...movie,
       showtimes: dedupePublicShowtimes(
