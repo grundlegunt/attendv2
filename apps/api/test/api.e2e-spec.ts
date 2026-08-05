@@ -1688,6 +1688,28 @@ describe("Customer authentication", () => {
     expect(res.body.customer.email).toBe(email);
   });
 
+  it("returns the signed-in customer's account and ticket orders", async () => {
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .send({ email, password: "customer-password-1" });
+    expect(login.status).toBe(200);
+
+    const account = await request(app.getHttpServer())
+      .get("/api/v1/auth/customers/me")
+      .set("Authorization", `Bearer ${login.body.accessToken}`);
+
+    expect(account.status).toBe(200);
+    expect(account.body.customer).toMatchObject({ email, isGuest: false });
+    expect(account.body.orders).toEqual(expect.any(Array));
+  });
+
+  it("does not expose customer account data without a customer session", async () => {
+    const account = await request(app.getHttpServer())
+      .get("/api/v1/auth/customers/me");
+
+    expect(account.status).toBe(401);
+  });
+
   it("rejects an invalid password", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/login")

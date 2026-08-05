@@ -11,6 +11,7 @@ import {
 import { loadEnv } from "@cinema/config/env";
 import {
   AuthenticatedCustomer,
+  CustomerAccountResponse,
   AuthenticatedEmployee,
   CustomerLoginRequest,
   CustomerRegisterRequest,
@@ -253,6 +254,59 @@ export class AuthService {
       where: { customerId },
       data: { refreshTokenVersion: { increment: 1 } },
     });
+  }
+
+  async customerAccount(customerId: string): Promise<CustomerAccountResponse> {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: {
+        authAccount: true,
+        ticketOrders: {
+          where: { status: { not: "CART" } },
+          orderBy: { createdAt: "desc" },
+          include: {
+            location: { select: { name: true } },
+            tickets: {
+              orderBy: { issuedAt: "asc" },
+              include: {
+                showtimeSeat: {
+                  include: {
+                    seat: true,
+                    showtime: { include: { movie: true, auditorium: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!customer?.authAccount) throw AppError.unauthenticated();
+
+    return {
+      customer: this.customerToProfile(customer),
+      orders: customer.ticketOrders.map((order) => ({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        totalCents: order.totalCents,
+        currency: order.currency,
+        createdAt: order.createdAt.toISOString(),
+        locationName: order.location.name,
+        tickets: order.tickets.map((ticket) => ({
+          id: ticket.id,
+          status: ticket.status,
+          qrToken: ticket.qrToken,
+          priceCentsPaid: ticket.priceCentsPaid,
+          seatLabel: ticket.showtimeSeat.seat.label,
+          movieTitle: ticket.showtimeSeat.showtime.movie.title,
+          moviePosterUrl: ticket.showtimeSeat.showtime.movie.posterUrl,
+          auditoriumName: ticket.showtimeSeat.showtime.auditorium.name,
+          startsAt: ticket.showtimeSeat.showtime.startsAt.toISOString(),
+        })),
+      })),
+    };
   }
 
   private issueCustomerTokens(customerId: string, tokenVersion: number): TokenPair {

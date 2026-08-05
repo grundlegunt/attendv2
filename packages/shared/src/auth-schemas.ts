@@ -52,3 +52,31 @@ export interface AuthenticatedCustomer {
   name: string | null;
   isGuest: boolean;
 }
+
+export interface CustomerTicketSummary {
+  id: string;
+  status: string;
+  qrToken: string;
+  priceCentsPaid: number;
+  seatLabel: string;
+  movieTitle: string;
+  moviePosterUrl: string | null;
+  auditoriumName: string;
+  startsAt: string;
+}
+
+export interface CustomerTicketOrderSummary {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalCents: number;
+  currency: string;
+  createdAt: string;
+  locationName: string;
+  tickets: CustomerTicketSummary[];
+}
+
+export interface CustomerAccountResponse {
+  customer: AuthenticatedCustomer;
+  orders: CustomerTicketOrderSummary[];
+}
