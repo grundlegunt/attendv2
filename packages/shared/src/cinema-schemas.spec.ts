@@ -22,13 +22,21 @@ describe("cinema programming requests", () => {
   };
 
   it("accepts movie metadata with either an absolute or app-relative poster URL", () => {
-    expect(createMovieRequestSchema.parse({
+    const parsed = createMovieRequestSchema.parse({
       title: "The Matrix",
       runtimeMinutes: 136,
       synopsis: "A programmer discovers the world is not what it seems.",
       rating: "R",
       posterUrl: "https://images.example.com/matrix.jpg",
-    }).posterUrl).toContain("images.example.com");
+      director: "Lana Wachowski, Lilly Wachowski",
+      starring: "Keanu Reeves, Carrie-Anne Moss",
+      trailerUrl: "https://video.example.com/matrix",
+      releaseYear: 1999,
+      pairingMenuItemIds: ["10000000-0000-4000-8000-000000000005"],
+    });
+    expect(parsed.posterUrl).toContain("images.example.com");
+    expect(parsed.releaseYear).toBe(1999);
+    expect(parsed.pairingMenuItemIds).toHaveLength(1);
 
     expect(createMovieRequestSchema.parse({
       title: "The Matrix",
@@ -43,10 +51,12 @@ describe("cinema programming requests", () => {
       ...showtime,
       filmSeriesId,
       presentation: "Q_AND_A",
+      format: "35mm",
     });
 
     expect(parsed.filmSeriesId).toBe(filmSeriesId);
     expect(parsed.presentation).toBe("Q_AND_A");
+    expect(parsed.format).toBe("35mm");
   });
 
   it("validates film-series create, edit, and archive payloads", () => {
@@ -157,6 +167,8 @@ function screening(id: string, startsAt: string, auditoriumId = "room-1"): Publi
     startsAt,
     auditorium: { id: auditoriumId, name: "Theater 1", capacity: 60 },
     priceTier: { name: "Standard", ticketPriceMinor: 1700, feeMinor: 200, currency: "USD" },
+    filmSeries: null,
+    format: null,
   };
 }
 

@@ -36,6 +36,7 @@ export interface CalendarShowtime {
   onSale: boolean;
   filmSeries?: ScheduleFilmSeries | null;
   presentation?: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
+  format?: string | null;
   movie: ScheduleMovie;
   auditorium: ScheduleAuditorium;
   priceTier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string };

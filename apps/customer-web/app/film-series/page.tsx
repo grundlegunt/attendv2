@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import type { PublicFilmSeries } from "@cinema/shared";
 import { SeatPicker } from "../components/seat-picker";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
@@ -66,12 +67,12 @@ export default function FilmSeriesPage() {
                 <div className="series-films">
                   {series.movies.map((movie) => (
                     <section className="series-film" key={movie.id}>
-                      <div className="series-poster">
+                      <Link className="series-poster" href={`/movie/${movie.id}`}>
                         {movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}
-                      </div>
+                      </Link>
                       <div>
                         <p className="movie-meta">{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</p>
-                        <h3>{movie.title}</h3>
+                        <h3><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h3>
                         {movie.synopsis && <p>{movie.synopsis}</p>}
                         <div className="showtime-list">
                           {movie.showtimes.map((showtime) => (

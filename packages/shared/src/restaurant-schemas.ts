@@ -40,6 +40,7 @@ export const createMenuItemRequestSchema = z.object({
   kitchenStationId: z.string().uuid(),
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional(),
+  imageUrl: z.string().trim().url("Image URL must be a valid URL.").nullable().optional(),
   priceCents: z.number().int().min(0),
   sortOrder: z.number().int().min(0).default(0),
 });
@@ -66,6 +67,7 @@ export const updateMenuItemRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(500).nullable().optional(),
+    imageUrl: z.string().trim().url("Image URL must be a valid URL.").nullable().optional(),
     priceCents: z.number().int().min(0).optional(),
     active: z.boolean().optional(),
     is86d: z.boolean().optional(),

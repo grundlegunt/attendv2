@@ -82,6 +82,11 @@ export const createMovieRequestSchema = z.object({
     z.string().trim().url("Poster URL must be a valid URL."),
     z.string().trim().regex(/^\/(?!\/)/, "Poster path must begin with a single slash."),
   ]).nullable().optional(),
+  director: z.string().trim().max(200).nullable().optional(),
+  starring: z.string().trim().max(1000).nullable().optional(),
+  trailerUrl: z.string().trim().url("Trailer URL must be a valid URL.").nullable().optional(),
+  releaseYear: z.number().int().min(1888).max(2200).nullable().optional(),
+  pairingMenuItemIds: z.array(z.string().uuid()).max(20).default([]),
 });
 
 const artworkUrlSchema = z.union([
@@ -112,6 +117,7 @@ const showtimeFieldsSchema = z.object({
   onSale: z.boolean(),
   filmSeriesId: z.string().uuid().nullable().optional(),
   presentation: showtimePresentationSchema,
+  format: z.string().trim().max(80).nullable().optional(),
 });
 
 export const createShowtimeRequestSchema = showtimeFieldsSchema.extend({
@@ -201,6 +207,8 @@ export interface PublicShowtime {
   startsAt: string;
   auditorium: { id: string; name: string; capacity: number };
   priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
+  filmSeries: { id: string; name: string } | null;
+  format: string | null;
 }
 
 /**
@@ -265,7 +273,23 @@ export interface NowPlayingMovie {
   runtimeMinutes: number;
   rating: string | null;
   posterUrl: string | null;
+  director: string | null;
+  starring: string | null;
+  trailerUrl: string | null;
+  releaseYear: number | null;
   showtimes: PublicShowtime[];
+}
+
+export interface PublicMoviePairing {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  priceCents: number;
+}
+
+export interface PublicMovieDetail extends NowPlayingMovie {
+  pairings: PublicMoviePairing[];
 }
 
 export type ShowtimePresentation = z.infer<typeof showtimePresentationSchema>;

@@ -216,11 +216,16 @@ model Movie {
   runtimeMinutes Int
   rating         String?
   posterUrl      String?
+  director       String?
+  starring       String?
+  trailerUrl     String?
+  releaseYear    Int?
   active         Boolean  @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   showtimes Showtime[]
+  pairings  MoviePairing[]
 
   @@index([organizationId, active])
   @@map("movies")
@@ -268,6 +273,7 @@ model Showtime {
   filmSeriesId    String?
   filmSeries      FilmSeries?     @relation(fields: [filmSeriesId], references: [id], onDelete: Restrict)
   presentation    String          @default("STANDARD")
+  format          String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]
@@ -1114,6 +1120,7 @@ model MenuItem {
   kitchenStation   KitchenStation           @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
   name             String
   description      String?
+  imageUrl         String?
   priceCents       Int
   chargeCategory   RestaurantChargeCategory @default(FOOD)
   active           Boolean                  @default(true)
@@ -1124,11 +1131,25 @@ model MenuItem {
 
   modifierGroups ModifierGroup[]
   orderItems     RestaurantOrderItem[]
+  moviePairings MoviePairing[]
 
   @@unique([menuCategoryId, name])
   @@index([menuCategoryId, active, sortOrder])
   @@index([kitchenStationId, active])
   @@map("menu_items")
+}
+
+model MoviePairing {
+  movieId   String
+  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem  MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@id([movieId, menuItemId])
+  @@index([menuItemId])
+  @@map("movie_pairings")
 }
 
 model TaxRule {

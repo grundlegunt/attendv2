@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const firstShowtimeToDisplay = startOfLocalDay(new Date(), location.timezone);
   const movies = await prisma.movie.findMany({
     where: { organizationId: location.organizationId, active: true, showtimes: { some: { onSale: true, startsAt: { gte: firstShowtimeToDisplay }, auditorium: { locationId: location.id } } } },
-    include: { showtimes: { where: { onSale: true, startsAt: { gte: firstShowtimeToDisplay }, auditorium: { locationId: location.id } }, select: { id: true, startsAt: true, auditorium: { select: { id: true, name: true, capacity: true } }, priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } } }, orderBy: { startsAt: "asc" } } },
+    include: { showtimes: { where: { onSale: true, startsAt: { gte: firstShowtimeToDisplay }, auditorium: { locationId: location.id } }, select: { id: true, startsAt: true, format: true, filmSeries: { select: { id: true, name: true } }, auditorium: { select: { id: true, name: true, capacity: true } }, priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } } }, orderBy: { startsAt: "asc" } } },
     orderBy: { title: "asc" },
   });
   return NextResponse.json({

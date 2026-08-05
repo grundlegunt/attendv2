@@ -132,6 +132,7 @@ export class RestaurantService {
     kitchenStationId: string;
     name: string;
     description?: string;
+    imageUrl?: string | null;
     priceCents: number;
     sortOrder: number;
   }) {
@@ -143,6 +144,7 @@ export class RestaurantService {
           kitchenStationId: input.kitchenStationId,
           name: input.name,
           description: input.description,
+          imageUrl: input.imageUrl,
           priceCents: input.priceCents,
           sortOrder: input.sortOrder,
         },
@@ -258,6 +260,7 @@ export class RestaurantService {
     changes: {
       name?: string;
       description?: string | null;
+      imageUrl?: string | null;
       priceCents?: number;
       active?: boolean;
       is86d?: boolean;
