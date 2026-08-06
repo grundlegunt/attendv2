@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
 import { platformLoginRequestSchema } from "@cinema/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -23,5 +23,11 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   overview() {
     return this.platform.overview();
+  }
+
+  @Get("organizations/:organizationId")
+  @UseGuards(PlatformAuthGuard)
+  organization(@Param("organizationId") organizationId: string) {
+    return this.platform.organization(organizationId);
   }
 }
