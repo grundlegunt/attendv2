@@ -33,6 +33,11 @@ export class CinemaController {
     return this.cinemaService.publicFilmSeries(locationId);
   }
 
+  @Get("menu")
+  menu(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicDiningMenu(locationId);
+  }
+
   @Get("movies/:id")
   movieDetail(@Param("id") id: string, @Query("locationId") locationId?: string) {
     return this.cinemaService.publicMovieDetail(id, locationId);

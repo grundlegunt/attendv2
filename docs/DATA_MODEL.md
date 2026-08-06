@@ -69,7 +69,7 @@ This document proposes the entity set and key relationships. It intentionally di
 
 ### Restaurant
 - **MenuCategory**: id, locationId, name, sortOrder, active.
-- **MenuItem**: id, menuCategoryId, name, description, imageUrl, priceCents, taxCategoryId, kitchenStationId, active, is86d.
+- **MenuItem**: id, menuCategoryId, name, description, imageUrl, priceCents, taxCategoryId, kitchenStationId, isVegan, isGlutenFree, active, is86d. Dietary booleans are operator-authored display attributes, not inferred from ingredients.
 - **ModifierGroup**: id, menuItemId (or shared groups linked via join table), name, selectionType (`SINGLE/MULTIPLE`), required.
 - **Modifier**: id, modifierGroupId, name, priceDeltaCents, active.
 - **KitchenStation**: id, locationId, name (`KITCHEN/BAR/CONCESSIONS`), displayType.

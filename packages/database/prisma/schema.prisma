@@ -1123,6 +1123,8 @@ model MenuItem {
   imageUrl         String?
   priceCents       Int
   chargeCategory   RestaurantChargeCategory @default(FOOD)
+  isVegan          Boolean                  @default(false)
+  isGlutenFree     Boolean                  @default(false)
   active           Boolean                  @default(true)
   is86d            Boolean                  @default(false)
   sortOrder        Int                      @default(0)

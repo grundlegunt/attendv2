@@ -6,6 +6,14 @@ test("customer browses a live program and safely holds a seat", async ({ page })
   await page.goto("http://127.0.0.1:3000");
   await expect(page.getByText("NOW PLAYING")).toBeVisible();
   const showtime = page.locator(".program-tile__showtimes button:not([disabled])").first();
+  const showtimeDates = page.getByRole("navigation", { name: "Showtime dates" }).getByRole("button");
+
+  for (let index = 0; index < await showtimeDates.count() && await showtime.count() === 0; index += 1) {
+    const date = showtimeDates.nth(index);
+    await date.click();
+    await expect(date).toHaveClass(/active/);
+  }
+
   await expect(showtime).toBeVisible();
   await showtime.click();
   const seatMap = page.getByRole("region", { name: /seating chart/i });
