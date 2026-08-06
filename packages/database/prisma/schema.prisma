@@ -94,6 +94,9 @@ model Location {
   adminSurfaceColor        String?
   adminTextColor           String?
   adminMutedTextColor      String?
+  contentDraft             Json?
+  contentPublished         Json?
+  contentPublishedAt       DateTime?
   timezone                 String  @default("America/New_York")
   currency                 String  @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the

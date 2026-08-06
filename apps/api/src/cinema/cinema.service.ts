@@ -14,6 +14,8 @@ import {
   updateShowtimeRequestSchema,
   validateAdvancedSeatLayout,
   validateSeatLayout,
+  cinemaContentDefaults,
+  cinemaContentSchema,
 } from "@cinema/shared";
 import type { PublicDiningMenuResponse } from "@cinema/shared";
 import { RequestActor } from "../auth/types";
@@ -749,6 +751,15 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       textColor: location.customerTextColor,
       mutedTextColor: location.customerMutedTextColor,
     };
+  }
+
+  async publicContent(locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
+      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const parsed = cinemaContentSchema.safeParse(location.contentPublished);
+    return { locationId: location.id, content: parsed.success ? parsed.data : cinemaContentDefaults, publishedAt: location.contentPublishedAt?.toISOString() ?? null };
   }
 
   async nowPlaying(locationId?: string) {
