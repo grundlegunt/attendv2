@@ -66,7 +66,7 @@ export default function ShowtimesPage() {
   }, []);
 
   return (
-    <main className="cinema-shell">
+    <main className="cinema-shell route-page">
       <section className="program-heading">
         <span className="eyebrow">NOW PLAYING</span>
         <h1>Showtimes</h1>
