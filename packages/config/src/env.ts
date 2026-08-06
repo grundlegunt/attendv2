@@ -61,7 +61,7 @@ const envSchema = z.object({
   // distinct secret from application/session credentials.
   OBSERVABILITY_TOKEN: z.string().min(32).optional(),
 
-  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
+  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004"),
 }).superRefine((env, context) => {
   if (env.NODE_ENV === "production" && !env.OBSERVABILITY_TOKEN) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["OBSERVABILITY_TOKEN"], message: "OBSERVABILITY_TOKEN is required in production." });

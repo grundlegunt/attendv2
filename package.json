@@ -19,6 +19,7 @@
     "test:load": "node tests/load/opening-night.mjs",
     "db:migrate": "pnpm --filter @cinema/database migrate:dev",
     "db:seed": "pnpm --filter @cinema/database seed",
+    "platform-user:create": "pnpm --filter @cinema/database platform-user:create",
     "db:generate": "pnpm --filter @cinema/database generate"
   },
   "devDependencies": {

@@ -19,6 +19,8 @@ export interface SeedResult {
   customerId: string;
 }
 
+export const PLATFORM_SEED_EMAIL = "platform@attend.test";
+
 function buildPairedSeats(rows: number, seatsPerRow: number) {
   return Array.from({ length: rows }, (_, rowIndex) => {
     const rowLabel = String.fromCharCode(65 + rowIndex);
@@ -116,6 +118,17 @@ export async function seedDatabase(
   log("Seeding demo employees (Owner, Server)...");
   const passwordHash = await hashPassword(SEED_PASSWORD);
   const pinHash = await hashPin("1234");
+
+  log("Seeding Attend platform operator...");
+  await prisma.platformUser.upsert({
+    where: { email: PLATFORM_SEED_EMAIL },
+    update: { active: true },
+    create: {
+      name: "Attend Operator",
+      email: PLATFORM_SEED_EMAIL,
+      passwordHash,
+    },
+  });
 
   const owner = await prisma.employee.upsert({
     where: { email: `owner@${suffix}` },
@@ -761,6 +774,7 @@ if (require.main === module) {
       console.log(`  Kitchen login:  kitchen@ridgelinecinema.test / ${SEED_PASSWORD}`);
       console.log(`  Bartender login: bartender@ridgelinecinema.test / ${SEED_PASSWORD}`);
       console.log(`  Customer login: customer@ridgelinecinema.test / ${SEED_PASSWORD}`);
+      console.log(`  Platform login: ${PLATFORM_SEED_EMAIL} / ${SEED_PASSWORD}`);
       console.log(`  Location id:    ${result.locationId}`);
     })
     .catch((err) => {
