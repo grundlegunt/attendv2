@@ -236,6 +236,38 @@ describe("Attend platform authentication boundary", () => {
     ]));
   });
 
+  it("returns a detailed organization view only to an Attend operator", async () => {
+    const overview = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200);
+    const organizationId = overview.body.organizations[0].id as string;
+
+    const res = await request(app.getHttpServer())
+      .get(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.objectContaining({
+      id: organizationId,
+      payments: expect.objectContaining({ onboardingStatus: expect.any(String) }),
+      locations: expect.arrayContaining([expect.objectContaining({
+        branding: expect.objectContaining({ accentColor: expect.anything() }),
+        operations: expect.objectContaining({ cleaningBufferMinutes: expect.any(Number) }),
+        configuration: expect.objectContaining({ activeMovies: expect.any(Number), activeFilmSeries: expect.any(Number) }),
+      })]),
+    }));
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get("/api/v1/platform/organizations/00000000-0000-0000-0000-000000000000")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(404);
+  });
+
   it("rejects an Attend operator token from cinema staff routes", async () => {
     const res = await request(app.getHttpServer())
       .get("/api/v1/auth/staff/me")

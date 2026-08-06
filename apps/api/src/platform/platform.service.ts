@@ -71,6 +71,62 @@ export class PlatformService {
     };
   }
 
+  async organization(organizationId: string) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: { locations: { orderBy: { name: "asc" } } },
+    });
+    if (!organization) throw AppError.notFound("Cinema organization not found.");
+
+    return {
+      id: organization.id,
+      name: organization.name,
+      legalName: organization.legalName,
+      timezone: organization.timezone,
+      createdAt: organization.createdAt.toISOString(),
+      payments: {
+        connected: Boolean(organization.stripeConnectedAccountId),
+        onboardingStatus: organization.connectOnboardingStatus,
+      },
+      locations: await Promise.all(organization.locations.map(async (location) => {
+        const [auditoriums, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries] = await Promise.all([
+          prisma.auditorium.count({ where: { locationId: location.id, active: true } }),
+          prisma.employee.count({ where: { locationId: location.id, active: true, deletedAt: null } }),
+          prisma.menuItem.count({ where: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } }),
+          prisma.showtime.count({ where: { auditorium: { locationId: location.id }, onSale: true, startsAt: { gte: new Date() } } }),
+          prisma.movie.count({ where: { organizationId, active: true } }),
+          prisma.filmSeries.count({ where: { organizationId, active: true } }),
+        ]);
+        return {
+          id: location.id,
+          name: location.name,
+          address: location.address,
+          timezone: location.timezone,
+          currency: location.currency,
+          active: location.active,
+          branding: {
+            logoUrl: location.customerLogoUrl,
+            accentColor: location.customerAccentColor,
+            accentMutedColor: location.customerAccentMutedColor,
+            backgroundColor: location.customerBackgroundColor,
+            surfaceColor: location.customerSurfaceColor,
+            textColor: location.customerTextColor,
+            mutedTextColor: location.customerMutedTextColor,
+          },
+          operations: {
+            ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints,
+            preShowBufferMinutes: location.preShowBufferMinutes,
+            cleaningBufferMinutes: location.cleaningBufferMinutes,
+            checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd,
+            autoSettleGraceMinutes: location.autoSettleGraceMinutes,
+            timeClockEnabled: location.timeClockEnabled,
+          },
+          configuration: { auditoriums, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries },
+        };
+      })),
+    };
+  }
+
   private issueTokens(userId: string, tokenVersion: number): TokenPair {
     const env = loadEnv();
     return signTokenPair(
