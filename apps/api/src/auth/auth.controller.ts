@@ -55,12 +55,14 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   async staffLogout(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
     await this.authService.staffLogout(actor.sub);
   }
 
   @Get("staff/me")
   @UseGuards(JwtAuthGuard)
   async staffMe(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
     return this.authService.staffMe(actor.sub);
   }
 

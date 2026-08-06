@@ -10,9 +10,10 @@ import { WorkforceModule } from "./workforce/workforce.module";
 import { BoxOfficeModule } from "./box-office/box-office.module";
 import { ReportingModule } from "./reporting/reporting.module";
 import { ManagementModule } from "./management/management.module";
+import { PlatformModule } from "./platform/platform.module";
 
 @Module({
-  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule],
+  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule, PlatformModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

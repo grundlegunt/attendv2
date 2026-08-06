@@ -23,6 +23,7 @@ let testDb: TestDatabase;
 let app: INestApplication;
 let ownerAccessToken: string;
 let ownerRefreshToken: string;
+let platformAccessToken: string;
 let milestone4Credential: string;
 let milestone4TicketId: string;
 let milestone8TabId: string;
@@ -183,6 +184,65 @@ describe("Staff authentication", () => {
       .post("/api/v1/auth/staff/login")
       .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
     ownerAccessToken = loginAgain.body.accessToken;
+  });
+});
+
+describe("Attend platform authentication boundary", () => {
+  it("logs a separately seeded Attend operator in", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/platform/auth/login")
+      .send({ email: "platform@attend.test", password: SEED_PASSWORD });
+
+    expect(res.status).toBe(200);
+    expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.user).toEqual(expect.objectContaining({
+      email: "platform@attend.test",
+      name: "Attend Operator",
+    }));
+    platformAccessToken = res.body.accessToken;
+  });
+
+  it("rejects a cinema employee token from the Attend Master API", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("FORBIDDEN");
+  });
+
+  it("returns a read-only cinema overview to an Attend operator", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${platformAccessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.generatedAt).toEqual(expect.any(String));
+    expect(res.body.organizations).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: "Ridgeline Cinema Group",
+        locations: expect.arrayContaining([
+          expect.objectContaining({
+            name: "Meridian Cinema",
+            configuration: expect.objectContaining({
+              auditoriums: expect.any(Number),
+              employees: expect.any(Number),
+              menuItems: expect.any(Number),
+              upcomingShowtimes: expect.any(Number),
+            }),
+          }),
+        ]),
+      }),
+    ]));
+  });
+
+  it("rejects an Attend operator token from cinema staff routes", async () => {
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/auth/staff/me")
+      .set("Authorization", `Bearer ${platformAccessToken}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("FORBIDDEN");
   });
 });
 

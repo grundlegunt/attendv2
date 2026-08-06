@@ -12,6 +12,9 @@ export const staffLoginRequestSchema = z.object({
 });
 export type StaffLoginRequest = z.infer<typeof staffLoginRequestSchema>;
 
+export const platformLoginRequestSchema = staffLoginRequestSchema;
+export type PlatformLoginRequest = z.infer<typeof platformLoginRequestSchema>;
+
 export const customerRegisterRequestSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -51,6 +54,12 @@ export interface AuthenticatedCustomer {
   email: string | null;
   name: string | null;
   isGuest: boolean;
+}
+
+export interface AuthenticatedPlatformUser {
+  id: string;
+  name: string;
+  email: string;
 }
 
 export interface CustomerTicketSummary {
