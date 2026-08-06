@@ -220,7 +220,7 @@ describe("Attend platform authentication boundary", () => {
     expect(res.body.generatedAt).toEqual(expect.any(String));
     expect(res.body.organizations).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        name: "Ridgeline Cinema Group",
+        name: "Meridian Cinema Co.",
         locations: expect.arrayContaining([
           expect.objectContaining({
             name: "Meridian Cinema",
