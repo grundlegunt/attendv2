@@ -390,6 +390,31 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
   });
 
+  it("publishes audited per-location customer branding", async () => {
+    const updated = await request(app.getHttpServer())
+      .patch("/api/v1/management/settings/location")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe" });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual(expect.objectContaining({ name: "Integration Cinema", customerAccentColor: "#123456" }));
+
+    const branding = await request(app.getHttpServer()).get("/api/v1/cinema/branding");
+    expect(branding.status).toBe(200);
+    expect(branding.body).toEqual(expect.objectContaining({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe" }));
+
+    const { prisma } = await import("@cinema/database");
+    expect(await prisma.auditEvent.count({ where: { action: "location.settings_updated", entityId: branding.body.locationId } })).toBeGreaterThan(0);
+  });
+
+  it("rejects invalid customer branding colors", async () => {
+    const response = await request(app.getHttpServer())
+      .patch("/api/v1/management/settings/location")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ accentColor: "hotpink" });
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_FAILED");
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")

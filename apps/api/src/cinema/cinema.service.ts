@@ -732,6 +732,24 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async publicBranding(locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
+      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    return {
+      locationId: location.id,
+      name: location.name,
+      logoUrl: location.customerLogoUrl,
+      accentColor: location.customerAccentColor,
+      accentMutedColor: location.customerAccentMutedColor,
+      backgroundColor: location.customerBackgroundColor,
+      surfaceColor: location.customerSurfaceColor,
+      textColor: location.customerTextColor,
+      mutedTextColor: location.customerMutedTextColor,
+    };
+  }
+
   async nowPlaying(locationId?: string) {
     const location = locationId
       ? await prisma.location.findFirst({ where: { id: locationId, active: true } })

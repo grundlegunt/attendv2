@@ -1,5 +1,33 @@
 import { z } from "zod";
 
+export const customerBrandingDefaults = {
+  accentColor: "#fe2c54",
+  accentMutedColor: "#a91d39",
+  backgroundColor: "#0b0b0d",
+  surfaceColor: "#16161a",
+  textColor: "#f5f3ee",
+  mutedTextColor: "#a8a49c",
+} as const;
+
+const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color such as #fe2c54.");
+const customerLogoUrlSchema = z.union([
+  z.string().trim().url("Logo URL must be a valid URL."),
+  z.string().trim().regex(/^\/(?!\/)/, "Logo path must begin with a single slash."),
+]);
+
+export const customerBrandingSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  logoUrl: customerLogoUrlSchema.nullable().optional(),
+  accentColor: hexColorSchema.nullable().optional(),
+  accentMutedColor: hexColorSchema.nullable().optional(),
+  backgroundColor: hexColorSchema.nullable().optional(),
+  surfaceColor: hexColorSchema.nullable().optional(),
+  textColor: hexColorSchema.nullable().optional(),
+  mutedTextColor: hexColorSchema.nullable().optional(),
+}).strict();
+
+export type CustomerBranding = z.infer<typeof customerBrandingSchema>;
+
 export const seatTypeSchema = z.enum(["STANDARD", "ADA", "COMPANION"]);
 export const tablePositionSchema = z.enum(["LEFT", "RIGHT"]);
 

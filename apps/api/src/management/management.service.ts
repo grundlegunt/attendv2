@@ -8,15 +8,21 @@ export class ManagementService {
   async settings(locationId: string) {
     return prisma.location.findUniqueOrThrow({
       where: { id: locationId },
-      select: { id: true, name: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" } } },
+      select: { id: true, name: true, customerLogoUrl: true, customerAccentColor: true, customerAccentMutedColor: true, customerBackgroundColor: true, customerSurfaceColor: true, customerTextColor: true, customerMutedTextColor: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" } } },
     });
   }
 
-  async updateLocation(input: { locationId: string; employeeId: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number }) {
+  async updateLocation(input: { locationId: string; employeeId: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number; name?: string; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null }) {
     return prisma.$transaction(async (tx) => {
       const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
-      const updated = await tx.location.update({ where: { id: input.locationId }, data: { timeClockEnabled: input.timeClockEnabled, ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.settings_updated", entityType: "Location", entityId: input.locationId, beforeState: { timeClockEnabled: before.timeClockEnabled, ticketTaxRateBasisPoints: before.ticketTaxRateBasisPoints }, afterState: { timeClockEnabled: updated.timeClockEnabled, ticketTaxRateBasisPoints: updated.ticketTaxRateBasisPoints } } });
+      const updated = await tx.location.update({ where: { id: input.locationId }, data: {
+        timeClockEnabled: input.timeClockEnabled, ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints, name: input.name,
+        customerLogoUrl: input.logoUrl, customerAccentColor: input.accentColor, customerAccentMutedColor: input.accentMutedColor,
+        customerBackgroundColor: input.backgroundColor, customerSurfaceColor: input.surfaceColor,
+        customerTextColor: input.textColor, customerMutedTextColor: input.mutedTextColor,
+      } });
+      const brandingState = (location: typeof updated) => ({ name: location.name, logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor, backgroundColor: location.customerBackgroundColor, surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor, timeClockEnabled: location.timeClockEnabled, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.settings_updated", entityType: "Location", entityId: input.locationId, beforeState: brandingState(before), afterState: brandingState(updated) } });
       return updated;
     });
   }

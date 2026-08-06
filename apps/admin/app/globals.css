@@ -289,7 +289,28 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .audit-list article div { display: grid; gap: .2rem; }
 .audit-list span, .audit-list time { color: var(--muted); font-size: .85rem; }
 .button-link { display: inline-block; text-decoration: none; margin: .5rem 0; }
+.branding-editor .management-heading { align-items: start; }
+.branding-editor .secondary { width: auto; margin: 0; }
+.branding-layout { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(360px, 1.1fr); gap: 28px; margin-top: 24px; }
+.branding-fields, .branding-colors { display: grid; gap: 14px; }
+.branding-colors { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.color-control { display: grid; grid-template-columns: 52px 1fr; gap: 8px; }
+.color-control input[type="color"] { width: 52px; min-height: 46px; padding: 3px; }
+.branding-preview { min-height: 430px; border: 1px solid; }
+.branding-preview header { min-height: 82px; padding: 18px 24px; border-bottom: 1px solid; }
+.branding-preview header img { display: block; max-width: 210px; max-height: 48px; object-fit: contain; }
+.branding-preview header div { display: grid; gap: 3px; }
+.branding-preview header small, .branding-preview main > small { font-weight: 900; letter-spacing: .16em; }
+.branding-preview header strong { font: 1.5rem Georgia, serif; }
+.branding-preview main { padding: 42px 30px; }
+.branding-preview h3 { margin: 8px 0; font: 2.4rem Georgia, serif; }
+.branding-preview main > div { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 32px; padding: 20px; border: 1px solid; }
+.branding-preview button { padding: 12px 18px; border: 0; font-weight: 900; }
+.contrast-warning { padding: 12px; border-left: 3px solid var(--danger); color: #ffaaa3; }
+.success-banner { padding: 12px; border: 1px solid #376b49; color: #a9d7b7; }
 @media (max-width: 760px) { .table-row { grid-template-columns: 1fr 1fr; } .table-head { display: none; } }
+@media (max-width: 900px) { .branding-layout { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .branding-colors { grid-template-columns: 1fr; } }
 .people-list, .refund-list { display: grid; margin-top: 1rem; }
 .people-list article, .refund-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
 .people-list article div, .refund-list article div { display: grid; gap: .2rem; }
