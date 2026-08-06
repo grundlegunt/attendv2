@@ -63,13 +63,14 @@ model FilmSeries {
   name           String
   description    String?
   artworkUrl     String?
+  sortOrder      Int          @default(0)
   active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   showtimes      Showtime[]
 
   @@unique([organizationId, name])
-  @@index([organizationId, active])
+  @@index([organizationId, active, sortOrder])
   @@map("film_series")
 }
 

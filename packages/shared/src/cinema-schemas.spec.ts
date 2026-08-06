@@ -76,11 +76,14 @@ describe("cinema programming requests", () => {
   });
 
   it("validates film-series create, edit, and archive payloads", () => {
-    expect(createFilmSeriesRequestSchema.parse({
+    const createdSeries = createFilmSeriesRequestSchema.parse({
       name: "Summer Classics",
       description: "A repertory season.",
       artworkUrl: "/series/summer-classics.jpg",
-    }).name).toBe("Summer Classics");
+      sortOrder: 3,
+    });
+    expect(createdSeries.name).toBe("Summer Classics");
+    expect(createdSeries.sortOrder).toBe(3);
     expect(updateFilmSeriesRequestSchema.parse({ active: false })).toEqual({ active: false });
     expect(() => updateFilmSeriesRequestSchema.parse({})).toThrow();
   });

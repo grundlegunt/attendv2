@@ -64,7 +64,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               include: { pairings: { orderBy: { sortOrder: "asc" } } },
               orderBy: { title: "asc" },
             },
-            filmSeries: { orderBy: [{ active: "desc" }, { name: "asc" }] },
+            filmSeries: { orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }] },
             priceTiers: { where: { active: true }, orderBy: { ticketPriceMinor: "asc" } },
           },
         },
@@ -394,6 +394,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             name: input.name,
             description: input.description ?? null,
             artworkUrl: input.artworkUrl ?? null,
+            sortOrder: input.sortOrder ?? await tx.filmSeries.count({ where: { organizationId: location.organizationId, active: true } }),
           },
         });
         await tx.auditEvent.create({ data: {
@@ -428,8 +429,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         await tx.auditEvent.create({ data: {
           actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
           action: "film_series.updated", entityType: "FilmSeries", entityId: filmSeries.id,
-          beforeState: { name: existing.name, description: existing.description, artworkUrl: existing.artworkUrl, active: existing.active },
-          afterState: { name: filmSeries.name, description: filmSeries.description, artworkUrl: filmSeries.artworkUrl, active: filmSeries.active },
+          beforeState: { name: existing.name, description: existing.description, artworkUrl: existing.artworkUrl, sortOrder: existing.sortOrder, active: existing.active },
+          afterState: { name: filmSeries.name, description: filmSeries.description, artworkUrl: filmSeries.artworkUrl, sortOrder: filmSeries.sortOrder, active: filmSeries.active },
         } });
         return filmSeries;
       });
@@ -991,6 +992,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           orderBy: { startsAt: "asc" },
         },
       },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
 
     return {
@@ -1026,10 +1028,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             description: entry.description,
             artworkUrl: entry.artworkUrl,
             movies: Array.from(movies.values()),
-            firstShowtimeAt: entry.showtimes[0]?.startsAt.getTime() ?? Infinity,
+            sortOrder: entry.sortOrder,
           };
         })
-        .sort((a, b) => a.firstShowtimeAt - b.firstShowtimeAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
         .map((entry) => ({
           id: entry.id,
           name: entry.name,
