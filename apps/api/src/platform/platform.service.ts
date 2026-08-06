@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { ConnectOnboardingStatus, prisma } from "@cinema/database";
+import { ConnectOnboardingStatus, Prisma, prisma } from "@cinema/database";
 import { signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
-import { PlatformLoginRequest } from "@cinema/shared";
+import { CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
 
@@ -121,6 +121,11 @@ export class PlatformService {
             textColor: location.adminTextColor,
             mutedTextColor: location.adminMutedTextColor,
           },
+          content: {
+            draft: cinemaContentSchema.safeParse(location.contentDraft).success ? cinemaContentSchema.parse(location.contentDraft) : cinemaContentDefaults,
+            published: cinemaContentSchema.safeParse(location.contentPublished).success ? cinemaContentSchema.parse(location.contentPublished) : cinemaContentDefaults,
+            publishedAt: location.contentPublishedAt?.toISOString() ?? null,
+          },
           operations: {
             ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints,
             preShowBufferMinutes: location.preShowBufferMinutes,
@@ -167,6 +172,28 @@ export class PlatformService {
       } });
       const state = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, active: location.active, logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor, backgroundColor: location.customerBackgroundColor, surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor, adminAccentColor: location.adminAccentColor, adminAccentMutedColor: location.adminAccentMutedColor, adminBackgroundColor: location.adminBackgroundColor, adminSurfaceColor: location.adminSurfaceColor, adminTextColor: location.adminTextColor, adminMutedTextColor: location.adminMutedTextColor, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, timeClockEnabled: location.timeClockEnabled });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: updated.id, action: "platform.location_updated", entityType: "Location", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
+    });
+    return this.organization(input.organizationId);
+  }
+
+  async updateContentDraft(input: { actorId: string; organizationId: string; locationId: string; content: CinemaContent }) {
+    await prisma.$transaction(async (tx) => {
+      const location = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
+      if (!location) throw AppError.notFound("Cinema location not found.");
+      await tx.location.update({ where: { id: input.locationId }, data: { contentDraft: input.content as Prisma.InputJsonValue } });
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.location_content_draft_updated", entityType: "Location", entityId: input.locationId, afterState: { version: input.content.version } }, tx);
+    });
+    return this.organization(input.organizationId);
+  }
+
+  async publishContent(input: { actorId: string; organizationId: string; locationId: string }) {
+    await prisma.$transaction(async (tx) => {
+      const location = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
+      if (!location) throw AppError.notFound("Cinema location not found.");
+      const content = cinemaContentSchema.parse(location.contentDraft ?? cinemaContentDefaults);
+      const publishedAt = new Date();
+      await tx.location.update({ where: { id: input.locationId }, data: { contentDraft: content as Prisma.InputJsonValue, contentPublished: content as Prisma.InputJsonValue, contentPublishedAt: publishedAt } });
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.location_content_published", entityType: "Location", entityId: input.locationId, afterState: { version: content.version, publishedAt: publishedAt.toISOString() } }, tx);
     });
     return this.organization(input.organizationId);
   }

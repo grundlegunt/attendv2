@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { PublicDiningMenuResponse, PublicMenuItem } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { useCinemaContent } from "../components/customer-branding";
 
 type MenuFilter = "FULL" | "VEGAN" | "GLUTEN_FREE";
 
@@ -25,6 +26,7 @@ function MenuItemCard({ item }: { item: PublicMenuItem }) {
 }
 
 export default function DiningBarPage() {
+  const { dining } = useCinemaContent();
   const [menu, setMenu] = useState<PublicDiningMenuResponse | null>(null);
   const [filter, setFilter] = useState<MenuFilter>("FULL");
   const [error, setError] = useState<string | null>(null);
@@ -40,15 +42,11 @@ export default function DiningBarPage() {
     .filter((category) => category.items.length) ?? [], [filter, menu]);
 
   return <main className="cinema-shell route-page dining-page">
-    <section className="route-heading"><span className="eyebrow">DINE AT THE MOVIES</span><h1>Dining &amp; Bar</h1><p>Food, drinks, and attentive service built around the film.</p></section>
+    <section className="route-heading"><span className="eyebrow">{dining.eyebrow}</span><h1>{dining.title}</h1><p>{dining.intro}</p></section>
 
     <section className="how-it-works" aria-labelledby="how-heading">
-      <div><span className="eyebrow">YOUR VISIT</span><h2 id="how-heading">How it works</h2></div>
-      <ol>
-        <li><strong>01</strong><h3>Order before the show</h3><p>Arrive early, settle in, and place your first order before the lights go down.</p></li>
-        <li><strong>02</strong><h3>Service during the film</h3><p>Your server can bring additional food and drinks to your seat during the screening.</p></li>
-        <li><strong>03</strong><h3>Pay at the end</h3><p>Review and close your dining tab separately from your movie tickets.</p></li>
-      </ol>
+      <div><span className="eyebrow">{dining.howEyebrow}</span><h2 id="how-heading">{dining.howTitle}</h2></div>
+      <ol>{dining.steps.map((step, index) => <li key={step.title}><strong>{String(index + 1).padStart(2, "0")}</strong><h3>{step.title}</h3><p>{step.body}</p></li>)}</ol>
     </section>
 
     <section className="public-menu" aria-labelledby="menu-heading">
@@ -61,6 +59,6 @@ export default function DiningBarPage() {
 
     {menu?.movieSpecials.length ? <section className="movie-specials"><span className="eyebrow">ONLY AT THIS SHOW</span><h2>Movie Specials</h2><div className="specials-grid">{menu.movieSpecials.map((special) => <article key={special.movieId}>{special.posterUrl && <img src={special.posterUrl} alt="" />}<div><h3>{special.movieTitle}</h3>{special.items.map((item) => <div className="special-line" key={item.id}><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span><b>${(item.priceCents / 100).toFixed(2)}</b></div>)}<Link href={`/movie/${special.movieId}`}>View movie</Link></div></article>)}</div></section> : null}
 
-    <section className="afterglow-callout"><div><span className="eyebrow">STAY A LITTLE LONGER</span><h2>Afterglow</h2><p>A relaxed place for a drink and conversation before or after the film.</p><Link className="primary-link" href="/afterglow">Learn more</Link></div></section>
+    <section className="afterglow-callout"><div><span className="eyebrow">{dining.afterglowEyebrow}</span><h2>{dining.afterglowTitle}</h2><p>{dining.afterglowBody}</p><Link className="primary-link" href="/afterglow">{dining.afterglowButton}</Link></div></section>
   </main>;
 }

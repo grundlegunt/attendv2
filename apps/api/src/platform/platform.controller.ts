@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
+import { adminBrandingSchema, cinemaContentSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
@@ -63,5 +63,17 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   updateLocation(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(locationUpdateSchema)) body: unknown) {
     return this.platform.updateLocation({ actorId: actor.sub, organizationId, locationId, ...locationUpdateSchema.parse(body) });
+  }
+
+  @Patch("organizations/:organizationId/locations/:locationId/content/draft")
+  @UseGuards(PlatformAuthGuard)
+  updateContentDraft(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(cinemaContentSchema)) body: unknown) {
+    return this.platform.updateContentDraft({ actorId: actor.sub, organizationId, locationId, content: cinemaContentSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/locations/:locationId/content/publish")
+  @UseGuards(PlatformAuthGuard)
+  publishContent(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string) {
+    return this.platform.publishContent({ actorId: actor.sub, organizationId, locationId });
   }
 }

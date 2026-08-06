@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { customerBrandingDefaults } from "@cinema/shared";
+import { cinemaContentDefaults, customerBrandingDefaults, type CinemaContent } from "@cinema/shared";
 import { apiFetch } from "../lib/api-client";
 
 type PublicBranding = {
@@ -18,13 +18,17 @@ type PublicBranding = {
 
 const BrandingContext = createContext<Pick<PublicBranding, "name" | "logoUrl">>({ name: "Cinema", logoUrl: null });
 export const useCustomerBranding = () => useContext(BrandingContext);
+const ContentContext = createContext<CinemaContent>(cinemaContentDefaults);
+export const useCinemaContent = () => useContext(ContentContext);
 
 export function CustomerBrandingProvider({ children }: { children: ReactNode }) {
   const [branding, setBranding] = useState<PublicBranding | null>(null);
+  const [content, setContent] = useState<CinemaContent>(cinemaContentDefaults);
   useEffect(() => {
     const locationId = process.env.NEXT_PUBLIC_LOCATION_ID;
     const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
     apiFetch<PublicBranding>(`/cinema/branding${query}`).then(setBranding).catch(() => undefined);
+    apiFetch<{ content: CinemaContent }>(`/cinema/content${query}`).then((response) => setContent(response.content)).catch(() => undefined);
   }, []);
   useEffect(() => {
     if (!branding) return;
@@ -38,7 +42,11 @@ export function CustomerBrandingProvider({ children }: { children: ReactNode }) 
       "--color-text-secondary": branding.mutedTextColor ?? customerBrandingDefaults.mutedTextColor,
     };
     Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value));
-  }, [branding]);
+    const headingFonts = { EDITORIAL: 'Georgia, "Times New Roman", serif', CLASSIC: 'Baskerville, Georgia, serif', MODERN: 'Arial Black, Arial, sans-serif' };
+    const bodyFonts = { SANS: 'Inter, Arial, sans-serif', HUMANIST: 'Optima, Candara, sans-serif', SERIF: 'Georgia, "Times New Roman", serif' };
+    root.style.setProperty("--font-family-display", headingFonts[content.typography.headingFont]);
+    root.style.setProperty("--font-family-body", bodyFonts[content.typography.bodyFont]);
+  }, [branding, content]);
   const identity = useMemo(() => ({ name: branding?.name ?? "Cinema", logoUrl: branding?.logoUrl ?? null }), [branding]);
-  return <BrandingContext.Provider value={identity}>{children}</BrandingContext.Provider>;
+  return <BrandingContext.Provider value={identity}><ContentContext.Provider value={content}>{children}</ContentContext.Provider></BrandingContext.Provider>;
 }
