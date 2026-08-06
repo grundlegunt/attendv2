@@ -32,10 +32,7 @@ export function SiteHeader() {
           {showLogo ? (
             <img src={branding.logoUrl ?? undefined} alt={branding.name} onError={() => setLogoFailed(true)} />
           ) : (
-            <>
-              <span className="eyebrow">CINEMA</span>
-              <strong>{branding.name}</strong>
-            </>
+            <strong>{branding.name}</strong>
           )}
         </Link>
         <nav className="site-nav" aria-label="Customer navigation">

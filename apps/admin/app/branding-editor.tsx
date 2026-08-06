@@ -85,9 +85,9 @@ export function BrandingEditor({ accessToken, settings, onSaved }: { accessToken
         {(textContrast < 4.5 || mutedContrast < 4.5) && <p className="contrast-warning">Contrast warning: primary and secondary text should each reach at least 4.5:1 against the page background.</p>}
         <button className="primary">Save customer-site branding</button>
       </div>
-      <div className="branding-preview" style={{ background: form.backgroundColor, color: form.textColor, borderColor: form.accentMutedColor }}>
+      <div className="branding-preview" style={{ background: `radial-gradient(circle at top right, color-mix(in srgb, ${form.accentColor} 18%, ${form.backgroundColor}), ${form.backgroundColor} 45%)`, color: form.textColor, borderColor: form.accentMutedColor }}>
         <header style={{ borderColor: form.accentMutedColor }}>{form.logoUrl ? <img src={form.logoUrl} alt="Brand preview" /> : <div><small style={{ color: form.accentColor }}>CINEMA</small><strong>{form.name}</strong></div>}</header>
-        <main><small style={{ color: form.accentColor }}>NOW PLAYING</small><h3>Tonight at the movies</h3><p style={{ color: form.mutedTextColor }}>Preview customer-facing headings, panels, and calls to action.</p><div style={{ background: form.surfaceColor, borderColor: form.accentMutedColor }}><strong>Featured showtime</strong><button type="button" style={{ background: form.accentColor, color: form.backgroundColor }}>7:30 PM</button></div></main>
+        <main><small style={{ color: form.accentColor }}>NOW PLAYING</small><h3>Showtimes</h3><p style={{ color: form.mutedTextColor }}>Preview customer-facing headings, panels, and calls to action.</p><div style={{ background: form.surfaceColor, borderColor: form.accentMutedColor }}><strong>Featured showtime</strong><button type="button" style={{ background: form.accentColor, color: form.backgroundColor }}>7:30 PM</button></div></main>
       </div>
     </div>
   </form>;

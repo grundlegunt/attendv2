@@ -69,7 +69,7 @@ export default function ShowtimesPage() {
     <main className="cinema-shell">
       <section className="program-heading">
         <span className="eyebrow">NOW PLAYING</span>
-        <h1>{program?.location.name ?? "Showtimes"}</h1>
+        <h1>Showtimes</h1>
         {program && <p>Choose a showtime and reserve your seats.</p>}
       </section>
 
