@@ -1,4 +1,4 @@
-.admin-theme-root { min-height: 100vh; background: var(--color-bg); color: var(--color-text-primary); }
+.admin-theme-root { min-height: 100vh; background: var(--color-bg); color: var(--color-text-primary); --seat-available-border: color-mix(in srgb, var(--color-text-secondary) 58%, transparent); --seat-selected: var(--color-accent); --seat-selected-border: var(--color-accent); --seat-unavailable: color-mix(in srgb, var(--color-text-secondary) 34%, var(--color-bg-elevated)); --seat-unavailable-border: transparent; }
 .admin-shell { min-height: 100vh; padding: 32px; background: var(--color-bg); }
 .login-shell { display: grid; place-items: center; }
 .login-panel { width: min(100%, 480px); }
@@ -206,11 +206,16 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-series-form-actions button { flex: 1; }
 .film-series-list { grid-column: 1 / -1; display: grid; border-top: 1px solid var(--color-border); }
 .film-series-list article { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--color-border); }
+.film-series-list article[draggable="true"] { cursor: grab; }
+.film-series-list article[draggable="true"]:active { cursor: grabbing; }
+.film-series-list article.dragging { opacity: .45; }
+.film-series-list article.drag-over { background: color-mix(in srgb, var(--color-accent) 9%, transparent); box-shadow: inset 4px 0 var(--color-accent); }
 .film-series-list img, .series-artwork-placeholder { width: 86px; height: 58px; object-fit: cover; border: 1px solid #55564f; }
 .series-artwork-placeholder { display: grid; place-items: center; color: var(--color-text-secondary); font-size: .68rem; text-transform: uppercase; letter-spacing: .1em; }
 .film-series-list h3 { margin: 0 0 5px; font-family: Georgia, serif; }
 .film-series-list p { margin: 0; color: var(--color-text-secondary); font-size: .8rem; line-height: 1.4; }
-.film-series-row-actions button { padding: 9px 13px; border: 1px solid #55564f; background: transparent; color: white; cursor: pointer; }
+.film-series-row-actions button { padding: 9px 13px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); cursor: pointer; }
+.film-series-drag-handle { display: inline-grid; min-width: 40px; place-items: center; color: var(--color-text-secondary); font-size: 1.2rem; letter-spacing: -2px; cursor: grab; }
 .auditorium-picker { margin: -24px -24px 28px; padding: 24px; border-bottom: 1px solid var(--color-border); background: #181916; }
 .auditorium-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .builder-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; }

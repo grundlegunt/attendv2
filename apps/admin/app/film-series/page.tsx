@@ -30,6 +30,8 @@ export default function FilmSeriesPage() {
   const [seriesArtworkUrl, setSeriesArtworkUrl] = useState("");
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [seriesSaving, setSeriesSaving] = useState(false);
+  const [draggedSeriesId, setDraggedSeriesId] = useState<string | null>(null);
+  const [dragOverSeriesId, setDragOverSeriesId] = useState<string | null>(null);
 
   async function refresh() {
     if (!accessToken) return;
@@ -104,22 +106,30 @@ export default function FilmSeriesPage() {
     }
   }
 
-  async function moveSeries(series: FilmSeries, direction: -1 | 1) {
-    if (!accessToken) return;
-    const currentIndex = activeSeries.findIndex((entry) => entry.id === series.id);
-    const other = activeSeries[currentIndex + direction];
-    if (!other) return;
+  async function reorderSeries(targetSeriesId: string) {
+    if (!accessToken || !draggedSeriesId || draggedSeriesId === targetSeriesId) return;
+    const reordered = [...activeSeries];
+    const sourceIndex = reordered.findIndex((entry) => entry.id === draggedSeriesId);
+    const targetIndex = reordered.findIndex((entry) => entry.id === targetSeriesId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const [moved] = reordered.splice(sourceIndex, 1);
+    if (!moved) return;
+    reordered.splice(targetIndex, 0, moved);
     setError(null);
     setNotice(null);
     try {
-      await Promise.all([
-        apiFetch(`/cinema/film-series/${series.id}`, { accessToken, method: "PATCH", body: JSON.stringify({ sortOrder: other.sortOrder }) }),
-        apiFetch(`/cinema/film-series/${other.id}`, { accessToken, method: "PATCH", body: JSON.stringify({ sortOrder: series.sortOrder }) }),
-      ]);
+      await Promise.all(reordered.map((series, index) => apiFetch(`/cinema/film-series/${series.id}`, {
+        accessToken,
+        method: "PATCH",
+        body: JSON.stringify({ sortOrder: index }),
+      })));
       await refresh();
-      setNotice(`${series.name} display order updated.`);
+      setNotice(`${moved.name} display order updated.`);
     } catch (reason) {
       showError(reason);
+    } finally {
+      setDraggedSeriesId(null);
+      setDragOverSeriesId(null);
     }
   }
 
@@ -144,10 +154,19 @@ export default function FilmSeriesPage() {
         <div className="film-series-form-actions"><button className="primary" disabled={seriesSaving}>{seriesSaving ? (editingSeriesId ? "Saving…" : "Creating…") : (editingSeriesId ? "Save series" : "Add series")}</button>{editingSeriesId && <button type="button" className="secondary" onClick={resetSeriesForm} disabled={seriesSaving}>Cancel</button>}</div>
       </form>
       <div className="film-series-list">
-        {activeSeries.map((series, index) => <article key={series.id}>
+        {activeSeries.map((series) => <article
+          key={series.id}
+          draggable
+          className={`${draggedSeriesId === series.id ? "dragging" : ""} ${dragOverSeriesId === series.id ? "drag-over" : ""}`.trim()}
+          onDragStart={(event) => { setDraggedSeriesId(series.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", series.id); }}
+          onDragEnter={() => setDragOverSeriesId(series.id)}
+          onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
+          onDrop={(event) => { event.preventDefault(); void reorderSeries(series.id); }}
+          onDragEnd={() => { setDraggedSeriesId(null); setDragOverSeriesId(null); }}
+        >
           {series.artworkUrl ? <img src={series.artworkUrl} alt="" /> : <div className="series-artwork-placeholder">Series</div>}
           <div><h3>{series.name}</h3><p>{series.description || "No description added."}</p></div>
-          <div className="film-series-row-actions"><button type="button" onClick={() => void moveSeries(series, -1)} disabled={index === 0} aria-label={`Move ${series.name} up`}>↑</button><button type="button" onClick={() => void moveSeries(series, 1)} disabled={index === activeSeries.length - 1} aria-label={`Move ${series.name} down`}>↓</button><button type="button" onClick={() => editSeries(series)}>Edit</button><button type="button" className="destructive-outline" onClick={() => void archiveSeries(series)}>Archive</button></div>
+          <div className="film-series-row-actions"><span className="film-series-drag-handle" aria-label={`Drag ${series.name} to reorder`} title="Drag to reorder">⠿</span><button type="button" onClick={() => editSeries(series)}>Edit</button><button type="button" className="destructive-outline" onClick={() => void archiveSeries(series)}>Archive</button></div>
         </article>)}
         {data && activeSeries.length === 0 && <p className="builder-help">No film series yet. Add one here, then assign it to showtimes from Scheduling.</p>}
       </div>
