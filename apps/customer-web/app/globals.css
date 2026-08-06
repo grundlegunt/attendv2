@@ -184,7 +184,24 @@
 button.primary { width: 100%; padding: 13px; border: 0; background: var(--color-accent); font-weight: 800; }
 button.link { padding: 14px 0 0; border: 0; background: none; color: var(--color-accent); }
 .error-banner { margin: 16px 0; padding: 12px; border: 1px solid var(--color-danger); color: #ffb3b3; }
-.seat-picker { display: grid; gap: 24px; }
+.seat-picker {
+  --seat-available-border: color-mix(in srgb, var(--color-text-secondary) 58%, transparent);
+  --seat-selected: var(--color-accent);
+  --seat-selected-border: var(--color-accent);
+  display: grid;
+  gap: 24px;
+}
+.seat-picker .seat--available:hover:not(:disabled) {
+  border-color: var(--color-text-secondary);
+  background: color-mix(in srgb, var(--color-text-secondary) 8%, transparent);
+}
+.seat-picker .seat--available:focus-visible {
+  outline: 2px solid var(--color-text-primary);
+  outline-offset: 3px;
+}
+.seat-picker .seat--selected {
+  box-shadow: 0 0 18px color-mix(in srgb, var(--color-accent) 42%, transparent);
+}
 .seat-picker__header { display: grid; grid-template-columns: auto 1fr auto; align-items: end; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--color-border); }
 .seat-picker__header h2 { margin: 4px 0; font: clamp(2rem, 5vw, 4rem) var(--font-family-display); }
 .seat-picker__header p { margin: 0; color: var(--color-text-secondary); }
