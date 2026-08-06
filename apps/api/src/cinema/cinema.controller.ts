@@ -33,6 +33,11 @@ export class CinemaController {
     return this.cinemaService.publicBranding(locationId);
   }
 
+  @Get("admin-branding")
+  adminBranding(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicAdminBranding(locationId);
+  }
+
   @Get("content")
   content(@Query("locationId") locationId?: string) {
     return this.cinemaService.publicContent(locationId);

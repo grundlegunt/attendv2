@@ -350,6 +350,48 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .modifier-summary span, .modifier-summary small, .muted { color: var(--muted); }
 .menu-item-editor { margin-top: 20px; padding: 20px; border: 1px solid var(--accent); background: #11120f; }
 .menu-item-editor h3 { margin: 4px 0 0; font-size: 1.45rem; }
+
+/* Operator-managed admin palette: structural chrome and work surfaces inherit
+   the same tokens as standard panels instead of retaining the legacy black UI. */
+.admin-topbar { border-color: var(--color-border); background: color-mix(in srgb, var(--color-bg) 96%, transparent); }
+.admin-brand { color: var(--color-text-primary); }
+.admin-brand span { color: var(--color-accent); }
+.admin-nav { border-color: var(--color-border); background: color-mix(in srgb, var(--color-bg-elevated) 97%, transparent); }
+.admin-nav a { color: var(--color-text-secondary); }
+.admin-nav a:hover { border-color: var(--color-border); color: var(--color-text-primary); }
+.admin-nav a.active { border-color: var(--color-accent); color: var(--color-accent); }
+.schedule-workspace, .schedule-with-inspector, .film-library, .film-library-detail,
+.schedule-inspector, .calendar-corner, .time-ruler, .room-label, .room-timeline,
+.week-day > header, .showtime-drawer, .setup-location-rail, .auditorium-picker,
+.menu-item-editor { border-color: var(--color-border); background: var(--color-bg-elevated); color: var(--color-text-primary); }
+.schedule-toolbar, .schedule-legend, .film-library-list, .film-programming-summary,
+.timing-summary, .timing-summary div, .calendar-corner, .time-ruler, .room-label,
+.room-timeline, .week-day, .week-day > header, .week-room { border-color: var(--color-border); }
+.view-switch, .calendar-nav, .calendar-today, .export-schedule-button,
+.setup-location-card, .auditorium-options button, .builder-mode,
+.builder-mode button, .level-tabs button, .element-palette button,
+.film-library-detail, .film-detail-poster, .film-appearances button,
+.time-nudges button, .selected-film-details, .poster-placeholder {
+  border-color: var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+.view-switch button, .schedule-legend, .film-library-heading span, .film-card span,
+.film-card::after, .film-detail-synopsis, .film-programming-summary span,
+.film-appearances button span, .film-appearances button small, .inspector-empty,
+.inspector-room, .timing-summary span, .selected-film-details span,
+.calendar-corner, .time-ruler span, .room-label span, .week-day > header span,
+.week-room > b, .builder-mode button, .level-tabs button, .element-palette button {
+  color: var(--color-text-secondary);
+}
+.view-switch button.active, .builder-mode button.active, .level-tabs button.active,
+.element-palette button.active { background: var(--color-accent); color: var(--color-bg); }
+.add-film-button, .film-edit, .film-details-button { border-color: var(--color-accent); color: var(--color-accent); }
+.film-card { border-color: var(--color-border); color: var(--color-text-primary); }
+.film-card:hover, .film-card.selected, .setup-location-card.active,
+.auditorium-options button.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elevated)); }
+.schedule-inspector { border-color: var(--color-border); background: color-mix(in srgb, var(--color-accent) 5%, var(--color-bg-elevated)); }
+.calculation-note { background: color-mix(in srgb, var(--color-accent) 7%, var(--color-bg-elevated)); }
 .menu-item-editor .management-heading { margin-bottom: 18px; }
 .menu-item-editor .management-heading .secondary { width: auto; margin: 0; }
 .status-row { display: flex !important; flex-wrap: wrap; gap: 6px !important; margin-top: 7px; }

@@ -5,6 +5,7 @@ import { FormEvent, createContext, useContext, useEffect, useMemo, useState, typ
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string };
+type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null };
 type AdminSessionValue = Session & { signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
 const AdminSessionContext = createContext<AdminSessionValue | null>(null);
@@ -21,6 +22,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
 
   useEffect(() => {
     try {
@@ -31,6 +33,13 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     } finally {
       setRestored(true);
     }
+  }, []);
+
+  useEffect(() => {
+    const locationId = process.env.NEXT_PUBLIC_LOCATION_ID;
+    apiFetch<PublicAdminBranding>(`/cinema/admin-branding${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`)
+      .then(setPublicBranding)
+      .catch(() => undefined);
   }, []);
 
   async function login(event: FormEvent) {
@@ -46,14 +55,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   }
 
   const value = useMemo(() => session ? { ...session, signOut: () => { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); } } : null, [session]);
-  if (!restored) return <main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main>;
-  if (!value) return <main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
-    <p className="kicker">ATTEND ADMIN</p><h1>Manager sign in</h1>{error && <div className="error-banner">{error}</div>}
-    <label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-    <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-    <button className="primary">Sign in</button>
-  </form></main>;
-  const branding = value.employee.adminBranding;
+  const branding = value?.employee.adminBranding ?? publicBranding;
   const theme = {
     "--color-accent": branding?.accentColor ?? adminBrandingDefaults.accentColor,
     "--color-accent-muted": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
@@ -62,6 +64,16 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--color-text-primary": branding?.textColor ?? adminBrandingDefaults.textColor,
     "--color-text-secondary": branding?.mutedTextColor ?? adminBrandingDefaults.mutedTextColor,
     "--color-border": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
+    "--accent": branding?.accentColor ?? adminBrandingDefaults.accentColor,
+    "--muted": branding?.mutedTextColor ?? adminBrandingDefaults.mutedTextColor,
+    "--line": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
   } as CSSProperties;
+  if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
+  if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
+    <p className="kicker">ATTEND ADMIN</p><h1>{publicBranding?.name ? `${publicBranding.name} sign in` : "Manager sign in"}</h1>{error && <div className="error-banner">{error}</div>}
+    <label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+    <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+    <button className="primary">Sign in</button>
+  </form></main></div>;
   return <AdminSessionContext.Provider value={value}><div className="admin-theme-root" style={theme}>{children}</div></AdminSessionContext.Provider>;
 }

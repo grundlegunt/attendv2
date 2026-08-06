@@ -16,7 +16,19 @@ const organizationUpdateSchema = z.object({
   onboardingStatus: z.enum(["NOT_STARTED", "IN_PROGRESS", "COMPLETE", "RESTRICTED"]).optional(),
 }).strict();
 
+const organizationCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  legalName: z.string().trim().min(1).max(200).nullable().optional(),
+  timezone: z.string().trim().min(1).max(100),
+  location: z.object({
+    name: z.string().trim().min(1).max(120),
+    address: z.string().trim().min(1).max(500).nullable().optional(),
+    timezone: z.string().trim().min(1).max(100),
+  }).strict(),
+}).strict();
+
 const locationUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
   address: z.string().trim().min(1).max(500).nullable().optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
   active: z.boolean().optional(),
@@ -45,6 +57,12 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   overview() {
     return this.platform.overview();
+  }
+
+  @Post("organizations")
+  @UseGuards(PlatformAuthGuard)
+  createOrganization(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(organizationCreateSchema)) body: unknown) {
+    return this.platform.createOrganization({ actorId: actor.sub, ...organizationCreateSchema.parse(body) });
   }
 
   @Get("organizations/:organizationId")
