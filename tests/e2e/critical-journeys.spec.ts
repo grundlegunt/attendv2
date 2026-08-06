@@ -9,7 +9,9 @@ test("customer browses a live program and safely holds a seat", async ({ page })
   const showtimeDates = page.getByRole("navigation", { name: "Showtime dates" }).getByRole("button");
 
   for (let index = 0; index < await showtimeDates.count() && await showtime.count() === 0; index += 1) {
-    await showtimeDates.nth(index).click();
+    const date = showtimeDates.nth(index);
+    await date.click();
+    await expect(date).toHaveClass(/active/);
   }
 
   await expect(showtime).toBeVisible();
