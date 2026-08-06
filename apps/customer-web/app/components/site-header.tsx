@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useCustomerBranding } from "./customer-branding";
 
 const links = [
@@ -18,12 +19,24 @@ const links = [
 export function SiteHeader() {
   const pathname = usePathname();
   const branding = useCustomerBranding();
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => setLogoFailed(false), [branding.logoUrl]);
+
+  const showLogo = Boolean(branding.logoUrl) && !logoFailed;
 
   return (
     <header className="site-header">
       <div className="site-header__inner">
         <Link className="site-brand" href="/showtimes" aria-label={`${branding.name} showtimes`}>
-          {branding.logoUrl ? <img src={branding.logoUrl} alt={branding.name} /> : <><span className="eyebrow">CINEMA</span><strong>{branding.name}</strong></>}
+          {showLogo ? (
+            <img src={branding.logoUrl ?? undefined} alt={branding.name} onError={() => setLogoFailed(true)} />
+          ) : (
+            <>
+              <span className="eyebrow">CINEMA</span>
+              <strong>{branding.name}</strong>
+            </>
+          )}
         </Link>
         <nav className="site-nav" aria-label="Customer navigation">
           {links.map((link) => (

@@ -5,7 +5,7 @@ import { SiteHeader } from "./components/site-header";
 import { CustomerBrandingProvider } from "./components/customer-branding";
 
 export const metadata = {
-  title: "Attend Cinema",
+  title: "Cinema",
   description: "Reserved seating, tickets, and dine-in service.",
 };
 
