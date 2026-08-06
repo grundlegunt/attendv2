@@ -47,8 +47,8 @@ export function MovieTile({
           {formats.map((format) => <span key={format}>{format}</span>)}
         </div>
         <div className="program-tile__title">
-          <span>{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</span>
           <h2><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
+          <span>{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</span>
         </div>
       </div>
       <div className="program-tile__showtimes">
