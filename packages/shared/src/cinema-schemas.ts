@@ -146,6 +146,7 @@ export const createFilmSeriesRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(2000).nullable().optional(),
   artworkUrl: artworkUrlSchema.nullable().optional(),
+  sortOrder: z.number().int().nonnegative().optional(),
 });
 
 export const updateFilmSeriesRequestSchema = createFilmSeriesRequestSchema.partial().extend({
