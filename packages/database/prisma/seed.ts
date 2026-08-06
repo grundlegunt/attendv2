@@ -533,7 +533,15 @@ export async function seedDatabase(
     },
   });
 
-  const publicMenuSections = [
+  type PublicMenuSeedSection = {
+    name: string;
+    sortOrder: number;
+    stationId: string;
+    chargeCategory: "FOOD" | "ALCOHOL" | "NA_BEVERAGE";
+    items: Array<[name: string, description: string | null, priceCents: number]>;
+  };
+
+  const publicMenuSections: PublicMenuSeedSection[] = [
     {
       name: "Shareables", sortOrder: 30, stationId: kitchenStation.id, chargeCategory: "FOOD" as const,
       items: [
@@ -620,7 +628,7 @@ export async function seedDatabase(
       ],
     },
     {
-      name: "Non-Alcoholic", sortOrder: 100, stationId: barStation.id, chargeCategory: "BEVERAGE" as const,
+      name: "Non-Alcoholic", sortOrder: 100, stationId: barStation.id, chargeCategory: "NA_BEVERAGE",
       items: [
         ["Spring in Bottle N/A Sparkling Rosé", null, 1250], ["Best Day Brewing Kölsch", null, 700],
         ["Athletic IPA", null, 700], ["St. Agrestis Phony Negroni", null, 1100],
@@ -628,7 +636,7 @@ export async function seedDatabase(
       ],
     },
     {
-      name: "Soda, Coffee & Tea", sortOrder: 110, stationId: barStation.id, chargeCategory: "BEVERAGE" as const,
+      name: "Soda, Coffee & Tea", sortOrder: 110, stationId: barStation.id, chargeCategory: "NA_BEVERAGE",
       items: [
         ...["Coke", "Diet Coke", "Dr. Pepper", "Sprite", "Fresh Squeezed OJ"].map((name) => [name, "Soda and juice.", 500] as [string, string, number]),
         ["Hot Coffee", "Coffee.", 500], ["Cold Brew Coffee", "Coffee.", 600], ["Espresso", "Coffee.", 600],
