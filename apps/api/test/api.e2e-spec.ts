@@ -269,6 +269,42 @@ describe("Attend platform authentication boundary", () => {
       .expect(404);
   });
 
+  it("lets an Attend operator create a cinema organization with its first location", async () => {
+    await request(app.getHttpServer())
+      .post("/api/v1/platform/organizations")
+      .send({
+        name: "Unauthorized Cinema Co.",
+        timezone: "America/Chicago",
+        location: { name: "Unauthorized Cinema", timezone: "America/Chicago" },
+      })
+      .expect(401);
+
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/platform/organizations")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({
+        name: "Bluebird Cinema Co.",
+        legalName: "Bluebird Cinema Co. LLC",
+        timezone: "America/New_York",
+        location: {
+          name: "Bluebird Cinema",
+          address: "100 Main Street, Richmond, VA",
+          timezone: "America/New_York",
+        },
+      })
+      .expect(201);
+
+    expect(created.body).toEqual(expect.objectContaining({
+      name: "Bluebird Cinema Co.",
+      legalName: "Bluebird Cinema Co. LLC",
+      locations: [expect.objectContaining({
+        name: "Bluebird Cinema",
+        address: "100 Main Street, Richmond, VA",
+        timezone: "America/New_York",
+      })],
+    }));
+  });
+
   it("lets only an Attend operator update organization and location configuration", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")
@@ -296,6 +332,15 @@ describe("Attend platform authentication boundary", () => {
       branding: expect.objectContaining({ accentColor: "#fe2c54" }),
       adminBranding: expect.objectContaining({ accentColor: "#4c7dff", backgroundColor: "#10131a" }),
       operations: expect.objectContaining({ preShowBufferMinutes: 35, timeClockEnabled: false }),
+    }));
+
+    const publicAdminBranding = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/admin-branding?locationId=${locationId}`)
+      .expect(200);
+    expect(publicAdminBranding.body).toEqual(expect.objectContaining({
+      name: "Meridian Cinema",
+      accentColor: "#4c7dff",
+      backgroundColor: "#10131a",
     }));
 
     await request(app.getHttpServer())

@@ -71,6 +71,32 @@ export class PlatformService {
     };
   }
 
+  async createOrganization(input: { actorId: string; name: string; legalName?: string | null; timezone: string; location: { name: string; address?: string | null; timezone: string } }) {
+    const organizationId = await prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.create({
+        data: {
+          name: input.name,
+          legalName: input.legalName,
+          timezone: input.timezone,
+          locations: { create: { name: input.location.name, address: input.location.address, timezone: input.location.timezone } },
+        },
+        include: { locations: true },
+      });
+      const location = organization.locations[0];
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        locationId: location?.id,
+        action: "platform.organization_created",
+        entityType: "Organization",
+        entityId: organization.id,
+        afterState: { name: organization.name, legalName: organization.legalName, timezone: organization.timezone, initialLocationId: location?.id },
+      }, tx);
+      return organization.id;
+    });
+    return this.organization(organizationId);
+  }
+
   async organization(organizationId: string) {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },

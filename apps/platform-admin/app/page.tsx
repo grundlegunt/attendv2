@@ -42,6 +42,7 @@ interface OrganizationDetail {
   }>;
 }
 type OrganizationDraft = { name: string; legalName: string; timezone: string; onboardingStatus: string };
+type OrganizationCreateDraft = { name: string; legalName: string; timezone: string; locationName: string; address: string; locationTimezone: string };
 type LocationDetail = OrganizationDetail["locations"][number];
 type LocationDraft = {
   name: string; address: string; timezone: string; active: boolean; logoUrl: string;
@@ -73,6 +74,7 @@ export default function AttendMaster() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [organizationDraft, setOrganizationDraft] = useState<OrganizationDraft | null>(null);
+  const [organizationCreateDraft, setOrganizationCreateDraft] = useState<OrganizationCreateDraft | null>(null);
   const [locationDraft, setLocationDraft] = useState<{ id: string; values: LocationDraft } | null>(null);
   const [contentDraft, setContentDraft] = useState<{ id: string; values: CinemaContent } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -116,6 +118,28 @@ export default function AttendMaster() {
 
   function beginOrganizationEdit(detail: OrganizationDetail) {
     setOrganizationDraft({ name: detail.name, legalName: detail.legalName ?? "", timezone: detail.timezone, onboardingStatus: detail.payments.onboardingStatus });
+  }
+
+  function beginOrganizationCreate() {
+    setOrganizationCreateDraft({ name: "", legalName: "", timezone: "America/Chicago", locationName: "", address: "", locationTimezone: "America/Chicago" });
+  }
+
+  async function createOrganization(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organizationCreateDraft) return;
+    setSaving(true); setError(null);
+    try {
+      const values = organizationCreateDraft;
+      const created = await request<OrganizationDetail>("/platform/organizations", { method: "POST", body: JSON.stringify({
+        name: values.name,
+        legalName: values.legalName || null,
+        timezone: values.timezone,
+        location: { name: values.locationName, address: values.address || null, timezone: values.locationTimezone },
+      }) }, session.accessToken);
+      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      setOverview(refreshed); setOrganizationCreateDraft(null); setSelectedOrganizationId(created.id);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add organization."); }
+    finally { setSaving(false); }
   }
 
   function beginLocationEdit(location: LocationDetail) {
@@ -186,8 +210,9 @@ export default function AttendMaster() {
 
   const locations = overview?.organizations.flatMap((item) => item.locations) ?? [];
   return <main className="shell">
-    <header><div><p className="eyebrow">ATTEND MASTER</p><h1>{selectedOrganizationId ? "Cinema profile" : "Client operations"}</h1><p className="muted">Company visibility across cinema clients. Cinema staff retain control of their own operations.</p></div><div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>
+    <header><div><p className="eyebrow">ATTEND MASTER</p><h1>{selectedOrganizationId ? "Cinema profile" : "Client operations"}</h1><p className="muted">Company visibility across cinema clients. Cinema staff retain control of their own operations.</p></div><div className="identity">{!selectedOrganizationId && <button className="quiet" onClick={beginOrganizationCreate}>+ Add organization</button>}<span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>
     {error && <div className="error">{error}</div>}
+    {!selectedOrganizationId && organizationCreateDraft && <form className="editor create-organization" onSubmit={createOrganization}><div className="editor-heading"><div><p className="eyebrow">NEW CLIENT</p><h2>Add organization</h2><p className="muted">Create the cinema company or chain and its first operating location. More locations can be added later.</p></div><button type="button" className="quiet" onClick={() => setOrganizationCreateDraft(null)}>Cancel</button></div><div className="form-grid"><label>Organization name<input required value={organizationCreateDraft.name} onChange={(event) => setOrganizationCreateDraft({ ...organizationCreateDraft, name: event.target.value })} /></label><label>Legal name<input value={organizationCreateDraft.legalName} onChange={(event) => setOrganizationCreateDraft({ ...organizationCreateDraft, legalName: event.target.value })} /></label><label>Organization timezone<input required value={organizationCreateDraft.timezone} onChange={(event) => setOrganizationCreateDraft({ ...organizationCreateDraft, timezone: event.target.value })} /></label><label>First cinema name<input required value={organizationCreateDraft.locationName} onChange={(event) => setOrganizationCreateDraft({ ...organizationCreateDraft, locationName: event.target.value })} /></label><label>First cinema address<input value={organizationCreateDraft.address} onChange={(event) => setOrganizationCreateDraft({ ...organizationCreateDraft, address: event.target.value })} /></label><label>Cinema timezone<input required value={organizationCreateDraft.locationTimezone} onChange={(event) => setOrganizationCreateDraft({ ...organizationCreateDraft, locationTimezone: event.target.value })} /></label></div><button disabled={saving}>{saving ? "Creating…" : "Create organization and first cinema"}</button></form>}
     {selectedOrganizationId && <section className="detail-shell">
       <button className="back" onClick={() => setSelectedOrganizationId(null)}>← All cinema clients</button>
       {organizationLoading && <p className="muted">Loading cinema profile…</p>}
