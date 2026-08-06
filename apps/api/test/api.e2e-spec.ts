@@ -253,6 +253,7 @@ describe("Attend platform authentication boundary", () => {
       payments: expect.objectContaining({ onboardingStatus: expect.any(String) }),
       locations: expect.arrayContaining([expect.objectContaining({
         branding: expect.objectContaining({ accentColor: expect.anything() }),
+        adminBranding: expect.objectContaining({ accentColor: expect.anything() }),
         operations: expect.objectContaining({ cleaningBufferMinutes: expect.any(Number) }),
         configuration: expect.objectContaining({ activeMovies: expect.any(Number), activeFilmSeries: expect.any(Number) }),
       })]),
@@ -289,10 +290,11 @@ describe("Attend platform authentication boundary", () => {
     const location = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}/locations/${locationId}`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ accentColor: "#fe2c54", preShowBufferMinutes: 35, timeClockEnabled: false })
+      .send({ accentColor: "#fe2c54", adminAccentColor: "#4c7dff", adminBackgroundColor: "#10131a", preShowBufferMinutes: 35, timeClockEnabled: false })
       .expect(200);
     expect(location.body.locations[0]).toEqual(expect.objectContaining({
       branding: expect.objectContaining({ accentColor: "#fe2c54" }),
+      adminBranding: expect.objectContaining({ accentColor: "#4c7dff", backgroundColor: "#10131a" }),
       operations: expect.objectContaining({ preShowBufferMinutes: 35, timeClockEnabled: false }),
     }));
 
@@ -547,23 +549,16 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
   });
 
-  it("publishes audited per-location customer branding", async () => {
+  it("keeps customer branding read-only for cinema staff", async () => {
     const updated = await request(app.getHttpServer())
       .patch("/api/v1/management/settings/location")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe" });
-    expect(updated.status).toBe(200);
-    expect(updated.body).toEqual(expect.objectContaining({ name: "Integration Cinema", customerAccentColor: "#123456" }));
-
-    const branding = await request(app.getHttpServer()).get("/api/v1/cinema/branding");
-    expect(branding.status).toBe(200);
-    expect(branding.body).toEqual(expect.objectContaining({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe" }));
-
-    const { prisma } = await import("@cinema/database");
-    expect(await prisma.auditEvent.count({ where: { action: "location.settings_updated", entityId: branding.body.locationId } })).toBeGreaterThan(0);
+    expect(updated.status).toBe(400);
+    expect(updated.body.code).toBe("VALIDATION_FAILED");
   });
 
-  it("rejects invalid customer branding colors", async () => {
+  it("rejects customer branding fields on the cinema-staff settings endpoint", async () => {
     const response = await request(app.getHttpServer())
       .patch("/api/v1/management/settings/location")
       .set("Authorization", `Bearer ${ownerAccessToken}`)

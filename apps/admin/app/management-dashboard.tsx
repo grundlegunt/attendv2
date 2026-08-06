@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
-import { BrandingEditor, type BrandingSettings } from "./branding-editor";
+import { BrandingSummary, type BrandingSettings } from "./branding-editor";
 
 type RevenueReport = {
   totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
@@ -87,7 +87,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
     {labor && <section className="panel"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span>{(row.workedMinutes / 60).toFixed(2)}</span></div>)}</div></section>}
 
-    {settings && section === "branding" && <BrandingEditor accessToken={accessToken} settings={settings} onSaved={refresh} />}
+    {settings && section === "branding" && <BrandingSummary settings={settings} />}
     {settings && section === "location" && <section className="panel"><p className="kicker">LOCATION</p><h2>Operating settings</h2><label className="checkbox"><input type="checkbox" checked={settings.timeClockEnabled} onChange={() => void toggleClock()} /> Require staff clock-in at this location</label><p>Ticket tax: {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p></section>}
     {settings && section === "promotions" && <form className="panel" onSubmit={(event) => void createPromotion(event)}><p className="kicker">PROMOTIONS</p><h2>Create fixed discount</h2><label>Code<input required value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value })} /></label><label>Name<input required value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} /></label><label>Amount in cents<input type="number" min="1" required value={promotion.amountCents} onChange={(event) => setPromotion({ ...promotion, amountCents: Number(event.target.value) })} /></label><button className="primary">Create promotion</button><ul>{settings.promotions.map((item) => <li key={item.id}><strong>{item.code}</strong> · {item.name} · {item.active ? "Active" : "Inactive"}</li>)}</ul></form>}
 

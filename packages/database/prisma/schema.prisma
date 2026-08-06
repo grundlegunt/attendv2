@@ -87,6 +87,12 @@ model Location {
   customerSurfaceColor     String?
   customerTextColor        String?
   customerMutedTextColor   String?
+  adminAccentColor         String?
+  adminAccentMutedColor    String?
+  adminBackgroundColor     String?
+  adminSurfaceColor        String?
+  adminTextColor           String?
+  adminMutedTextColor      String?
   timezone                 String  @default("America/New_York")
   currency                 String  @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the

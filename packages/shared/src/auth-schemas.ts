@@ -47,6 +47,14 @@ export interface AuthenticatedEmployee {
   roles: string[];
   permissions: string[];
   timeClockEnabled: boolean;
+  adminBranding: {
+    accentColor: string | null;
+    accentMutedColor: string | null;
+    backgroundColor: string | null;
+    surfaceColor: string | null;
+    textColor: string | null;
+    mutedTextColor: string | null;
+  };
 }
 
 export interface AuthenticatedCustomer {

@@ -55,6 +55,14 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
     roles: employee.employeeRoles.map((er) => er.role.key),
     permissions: flattenEmployeePermissions(employee),
     timeClockEnabled: employee.location.timeClockEnabled,
+    adminBranding: {
+      accentColor: employee.location.adminAccentColor,
+      accentMutedColor: employee.location.adminAccentMutedColor,
+      backgroundColor: employee.location.adminBackgroundColor,
+      surfaceColor: employee.location.adminSurfaceColor,
+      textColor: employee.location.adminTextColor,
+      mutedTextColor: employee.location.adminMutedTextColor,
+    },
   };
 }
 
