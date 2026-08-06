@@ -32,6 +32,17 @@ export default function ShowtimesPage() {
     )).sort(),
     [program, nowPlayingMovies],
   );
+  const visibleDates = useMemo(() => {
+    if (!program) return [];
+    const todayKey = localDateKey(new Date(), program.location.timezone);
+    const today = new Date(`${todayKey}T12:00:00`);
+
+    return Array.from({ length: 3 }, (_, offset) => {
+      const date = new Date(today);
+      date.setDate(today.getDate() + offset);
+      return localDateKey(date, program.location.timezone);
+    });
+  }, [program]);
   const activeDate = useMemo(() => {
     if (selectedDate) return selectedDate;
     if (!program) return availableDates[0] ?? null;
@@ -73,9 +84,9 @@ export default function ShowtimesPage() {
         {program && <p>Choose a showtime and reserve your seats.</p>}
       </section>
 
-      {!selectedShowtimeId && availableDates.length > 0 && (
+      {!selectedShowtimeId && visibleDates.length > 0 && (
         <nav className="date-bar" aria-label="Showtime dates">
-          {availableDates.map((dateKey) => {
+          {visibleDates.map((dateKey, index) => {
             const date = new Date(`${dateKey}T12:00:00`);
             return (
               <button
@@ -83,11 +94,23 @@ export default function ShowtimesPage() {
                 className={dateKey === activeDate ? "active" : ""}
                 onClick={() => setSelectedDate(dateKey)}
               >
-                <span>{date.toLocaleDateString([], { weekday: "short" })}</span>
+                <span>{index === 0 ? "Today" : date.toLocaleDateString([], { weekday: "long" })}</span>
                 <strong>{date.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
               </button>
             );
           })}
+          <label className="date-bar__calendar" aria-label="Choose a date from the calendar">
+            <svg aria-hidden="true" viewBox="0 0 32 32">
+              <path d="M6 4v4M12 4v4M20 4v4M26 4v4M4 9h24v19H4zM4 14h24M10 14v14M18 14v14M10 21h18" />
+            </svg>
+            <input
+              type="date"
+              min={visibleDates[0]}
+              max={availableDates.at(-1)}
+              value={activeDate ?? ""}
+              onChange={(event) => event.target.value && setSelectedDate(event.target.value)}
+            />
+          </label>
         </nav>
       )}
 
@@ -98,6 +121,9 @@ export default function ShowtimesPage() {
           {programError && <div className="error-banner">{programError}</div>}
           {!program && !programError && <p className="loading-copy">Loading the program…</p>}
           {program && nowPlayingMovies.length === 0 && <p className="loading-copy">No movies are playing today.</p>}
+          {program && nowPlayingMovies.length > 0 && moviesForActiveDate.length === 0 && (
+            <p className="loading-copy">No showtimes are scheduled for this date.</p>
+          )}
 
           <section className="movie-grid">
             {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
