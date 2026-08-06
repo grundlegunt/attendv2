@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAdminSession } from "./admin-session";
 
-const links = [["/scheduling", "Scheduling"], ["/cinema-setup", "Cinema Setup"], ["/menu", "Menu"], ["/reports", "Reports & Finance"], ["/labor", "Labor"], ["/location", "Location"], ["/promotions", "Promotions"], ["/taxes", "Tax & Service Charges"], ["/users", "Users & Permissions"], ["/refunds", "Refunds"], ["/audit-log", "Audit Log"]] as const;
+const links = [["/scheduling", "Scheduling"], ["/film-series", "Film Series"], ["/cinema-setup", "Cinema Setup"], ["/menu", "Menu"], ["/reports", "Reports & Finance"], ["/labor", "Labor"], ["/location", "Location"], ["/promotions", "Promotions"], ["/taxes", "Tax & Service Charges"], ["/users", "Users & Permissions"], ["/refunds", "Refunds"], ["/audit-log", "Audit Log"]] as const;
 
 export function AdminNav() {
   const pathname = usePathname();
