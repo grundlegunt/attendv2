@@ -9,6 +9,15 @@ export const customerBrandingDefaults = {
   mutedTextColor: "#a8a49c",
 } as const;
 
+export const adminBrandingDefaults = {
+  accentColor: "#ffb800",
+  accentMutedColor: "#8a6500",
+  backgroundColor: "#000000",
+  surfaceColor: "#1a1a1a",
+  textColor: "#ffffff",
+  mutedTextColor: "#cccccc",
+} as const;
+
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color such as #fe2c54.");
 const customerLogoUrlSchema = z.union([
   z.string().trim().url("Logo URL must be a valid URL."),
@@ -27,6 +36,17 @@ export const customerBrandingSchema = z.object({
 }).strict();
 
 export type CustomerBranding = z.infer<typeof customerBrandingSchema>;
+
+export const adminBrandingSchema = z.object({
+  adminAccentColor: hexColorSchema.nullable().optional(),
+  adminAccentMutedColor: hexColorSchema.nullable().optional(),
+  adminBackgroundColor: hexColorSchema.nullable().optional(),
+  adminSurfaceColor: hexColorSchema.nullable().optional(),
+  adminTextColor: hexColorSchema.nullable().optional(),
+  adminMutedTextColor: hexColorSchema.nullable().optional(),
+}).strict();
+
+export type AdminBranding = z.infer<typeof adminBrandingSchema>;
 
 export const seatTypeSchema = z.enum(["STANDARD", "ADA", "COMPANION"]);
 export const tablePositionSchema = z.enum(["LEFT", "RIGHT"]);

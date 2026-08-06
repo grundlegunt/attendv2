@@ -1,7 +1,7 @@
 "use client";
 
-import type { AuthenticatedEmployee, AuthTokenResponse } from "@cinema/shared";
-import { FormEvent, createContext, useContext, useEffect, useMemo, useState } from "react";
+import { adminBrandingDefaults, type AuthenticatedEmployee, type AuthTokenResponse } from "@cinema/shared";
+import { FormEvent, createContext, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string };
@@ -53,5 +53,15 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
     <button className="primary">Sign in</button>
   </form></main>;
-  return <AdminSessionContext.Provider value={value}>{children}</AdminSessionContext.Provider>;
+  const branding = value.employee.adminBranding;
+  const theme = {
+    "--color-accent": branding?.accentColor ?? adminBrandingDefaults.accentColor,
+    "--color-accent-muted": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
+    "--color-bg": branding?.backgroundColor ?? adminBrandingDefaults.backgroundColor,
+    "--color-bg-elevated": branding?.surfaceColor ?? adminBrandingDefaults.surfaceColor,
+    "--color-text-primary": branding?.textColor ?? adminBrandingDefaults.textColor,
+    "--color-text-secondary": branding?.mutedTextColor ?? adminBrandingDefaults.mutedTextColor,
+    "--color-border": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
+  } as CSSProperties;
+  return <AdminSessionContext.Provider value={value}><div className="admin-theme-root" style={theme}>{children}</div></AdminSessionContext.Provider>;
 }

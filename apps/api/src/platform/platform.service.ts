@@ -113,6 +113,14 @@ export class PlatformService {
             textColor: location.customerTextColor,
             mutedTextColor: location.customerMutedTextColor,
           },
+          adminBranding: {
+            accentColor: location.adminAccentColor,
+            accentMutedColor: location.adminAccentMutedColor,
+            backgroundColor: location.adminBackgroundColor,
+            surfaceColor: location.adminSurfaceColor,
+            textColor: location.adminTextColor,
+            mutedTextColor: location.adminMutedTextColor,
+          },
           operations: {
             ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints,
             preShowBufferMinutes: location.preShowBufferMinutes,
@@ -143,7 +151,7 @@ export class PlatformService {
     return this.organization(input.organizationId);
   }
 
-  async updateLocation(input: { actorId: string; organizationId: string; locationId: string; name?: string; address?: string | null; timezone?: string; active?: boolean; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; timeClockEnabled?: boolean }) {
+  async updateLocation(input: { actorId: string; organizationId: string; locationId: string; name?: string; address?: string | null; timezone?: string; active?: boolean; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; adminAccentColor?: string | null; adminAccentMutedColor?: string | null; adminBackgroundColor?: string | null; adminSurfaceColor?: string | null; adminTextColor?: string | null; adminMutedTextColor?: string | null; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; timeClockEnabled?: boolean }) {
     await prisma.$transaction(async (tx) => {
       const before = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
       if (!before) throw AppError.notFound("Cinema location not found.");
@@ -151,10 +159,13 @@ export class PlatformService {
         name: input.name, address: input.address, timezone: input.timezone, active: input.active,
         customerLogoUrl: input.logoUrl, customerAccentColor: input.accentColor, customerAccentMutedColor: input.accentMutedColor,
         customerBackgroundColor: input.backgroundColor, customerSurfaceColor: input.surfaceColor, customerTextColor: input.textColor, customerMutedTextColor: input.mutedTextColor,
+        adminAccentColor: input.adminAccentColor, adminAccentMutedColor: input.adminAccentMutedColor,
+        adminBackgroundColor: input.adminBackgroundColor, adminSurfaceColor: input.adminSurfaceColor,
+        adminTextColor: input.adminTextColor, adminMutedTextColor: input.adminMutedTextColor,
         ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints, preShowBufferMinutes: input.preShowBufferMinutes, cleaningBufferMinutes: input.cleaningBufferMinutes,
         checkDropMinutesBeforeEnd: input.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: input.autoSettleGraceMinutes, timeClockEnabled: input.timeClockEnabled,
       } });
-      const state = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, active: location.active, logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor, backgroundColor: location.customerBackgroundColor, surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, timeClockEnabled: location.timeClockEnabled });
+      const state = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, active: location.active, logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor, backgroundColor: location.customerBackgroundColor, surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor, adminAccentColor: location.adminAccentColor, adminAccentMutedColor: location.adminAccentMutedColor, adminBackgroundColor: location.adminBackgroundColor, adminSurfaceColor: location.adminSurfaceColor, adminTextColor: location.adminTextColor, adminMutedTextColor: location.adminMutedTextColor, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, timeClockEnabled: location.timeClockEnabled });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: updated.id, action: "platform.location_updated", entityType: "Location", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
     });
     return this.organization(input.organizationId);
