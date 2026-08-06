@@ -391,6 +391,11 @@ export async function seedDatabase(
 
   const firstDate = new Date();
   firstDate.setUTCHours(5, 0, 0, 0);
+  // Nashville is UTC-5 during this summer demo week. Before 05:00 UTC,
+  // today's local calendar date is still the preceding UTC date.
+  if (firstDate.getTime() > Date.now()) {
+    firstDate.setUTCDate(firstDate.getUTCDate() - 1);
+  }
   for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
     const date = new Date(firstDate);
     date.setUTCDate(firstDate.getUTCDate() + dayIndex);
