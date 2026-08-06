@@ -532,6 +532,164 @@ export async function seedDatabase(
       chargeCategory: "ALCOHOL",
     },
   });
+
+  const publicMenuSections = [
+    {
+      name: "Shareables", sortOrder: 30, stationId: kitchenStation.id, chargeCategory: "FOOD" as const,
+      items: [
+        ["Fresh Hot Popcorn", "Traditional salt, dill pickle, cacio e pepe, or sweet kettle.", 700],
+        ["Shoestring Fries", "Served with rosemary chive aioli and ketchup.", 800],
+        ["Hot Pretzels", "Housemade pretzel rings with white cheddar queso and stone-ground mustard.", 950],
+        ["Picnic Platter", "Chef selection of three cheeses and two meats, served with warm baguette, fig jam, nuts, and olives.", 1400],
+        ["Stuffed Pepper Dip", "Creamy caramelized onion banana pepper dip with a crispy breadcrumb topping, served with hot bread.", 1100],
+        ["Katsu Style Chicken Tenders", "Plain or tossed in tonkatsu, lemon garlic herb, honey mustard, or tangy buffalo sauce. Served with housemade pickles.", 1250],
+        ["Corn & Zucchini Fritters", "Light, crispy fritters served with creamy dill dipping sauce.", 1100],
+      ],
+    },
+    {
+      name: "Salads", sortOrder: 40, stationId: kitchenStation.id, chargeCategory: "FOOD" as const,
+      items: [
+        ["Tender Love", "Tangy buffalo chicken tenders on butter lettuce with carrot ribbons and creamy bleu cheese crumbles. Served with buttermilk dill dressing.", 1400],
+        ["House Party", "Chopped romaine, carrot, cucumber, red onion, garbanzo beans, toasted sunflower seeds, shredded mozzarella, parmesan, and housemade croutons. Served with garlic shallot vinaigrette.", 1250],
+      ],
+    },
+    {
+      name: "Toasties", sortOrder: 50, stationId: kitchenStation.id, chargeCategory: "FOOD" as const,
+      items: [
+        ["Patty Melt", "Grass-fed organic ground beef, caramelized onions, and white American cheese on Butterlamp sourdough. Add fries for $3.", 1400],
+        ["Classic", "Thinly sliced rosemary ham, baby Swiss cheese, and dijonaise on Butterlamp sourdough. Add fries for $3.", 1250],
+        ["Short Rib", "Braised short rib, aged white cheddar, and balsamic and caramelized shallot spread on Butterlamp sourdough. Add fries for $3.", 1600],
+        ["Broccoli Cheddar", "Charred broccoli and aged white cheddar on Butterlamp sourdough. Add fries for $3.", 1400],
+        ["French Onion", "Smashed chicken meatballs, French onion soup-style caramelized onions, melty Gruyere, and mozzarella on Butterlamp sourdough. Add fries for $3.", 1400],
+        ["Spanikopita", "Spinach, mozzarella, feta, scallion, dill, and honey sesame crust on Butterlamp sourdough. Add diced lemon garlic herb chicken tenders for $3.", 1250],
+      ],
+    },
+    {
+      name: "Sweet Treats", sortOrder: 60, stationId: kitchenStation.id, chargeCategory: "FOOD" as const,
+      items: [
+        ["Skillet Cookie", "Warm chocolate chip cookie topped with vanilla ice cream.", 950],
+        ["Dirt Sundae", "Vanilla soft serve, hot fudge, crumbled OREOs, and gummy worms.", 700],
+        ["Seasonal Crumble", "Fruit crumble with buttery graham cracker oat topping.", 1100],
+        ["Affogato", "Vanilla soft serve topped with crema espresso.", 800],
+        ["Candy Selection", "Gummy worms, peanut M&M's, Reese's Pieces, sour strips, Blow Pops, Milk Duds, and Raisinets.", 300],
+      ],
+    },
+    {
+      name: "Cocktails", sortOrder: 70, stationId: barStation.id, chargeCategory: "ALCOHOL" as const,
+      items: [
+        ["Martini and a ½", "Dirty vodka or clean gin served with a sidecar on ice; Castelvetrano olives, lemon twist, and pickled onion garnish options.", 1400],
+        ["Sunrise Cosmo", "Vodka, freshly squeezed lime, pomegranate juice, topped with an Aperol float.", 1400],
+        ["Valley Girl", "Gin, freshly squeezed lime, and housemade cucumber melon juice.", 1400],
+        ["Dirty Work", "Vodka spiced chai espresso martini.", 1400],
+        ["Made in Manhattan", "Rye whiskey, Amaro Nonino, house aromatic bitters, and Luxardo cherry.", 1400],
+        ["Old West", "Bourbon or rye, peppercorn simple syrup, house aromatic bitters, and orange peel.", 1400],
+        ["Smash Hit", "Bourbon, blackberry, blueberry, mint, and freshly squeezed lemon.", 1400],
+        ["Pool Party", "Tequila, hibiscus, jalapeño, freshly squeezed lime, agave, and chili salt rim.", 1400],
+        ["Easy Rider", "Mezcal, mango puree, orange liqueur, freshly squeezed lime, and chili salt rim.", 1400],
+        ["Ivory Tower", "Gin, elderflower liqueur, dry vermouth, and lemon twist.", 1400],
+        ["Highwire Act", "Japanese whiskey, ginger simple syrup, club soda, and freshly squeezed lemon.", 1400],
+        ["Scarface", "Rum, cherry cordial, cola, and freshly squeezed lime.", 1400],
+        ["Peach Fizz", "Vodka, Pimm's, muddled peach, topped with fizzy orange wine.", 1400],
+        ["Ocean Air", "Tequila, freshly squeezed lime and grapefruit, club soda, and saltwater ice cubes.", 1400],
+      ],
+    },
+    {
+      name: "Natural Wine", sortOrder: 80, stationId: barStation.id, chargeCategory: "ALCOHOL" as const,
+      items: [
+        ["Flora Prosecco Brut — Glass", "Sparkling.", 1100], ["Flora Prosecco Brut — Bottle", "Sparkling.", 3200],
+        ["Tinc Set Ancestral — Glass", "Sparkling.", 1250], ["Tinc Set Ancestral — Bottle", "Sparkling.", 5400],
+        ["Lambrusco Dell’Emilio — Glass", "Sparkling.", 1250], ["Lambrusco Dell’Emilio — Bottle", "Sparkling.", 5400],
+        ["Broadbent Vinho Verde — Glass", "White.", 1100], ["Broadbent Vinho Verde — Bottle", "White.", 3200],
+        ["Christina Gruner Veltliner — Glass", "White.", 1250], ["Christina Gruner Veltliner — Bottle", "White.", 5400],
+        ["Punta Crena Lumassina — Glass", "White.", 1400], ["Punta Crena Lumassina — Bottle", "White.", 5800],
+        ["Les Athletes du Vin Chenin Blanc — Glass", "White.", 1400], ["Les Athletes du Vin Chenin Blanc — Bottle", "White.", 5800],
+        ["Vin de Days L’Orange — Glass", "Orange and skin contact.", 1250], ["Vin de Days L’Orange — Bottle", "Orange and skin contact.", 5400],
+        ["Love You Bunches Rosé — Glass", "Orange and skin contact.", 1250], ["Love You Bunches Rosé — Bottle", "Orange and skin contact.", 5400],
+        ["Swick Only Zuul Rosé — Glass", "Orange and skin contact.", 1600], ["Swick Only Zuul Rosé — Bottle", "Orange and skin contact.", 6400],
+        ["Gulp Hablo Garnacha — Glass", "Red.", 1100], ["Gulp Hablo Garnacha — Bottle", "Red.", 3200],
+        ["Arboreto Montepulciano d’Abruzzo — Glass", "Red.", 1250], ["Arboreto Montepulciano d’Abruzzo — Bottle", "Red.", 5400],
+        ["Angelo Negro Vino Rosso — Glass", "Red.", 1400], ["Angelo Negro Vino Rosso — Bottle", "Red.", 5800],
+        ["Las Jaras Glou Glou — Glass", "Red.", 1400], ["Las Jaras Glou Glou — Bottle", "Red.", 5800],
+      ],
+    },
+    {
+      name: "Beer", sortOrder: 90, stationId: barStation.id, chargeCategory: "ALCOHOL" as const,
+      items: [
+        ...["Budweiser", "Corona", "Tiny Juicy IPA", "German Pilsner", "Lonestar Lager", "Miller High Life Pony (for 2)"].map((name) => [name, "Bottle or can.", 600] as [string, string, number]),
+        ...["Japanese Lager", "Guinness", "Yazoo Pale Ale", "Austin East Cider", "Allagash White", "Bearded Iris Homestyle IPA"].map((name) => [name, "Draft.", 700] as [string, string, number]),
+      ],
+    },
+    {
+      name: "Non-Alcoholic", sortOrder: 100, stationId: barStation.id, chargeCategory: "BEVERAGE" as const,
+      items: [
+        ["Spring in Bottle N/A Sparkling Rosé", null, 1250], ["Best Day Brewing Kölsch", null, 700],
+        ["Athletic IPA", null, 700], ["St. Agrestis Phony Negroni", null, 1100],
+        ["Ghia Spritz", null, 1100], ["Hi-yo Social Tonic", null, 1250], ["Parch Agave Cocktails", null, 1250],
+      ],
+    },
+    {
+      name: "Soda, Coffee & Tea", sortOrder: 110, stationId: barStation.id, chargeCategory: "BEVERAGE" as const,
+      items: [
+        ...["Coke", "Diet Coke", "Dr. Pepper", "Sprite", "Fresh Squeezed OJ"].map((name) => [name, "Soda and juice.", 500] as [string, string, number]),
+        ["Hot Coffee", "Coffee.", 500], ["Cold Brew Coffee", "Coffee.", 600], ["Espresso", "Coffee.", 600],
+        ["Latte", "Coffee.", 750], ["Cortado", "Coffee.", 750],
+        ...["Spiced Chai", "Jasmine Green", "Lemon Ginger"].map((name) => [name, "Tea.", 500] as [string, string, number]),
+      ],
+    },
+    {
+      name: "Movie Specials", sortOrder: 120, stationId: kitchenStation.id, chargeCategory: "FOOD" as const,
+      items: [
+        ["Grand Prix Burger", "¼ lb. grass-fed beef cheeseburger on a brioche bun with cornichons and truffle aioli.", 1400],
+        ["Pitt Crew", "Budweiser tallboy and a shot of whiskey.", 1100],
+        ["Redbull Spritz", "Campari, vodka, and Red Bull.", 1100],
+        ["Terror Dog", "New York-style Sabrett hot dog topped with sweet onion relish, sauerkraut, and spicy brown mustard.", 1400],
+        ["Marshmallow Man", "Toasted brown butter rice krispie treat.", 900],
+        ["That’s a Good Meatball", "Grass-fed organic beef meatball sliders topped with marinara and melty mozzarella.", 1400],
+        ["Alabama Slammer", "Amaretto, sloe gin, Southern Comfort, and freshly squeezed orange juice.", 1250],
+      ],
+    },
+  ];
+
+  const seededMenuItems = new Map<string, string>();
+  for (const section of publicMenuSections) {
+    const category = await prisma.menuCategory.upsert({
+      where: { locationId_name: { locationId: location.id, name: section.name } },
+      update: { active: true, sortOrder: section.sortOrder },
+      create: { locationId: location.id, name: section.name, sortOrder: section.sortOrder },
+    });
+    for (const [sortOrder, item] of section.items.entries()) {
+      const [name, description, priceCents] = item;
+      const seeded = await prisma.menuItem.upsert({
+        where: { menuCategoryId_name: { menuCategoryId: category.id, name } },
+        update: { kitchenStationId: section.stationId, description, priceCents, chargeCategory: section.chargeCategory, active: true, is86d: false, sortOrder },
+        create: { menuCategoryId: category.id, kitchenStationId: section.stationId, name, description, priceCents, chargeCategory: section.chargeCategory, sortOrder },
+      });
+      seededMenuItems.set(name, seeded.id);
+    }
+  }
+
+  const movieSpecials = [
+    ["F1", ["Grand Prix Burger", "Pitt Crew", "Redbull Spritz"]],
+    ["Ghostbusters", ["Terror Dog", "Marshmallow Man"]],
+    ["The Wedding Singer", ["That’s a Good Meatball", "Alabama Slammer"]],
+  ] as const;
+  for (const [movieTitle, itemNames] of movieSpecials) {
+    const movie = movieByTitle.get(movieTitle)!;
+    for (const [sortOrder, itemName] of itemNames.entries()) {
+      await prisma.moviePairing.upsert({
+        where: { movieId_menuItemId: { movieId: movie.id, menuItemId: seededMenuItems.get(itemName)! } },
+        update: { sortOrder },
+        create: { movieId: movie.id, menuItemId: seededMenuItems.get(itemName)!, sortOrder },
+      });
+    }
+  }
+  for (const itemName of ["Pitt Crew", "Redbull Spritz", "Alabama Slammer"]) {
+    await prisma.menuItem.update({
+      where: { id: seededMenuItems.get(itemName)! },
+      data: { kitchenStationId: barStation.id, chargeCategory: "ALCOHOL" },
+    });
+  }
+
   const temperatureGroup = await prisma.modifierGroup.upsert({
     where: {
       menuItemId_name: { menuItemId: burger.id, name: "Temperature" },
