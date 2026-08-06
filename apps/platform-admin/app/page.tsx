@@ -29,6 +29,13 @@ interface OrganizationDetail {
     configuration: { auditoriums: number; employees: number; menuItems: number; upcomingShowtimes: number; activeMovies: number; activeFilmSeries: number };
   }>;
 }
+type OrganizationDraft = { name: string; legalName: string; timezone: string; onboardingStatus: string };
+type LocationDetail = OrganizationDetail["locations"][number];
+type LocationDraft = {
+  name: string; address: string; timezone: string; active: boolean; logoUrl: string;
+  accentColor: string; accentMutedColor: string; backgroundColor: string; surfaceColor: string; textColor: string; mutedTextColor: string;
+  ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; timeClockEnabled: boolean;
+};
 
 async function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
   const headers = new Headers(init?.headers);
@@ -52,6 +59,9 @@ export default function AttendMaster() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [organizationDraft, setOrganizationDraft] = useState<OrganizationDraft | null>(null);
+  const [locationDraft, setLocationDraft] = useState<{ id: string; values: LocationDraft } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const stored = window.sessionStorage.getItem(STORAGE_KEY);
@@ -90,6 +100,44 @@ export default function AttendMaster() {
     window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setOverview(null); setSelectedOrganizationId(null); setOrganization(null); setError(null);
   }
 
+  function beginOrganizationEdit(detail: OrganizationDetail) {
+    setOrganizationDraft({ name: detail.name, legalName: detail.legalName ?? "", timezone: detail.timezone, onboardingStatus: detail.payments.onboardingStatus });
+  }
+
+  function beginLocationEdit(location: LocationDetail) {
+    setLocationDraft({ id: location.id, values: {
+      name: location.name, address: location.address ?? "", timezone: location.timezone, active: location.active, logoUrl: location.branding.logoUrl ?? "",
+      accentColor: location.branding.accentColor ?? "", accentMutedColor: location.branding.accentMutedColor ?? "", backgroundColor: location.branding.backgroundColor ?? "", surfaceColor: location.branding.surfaceColor ?? "", textColor: location.branding.textColor ?? "", mutedTextColor: location.branding.mutedTextColor ?? "",
+      ...location.operations,
+    } });
+  }
+
+  async function saveOrganization(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !organizationDraft) return;
+    setSaving(true); setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, { method: "PATCH", body: JSON.stringify({ ...organizationDraft, legalName: organizationDraft.legalName || null }) }, session.accessToken);
+      setOrganization(updated); setOrganizationDraft(null);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save organization."); }
+    finally { setSaving(false); }
+  }
+
+  async function saveLocation(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !locationDraft) return;
+    const values = locationDraft.values;
+    const nullable = (value: string) => value || null;
+    setSaving(true); setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}/locations/${locationDraft.id}`, { method: "PATCH", body: JSON.stringify({
+        ...values, address: nullable(values.address), logoUrl: nullable(values.logoUrl), accentColor: nullable(values.accentColor), accentMutedColor: nullable(values.accentMutedColor), backgroundColor: nullable(values.backgroundColor), surfaceColor: nullable(values.surfaceColor), textColor: nullable(values.textColor), mutedTextColor: nullable(values.mutedTextColor),
+      }) }, session.accessToken);
+      setOrganization(updated); setLocationDraft(null);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save location."); }
+    finally { setSaving(false); }
+  }
+
   if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
   if (!session) return <main className="center"><form className="login-card" onSubmit={login}>
     <p className="eyebrow">ATTEND MASTER</p><h1>Company sign in</h1>
@@ -108,15 +156,17 @@ export default function AttendMaster() {
       <button className="back" onClick={() => setSelectedOrganizationId(null)}>← All cinema clients</button>
       {organizationLoading && <p className="muted">Loading cinema profile…</p>}
       {organization && <>
-        <div className="detail-heading"><div><p className="eyebrow">ORGANIZATION</p><h2>{organization.name}</h2><p className="muted">{organization.legalName ?? "Legal name not configured"} · Client since {new Date(organization.createdAt).toLocaleDateString()}</p></div><span className={organization.payments.connected ? "status good" : "status warning"}>{organization.payments.connected ? `Payments ${organization.payments.onboardingStatus.toLowerCase()}` : "Payments not connected"}</span></div>
+        <div className="detail-heading"><div><p className="eyebrow">ORGANIZATION</p><h2>{organization.name}</h2><p className="muted">{organization.legalName ?? "Legal name not configured"} · Client since {new Date(organization.createdAt).toLocaleDateString()}</p></div><div className="org-actions"><span className={organization.payments.connected ? "status good" : "status warning"}>{organization.payments.connected ? `Payments ${organization.payments.onboardingStatus.toLowerCase()}` : `Payments ${organization.payments.onboardingStatus.toLowerCase().replaceAll("_", " ")}`}</span><button className="edit-button" onClick={() => beginOrganizationEdit(organization)}>Edit organization</button></div></div>
+        {organizationDraft && <form className="editor" onSubmit={saveOrganization}><div className="editor-heading"><div><p className="eyebrow">COMPANY SETTINGS</p><h3>Edit organization</h3></div><button type="button" className="quiet" onClick={() => setOrganizationDraft(null)}>Cancel</button></div><div className="form-grid"><label>Name<input required value={organizationDraft.name} onChange={(event) => setOrganizationDraft({ ...organizationDraft, name: event.target.value })} /></label><label>Legal name<input value={organizationDraft.legalName} onChange={(event) => setOrganizationDraft({ ...organizationDraft, legalName: event.target.value })} /></label><label>Timezone<input required value={organizationDraft.timezone} onChange={(event) => setOrganizationDraft({ ...organizationDraft, timezone: event.target.value })} /></label><label>Payment onboarding<select value={organizationDraft.onboardingStatus} onChange={(event) => setOrganizationDraft({ ...organizationDraft, onboardingStatus: event.target.value })}><option value="NOT_STARTED">Not started</option><option value="IN_PROGRESS">In progress</option><option value="RESTRICTED">Restricted</option><option value="COMPLETE">Complete</option></select></label></div><p className="form-note">Complete requires a Stripe connected account. This status does not create or alter a Stripe account.</p><button disabled={saving}>{saving ? "Saving…" : "Save organization"}</button></form>}
         {organization.locations.map((location) => <article className="location-detail" key={location.id}>
-          <div className="location-detail-heading"><div><div className="location-title"><h3>{location.name}</h3><span className={location.active ? "dot active" : "dot"}>{location.active ? "Active" : "Inactive"}</span></div><p className="muted">{location.address ?? "Address not configured"} · {location.timezone}</p></div><div className="actions horizontal"><a href={CINEMA_ADMIN_URL} target="_blank" rel="noreferrer">Open cinema admin ↗</a><a href={CUSTOMER_WEB_URL} target="_blank" rel="noreferrer">Open customer site ↗</a></div></div>
+          <div className="location-detail-heading"><div><div className="location-title"><h3>{location.name}</h3><span className={location.active ? "dot active" : "dot"}>{location.active ? "Active" : "Inactive"}</span></div><p className="muted">{location.address ?? "Address not configured"} · {location.timezone}</p></div><div className="actions horizontal"><button className="edit-button" onClick={() => beginLocationEdit(location)}>Edit cinema</button><a href={CINEMA_ADMIN_URL} target="_blank" rel="noreferrer">Open cinema admin ↗</a><a href={CUSTOMER_WEB_URL} target="_blank" rel="noreferrer">Open customer site ↗</a></div></div>
           <div className="readiness-grid">
             <section><p className="eyebrow">READINESS</p><div className="metric-grid"><span><b>{location.configuration.auditoriums}</b> Auditoriums</span><span><b>{location.configuration.activeMovies}</b> Active movies</span><span><b>{location.configuration.activeFilmSeries}</b> Film series</span><span><b>{location.configuration.upcomingShowtimes}</b> Upcoming shows</span><span><b>{location.configuration.menuItems}</b> Menu items</span><span><b>{location.configuration.employees}</b> Active staff</span></div></section>
             <section><p className="eyebrow">CUSTOMER BRAND</p><div className="brand-preview" style={{ background: location.branding.backgroundColor ?? "#090a0c", color: location.branding.textColor ?? "#f5f2ea", borderColor: location.branding.accentColor ?? "#7c9cff" }}><span className="brand-mark" style={{ background: location.branding.accentColor ?? "#7c9cff" }} />{location.branding.logoUrl ? <span>Custom logo configured</span> : <span>Text identity · {location.name}</span>}</div><div className="swatches">{[["Accent", location.branding.accentColor], ["Background", location.branding.backgroundColor], ["Surface", location.branding.surfaceColor], ["Text", location.branding.textColor]].map(([label, color]) => <span key={label}><i style={{ background: color ?? "transparent" }} />{label}<code>{color ?? "Default"}</code></span>)}</div></section>
             <section><p className="eyebrow">OPERATING SETTINGS</p><dl><div><dt>Ticket tax</dt><dd>{(location.operations.ticketTaxRateBasisPoints / 100).toFixed(2)}%</dd></div><div><dt>Pre-show buffer</dt><dd>{location.operations.preShowBufferMinutes} min</dd></div><div><dt>Cleaning buffer</dt><dd>{location.operations.cleaningBufferMinutes} min</dd></div><div><dt>Check drop</dt><dd>{location.operations.checkDropMinutesBeforeEnd} min before end</dd></div><div><dt>Auto-settle grace</dt><dd>{location.operations.autoSettleGraceMinutes} min</dd></div><div><dt>Time clock</dt><dd>{location.operations.timeClockEnabled ? "Enabled" : "Disabled"}</dd></div></dl></section>
           </div>
-          <footer className="detail-note">Configuration changes are made in this cinema’s admin interface and remain scoped to its staff permissions.</footer>
+          {locationDraft?.id === location.id && <form className="editor location-editor" onSubmit={saveLocation}><div className="editor-heading"><div><p className="eyebrow">PLATFORM CONFIGURATION</p><h3>Edit {location.name}</h3></div><button type="button" className="quiet" onClick={() => setLocationDraft(null)}>Cancel</button></div><div className="form-grid"><label>Cinema name<input required value={locationDraft.values.name} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, name: event.target.value } })} /></label><label>Address<input value={locationDraft.values.address} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, address: event.target.value } })} /></label><label>Timezone<input required value={locationDraft.values.timezone} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, timezone: event.target.value } })} /></label><label className="check"><input type="checkbox" checked={locationDraft.values.active} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, active: event.target.checked } })} /> Active cinema</label></div><h4>Customer brand</h4><div className="form-grid brand-fields"><label>Logo URL<input value={locationDraft.values.logoUrl} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, logoUrl: event.target.value } })} /></label>{(["accentColor", "accentMutedColor", "backgroundColor", "surfaceColor", "textColor", "mutedTextColor"] as const).map((key) => <label key={key}>{key.replace(/([A-Z])/g, " $1")}<div className="color-input"><input type="color" value={locationDraft.values[key] || "#000000"} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, [key]: event.target.value } })} /><input placeholder="#fe2c54" value={locationDraft.values[key]} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, [key]: event.target.value } })} /></div></label>)}</div><h4>Operating settings</h4><div className="form-grid">{(["ticketTaxRateBasisPoints", "preShowBufferMinutes", "cleaningBufferMinutes", "checkDropMinutesBeforeEnd", "autoSettleGraceMinutes"] as const).map((key) => <label key={key}>{key.replace(/([A-Z])/g, " $1")}<input type="number" min="0" value={locationDraft.values[key]} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, [key]: Number(event.target.value) } })} /></label>)}<label className="check"><input type="checkbox" checked={locationDraft.values.timeClockEnabled} onChange={(event) => setLocationDraft({ ...locationDraft, values: { ...locationDraft.values, timeClockEnabled: event.target.checked } })} /> Time clock enabled</label></div><button disabled={saving}>{saving ? "Saving…" : "Save cinema settings"}</button></form>}
+          <footer className="detail-note">Attend Master changes are audited. Cinema staff retain their existing permissions and admin access.</footer>
         </article>)}
       </>}
     </section>}

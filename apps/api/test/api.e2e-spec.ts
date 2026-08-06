@@ -268,6 +268,71 @@ describe("Attend platform authentication boundary", () => {
       .expect(404);
   });
 
+  it("lets only an Attend operator update organization and location configuration", async () => {
+    const overview = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200);
+    const organizationId = overview.body.organizations[0].id as string;
+    const locationId = overview.body.organizations[0].locations[0].id as string;
+
+    const organization = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ legalName: "Meridian Cinema Co. LLC", onboardingStatus: "IN_PROGRESS" })
+      .expect(200);
+    expect(organization.body).toEqual(expect.objectContaining({
+      legalName: "Meridian Cinema Co. LLC",
+      payments: expect.objectContaining({ onboardingStatus: "IN_PROGRESS" }),
+    }));
+
+    const location = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}/locations/${locationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ accentColor: "#fe2c54", preShowBufferMinutes: 35, timeClockEnabled: false })
+      .expect(200);
+    expect(location.body.locations[0]).toEqual(expect.objectContaining({
+      branding: expect.objectContaining({ accentColor: "#fe2c54" }),
+      operations: expect.objectContaining({ preShowBufferMinutes: 35, timeClockEnabled: false }),
+    }));
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: "Forbidden rename" })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}/locations/00000000-0000-0000-0000-000000000000`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ active: false })
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}/locations/${locationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ preShowBufferMinutes: 30, timeClockEnabled: true })
+      .expect(200);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ onboardingStatus: "NOT_STARTED" })
+      .expect(200);
+  });
+
+  it("does not let an Attend operator mark payments complete without a connected Stripe account", async () => {
+    const overview = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200);
+    const organizationId = overview.body.organizations[0].id as string;
+
+    const result = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ onboardingStatus: "COMPLETE" });
+    expect(result.status).toBe(422);
+  });
+
   it("rejects an Attend operator token from cinema staff routes", async () => {
     const res = await request(app.getHttpServer())
       .get("/api/v1/auth/staff/me")

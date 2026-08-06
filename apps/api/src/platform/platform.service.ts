@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@cinema/database";
+import { ConnectOnboardingStatus, prisma } from "@cinema/database";
 import { signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { PlatformLoginRequest } from "@cinema/shared";
@@ -125,6 +125,39 @@ export class PlatformService {
         };
       })),
     };
+  }
+
+  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; onboardingStatus?: ConnectOnboardingStatus }) {
+    await prisma.$transaction(async (tx) => {
+      const before = await tx.organization.findUnique({ where: { id: input.organizationId } });
+      if (!before) throw AppError.notFound("Cinema organization not found.");
+      if (input.onboardingStatus === ConnectOnboardingStatus.COMPLETE && !before.stripeConnectedAccountId) {
+        throw AppError.validationFailed("Payments cannot be marked complete until a Stripe connected account exists.");
+      }
+      const updated = await tx.organization.update({ where: { id: input.organizationId }, data: {
+        name: input.name, legalName: input.legalName, timezone: input.timezone, connectOnboardingStatus: input.onboardingStatus,
+      } });
+      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, onboardingStatus: organization.connectOnboardingStatus });
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.organization_updated", entityType: "Organization", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
+    });
+    return this.organization(input.organizationId);
+  }
+
+  async updateLocation(input: { actorId: string; organizationId: string; locationId: string; name?: string; address?: string | null; timezone?: string; active?: boolean; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; timeClockEnabled?: boolean }) {
+    await prisma.$transaction(async (tx) => {
+      const before = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
+      if (!before) throw AppError.notFound("Cinema location not found.");
+      const updated = await tx.location.update({ where: { id: input.locationId }, data: {
+        name: input.name, address: input.address, timezone: input.timezone, active: input.active,
+        customerLogoUrl: input.logoUrl, customerAccentColor: input.accentColor, customerAccentMutedColor: input.accentMutedColor,
+        customerBackgroundColor: input.backgroundColor, customerSurfaceColor: input.surfaceColor, customerTextColor: input.textColor, customerMutedTextColor: input.mutedTextColor,
+        ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints, preShowBufferMinutes: input.preShowBufferMinutes, cleaningBufferMinutes: input.cleaningBufferMinutes,
+        checkDropMinutesBeforeEnd: input.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: input.autoSettleGraceMinutes, timeClockEnabled: input.timeClockEnabled,
+      } });
+      const state = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, active: location.active, logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor, backgroundColor: location.customerBackgroundColor, surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, timeClockEnabled: location.timeClockEnabled });
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: updated.id, action: "platform.location_updated", entityType: "Location", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
+    });
+    return this.organization(input.organizationId);
   }
 
   private issueTokens(userId: string, tokenVersion: number): TokenPair {
