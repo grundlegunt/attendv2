@@ -1,5 +1,6 @@
 import {
   createFilmSeriesRequestSchema,
+  customerBrandingSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   dedupePublicShowtimes,
@@ -12,6 +13,21 @@ import {
   validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "./cinema-schemas";
+
+describe("customer branding settings", () => {
+  it("accepts safe six-digit colors and a hosted logo", () => {
+    expect(customerBrandingSchema.parse({ name: "Meridian Cinema", logoUrl: "https://example.com/logo.svg", accentColor: "#fe2c54" })).toEqual({ name: "Meridian Cinema", logoUrl: "https://example.com/logo.svg", accentColor: "#fe2c54" });
+  });
+
+  it("supports null overrides for resetting to Attend defaults", () => {
+    expect(customerBrandingSchema.parse({ logoUrl: null, accentColor: null, textColor: null })).toEqual({ logoUrl: null, accentColor: null, textColor: null });
+  });
+
+  it("rejects unsafe or ambiguous color strings", () => {
+    expect(() => customerBrandingSchema.parse({ accentColor: "red" })).toThrow();
+    expect(() => customerBrandingSchema.parse({ backgroundColor: "#fff" })).toThrow();
+  });
+});
 
 describe("cinema programming requests", () => {
   const showtime = {

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCustomerBranding } from "./customer-branding";
 
 const links = [
   { href: "/showtimes", label: "Showtimes" },
@@ -16,13 +17,13 @@ const links = [
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const branding = useCustomerBranding();
 
   return (
     <header className="site-header">
       <div className="site-header__inner">
-        <Link className="site-brand" href="/showtimes" aria-label="Attend showtimes">
-          <span className="eyebrow">ATTEND</span>
-          <strong>Cinema</strong>
+        <Link className="site-brand" href="/showtimes" aria-label={`${branding.name} showtimes`}>
+          {branding.logoUrl ? <img src={branding.logoUrl} alt={branding.name} /> : <><span className="eyebrow">CINEMA</span><strong>{branding.name}</strong></>}
         </Link>
         <nav className="site-nav" aria-label="Customer navigation">
           {links.map((link) => (

@@ -28,6 +28,11 @@ export class CinemaController {
     return this.cinemaService.nowPlaying(locationId);
   }
 
+  @Get("branding")
+  branding(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicBranding(locationId);
+  }
+
   @Get("film-series")
   filmSeries(@Query("locationId") locationId?: string) {
     return this.cinemaService.publicFilmSeries(locationId);
