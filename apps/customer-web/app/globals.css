@@ -83,7 +83,7 @@
 .specials-grid a { display: inline-block; margin-top: 20px; color: var(--color-accent); font-weight: 800; }
 .special-line { display: flex; justify-content: space-between; gap: 24px; padding: 12px 0; border-top: 1px solid var(--color-border); }
 .special-line span, .special-line small { display: block; }
-.afterglow-callout { min-height: 360px; display: grid; align-items: end; padding: clamp(32px, 6vw, 72px); background: linear-gradient(90deg, rgba(8,6,8,.95), rgba(8,6,8,.42)), url("https://images.unsplash.com/photo-1514933651103-005eec06c04b?auto=format&fit=crop&w=1800&q=80") center/cover; }
+.afterglow-callout { min-height: 360px; display: grid; align-items: end; padding: clamp(32px, 6vw, 72px); background: linear-gradient(90deg, rgba(8,6,8,.95), rgba(8,6,8,.42)), url("/afterglow-bar.png") center/cover; }
 .afterglow-callout > div { max-width: 650px; }
 .afterglow-callout p { color: var(--color-text-secondary); font-size: 1.1rem; }
 .afterglow-hero { position: relative; min-height: 600px; display: grid; align-items: end; overflow: hidden; }
