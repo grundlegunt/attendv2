@@ -241,7 +241,11 @@ describe("Attend platform authentication boundary", () => {
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .expect(200);
-    const organizationId = overview.body.organizations[0].id as string;
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toBeDefined();
+    const organizationId = meridian.id as string;
 
     const res = await request(app.getHttpServer())
       .get(`/api/v1/platform/organizations/${organizationId}`)
@@ -252,12 +256,14 @@ describe("Attend platform authentication boundary", () => {
       id: organizationId,
       payments: expect.objectContaining({ onboardingStatus: expect.any(String) }),
       locations: expect.arrayContaining([expect.objectContaining({
-        branding: expect.objectContaining({ accentColor: expect.anything() }),
-        adminBranding: expect.objectContaining({ accentColor: expect.anything() }),
+        branding: expect.any(Object),
+        adminBranding: expect.any(Object),
         operations: expect.objectContaining({ cleaningBufferMinutes: expect.any(Number) }),
         configuration: expect.objectContaining({ activeMovies: expect.any(Number), activeFilmSeries: expect.any(Number) }),
       })]),
     }));
+    expect(res.body.locations[0].branding).toHaveProperty("accentColor");
+    expect(res.body.locations[0].adminBranding).toHaveProperty("accentColor");
 
     await request(app.getHttpServer())
       .get(`/api/v1/platform/organizations/${organizationId}`)
@@ -310,8 +316,12 @@ describe("Attend platform authentication boundary", () => {
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .expect(200);
-    const organizationId = overview.body.organizations[0].id as string;
-    const locationId = overview.body.organizations[0].locations[0].id as string;
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toBeDefined();
+    const organizationId = meridian.id as string;
+    const locationId = meridian.locations[0].id as string;
 
     const organization = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
@@ -371,13 +381,18 @@ describe("Attend platform authentication boundary", () => {
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .expect(200);
-    const organizationId = overview.body.organizations[0].id as string;
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toBeDefined();
+    const organizationId = meridian.id as string;
 
     const result = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .send({ onboardingStatus: "COMPLETE" });
-    expect(result.status).toBe(422);
+    expect(result.status).toBe(400);
+    expect(result.body.code).toBe("VALIDATION_FAILED");
   });
 
   it("rejects an Attend operator token from cinema staff routes", async () => {
@@ -2649,10 +2664,13 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
 describe("Milestone 8 restaurant settlement and tipping", () => {
   it("drops the check, permits one final order, and closes with split tender", async () => {
     const { prisma } = await import("@cinema/database");
-    const location = await prisma.location.findFirstOrThrow();
+    const settlementTab = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: { locationId: true },
+    });
     await prisma.taxRule.create({
       data: {
-        locationId: location.id,
+        locationId: settlementTab.locationId,
         name: "M8 test tax",
         appliesTo: "ALL",
         ratePermille: 100,
@@ -2660,7 +2678,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     });
     await prisma.serviceChargeRule.create({
       data: {
-        locationId: location.id,
+        locationId: settlementTab.locationId,
         name: "M8 test service",
         appliesTo: "ALL",
         flatCents: 100,

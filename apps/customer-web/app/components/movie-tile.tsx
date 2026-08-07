@@ -34,10 +34,10 @@ export function MovieTile({
 
   return (
     <article className="program-tile">
-      <Link className="program-tile__image" href={`/movie/${movie.id}`}>
-        {movie.posterUrl && <img src={movie.posterUrl} alt="" />}
-      </Link>
-      <div className="program-tile__info">
+      <div className="program-tile__image">
+        <Link className="program-tile__artwork" href={`/movie/${movie.id}`} aria-label={`View ${movie.title}`}>
+          {movie.posterUrl && <img src={movie.posterUrl} alt="" />}
+        </Link>
         <div className="program-tile__badges">
           {series.map((entry) => (
             <Link key={entry.id} href={`/film-series/${entry.id}`}>
@@ -46,10 +46,7 @@ export function MovieTile({
           ))}
           {formats.map((format) => <span key={format}>{format}</span>)}
         </div>
-        <div className="program-tile__title">
-          <h2><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
-          <span>{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</span>
-        </div>
+        <h2 className="program-tile__title"><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
       </div>
       <div className="program-tile__showtimes">
         {showtimes.map((showtime) => {
