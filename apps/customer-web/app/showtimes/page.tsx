@@ -5,6 +5,7 @@ import type { NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SeatPicker } from "../components/seat-picker";
 import { localDateKey, MovieTile } from "../components/movie-tile";
+import { ShowtimeCalendar } from "../components/showtime-calendar";
 
 interface NowPlayingResponse {
   location: { id: string; name: string; address: string | null; timezone: string };
@@ -16,6 +17,7 @@ export default function ShowtimesPage() {
   const [programError, setProgramError] = useState<string | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
 
   const nowPlayingMovies = useMemo(() => {
     if (!program) return [];
@@ -99,19 +101,28 @@ export default function ShowtimesPage() {
               </button>
             );
           })}
-          <label className="date-bar__calendar" aria-label="Choose a date from the calendar">
+          <button
+            type="button"
+            className="date-bar__calendar"
+            aria-label="Choose a date from the calendar"
+            aria-expanded={calendarOpen}
+            onClick={() => setCalendarOpen(true)}
+          >
             <svg aria-hidden="true" viewBox="0 0 32 32">
               <path d="M6 4v4M12 4v4M20 4v4M26 4v4M4 9h24v19H4zM4 14h24M10 14v14M18 14v14M10 21h18" />
             </svg>
-            <input
-              type="date"
-              min={visibleDates[0]}
-              max={availableDates.at(-1)}
-              value={activeDate ?? ""}
-              onChange={(event) => event.target.value && setSelectedDate(event.target.value)}
-            />
-          </label>
+          </button>
         </nav>
+      )}
+
+      {calendarOpen && program && (
+        <ShowtimeCalendar
+          availableDates={availableDates}
+          selectedDate={activeDate}
+          today={localDateKey(new Date(), program.location.timezone)}
+          onSelect={setSelectedDate}
+          onClose={() => setCalendarOpen(false)}
+        />
       )}
 
       {selectedShowtimeId ? (

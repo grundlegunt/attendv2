@@ -49,6 +49,7 @@ export function SeatPicker({
   const [holderKey, setHolderKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
+  const [optimisticSeatStates, setOptimisticSeatStates] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
@@ -88,6 +89,10 @@ export function SeatPicker({
     () => availability?.seats.filter((seat) => seat.heldByMe) ?? [],
     [availability],
   );
+  const displayedSeats = useMemo(
+    () => availability?.seats.filter((seat) => optimisticSeatStates[seat.id] ?? seat.heldByMe) ?? [],
+    [availability, optimisticSeatStates],
+  );
   const expiresAt = mySeats.reduce(
     (earliest, seat) => Math.min(earliest, seat.expiresAt ? Date.parse(seat.expiresAt) : Infinity),
     Infinity,
@@ -98,6 +103,8 @@ export function SeatPicker({
 
   async function toggleSeat(seat: AvailabilitySeat) {
     if (!holderKey || pending) return;
+    const selected = !seat.heldByMe;
+    setOptimisticSeatStates((states) => ({ ...states, [seat.id]: selected }));
     setPending(seat.id ?? seat.label);
     setError(null);
     try {
@@ -121,6 +128,11 @@ export function SeatPicker({
       );
       await refresh();
     } finally {
+      setOptimisticSeatStates((states) => {
+        const next = { ...states };
+        delete next[seat.id];
+        return next;
+      });
       setPending(null);
     }
   }
@@ -143,7 +155,7 @@ export function SeatPicker({
 
   const mapSeats = availability?.seats.map((seat) => ({
     ...seat,
-    state: seat.heldByMe
+    state: (optimisticSeatStates[seat.id] ?? seat.heldByMe)
       ? ("selected" as const)
       : seat.state === "AVAILABLE"
         ? ("available" as const)
@@ -208,7 +220,7 @@ export function SeatPicker({
       <footer className="seat-picker__summary">
         <div>
           <span className="eyebrow">YOUR SEATS</span>
-          <strong>{mySeats.length ? mySeats.map((seat) => seat.label).join(", ") : "None selected"}</strong>
+          <strong>{displayedSeats.length ? displayedSeats.map((seat) => seat.label).join(", ") : "None selected"}</strong>
         </div>
         <button
           className="primary"

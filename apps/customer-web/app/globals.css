@@ -101,13 +101,41 @@
 .date-bar span, .date-bar strong { display: block; }
 .date-bar span { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; }
 .date-bar strong { margin-top: 5px; font: 1.05rem var(--font-family-display); }
-.date-bar__calendar { position: relative; display: grid; min-height: 76px; place-items: center; background: var(--color-text-primary); color: var(--color-bg); cursor: pointer; }
+.date-bar__calendar { position: relative; display: grid; min-height: 76px; place-items: center; border-right: 0 !important; background: var(--color-text-primary) !important; color: var(--color-bg) !important; cursor: pointer; }
 .date-bar__calendar svg { width: 38px; fill: none; stroke: currentColor; stroke-linecap: square; stroke-width: 1.5; }
-.date-bar__calendar input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.showtime-calendar { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 28px; }
+.showtime-calendar__backdrop { position: absolute; inset: 0; width: 100%; border: 0; background: rgba(0, 0, 0, .82); cursor: default; }
+.showtime-calendar__dialog { position: relative; width: min(980px, 100%); max-height: calc(100vh - 56px); overflow: auto; padding: 24px; background: #f7f4ef; color: #090709; box-shadow: 0 28px 90px rgba(0,0,0,.5); }
+.showtime-calendar__close { font: 2.3rem/1 sans-serif !important; }
+.showtime-calendar__header { display: grid; grid-template-columns: 54px 1fr 54px 54px; align-items: center; min-height: 88px; padding: 8px; background: #090709; color: var(--color-accent); }
+.showtime-calendar__header h2 { margin: 0; text-align: center; font: 800 clamp(1.5rem, 4vw, 2.5rem) var(--font-family-body); letter-spacing: .24em; text-transform: uppercase; }
+.showtime-calendar__header button { min-height: 52px; padding: 0; border: 0; background: transparent; color: inherit; font-size: 3rem; cursor: pointer; }
+.showtime-calendar__header button:disabled { opacity: .2; cursor: not-allowed; }
+.showtime-calendar__weekdays, .showtime-calendar__grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.showtime-calendar__weekdays { padding: 24px 0 8px; }
+.showtime-calendar__weekdays span { text-align: center; font-size: .78rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.showtime-calendar__grid { min-height: 520px; align-items: center; }
+.showtime-calendar__grid button { justify-self: center; width: clamp(54px, 6vw, 76px); min-height: auto; aspect-ratio: 1; padding: 7px; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.showtime-calendar__grid button:not(:disabled):hover, .showtime-calendar__grid button:not(:disabled):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.showtime-calendar__grid button:disabled { opacity: .18; cursor: not-allowed; }
+.showtime-calendar__grid button.today { background: color-mix(in srgb, var(--color-accent) 28%, #f7f4ef); }
+.showtime-calendar__grid button.selected { background: var(--color-accent); color: #090709; }
+.showtime-calendar__grid strong, .showtime-calendar__grid small { display: block; }
+.showtime-calendar__grid strong { font-size: 1.05rem; }
+.showtime-calendar__grid small { margin-top: 2px; font-size: .56rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.showtime-calendar__help { margin: 18px auto 0; text-align: center; font-size: .95rem; }
 @media (max-width: 620px) {
   .date-bar { grid-template-columns: repeat(3, minmax(92px, 1fr)) 64px; overflow-x: auto; }
   .date-bar button, .date-bar__calendar { min-height: 68px; }
   .date-bar__calendar svg { width: 30px; }
+  .showtime-calendar { padding: 10px; }
+  .showtime-calendar__dialog { max-height: calc(100vh - 20px); padding: 12px; }
+  .showtime-calendar__header { grid-template-columns: 42px 1fr 42px 42px; min-height: 70px; }
+  .showtime-calendar__header h2 { font-size: 1.15rem; letter-spacing: .13em; }
+  .showtime-calendar__weekdays { padding-top: 18px; }
+  .showtime-calendar__weekdays span { font-size: .62rem; }
+  .showtime-calendar__grid { min-height: 400px; }
+  .showtime-calendar__grid button { width: 43px; }
 }
 .program-heading p, .movie-copy > p, .loading-copy { color: var(--color-text-secondary); }
 .movie-grid { display: grid; width: min(100%, 1500px); margin-inline: auto; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; align-items: start; }
