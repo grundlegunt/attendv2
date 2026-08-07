@@ -11,6 +11,7 @@ type PublicBranding = {
   accentColor: string | null;
   accentMutedColor: string | null;
   backgroundColor: string | null;
+  backgroundGlowColor: string | null;
   surfaceColor: string | null;
   textColor: string | null;
   mutedTextColor: string | null;
@@ -37,6 +38,7 @@ export function CustomerBrandingProvider({ children }: { children: ReactNode }) 
       "--color-accent": branding.accentColor ?? customerBrandingDefaults.accentColor,
       "--color-accent-muted": branding.accentMutedColor ?? customerBrandingDefaults.accentMutedColor,
       "--color-bg": branding.backgroundColor ?? customerBrandingDefaults.backgroundColor,
+      "--color-bg-glow": branding.backgroundGlowColor ?? customerBrandingDefaults.backgroundGlowColor,
       "--color-bg-elevated": branding.surfaceColor ?? customerBrandingDefaults.surfaceColor,
       "--color-text-primary": branding.textColor ?? customerBrandingDefaults.textColor,
       "--color-text-secondary": branding.mutedTextColor ?? customerBrandingDefaults.mutedTextColor,

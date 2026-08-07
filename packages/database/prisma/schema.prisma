@@ -85,6 +85,7 @@ model Location {
   customerAccentColor      String?
   customerAccentMutedColor String?
   customerBackgroundColor  String?
+  customerBackgroundGlowColor String?
   customerSurfaceColor     String?
   customerTextColor        String?
   customerMutedTextColor   String?

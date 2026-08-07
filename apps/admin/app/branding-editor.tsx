@@ -8,6 +8,7 @@ export type BrandingSettings = {
   customerAccentColor: string | null;
   customerAccentMutedColor: string | null;
   customerBackgroundColor: string | null;
+  customerBackgroundGlowColor: string | null;
   customerSurfaceColor: string | null;
   customerTextColor: string | null;
   customerMutedTextColor: string | null;
@@ -31,6 +32,7 @@ export function BrandingSummary({ settings }: { settings: BrandingSettings }) {
     ["Accent", settings.customerAccentColor ?? customerBrandingDefaults.accentColor],
     ["Muted accent", settings.customerAccentMutedColor ?? customerBrandingDefaults.accentMutedColor],
     ["Background", settings.customerBackgroundColor ?? customerBrandingDefaults.backgroundColor],
+    ["Background glow", settings.customerBackgroundGlowColor ?? customerBrandingDefaults.backgroundGlowColor],
     ["Surface", settings.customerSurfaceColor ?? customerBrandingDefaults.surfaceColor],
     ["Text", settings.customerTextColor ?? customerBrandingDefaults.textColor],
     ["Muted text", settings.customerMutedTextColor ?? customerBrandingDefaults.mutedTextColor],

@@ -747,6 +747,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       accentColor: location.customerAccentColor,
       accentMutedColor: location.customerAccentMutedColor,
       backgroundColor: location.customerBackgroundColor,
+      backgroundGlowColor: location.customerBackgroundGlowColor,
       surfaceColor: location.customerSurfaceColor,
       textColor: location.customerTextColor,
       mutedTextColor: location.customerMutedTextColor,
