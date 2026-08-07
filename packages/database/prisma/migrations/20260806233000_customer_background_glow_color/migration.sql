@@ -1,1 +1,1 @@
-ALTER TABLE "Location" ADD COLUMN "customerBackgroundGlowColor" TEXT;
+ALTER TABLE "locations" ADD COLUMN "customerBackgroundGlowColor" TEXT;
