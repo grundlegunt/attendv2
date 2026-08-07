@@ -138,15 +138,13 @@ export default function AdminPage() {
 
   async function duplicateDay(sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") {
     setError(null);
-    try {
-      const result = await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
-        accessToken: token ?? undefined,
-        method: "POST",
-        body: JSON.stringify({ sourceDate, targetDates, saleStatus }),
-      });
-      await refresh();
-      setNotice(`${result.createdCount} showing${result.createdCount === 1 ? "" : "s"} copied to ${targetDates.length} day${targetDates.length === 1 ? "" : "s"}.`);
-    } catch (reason) { showError(reason); throw reason; }
+    const result = await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
+      accessToken: token ?? undefined,
+      method: "POST",
+      body: JSON.stringify({ sourceDate, targetDates, saleStatus }),
+    });
+    await refresh();
+    setNotice(`${result.createdCount} showing${result.createdCount === 1 ? "" : "s"} copied to ${targetDates.length} day${targetDates.length === 1 ? "" : "s"}.`);
   }
 
   async function createShowtime(event: FormEvent) {

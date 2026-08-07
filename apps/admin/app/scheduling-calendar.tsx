@@ -123,6 +123,7 @@ export function SchedulingCalendar({
   const [duplicateTargets, setDuplicateTargets] = useState<string[]>([]);
   const [duplicateSaleStatus, setDuplicateSaleStatus] = useState<"PRESERVE" | "DRAFT" | "ON_SALE">("PRESERVE");
   const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
@@ -237,6 +238,7 @@ export function SchedulingCalendar({
           next.setDate(next.getDate() + 1);
           setDuplicateTarget(dateInputValue(next));
           setDuplicateTargets([]);
+          setDuplicateError(null);
           setDuplicateOpen(true);
         }}>Duplicate day</button>
       </div>
@@ -476,20 +478,40 @@ export function SchedulingCalendar({
       <form className="showtime-drawer duplicate-day-drawer" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => {
         event.preventDefault();
         const targets = duplicateTarget && !duplicateTargets.includes(duplicateTarget) ? [...duplicateTargets, duplicateTarget] : duplicateTargets;
-        if (!targets.length) return;
+        if (!targets.length) {
+          setDuplicateError("Choose at least one target day.");
+          return;
+        }
+        if (targets.includes(selectedDate)) {
+          setDuplicateError("Choose a target day different from the source day.");
+          return;
+        }
+        setDuplicateError(null);
         setDuplicating(true);
         try {
           await onDuplicateDay(selectedDate, targets, duplicateSaleStatus);
           setDuplicateOpen(false);
+        } catch (reason) {
+          setDuplicateError(reason instanceof Error && reason.message
+            ? reason.message
+            : "The schedule could not be duplicated. Please try again.");
         } finally { setDuplicating(false); }
       }}>
         <div className="drawer-heading"><div><p className="kicker">SCHEDULING</p><h2>Duplicate day</h2></div><button type="button" className="drawer-close" onClick={() => setDuplicateOpen(false)}>×</button></div>
         <p>Copy every showing from <strong>{new Date(`${selectedDate}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</strong>. Conflicts stop the copy before anything is changed.</p>
-        <label>Target day<div className="duplicate-target-input"><input type="date" min={selectedDate} value={duplicateTarget} onChange={(event) => setDuplicateTarget(event.target.value)} /><button type="button" onClick={() => {
-          if (duplicateTarget && duplicateTarget !== selectedDate) setDuplicateTargets((current) => current.includes(duplicateTarget) ? current : [...current, duplicateTarget].sort());
+        <label>Target day<div className="duplicate-target-input"><input type="date" min={selectedDate} value={duplicateTarget} onChange={(event) => { setDuplicateTarget(event.target.value); setDuplicateError(null); }} /><button type="button" onClick={() => {
+          if (duplicateTarget === selectedDate) {
+            setDuplicateError("Choose a target day different from the source day.");
+            return;
+          }
+          if (duplicateTarget) {
+            setDuplicateTargets((current) => current.includes(duplicateTarget) ? current : [...current, duplicateTarget].sort());
+            setDuplicateError(null);
+          }
         }}>Add</button></div></label>
         <div className="duplicate-targets">{duplicateTargets.map((date) => <button type="button" key={date} onClick={() => setDuplicateTargets((current) => current.filter((item) => item !== date))}>{new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ×</button>)}</div>
         <label>Sale status<select value={duplicateSaleStatus} onChange={(event) => setDuplicateSaleStatus(event.target.value as typeof duplicateSaleStatus)}><option value="PRESERVE">Preserve each showing</option><option value="ON_SALE">Open all for sale</option><option value="DRAFT">Copy all as drafts</option></select></label>
+        {duplicateError && <div className="error-banner duplicate-day-error" role="alert">{duplicateError}</div>}
         <button className="primary" disabled={duplicating}>{duplicating ? "Copying…" : "Duplicate schedule"}</button>
         <button type="button" className="secondary" onClick={() => setDuplicateOpen(false)}>Cancel</button>
       </form>
