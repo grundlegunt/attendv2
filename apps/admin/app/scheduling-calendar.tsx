@@ -46,6 +46,7 @@ interface SchedulingCalendarProps {
   locationName: string;
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
+  archivedMovies: ScheduleMovie[];
   showtimes: CalendarShowtime[];
   preShowBufferMinutes: number;
   cleaningBufferMinutes: number;
@@ -55,6 +56,8 @@ interface SchedulingCalendarProps {
   onAddMovie: () => void;
   onEditMovie: (movie: ScheduleMovie) => void;
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
+  onRestoreMovie: (movie: ScheduleMovie) => Promise<void>;
+  onDuplicateDay: (sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") => Promise<void>;
 }
 
 function presentationLabel(presentation: NonNullable<CalendarShowtime["presentation"]>) {
@@ -96,6 +99,7 @@ export function SchedulingCalendar({
   locationName,
   auditoriums,
   movies,
+  archivedMovies,
   showtimes,
   preShowBufferMinutes,
   cleaningBufferMinutes,
@@ -105,6 +109,8 @@ export function SchedulingCalendar({
   onAddMovie,
   onEditMovie,
   onArchiveMovie,
+  onRestoreMovie,
+  onDuplicateDay,
 }: SchedulingCalendarProps) {
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
   const [view, setView] = useState<"day" | "week">("day");
@@ -112,6 +118,11 @@ export function SchedulingCalendar({
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [duplicateTarget, setDuplicateTarget] = useState("");
+  const [duplicateTargets, setDuplicateTargets] = useState<string[]>([]);
+  const [duplicateSaleStatus, setDuplicateSaleStatus] = useState<"PRESERVE" | "DRAFT" | "ON_SALE">("PRESERVE");
+  const [duplicating, setDuplicating] = useState(false);
   const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
@@ -221,6 +232,13 @@ export function SchedulingCalendar({
           }
         }}>{exporting ? "Preparing…" : "Export Excel"}</button>
         <button type="button" className="add-film-button" onClick={onAddMovie}>+ Add film</button>
+        <button type="button" className="duplicate-day-button" onClick={() => {
+          const next = new Date(`${selectedDate}T12:00:00`);
+          next.setDate(next.getDate() + 1);
+          setDuplicateTarget(dateInputValue(next));
+          setDuplicateTargets([]);
+          setDuplicateOpen(true);
+        }}>Duplicate day</button>
       </div>
       <div className="date-controls">
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
@@ -444,5 +462,37 @@ export function SchedulingCalendar({
       </section>
       </div>
     </div>
+
+    <details className="archived-films">
+      <summary>Archived films <span>{archivedMovies.length}</span></summary>
+      <p>Archived films stay connected to their historical showtimes, ticket sales, and reports.</p>
+      {archivedMovies.length ? <div className="archived-film-list">{archivedMovies.map((movie) => <div key={movie.id}>
+        <span><strong>{movie.title}</strong><small>{movie.runtimeMinutes} min</small></span>
+        <button type="button" onClick={() => void onRestoreMovie(movie)}>Restore</button>
+      </div>)}</div> : <p>No archived films.</p>}
+    </details>
+
+    {duplicateOpen && <div className="editor-backdrop duplicate-day-backdrop" role="presentation" onMouseDown={() => setDuplicateOpen(false)}>
+      <form className="showtime-drawer duplicate-day-drawer" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => {
+        event.preventDefault();
+        const targets = duplicateTarget && !duplicateTargets.includes(duplicateTarget) ? [...duplicateTargets, duplicateTarget] : duplicateTargets;
+        if (!targets.length) return;
+        setDuplicating(true);
+        try {
+          await onDuplicateDay(selectedDate, targets, duplicateSaleStatus);
+          setDuplicateOpen(false);
+        } finally { setDuplicating(false); }
+      }}>
+        <div className="drawer-heading"><div><p className="kicker">SCHEDULING</p><h2>Duplicate day</h2></div><button type="button" className="drawer-close" onClick={() => setDuplicateOpen(false)}>×</button></div>
+        <p>Copy every showing from <strong>{new Date(`${selectedDate}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</strong>. Conflicts stop the copy before anything is changed.</p>
+        <label>Target day<div className="duplicate-target-input"><input type="date" min={selectedDate} value={duplicateTarget} onChange={(event) => setDuplicateTarget(event.target.value)} /><button type="button" onClick={() => {
+          if (duplicateTarget && duplicateTarget !== selectedDate) setDuplicateTargets((current) => current.includes(duplicateTarget) ? current : [...current, duplicateTarget].sort());
+        }}>Add</button></div></label>
+        <div className="duplicate-targets">{duplicateTargets.map((date) => <button type="button" key={date} onClick={() => setDuplicateTargets((current) => current.filter((item) => item !== date))}>{new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ×</button>)}</div>
+        <label>Sale status<select value={duplicateSaleStatus} onChange={(event) => setDuplicateSaleStatus(event.target.value as typeof duplicateSaleStatus)}><option value="PRESERVE">Preserve each showing</option><option value="ON_SALE">Open all for sale</option><option value="DRAFT">Copy all as drafts</option></select></label>
+        <button className="primary" disabled={duplicating}>{duplicating ? "Copying…" : "Duplicate schedule"}</button>
+        <button type="button" className="secondary" onClick={() => setDuplicateOpen(false)}>Cancel</button>
+      </form>
+    </div>}
   </section>;
 }

@@ -1,8 +1,29 @@
 import { randomUUID } from "node:crypto";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// embedded-postgres is ESM-only. Constructing the native dynamic import this
+// way prevents TypeScript's CommonJS transform from rewriting it to require(),
+// which Jest cannot use to load that package.
+const importEsm = new Function("specifier", "return import(specifier)") as (
+  specifier: string,
+) => Promise<{
+  default: new (options: {
+    databaseDir: string;
+    user: string;
+    password: string;
+    port: number;
+    persistent: boolean;
+  }) => {
+    initialise(): Promise<void>;
+    start(): Promise<void>;
+    stop(): Promise<void>;
+    createDatabase(name: string): Promise<void>;
+  };
+}>;
 
 /**
  * Boots a real, ephemeral PostgreSQL instance for integration tests — not a
@@ -21,48 +42,60 @@ export interface TestDatabase {
   stop: () => Promise<void>;
 }
 
-const PORT = 55490;
+async function findAvailablePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close();
+        reject(new Error("Could not allocate a local port for the test database."));
+        return;
+      }
+      server.close((error) => (error ? reject(error) : resolve(address.port)));
+    });
+  });
+}
 
 export async function startTestDatabase(): Promise<TestDatabase> {
-  if (process.env.CI && process.env.DATABASE_URL) {
-    const schemaPath = join(__dirname, "../../../packages/database/prisma/schema.prisma");
-    execSync(`pnpm --filter @cinema/database exec prisma db push --schema="${schemaPath}" --skip-generate --accept-data-loss`, {
-      env: process.env,
-      stdio: "pipe",
-    });
-    return { databaseUrl: process.env.DATABASE_URL, stop: async () => {} };
-  }
-
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const EmbeddedPostgres = require("embedded-postgres").default;
+  const { default: EmbeddedPostgres } = await importEsm("embedded-postgres");
   const dataDir = mkdtempSync(join(tmpdir(), "cinema-test-pg-"));
   const dbName = `cinema_test_${randomUUID().replace(/-/g, "")}`;
+  const port = await findAvailablePort();
 
   const pg = new EmbeddedPostgres({
     databaseDir: dataDir,
     user: "postgres",
     password: "postgres",
-    port: PORT,
+    port,
     persistent: false,
   });
 
-  await pg.initialise();
-  await pg.start();
-  await pg.createDatabase(dbName);
+  try {
+    await pg.initialise();
+    await pg.start();
+    await pg.createDatabase(dbName);
 
-  const databaseUrl = `postgresql://postgres:postgres@127.0.0.1:${PORT}/${dbName}`;
+    const databaseUrl = `postgresql://postgres:postgres@127.0.0.1:${port}/${dbName}`;
 
-  const schemaPath = join(__dirname, "../../../packages/database/prisma/schema.prisma");
-  execSync(`pnpm exec prisma db push --schema="${schemaPath}" --skip-generate --accept-data-loss`, {
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-    stdio: "pipe",
-  });
+    const schemaPath = join(__dirname, "../../../packages/database/prisma/schema.prisma");
+    const prismaBin = join(__dirname, "../../../packages/database/node_modules/.bin/prisma");
+    execFileSync(prismaBin, ["migrate", "deploy", `--schema=${schemaPath}`], {
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+      stdio: "pipe",
+    });
 
-  return {
-    databaseUrl,
-    stop: async () => {
-      await pg.stop();
-      rmSync(dataDir, { recursive: true, force: true });
-    },
-  };
+    return {
+      databaseUrl,
+      stop: async () => {
+        await pg.stop();
+        rmSync(dataDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await pg.stop().catch(() => undefined);
+    rmSync(dataDir, { recursive: true, force: true });
+    throw error;
+  }
 }
