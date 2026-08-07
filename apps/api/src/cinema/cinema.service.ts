@@ -617,7 +617,6 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       where: { id: locationId },
       select: {
         id: true,
-        organizationId: true,
         timezone: true,
         preShowBufferMinutes: true,
         cleaningBufferMinutes: true,
@@ -665,13 +664,6 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               `${source.auditorium.name} already has ${conflict.movie.title} overlapping ${startsAt.toISOString()}. No showtimes were copied.`,
             );
           }
-          const priceTier = await this.resolvePriceTier(
-            tx,
-            location.organizationId,
-            location.timezone,
-            startsAt,
-            undefined,
-          );
           const onSale = input.saleStatus === "ON_SALE"
             ? true
             : input.saleStatus === "DRAFT"
@@ -681,7 +673,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             data: {
               movieId: source.movieId,
               auditoriumId: source.auditoriumId,
-              priceTierId: priceTier.id,
+              priceTierId: source.priceTierId,
               startsAt,
               featureStartsAt,
               endsAt,
