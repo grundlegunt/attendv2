@@ -59,6 +59,21 @@ async function findAvailablePort(): Promise<number> {
 }
 
 export async function startTestDatabase(): Promise<TestDatabase> {
+  const ciDatabaseUrl = process.env.CI === "true" ? process.env.DATABASE_URL : undefined;
+  if (ciDatabaseUrl) {
+    const schemaPath = join(__dirname, "../../../packages/database/prisma/schema.prisma");
+    const prismaBin = join(__dirname, "../../../packages/database/node_modules/.bin/prisma");
+    execFileSync(prismaBin, ["migrate", "deploy", `--schema=${schemaPath}`], {
+      env: { ...process.env, DATABASE_URL: ciDatabaseUrl },
+      stdio: "pipe",
+    });
+
+    return {
+      databaseUrl: ciDatabaseUrl,
+      stop: async () => undefined,
+    };
+  }
+
   const { default: EmbeddedPostgres } = await importEsm("embedded-postgres");
   const dataDir = mkdtempSync(join(tmpdir(), "cinema-test-pg-"));
   const dbName = `cinema_test_${randomUUID().replace(/-/g, "")}`;
