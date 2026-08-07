@@ -763,7 +763,7 @@ describe("Milestone 1 cinema configuration", () => {
     expect(bootstrap.body.showtimes.some((item: { id: string }) => item.id === showtime.body.id)).toBe(false);
   });
 
-  it("duplicates one day of programming to multiple dates with automatic pricing and fresh seat inventory", async () => {
+  it("duplicates one day of programming to multiple dates with preserved pricing and fresh seat inventory", async () => {
     const auditorium = await request(app.getHttpServer())
       .post("/api/v1/cinema/auditoriums")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
@@ -781,7 +781,7 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ title: "Duplicate Day Feature", runtimeMinutes: 90 })
       .expect(201);
-    await request(app.getHttpServer())
+    const sourceShowtime = await request(app.getHttpServer())
       .post("/api/v1/cinema/showtimes")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({
@@ -805,7 +805,11 @@ describe("Milestone 1 cinema configuration", () => {
     expect(duplicated.body.createdCount).toBe(2);
     expect(duplicated.body.showtimes).toHaveLength(2);
     expect(duplicated.body.showtimes.every((showtime: { onSale: boolean }) => showtime.onSale)).toBe(true);
-    expect(duplicated.body.showtimes.every((showtime: { priceTier: { id: string } }) => Boolean(showtime.priceTier.id))).toBe(true);
+    expect(
+      duplicated.body.showtimes.every(
+        (showtime: { priceTier: { id: string } }) => showtime.priceTier.id === sourceShowtime.body.priceTier.id,
+      ),
+    ).toBe(true);
     expect(duplicated.body.showtimes.map((showtime: { startsAt: string }) => showtime.startsAt)).toEqual([
       "2031-02-12T18:00:00.000Z",
       "2031-02-13T18:00:00.000Z",
