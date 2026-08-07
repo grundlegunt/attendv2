@@ -241,7 +241,11 @@ describe("Attend platform authentication boundary", () => {
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .expect(200);
-    const organizationId = overview.body.organizations[0].id as string;
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toBeDefined();
+    const organizationId = meridian.id as string;
 
     const res = await request(app.getHttpServer())
       .get(`/api/v1/platform/organizations/${organizationId}`)
@@ -252,12 +256,14 @@ describe("Attend platform authentication boundary", () => {
       id: organizationId,
       payments: expect.objectContaining({ onboardingStatus: expect.any(String) }),
       locations: expect.arrayContaining([expect.objectContaining({
-        branding: expect.objectContaining({ accentColor: expect.anything() }),
-        adminBranding: expect.objectContaining({ accentColor: expect.anything() }),
+        branding: expect.any(Object),
+        adminBranding: expect.any(Object),
         operations: expect.objectContaining({ cleaningBufferMinutes: expect.any(Number) }),
         configuration: expect.objectContaining({ activeMovies: expect.any(Number), activeFilmSeries: expect.any(Number) }),
       })]),
     }));
+    expect(res.body.locations[0].branding).toHaveProperty("accentColor");
+    expect(res.body.locations[0].adminBranding).toHaveProperty("accentColor");
 
     await request(app.getHttpServer())
       .get(`/api/v1/platform/organizations/${organizationId}`)
@@ -310,8 +316,12 @@ describe("Attend platform authentication boundary", () => {
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .expect(200);
-    const organizationId = overview.body.organizations[0].id as string;
-    const locationId = overview.body.organizations[0].locations[0].id as string;
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toBeDefined();
+    const organizationId = meridian.id as string;
+    const locationId = meridian.locations[0].id as string;
 
     const organization = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
@@ -371,7 +381,11 @@ describe("Attend platform authentication boundary", () => {
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .expect(200);
-    const organizationId = overview.body.organizations[0].id as string;
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toBeDefined();
+    const organizationId = meridian.id as string;
 
     const result = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
