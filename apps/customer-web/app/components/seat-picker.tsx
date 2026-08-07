@@ -48,7 +48,7 @@ export function SeatPicker({
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [holderKey, setHolderKey] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pendingSeatIds, setPendingSeatIds] = useState<Record<string, true>>({});
   const [optimisticSeatStates, setOptimisticSeatStates] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -102,10 +102,10 @@ export function SeatPicker({
     : 0;
 
   async function toggleSeat(seat: AvailabilitySeat) {
-    if (!holderKey || pending) return;
+    if (!holderKey || pendingSeatIds[seat.id]) return;
     const selected = !seat.heldByMe;
     setOptimisticSeatStates((states) => ({ ...states, [seat.id]: selected }));
-    setPending(seat.id ?? seat.label);
+    setPendingSeatIds((seatIds) => ({ ...seatIds, [seat.id]: true }));
     setError(null);
     try {
       if (seat.heldByMe && seat.holdToken) {
@@ -133,7 +133,11 @@ export function SeatPicker({
         delete next[seat.id];
         return next;
       });
-      setPending(null);
+      setPendingSeatIds((seatIds) => {
+        const next = { ...seatIds };
+        delete next[seat.id];
+        return next;
+      });
     }
   }
 
@@ -224,7 +228,7 @@ export function SeatPicker({
         </div>
         <button
           className="primary"
-          disabled={!mySeats.length || Boolean(pending)}
+          disabled={!mySeats.length || Object.keys(pendingSeatIds).length > 0}
           onClick={() => setCheckoutOpen(true)}
         >
           Continue to tickets
