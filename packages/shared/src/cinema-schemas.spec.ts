@@ -4,6 +4,7 @@ import {
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   dedupePublicShowtimes,
+  duplicateShowtimeDayRequestSchema,
   startOfLocalDay,
   showtimeWindowsOverlap,
   updateShowtimeRequestSchema,
@@ -73,6 +74,22 @@ describe("cinema programming requests", () => {
     expect(parsed.filmSeriesId).toBe(filmSeriesId);
     expect(parsed.presentation).toBe("Q_AND_A");
     expect(parsed.format).toBe("35mm");
+    expect(parsed.onSale).toBe(true);
+  });
+
+  it("accepts a multi-day schedule copy and rejects the source as a target", () => {
+    expect(duplicateShowtimeDayRequestSchema.parse({
+      sourceDate: "2026-08-06",
+      targetDates: ["2026-08-07", "2026-08-08"],
+    })).toEqual({
+      sourceDate: "2026-08-06",
+      targetDates: ["2026-08-07", "2026-08-08"],
+      saleStatus: "PRESERVE",
+    });
+    expect(() => duplicateShowtimeDayRequestSchema.parse({
+      sourceDate: "2026-08-06",
+      targetDates: ["2026-08-06"],
+    })).toThrow();
   });
 
   it("validates film-series create, edit, and archive payloads", () => {

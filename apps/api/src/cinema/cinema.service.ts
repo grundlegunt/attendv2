@@ -6,6 +6,7 @@ import {
   createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  duplicateShowtimeDayRequestSchema,
   showtimePresentationSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
@@ -28,8 +29,42 @@ type FilmSeriesInput = ReturnType<typeof createFilmSeriesRequestSchema.parse>;
 type FilmSeriesUpdateInput = ReturnType<typeof updateFilmSeriesRequestSchema.parse>;
 type MovieInput = ReturnType<typeof createMovieRequestSchema.parse>;
 type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
+type DuplicateShowtimeDayInput = ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>;
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
+
+function addIsoDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function localDateTime(value: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute"), second: get("second") };
+}
+
+function zonedDate(date: string, hour: number, minute: number, second: number, timeZone: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const desired = Date.UTC(year!, month! - 1, day!, hour, minute, second);
+  let candidate = new Date(desired);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const actual = localDateTime(candidate, timeZone);
+    const represented = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+    candidate = new Date(candidate.getTime() + desired - represented);
+  }
+  return candidate;
+}
 
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
@@ -78,12 +113,19 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!location) throw AppError.notFound("Location not found.");
-    const showtimes = await prisma.showtime.findMany({
-      where: { auditorium: { locationId, active: true }, startsAt: { gte: new Date(Date.now() - 86400000) } },
-      include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
-      orderBy: { startsAt: "asc" },
-    });
-    return { location, showtimes };
+    const [showtimes, archivedMovies] = await Promise.all([
+      prisma.showtime.findMany({
+        where: { auditorium: { locationId, active: true }, startsAt: { gte: new Date(Date.now() - 86400000) } },
+        include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+        orderBy: { startsAt: "asc" },
+      }),
+      prisma.movie.findMany({
+        where: { organizationId: location.organizationId, active: false },
+        include: { pairings: { orderBy: { sortOrder: "asc" } } },
+        orderBy: { title: "asc" },
+      }),
+    ]);
+    return { location, showtimes, archivedMovies };
   }
 
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
@@ -322,6 +364,23 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async restoreMovie(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const movie = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: false } });
+      if (!movie) throw AppError.notFound("Archived movie not found.");
+      const restored = await tx.movie.update({ where: { id }, data: { active: true } });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "movie.restored",
+        entityType: "Movie", entityId: movie.id, locationId,
+        beforeState: { active: false, title: movie.title }, afterState: { active: true },
+      } });
+      return restored;
+    });
+  }
+
   async updateMovie(actor: RequestActor, id: string, input: MovieUpdateInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(async (tx) => {
@@ -550,6 +609,116 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  async duplicateShowtimeDay(actor: RequestActor, input: DuplicateShowtimeDayInput) {
+    const locationId = this.requireLocation(actor);
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: {
+        id: true,
+        organizationId: true,
+        timezone: true,
+        preShowBufferMinutes: true,
+        cleaningBufferMinutes: true,
+      },
+    });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const sourceStart = zonedDate(input.sourceDate, 0, 0, 0, location.timezone);
+    const sourceEnd = zonedDate(addIsoDays(input.sourceDate, 1), 0, 0, 0, location.timezone);
+    const sourceShowtimes = await prisma.showtime.findMany({
+      where: {
+        auditorium: { locationId, active: true },
+        startsAt: { gte: sourceStart, lt: sourceEnd },
+      },
+      include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+      orderBy: { startsAt: "asc" },
+    });
+    if (!sourceShowtimes.length) throw AppError.validationFailed("The source day has no showtimes to duplicate.");
+
+    return prisma.$transaction(async (tx) => {
+      const auditoriumIds = Array.from(new Set(sourceShowtimes.map((showtime) => showtime.auditoriumId))).sort();
+      for (const auditoriumId of auditoriumIds) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
+      }
+      const seatsByAuditorium = new Map<string, Array<{ id: string }>>();
+      const created = [];
+      for (const targetDate of input.targetDates) {
+        for (const source of sourceShowtimes) {
+          const sourceLocal = localDateTime(source.startsAt, location.timezone);
+          const startsAt = zonedDate(targetDate, sourceLocal.hour, sourceLocal.minute, sourceLocal.second, location.timezone);
+          const featureStartsAt = new Date(startsAt.getTime() + location.preShowBufferMinutes * 60000);
+          const endsAt = new Date(featureStartsAt.getTime() + source.movie.runtimeMinutes * 60000);
+          const cleaningMinutes = Math.max(this.minimumCinemaCleaningMinutes, location.cleaningBufferMinutes);
+          const roomReadyAt = new Date(endsAt.getTime() + cleaningMinutes * 60000);
+          const conflict = await tx.showtime.findFirst({
+            where: {
+              auditoriumId: source.auditoriumId,
+              startsAt: { lt: roomReadyAt },
+              roomReadyAt: { gt: startsAt },
+            },
+            include: { movie: true },
+          });
+          if (conflict) {
+            throw AppError.conflict(
+              `${source.auditorium.name} already has ${conflict.movie.title} overlapping ${startsAt.toISOString()}. No showtimes were copied.`,
+            );
+          }
+          const priceTier = await this.resolvePriceTier(
+            tx,
+            location.organizationId,
+            location.timezone,
+            startsAt,
+            undefined,
+          );
+          const onSale = input.saleStatus === "ON_SALE"
+            ? true
+            : input.saleStatus === "DRAFT"
+              ? false
+              : source.onSale;
+          const showtime = await tx.showtime.create({
+            data: {
+              movieId: source.movieId,
+              auditoriumId: source.auditoriumId,
+              priceTierId: priceTier.id,
+              startsAt,
+              featureStartsAt,
+              endsAt,
+              roomReadyAt,
+              onSale,
+              filmSeriesId: source.filmSeriesId,
+              presentation: source.presentation,
+              format: source.format,
+            },
+            include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+          });
+          let seats = seatsByAuditorium.get(source.auditoriumId);
+          if (!seats) {
+            seats = await tx.seat.findMany({
+              where: { seatMap: { auditoriumId: source.auditoriumId }, active: true },
+              select: { id: true },
+            });
+            seatsByAuditorium.set(source.auditoriumId, seats);
+          }
+          await tx.showtimeSeat.createMany({
+            data: seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })),
+            skipDuplicates: true,
+          });
+          created.push(showtime);
+        }
+      }
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE,
+        actorId: actor.sub,
+        action: "showtime.day_duplicated",
+        entityType: "Location",
+        entityId: locationId,
+        locationId,
+        afterState: { sourceDate: input.sourceDate, targetDates: input.targetDates, createdCount: created.length, saleStatus: input.saleStatus },
+      } });
+      return { createdCount: created.length, showtimes: created };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async updateShowtime(actor: RequestActor, id: string, input: ShowtimeUpdateInput) {

@@ -172,8 +172,21 @@ const showtimeFieldsSchema = z.object({
 });
 
 export const createShowtimeRequestSchema = showtimeFieldsSchema.extend({
-  onSale: z.boolean().default(false),
+  onSale: z.boolean().default(true),
   presentation: showtimePresentationSchema.default("STANDARD"),
+});
+
+export const duplicateShowtimeDayRequestSchema = z.object({
+  sourceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  targetDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).min(1).max(31),
+  saleStatus: z.enum(["PRESERVE", "DRAFT", "ON_SALE"]).default("PRESERVE"),
+}).superRefine((value, context) => {
+  if (new Set(value.targetDates).size !== value.targetDates.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["targetDates"], message: "Target dates must be unique." });
+  }
+  if (value.targetDates.includes(value.sourceDate)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["targetDates"], message: "The source day cannot also be a target day." });
+  }
 });
 
 export const updateMovieRequestSchema = createMovieRequestSchema.partial().refine(

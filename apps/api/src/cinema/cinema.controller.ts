@@ -5,6 +5,7 @@ import {
   createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  duplicateShowtimeDayRequestSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
@@ -164,6 +165,13 @@ export class CinemaController {
     return this.cinemaService.archiveMovie(actor, id);
   }
 
+  @Post("movies/:id/restore")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  restoreMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.restoreMovie(actor, id);
+  }
+
   @Post("film-series")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
@@ -209,6 +217,19 @@ export class CinemaController {
     return this.cinemaService.createShowtime(
       actor,
       body as ReturnType<typeof createShowtimeRequestSchema.parse>,
+    );
+  }
+
+  @Post("showtimes/duplicate-day")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  duplicateShowtimeDay(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(duplicateShowtimeDayRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.duplicateShowtimeDay(
+      actor,
+      body as ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>,
     );
   }
 

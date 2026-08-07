@@ -36,6 +36,12 @@ interface Bootstrap {
     menuCategories: Array<{ id: string; name: string; items: Array<{ id: string; name: string; imageUrl?: string | null }> }>;
   };
   showtimes: Showtime[];
+  archivedMovies: Movie[];
+}
+
+function dateTimeInputValue(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export default function AdminPage() {
@@ -72,7 +78,6 @@ export default function AdminPage() {
     setData(response);
     setMovieId((current) => current || response.location.organization.movies[0]?.id || "");
     setAuditoriumId((current) => current || response.location.auditoriums[0]?.id || "");
-    setPriceTierId((current) => current || response.location.organization.priceTiers[0]?.id || "");
   }
 
   useEffect(() => { refresh().catch(showError); }, [token]);
@@ -122,6 +127,28 @@ export default function AdminPage() {
     } catch (reason) { showError(reason); }
   }
 
+  async function restoreMovie(movie: Movie) {
+    setError(null);
+    try {
+      await apiFetch(`/cinema/movies/${movie.id}/restore`, { accessToken: token ?? undefined, method: "POST" });
+      await refresh();
+      setNotice(`${movie.title} was restored to the film library.`);
+    } catch (reason) { showError(reason); }
+  }
+
+  async function duplicateDay(sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") {
+    setError(null);
+    try {
+      const result = await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
+        accessToken: token ?? undefined,
+        method: "POST",
+        body: JSON.stringify({ sourceDate, targetDates, saleStatus }),
+      });
+      await refresh();
+      setNotice(`${result.createdCount} showing${result.createdCount === 1 ? "" : "s"} copied to ${targetDates.length} day${targetDates.length === 1 ? "" : "s"}.`);
+    } catch (reason) { showError(reason); throw reason; }
+  }
+
   async function createShowtime(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
@@ -146,11 +173,10 @@ export default function AdminPage() {
 
   function editShowtime(showtime: CalendarShowtime) {
     const local = new Date(showtime.startsAt);
-    local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
     setEditingShowtimeId(showtime.id);
     setMovieId(showtime.movie.id);
     setAuditoriumId(showtime.auditorium.id);
-    setStartsAt(local.toISOString().slice(0, 16));
+    setStartsAt(dateTimeInputValue(local));
     setOnSale(showtime.onSale);
     setPriceTierId(showtime.priceTier.id);
     setFilmSeriesId(showtime.filmSeries?.id ?? "");
@@ -161,13 +187,12 @@ export default function AdminPage() {
 
   function createShowtimeAt(auditorium: string, date: Date, selectedMovieId?: string) {
     const local = new Date(date);
-    local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
     setEditingShowtimeId(null);
     if (selectedMovieId) setMovieId(selectedMovieId);
     setAuditoriumId(auditorium);
-    setStartsAt(local.toISOString().slice(0, 16));
-    setOnSale(false);
-    setPriceTierId(data?.location.organization.priceTiers[0]?.id ?? "");
+    setStartsAt(dateTimeInputValue(local));
+    setOnSale(true);
+    setPriceTierId("");
     setFilmSeriesId("");
     setPresentation("STANDARD");
     setShowtimeFormat("");
@@ -178,8 +203,7 @@ export default function AdminPage() {
     if (!startsAt) return;
     const next = new Date(startsAt);
     next.setMinutes(next.getMinutes() + minutes);
-    next.setMinutes(next.getMinutes() - next.getTimezoneOffset());
-    setStartsAt(next.toISOString().slice(0, 16));
+    setStartsAt(dateTimeInputValue(next));
   }
 
   async function changeSaleStatus() {
@@ -280,6 +304,7 @@ export default function AdminPage() {
       locationName={data.location.name}
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}
+      archivedMovies={data.archivedMovies}
       showtimes={data.showtimes}
       preShowBufferMinutes={data.location.preShowBufferMinutes}
       cleaningBufferMinutes={Math.max(15, data.location.cleaningBufferMinutes)}
@@ -289,6 +314,8 @@ export default function AdminPage() {
       onAddMovie={() => openMovieEditor()}
       onEditMovie={openMovieEditor}
       onArchiveMovie={archiveMovie}
+      onRestoreMovie={restoreMovie}
+      onDuplicateDay={duplicateDay}
     />
 
     <aside className="schedule-inspector" aria-label="Selected showtime">
@@ -316,7 +343,7 @@ export default function AdminPage() {
         <label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
         <div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15 min</button><button type="button" onClick={() => shiftShowtime(-5)}>−5 min</button><button type="button" onClick={() => shiftShowtime(5)}>+5 min</button><button type="button" onClick={() => shiftShowtime(15)}>+15 min</button></div>
         <label>Sale status<select value={onSale ? "open" : "draft"} onChange={(event) => setOnSale(event.target.value === "open")}><option value="open">Open for sale</option><option value="draft">Closed draft</option></select></label>
-        <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
+        <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}><option value="">Automatic for show date</option>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
         <label>Film series<select value={filmSeriesId} onChange={(event) => setFilmSeriesId(event.target.value)}><option value="">Regular engagement</option>{data.location.organization.filmSeries.filter((series) => series.active).map((series) => <option key={series.id} value={series.id}>{series.name}</option>)}</select></label>
         <label>Presentation<select value={presentation} onChange={(event) => setPresentation(event.target.value as typeof presentation)}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
         <label>Screening format<input value={showtimeFormat} onChange={(event) => setShowtimeFormat(event.target.value)} placeholder="DCP, 35mm, 70mm…" /></label>

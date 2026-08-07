@@ -488,8 +488,10 @@ describe("Milestone 1 cinema configuration", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/cinema/showtimes")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ movieId, auditoriumId, startsAt, onSale: true });
+      .send({ movieId, auditoriumId, startsAt });
     expect(res.status).toBe(201);
+    expect(res.body.onSale).toBe(true);
+    expect(res.body.priceTier.id).toBeTruthy();
     expect(res.body.featureStartsAt).toBe("2030-01-01T18:30:00.000Z");
     expect(res.body.endsAt).toBe("2030-01-01T20:30:00.000Z");
     expect(res.body.roomReadyAt).toBe("2030-01-01T20:45:00.000Z");
@@ -759,6 +761,92 @@ describe("Milestone 1 cinema configuration", () => {
     expect(bootstrap.body.location.auditoriums.some((room: { id: string }) => room.id === auditorium.body.id)).toBe(false);
     expect(bootstrap.body.location.organization.movies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
     expect(bootstrap.body.showtimes.some((item: { id: string }) => item.id === showtime.body.id)).toBe(false);
+  });
+
+  it("duplicates one day of programming to multiple dates with automatic pricing and fresh seat inventory", async () => {
+    const auditorium = await request(app.getHttpServer())
+      .post("/api/v1/cinema/auditoriums")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        name: "Duplicate Day Theater",
+        seatMapName: "Duplicate day layout",
+        seats: [
+          { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD" },
+          { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD" },
+        ],
+      })
+      .expect(201);
+    const movie = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Duplicate Day Feature", runtimeMinutes: 90 })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        movieId: movie.body.id,
+        auditoriumId: auditorium.body.id,
+        startsAt: "2031-02-10T18:00:00.000Z",
+        onSale: false,
+      })
+      .expect(201);
+
+    const duplicated = await request(app.getHttpServer())
+      .post("/api/v1/cinema/showtimes/duplicate-day")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        sourceDate: "2031-02-10",
+        targetDates: ["2031-02-12", "2031-02-13"],
+        saleStatus: "ON_SALE",
+      })
+      .expect(201);
+
+    expect(duplicated.body.createdCount).toBe(2);
+    expect(duplicated.body.showtimes).toHaveLength(2);
+    expect(duplicated.body.showtimes.every((showtime: { onSale: boolean }) => showtime.onSale)).toBe(true);
+    expect(duplicated.body.showtimes.every((showtime: { priceTier: { id: string } }) => Boolean(showtime.priceTier.id))).toBe(true);
+    expect(duplicated.body.showtimes.map((showtime: { startsAt: string }) => showtime.startsAt)).toEqual([
+      "2031-02-12T18:00:00.000Z",
+      "2031-02-13T18:00:00.000Z",
+    ]);
+
+    const { prisma } = await import("@cinema/database");
+    for (const showtime of duplicated.body.showtimes as Array<{ id: string }>) {
+      expect(await prisma.showtimeSeat.count({ where: { showtimeId: showtime.id } })).toBe(2);
+    }
+  });
+
+  it("keeps archived movies in the Film Library and allows restoring them", async () => {
+    const movie = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Restorable Feature", runtimeMinutes: 95 })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/movies/${movie.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+
+    const archived = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(archived.body.location.organization.movies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
+    expect(archived.body.archivedMovies.some((item: { id: string }) => item.id === movie.body.id)).toBe(true);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/cinema/movies/${movie.body.id}/restore`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(201);
+
+    const restored = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(restored.body.location.organization.movies.some((item: { id: string }) => item.id === movie.body.id)).toBe(true);
+    expect(restored.body.archivedMovies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
   });
 
   it("rejects a server role from creating a movie", async () => {
@@ -3032,7 +3120,7 @@ describe("Milestone 10 management reporting", () => {
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: firstShowing!.id, status: "CLOSED", subtotalCents: 450, taxCents: 50, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2024-01-10T16:00:00.000Z"), seats: { create: { showtimeSeatId: firstTicket.showtimeSeatId, ticketId: firstTicket.id } } } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: secondShowing!.id, status: "CLOSED", subtotalCents: 650, taxCents: 50, serviceChargeCents: 0, totalCents: 700, closedAt: new Date("2024-01-12T16:00:00.000Z"), seats: { create: { showtimeSeatId: secondTicket.showtimeSeatId, ticketId: secondTicket.id } } } });
     await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 750, feesCents: 25, taxCents: 25, totalCents: 800, createdAt: new Date("2024-01-15T12:00:00.000Z") } });
-    await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", status: "REFUNDED", subtotalCents: 275, taxCents: 25, serviceChargeCents: 0, totalCents: 300, closedAt: new Date("2024-01-15T16:00:00.000Z") } });
+    await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", label: "Refunded reporting fixture", status: "REFUNDED", subtotalCents: 275, taxCents: 25, serviceChargeCents: 0, totalCents: 300, closedAt: new Date("2024-01-15T16:00:00.000Z") } });
 
     const response = await request(app.getHttpServer()).get(`/api/v1/reports/revenue?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(response.body.totals).toMatchObject({ grossRevenueCents: 5300, refundedCents: 1100, ticketRefundedCents: 800, fnbRefundedCents: 300, ticketRevenueCents: 3000, fnbRevenueCents: 1200, combinedRevenueCents: 4200, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
@@ -3072,7 +3160,7 @@ describe("Milestone 10 management reporting", () => {
     const { ManagementRefundService } = await import("../src/management/management-refund.service");
     const { TestPaymentProvider } = await import("@cinema/payments");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
-    const tab = await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", status: "CLOSED", subtotalCents: 1000, taxCents: 0, serviceChargeCents: 0, totalCents: 1000, closedAt: new Date("2022-06-01T12:00:00.000Z"), payments: { create: [
+    const tab = await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", label: "Split-tender reporting fixture", status: "CLOSED", subtotalCents: 1000, taxCents: 0, serviceChargeCents: 0, totalCents: 1000, closedAt: new Date("2022-06-01T12:00:00.000Z"), payments: { create: [
       { purpose: "RESTAURANT_TAB", amountCents: 400, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_ambiguous_${crypto.randomUUID()}` },
       { purpose: "RESTAURANT_TAB", amountCents: 600, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_success_${crypto.randomUUID()}` },
     ] } }, include: { payments: true } });
