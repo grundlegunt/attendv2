@@ -33,6 +33,9 @@ type DuplicateShowtimeDayInput = ReturnType<typeof duplicateShowtimeDayRequestSc
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
 
+const DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS = 10_000;
+const DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS = 60_000;
+
 function addIsoDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -607,7 +610,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         });
         return showtime;
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS,
+        timeout: DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS,
+      },
     );
   }
 
