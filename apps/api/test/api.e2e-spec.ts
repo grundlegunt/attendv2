@@ -821,6 +821,87 @@ describe("Milestone 1 cinema configuration", () => {
     }
   });
 
+  it(
+    "duplicates a production-sized day across multiple targets within the extended transaction window",
+    async () => {
+      const seats = Array.from({ length: 8 }, (_, rowIndex) =>
+        Array.from({ length: 12 }, (_, seatIndex) => ({
+          label: `${String.fromCharCode(65 + rowIndex)}${seatIndex + 1}`,
+          rowLabel: String.fromCharCode(65 + rowIndex),
+          number: seatIndex + 1,
+          x: seatIndex,
+          y: rowIndex,
+          type: "STANDARD",
+        })),
+      ).flat();
+
+      const auditoriums = [];
+      for (let auditoriumIndex = 0; auditoriumIndex < 3; auditoriumIndex += 1) {
+        const auditorium = await request(app.getHttpServer())
+          .post("/api/v1/cinema/auditoriums")
+          .set("Authorization", `Bearer ${ownerAccessToken}`)
+          .send({
+            name: `Production duplicate auditorium ${auditoriumIndex + 1}`,
+            seatMapName: `Production duplicate seat map ${auditoriumIndex + 1}`,
+            seats,
+          })
+          .expect(201);
+        auditoriums.push(auditorium.body);
+      }
+
+      const movie = await request(app.getHttpServer())
+        .post("/api/v1/cinema/movies")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          title: "Production Duplicate Feature",
+          synopsis: "A production-sized duplicate-day regression fixture.",
+          runtimeMinutes: 90,
+          rating: "PG",
+          status: "ACTIVE",
+        })
+        .expect(201);
+
+      const sourceStarts = ["12:00:00.000Z", "15:00:00.000Z", "18:00:00.000Z", "21:00:00.000Z"];
+      for (const auditorium of auditoriums) {
+        for (const startsAt of sourceStarts) {
+          await request(app.getHttpServer())
+          .post("/api/v1/cinema/showtimes")
+            .set("Authorization", `Bearer ${ownerAccessToken}`)
+            .send({
+              movieId: movie.body.id,
+              auditoriumId: auditorium.id,
+              startsAt: `2031-03-10T${startsAt}`,
+              basePriceCents: 1700,
+              onSale: true,
+            })
+            .expect(201);
+        }
+      }
+
+      const duplicated = await request(app.getHttpServer())
+        .post("/api/v1/cinema/showtimes/duplicate-day")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          sourceDate: "2031-03-10",
+          targetDates: ["2031-03-12", "2031-03-13"],
+          saleStatus: "PRESERVE",
+        })
+        .expect(201);
+
+      expect(duplicated.body.createdCount).toBe(24);
+      expect(duplicated.body.showtimes).toHaveLength(24);
+
+      const { prisma } = await import("@cinema/database");
+      const duplicatedIds = duplicated.body.showtimes.map((showtime: { id: string }) => showtime.id);
+      expect(
+        await prisma.showtimeSeat.count({
+          where: { showtimeId: { in: duplicatedIds } },
+        }),
+      ).toBe(24 * 96);
+    },
+    60_000,
+  );
+
   it("keeps archived movies in the Film Library and allows restoring them", async () => {
     const movie = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")
