@@ -218,6 +218,26 @@ export default function AdminPage() {
     setShowtimeEditorOpen(true);
   }
 
+  async function quickCreateShowtime(auditorium: string, date: Date, selectedMovieId: string) {
+    setError(null);
+    try {
+      await apiFetch("/cinema/showtimes", {
+        accessToken: token ?? undefined,
+        method: "POST",
+        body: JSON.stringify({
+          movieId: selectedMovieId,
+          auditoriumId: auditorium,
+          startsAt: date.toISOString(),
+          onSale: true,
+          presentation: "STANDARD",
+        }),
+      });
+      await refresh();
+      const movie = data?.location.organization.movies.find((candidate) => candidate.id === selectedMovieId);
+      setNotice(`${movie?.title ?? "Film"} was added to the next available schedule slot.`);
+    } catch (reason) { showError(reason); }
+  }
+
   function shiftShowtime(minutes: number) {
     if (!startsAt) return;
     const next = new Date(startsAt);
@@ -329,6 +349,7 @@ export default function AdminPage() {
       preShowBufferMinutes={data.location.preShowBufferMinutes}
       cleaningBufferMinutes={Math.max(15, data.location.cleaningBufferMinutes)}
       onCreate={createShowtimeAt}
+      onQuickCreate={quickCreateShowtime}
       onEdit={editShowtime}
       onMove={moveShowtime}
       onAddMovie={() => openMovieEditor()}

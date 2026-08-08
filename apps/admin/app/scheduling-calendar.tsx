@@ -52,6 +52,7 @@ interface SchedulingCalendarProps {
   preShowBufferMinutes: number;
   cleaningBufferMinutes: number;
   onCreate: (auditoriumId: string, startsAt: Date, movieId?: string) => void;
+  onQuickCreate: (auditoriumId: string, startsAt: Date, movieId: string) => Promise<void>;
   onEdit: (showtime: CalendarShowtime) => void;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onAddMovie: () => void;
@@ -107,6 +108,7 @@ export function SchedulingCalendar({
   preShowBufferMinutes,
   cleaningBufferMinutes,
   onCreate,
+  onQuickCreate,
   onEdit,
   onMove,
   onAddMovie,
@@ -220,11 +222,28 @@ export function SchedulingCalendar({
   const filteredMovies = movies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
   const filteredArchivedMovies = archivedMovies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
 
-  function quickAddToSchedule(movieId: string) {
-    const firstRoom = auditoriums[0];
-    if (!firstRoom) return;
-    const start = new Date(`${selectedDate}T12:00:00`);
-    onCreate(firstRoom.id, start, movieId);
+  async function quickAddToSchedule(movie: ScheduleMovie) {
+    const dayStart = startOfCinemaDay(new Date(`${selectedDate}T12:00:00`));
+    const dayEnd = new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000);
+    const now = new Date();
+    let cursor = dayStart;
+    if (dateInputValue(now) === selectedDate && now > dayStart) {
+      cursor = new Date(Math.ceil(now.getTime() / (5 * 60000)) * 5 * 60000);
+    }
+    const durationMs = (preShowBufferMinutes + movie.runtimeMinutes + cleaningBufferMinutes) * 60000;
+    for (let startsAt = cursor; startsAt.getTime() + durationMs <= dayEnd.getTime(); startsAt = new Date(startsAt.getTime() + 5 * 60000)) {
+      for (const room of auditoriums) {
+        const endsAt = startsAt.getTime() + durationMs;
+        const conflicts = showtimes.some((showtime) => showtime.auditorium.id === room.id
+          && startsAt.getTime() < new Date(showtime.roomReadyAt).getTime()
+          && endsAt > new Date(showtime.startsAt).getTime());
+        if (!conflicts) {
+          await onQuickCreate(room.id, startsAt, movie.id);
+          return;
+        }
+      }
+    }
+    window.alert(`No open slot is available for ${movie.title} on the selected day.`);
   }
 
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
@@ -247,7 +266,6 @@ export function SchedulingCalendar({
             setExporting(false);
           }
         }}>{exporting ? "Preparing…" : "Export Excel"}</button>
-        <button type="button" className="add-film-button" onClick={onAddMovie}>+ Add film</button>
         <button type="button" className="duplicate-day-button" onClick={() => {
           const next = new Date(`${selectedDate}T12:00:00`);
           next.setDate(next.getDate() + 1);
@@ -480,7 +498,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button type="button" className="film-quick-add" onClick={(event) => { event.stopPropagation(); quickAddToSchedule(movie.id); }} onMouseDown={(event) => event.stopPropagation()}>Add +</button><button
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button type="button" className="film-quick-add" onClick={(event) => { event.stopPropagation(); void quickAddToSchedule(movie); }} onMouseDown={(event) => event.stopPropagation()}>Add +</button><button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}
