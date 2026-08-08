@@ -130,32 +130,51 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-appearances button span, .film-appearances button small { color: #aaa99f; font-size: .68rem; }
 .film-appearances > p { margin: 0; color: #77786f; font-size: .76rem; }
 .film-detail-empty { grid-column: 1 / -1; align-self: center; max-width: 620px; color: #aaa99f; }
-.schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; border: 1px solid #3a3b35; background: #171815; }
-.schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr) clamp(340px, 20vw, 390px); }
-.schedule-with-inspector .schedule-workspace { min-width: 0; border: 0; }
-.schedule-inspector { min-height: 620px; padding: 24px; border-left: 1px solid #484943; background: #170d14; }
-.schedule-inspector form, .inspector-empty { position: sticky; top: 18px; }
-.schedule-inspector form { max-height: calc(100vh - 36px); overflow-y: auto; padding-right: 6px; }
+.schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr) clamp(440px, 31vw, 580px); grid-template-areas: "toolbar library" "legend library" "calendar library" "inspector library"; align-items: start; margin: 24px 0; border: 1px solid #3a3b35; background: #171815; }
+.schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr) clamp(440px, 31vw, 580px); }
+.schedule-with-inspector .schedule-workspace { display: contents; }
+.schedule-with-inspector .schedule-toolbar { grid-area: toolbar; min-width: 0; }
+.schedule-with-inspector .schedule-legend { grid-area: legend; min-width: 0; }
+.schedule-with-inspector .calendar-scroll, .schedule-with-inspector .week-calendar { grid-area: calendar; min-width: 0; }
+.schedule-with-inspector .film-library { grid-area: library; grid-template-columns: 1fr; grid-template-areas: "library-heading" "library-content" "library-detail" "library-archive"; gap: 16px; align-self: start; max-height: calc(100vh - 48px); overflow-y: auto; padding: 22px; border-top: 0; border-left: 1px solid #484943; }
+.schedule-with-inspector .film-library-overview { display: contents; }
+.schedule-with-inspector .film-library-heading { grid-area: library-heading; }
+.schedule-with-inspector .film-library-content { grid-area: library-content; }
+.schedule-with-inspector .film-library-detail { grid-area: library-detail; grid-template-columns: 110px minmax(0, 1fr); min-height: 0; padding: 14px; }
+.schedule-with-inspector .film-detail-poster { min-height: 0; aspect-ratio: 2 / 3; }
+.schedule-with-inspector .film-detail-poster img { max-height: none; }
+.schedule-with-inspector .film-programming-summary, .schedule-with-inspector .film-appearances ul { grid-template-columns: 1fr; }
+.schedule-with-inspector .archived-films { grid-area: library-archive; }
+.schedule-with-inspector .film-card { grid-template-columns: 40px minmax(0, 1fr) 60px; gap: 8px; }
+.schedule-with-inspector .film-card::after { display: none; }
+.schedule-inspector { grid-area: inspector; width: 100%; padding: 22px; border-top: 1px solid #484943; background: #170d14; }
+.schedule-inspector form, .inspector-empty { position: static; }
+.schedule-inspector form { max-height: none; overflow: visible; padding: 0; }
 .inspector-empty { color: #aaa99f; }
 .inspector-empty h2 { color: white; }
 .inspector-room { margin: 8px 0 0; color: #aaa0a5; font-weight: 700; }
-.timing-summary { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: 26px; border-top: 1px solid #654d5c; border-left: 1px solid #654d5c; }
-.timing-summary div { display: grid; gap: 7px; padding: 16px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
+.showtime-inspector-summary { display: grid; grid-template-columns: 1.1fr .9fr; gap: 12px; margin-bottom: 14px; }
+.timing-summary { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid #654d5c; border-left: 1px solid #654d5c; }
+.timing-summary div { display: grid; gap: 5px; padding: 12px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
 .timing-summary span { color: #ad9fa7; font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; }
 .timing-summary strong { font-size: 1rem; }
-.selected-film-details { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 14px; align-items: center; margin: -8px 0 24px; padding: 12px; border: 1px solid #654d5c; background: #21131c; }
-.selected-film-details img, .poster-placeholder { width: 72px; height: 102px; border: 1px solid #654d5c; background: #120b10; object-fit: cover; }
+.selected-film-details { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 12px; align-items: center; margin: 0; padding: 10px; border: 1px solid #654d5c; background: #21131c; }
+.selected-film-details img, .poster-placeholder { width: 62px; height: 88px; border: 1px solid #654d5c; background: #120b10; object-fit: cover; }
 .poster-placeholder { display: grid; place-items: center; padding: 8px; color: #968991; font-size: .66rem; text-align: center; }
 .selected-film-details strong, .selected-film-details span { display: block; }
 .selected-film-details span { margin-top: 5px; color: #ad9fa7; font-size: .75rem; }
 .film-details-button { margin-top: 12px; padding: 0; border: 0; background: transparent; color: #f0bd2d; font-size: .72rem; font-weight: 900; text-align: left; cursor: pointer; }
 .film-details-button:hover { text-decoration: underline; }
-.time-nudges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: -3px 0 18px; }
-.time-nudges button { min-height: 48px; border: 1px solid #806d78; background: transparent; color: white; font-weight: 900; cursor: pointer; }
+.showtime-inspector-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.showtime-inspector-fields label { margin: 0; }
+.showtime-inspector-fields input, .showtime-inspector-fields select { margin-bottom: 0; }
+.showtime-time-editor { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(240px, 1fr) 1fr; align-items: end; gap: 10px; }
+.time-nudges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; }
+.time-nudges button { min-height: 42px; border: 1px solid #806d78; background: transparent; color: white; font-weight: 900; cursor: pointer; }
 .time-nudges button:hover { border-color: #f0bd2d; color: #f0bd2d; }
-.timing-rules { display: grid; gap: 10px; margin: 22px 0; padding: 20px 0 0; border-top: 1px solid #654d5c; color: #c7bbc2; list-style: none; }
-.timing-rules li { font-size: .84rem; }
-.sale-action { width: 100%; min-height: 54px; margin-top: 10px; border: 0; color: white; font-weight: 900; cursor: pointer; }
+.showtime-inspector-actions { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.showtime-inspector-actions button { width: 100%; min-height: 46px; margin: 0; }
+.sale-action { width: 100%; min-height: 46px; margin: 0; border: 0; color: white; font-weight: 900; cursor: pointer; }
 .close-sale { background: #f0553e; }
 .open-sale { background: #2f7653; }
 .calendar-scroll { width: 100%; overflow-x: auto; }
@@ -296,8 +315,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .builder-actions .secondary { min-width: 180px; }
 .compliance-note { margin: 16px 0 0; font-size: .72rem; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 1100px) { .schedule-with-inspector { grid-template-columns: 1fr; } .schedule-inspector { min-height: 0; border-top: 1px solid #484943; border-left: 0; } }
-@media (min-width: 1500px) { .admin-shell { padding-right: 24px; padding-left: 24px; } .schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr) 460px; } }
+@media (max-width: 1100px) {
+  .schedule-with-inspector, .schedule-with-inspector.inspector-open { grid-template-columns: 1fr; grid-template-areas: "toolbar" "legend" "calendar" "inspector" "library"; }
+  .schedule-with-inspector .film-library { max-height: none; border-top: 1px solid #484943; border-left: 0; }
+  .schedule-inspector { min-height: 0; border-top: 1px solid #484943; border-left: 0; }
+}
+@media (min-width: 1500px) { .admin-shell { padding-right: 24px; padding-left: 24px; } }
 @media (max-width: 760px) {
   .admin-shell { padding: 16px; }
   .schedule-toolbar { display: flex; align-items: stretch; flex-direction: column; }
@@ -315,9 +338,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .archived-search-result { grid-template-columns: minmax(0, 1fr) auto; }
   .archived-search-result > span:nth-child(2) { display: none; }
   .film-library-detail { grid-template-columns: 1fr; }
+  .schedule-with-inspector .film-library-detail { grid-template-columns: 1fr; }
+  .schedule-with-inspector .film-card { grid-template-columns: minmax(0, 1fr) 70px; }
   .film-detail-poster { min-height: 0; aspect-ratio: 2 / 3; max-width: 220px; }
   .film-detail-heading { flex-direction: column; }
   .film-programming-summary, .film-appearances ul { grid-template-columns: 1fr; }
+  .showtime-inspector-summary, .showtime-inspector-fields, .showtime-time-editor { grid-template-columns: 1fr; }
+  .showtime-inspector-actions { grid-template-columns: 1fr 1fr; }
   .cinema-setup-workspace { grid-template-columns: 1fr; margin: 0 0 20px; }
   .setup-location-rail { border-right: 0; border-bottom: 1px solid var(--color-border); }
   .film-series-manager { grid-template-columns: 1fr; margin: 0 0 20px; padding: 22px 18px; }

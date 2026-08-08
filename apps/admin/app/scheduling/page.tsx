@@ -345,6 +345,7 @@ export default function AdminPage() {
           <div><p className="kicker">SELECTED SHOWTIME</p><h2>{selectedMovie?.title ?? (editingShowtimeId ? "Edit showing" : "Add showing")}</h2>{selectedRoom && <p className="inspector-room">{selectedRoom.name} · {selectedRoom.capacity} seats</p>}</div>
           <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
         </div>
+        <div className="showtime-inspector-summary">
         {selectedTiming && <div className="timing-summary">
           <div><span>Doors / listed time</span><strong>{displayTime(selectedTiming.doors)}</strong></div>
           <div><span>Feature starts</span><strong>{displayTime(selectedTiming.feature)}</strong></div>
@@ -359,21 +360,24 @@ export default function AdminPage() {
             <button type="button" className="film-details-button" onClick={() => openMovieEditor(selectedMovie)}>Edit film details &amp; poster URL</button>
           </div>
         </div>}
+        </div>
+        <div className="showtime-inspector-fields">
         <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
         <label>Move to room<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
-        <label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
-        <div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15 min</button><button type="button" onClick={() => shiftShowtime(-5)}>−5 min</button><button type="button" onClick={() => shiftShowtime(5)}>+5 min</button><button type="button" onClick={() => shiftShowtime(15)}>+15 min</button></div>
+        <div className="showtime-time-editor"><label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label><div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15</button><button type="button" onClick={() => shiftShowtime(-5)}>−5</button><button type="button" onClick={() => shiftShowtime(5)}>+5</button><button type="button" onClick={() => shiftShowtime(15)}>+15</button></div></div>
         <label>Sale status<select value={onSale ? "open" : "draft"} onChange={(event) => setOnSale(event.target.value === "open")}><option value="open">Open for sale</option><option value="draft">Closed draft</option></select></label>
         <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}><option value="">Automatic for show date</option>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
         <label>Film series<select value={filmSeriesId} onChange={(event) => setFilmSeriesId(event.target.value)}><option value="">Regular engagement</option>{data.location.organization.filmSeries.filter((series) => series.active).map((series) => <option key={series.id} value={series.id}>{series.name}</option>)}</select></label>
         <label>Presentation<select value={presentation} onChange={(event) => setPresentation(event.target.value as typeof presentation)}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
         <label>Screening format<input value={showtimeFormat} onChange={(event) => setShowtimeFormat(event.target.value)} placeholder="DCP, 35mm, 70mm…" /></label>
+        </div>
         <div className="calculation-note">Attend includes {data.location.preShowBufferMinutes} minutes of pre-show, the film runtime, and at least 15 minutes of cleaning. Conflicting placements are rejected.</div>
-        <ul className="timing-rules"><li>✓ {data.location.preShowBufferMinutes} minutes for doors, ordering, and trailers</li><li>✓ Film runtime begins at feature start</li><li>✓ 15-minute cleaning gap is enforced automatically</li></ul>
+        <div className="showtime-inspector-actions">
         <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
         {editingShowtimeId && <button type="button" className={onSale ? "sale-action close-sale" : "sale-action open-sale"} onClick={() => void changeSaleStatus()}>{onSale ? "Close sales" : "Open sales"}</button>}
         {editingShowtimeId && <button type="button" className="secondary destructive-outline" onClick={() => void removeShowtime()}>Remove from schedule</button>}
         <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Close</button>
+        </div>
       </form>
     </aside>}</div>}
 
