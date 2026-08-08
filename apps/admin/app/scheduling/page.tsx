@@ -85,6 +85,8 @@ export default function AdminPage() {
     setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
   }
 
+  const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
+
   async function createMovie(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
@@ -313,6 +315,7 @@ export default function AdminPage() {
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}
       archivedMovies={data.archivedMovies}
+      initialSelectedMovieId={linkedMovieId}
       showtimes={data.showtimes}
       preShowBufferMinutes={data.location.preShowBufferMinutes}
       cleaningBufferMinutes={Math.max(15, data.location.cleaningBufferMinutes)}
