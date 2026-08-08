@@ -30,12 +30,10 @@ interface LiveTab {
 
 export function LiveRestaurantTab({
   tabId,
-  accessToken,
   guestToken,
   onClose,
 }: {
   tabId?: string;
-  accessToken?: string;
   guestToken?: string;
   onClose: () => void;
 }) {
@@ -46,14 +44,9 @@ export function LiveRestaurantTab({
   async function refresh() {
     try {
       setTab(
-        await apiFetch<LiveTab>(
-          guestToken
-            ? `/public/restaurant-tabs/${guestToken}`
-            : `/customer/restaurant-tabs/${tabId}`,
-          {
-          accessToken,
-          },
-        ),
+        await apiFetch<LiveTab>(guestToken
+          ? `/public/restaurant-tabs/${guestToken}`
+          : `/customer/restaurant-tabs/${tabId}`),
       );
     } catch (error) {
       setMessage(
@@ -68,7 +61,7 @@ export function LiveRestaurantTab({
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => window.clearInterval(timer);
-  }, [tabId, accessToken, guestToken]);
+  }, [tabId, guestToken]);
 
   async function chooseTip(value: number) {
     setTipCents(value);
@@ -78,7 +71,6 @@ export function LiveRestaurantTab({
         : `/customer/restaurant-tabs/${tabId}/tip`,
       {
       method: "POST",
-      accessToken,
       body: JSON.stringify({ tipCents: value }),
       },
     );
@@ -96,7 +88,6 @@ export function LiveRestaurantTab({
           : `/customer/restaurant-tabs/${tabId}/pay`,
         {
           method: "POST",
-          accessToken,
           body: JSON.stringify({
             requestId: crypto.randomUUID(),
             tipCents,

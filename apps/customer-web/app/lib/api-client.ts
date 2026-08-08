@@ -1,10 +1,13 @@
 import type { ApiErrorBody } from "@cinema/shared";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (process.env.NODE_ENV === "production"
-    ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
-    : "http://localhost:4000/api/v1");
+function apiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (process.env.NODE_ENV === "production") {
+    return "https://zealous-connection-production-0896.up.railway.app/api/v1";
+  }
+  const hostname = typeof window === "undefined" ? "localhost" : window.location.hostname;
+  return `http://${hostname}:4000/api/v1`;
+}
 
 export class ApiRequestError extends Error {
   constructor(
@@ -24,7 +27,7 @@ export async function apiFetch<T>(
   headers.set("Content-Type", "application/json");
   if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  const res = await fetch(`${apiBaseUrl()}${path}`, { ...init, headers, credentials: "include" });
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({ code: "INTERNAL_ERROR", message: res.statusText }))) as ApiErrorBody;

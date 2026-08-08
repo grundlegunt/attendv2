@@ -39,6 +39,11 @@ export interface AuthTokenResponse {
   expiresInSeconds: number;
 }
 
+export interface CustomerSessionResponse {
+  customer: AuthenticatedCustomer;
+  expiresInSeconds: number;
+}
+
 export interface AuthenticatedEmployee {
   id: string;
   name: string;

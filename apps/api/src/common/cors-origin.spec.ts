@@ -11,6 +11,10 @@ describe("isCorsOriginAllowed", () => {
     expect(isCorsOriginAllowed("https://attendv2-admin.vercel.app", configuredOrigins)).toBe(true);
   });
 
+  it("allows the configured loopback hostname used by browser journeys", () => {
+    expect(isCorsOriginAllowed("http://127.0.0.1:3000", ["http://127.0.0.1:3000"])).toBe(true);
+  });
+
   it("allows this project's Vercel customer, cinema admin, and Attend Master preview aliases", () => {
     expect(
       isCorsOriginAllowed(

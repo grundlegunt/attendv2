@@ -31,6 +31,18 @@ let milestone8TabId: string;
 const SEED_SUFFIX = "m0test.local";
 // Matches SEED_PASSWORD in packages/database/prisma/seed.ts.
 const SEED_PASSWORD = "DevPassword123!";
+const CUSTOMER_WEB_ORIGIN = "http://localhost:3000";
+
+function setCookieHeaders(response: { headers: Record<string, unknown> }): string[] {
+  const value = response.headers["set-cookie"];
+  return Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
+}
+
+function cookiePair(cookies: string[], name: string): string {
+  const cookie = cookies.find((value) => value.startsWith(`${name}=`));
+  if (!cookie) throw new Error(`Response did not set ${name}.`);
+  return cookie.split(";", 1)[0]!;
+}
 
 beforeAll(async () => {
   try {
@@ -2049,15 +2061,24 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
 describe("Customer authentication", () => {
   const email = "new-customer@m0test.local";
+  let accessCookie: string;
+  let refreshCookie: string;
 
-  it("registers a new customer account", async () => {
+  it("registers a new customer account and stores tokens only in HttpOnly cookies", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/register")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
       .send({ email, password: "customer-password-1", name: "New Customer" });
 
     expect(res.status).toBe(201);
     expect(res.body.customer.isGuest).toBe(false);
-    expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.accessToken).toBeUndefined();
+    expect(res.body.refreshToken).toBeUndefined();
+    const cookies = setCookieHeaders(res);
+    expect(cookies).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^attend_customer_access=.*HttpOnly.*SameSite=Lax/),
+      expect.stringMatching(/^attend_customer_refresh=.*HttpOnly.*SameSite=Lax/),
+    ]));
   });
 
   it("rejects registering the same email twice (409 conflict)", async () => {
@@ -2078,6 +2099,7 @@ describe("Customer authentication", () => {
 
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/register")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
       .send({
         email: guestEmail.toUpperCase(),
         password: "customer-password-2",
@@ -2089,28 +2111,101 @@ describe("Customer authentication", () => {
     expect(res.body.customer.isGuest).toBe(false);
   });
 
-  it("logs the customer in with correct credentials", async () => {
+  it("logs the customer in without exposing either token to JavaScript", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
       .send({ email: "NEW-CUSTOMER@M0TEST.LOCAL", password: "customer-password-1" });
 
     expect(res.status).toBe(200);
     expect(res.body.customer.email).toBe(email);
+    expect(res.body.accessToken).toBeUndefined();
+    expect(res.body.refreshToken).toBeUndefined();
+    const cookies = setCookieHeaders(res);
+    accessCookie = cookiePair(cookies, "attend_customer_access");
+    refreshCookie = cookiePair(cookies, "attend_customer_refresh");
   });
 
-  it("returns the signed-in customer's account and ticket orders", async () => {
-    const login = await request(app.getHttpServer())
-      .post("/api/v1/auth/customers/login")
-      .send({ email, password: "customer-password-1" });
-    expect(login.status).toBe(200);
-
+  it("restores the signed-in customer's account from the access cookie", async () => {
     const account = await request(app.getHttpServer())
       .get("/api/v1/auth/customers/me")
-      .set("Authorization", `Bearer ${login.body.accessToken}`);
+      .set("Cookie", accessCookie);
 
     expect(account.status).toBe(200);
     expect(account.body.customer).toMatchObject({ email, isGuest: false });
     expect(account.body.orders).toEqual(expect.any(Array));
+  });
+
+  it("refreshes from the HttpOnly refresh cookie and restores an access-cookie session", async () => {
+    const refreshed = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/refresh")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", refreshCookie)
+      .send();
+    expect(refreshed.status).toBe(200);
+    expect(refreshed.body.accessToken).toBeUndefined();
+    expect(refreshed.body.refreshToken).toBeUndefined();
+    const cookies = setCookieHeaders(refreshed);
+    accessCookie = cookiePair(cookies, "attend_customer_access");
+    refreshCookie = cookiePair(cookies, "attend_customer_refresh");
+
+    await request(app.getHttpServer())
+      .get("/api/v1/auth/customers/me")
+      .set("Cookie", accessCookie)
+      .expect(200);
+  });
+
+  it("rejects a foreign Origin before a cookie-authenticated state change", async () => {
+    const protectedMutation = await request(app.getHttpServer())
+      .post("/api/v1/customer/restaurant-tabs/00000000-0000-4000-8000-000000000001/tip")
+      .set("Origin", "https://attacker.example")
+      .set("Cookie", accessCookie)
+      .send({ tipCents: 100 });
+    expect(protectedMutation.status).toBe(403);
+    expect(protectedMutation.body.code).toBe("FORBIDDEN");
+
+    const rejected = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/logout")
+      .set("Origin", "https://attacker.example")
+      .set("Cookie", `${accessCookie}; ${refreshCookie}`)
+      .send();
+    expect(rejected.status).toBe(403);
+    expect(rejected.body.code).toBe("FORBIDDEN");
+
+    await request(app.getHttpServer())
+      .get("/api/v1/auth/customers/me")
+      .set("Cookie", accessCookie)
+      .expect(200);
+  });
+
+  it("logs out with the refresh cookie and expires both browser cookies", async () => {
+    const logout = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/logout")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", `${accessCookie}; ${refreshCookie}`)
+      .send();
+    expect(logout.status).toBe(204);
+    const cookies = setCookieHeaders(logout);
+    expect(cookies).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^attend_customer_access=;.*Expires=/),
+      expect.stringMatching(/^attend_customer_refresh=;.*Expires=/),
+    ]));
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/refresh")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", refreshCookie)
+      .send()
+      .expect(401);
+  });
+
+  it("rejects login CSRF from an untrusted browser origin", async () => {
+    const res = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", "https://attacker.example")
+      .send({ email, password: "customer-password-1" });
+    expect(res.status).toBe(403);
+    expect(setCookieHeaders(res)).toHaveLength(0);
   });
 
   it("does not expose customer account data without a customer session", async () => {

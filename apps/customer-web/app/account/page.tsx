@@ -3,8 +3,8 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   AuthenticatedCustomer,
-  AuthTokenResponse,
   CustomerAccountResponse,
+  CustomerSessionResponse,
   CustomerTicketOrderSummary,
 } from "@cinema/shared";
 import { QRCodeSVG } from "qrcode.react";
@@ -12,14 +12,6 @@ import { LiveRestaurantTab } from "../components/live-restaurant-tab";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 
 type Mode = "login" | "register";
-type CustomerSession = {
-  customer: AuthenticatedCustomer;
-  accessToken: string;
-  refreshToken: string;
-};
-
-const STORAGE_KEY = "attend-customer-session";
-
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 }
@@ -56,7 +48,7 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [accountLoading, setAccountLoading] = useState(false);
-  const [session, setSession] = useState<CustomerSession | null>(null);
+  const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
   const [liveTabId, setLiveTabId] = useState("");
   const [tabLookup, setTabLookup] = useState("");
@@ -71,64 +63,30 @@ export default function AccountPage() {
     [account],
   );
 
-  function saveSession(next: CustomerSession | null) {
-    setSession(next);
-    if (next) window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    else window.sessionStorage.removeItem(STORAGE_KEY);
-  }
-
-  async function fetchAccount(current: CustomerSession, allowRefresh = true) {
-    setAccountLoading(true);
+  async function requestAccount(allowRefresh: boolean): Promise<CustomerAccountResponse> {
     try {
-      const response = await apiFetch<CustomerAccountResponse>("/auth/customers/me", {
-        accessToken: current.accessToken,
-      });
-      setAccount(response);
-      if (response.customer.id !== current.customer.id) {
-        saveSession({ ...current, customer: response.customer });
-      }
+      return await apiFetch<CustomerAccountResponse>("/auth/customers/me");
     } catch (err) {
       if (allowRefresh && err instanceof ApiRequestError && err.status === 401) {
-        try {
-          const refreshed = await apiFetch<AuthTokenResponse>("/auth/customers/refresh", {
-            method: "POST",
-            body: JSON.stringify({ refreshToken: current.refreshToken }),
-          });
-          const next = {
-            customer: current.customer,
-            accessToken: refreshed.accessToken,
-            refreshToken: refreshed.refreshToken,
-          };
-          saveSession(next);
-          await fetchAccount(next, false);
-          return;
-        } catch {
-          saveSession(null);
-          setAccount(null);
-          setError("Your session expired. Please sign in again.");
-        }
-      } else {
-        setError(err instanceof ApiRequestError ? err.body.message : "Your account could not be loaded.");
+        await apiFetch<CustomerSessionResponse>("/auth/customers/refresh", { method: "POST" });
+        return apiFetch<CustomerAccountResponse>("/auth/customers/me");
       }
-    } finally {
-      setAccountLoading(false);
+      throw err;
     }
   }
 
   useEffect(() => {
-    const stored = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      setRestoring(false);
-      return;
-    }
-    try {
-      const restored = JSON.parse(stored) as CustomerSession;
-      setSession(restored);
-      void fetchAccount(restored).finally(() => setRestoring(false));
-    } catch {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-      setRestoring(false);
-    }
+    void requestAccount(true)
+      .then((response) => {
+        setAccount(response);
+        setSession(response.customer);
+      })
+      .catch((err) => {
+        if (!(err instanceof ApiRequestError && err.status === 401)) {
+          setError(err instanceof ApiRequestError ? err.body.message : "Your account could not be loaded.");
+        }
+      })
+      .finally(() => setRestoring(false));
   }, []);
 
   async function handleSubmit(event: FormEvent) {
@@ -138,33 +96,34 @@ export default function AccountPage() {
     try {
       const path = mode === "login" ? "/auth/customers/login" : "/auth/customers/register";
       const body = mode === "login" ? { email, password } : { email, password, name: name || undefined };
-      const response = await apiFetch<AuthTokenResponse & { customer: AuthenticatedCustomer }>(path, {
+      const response = await apiFetch<CustomerSessionResponse>(path, {
         method: "POST",
         body: JSON.stringify(body),
       });
-      const next = {
-        customer: response.customer,
-        accessToken: response.accessToken,
-        refreshToken: response.refreshToken,
-      };
-      saveSession(next);
-      await fetchAccount(next);
+      setSession(response.customer);
+      setAccountLoading(true);
+      const nextAccount = await requestAccount(false);
+      setAccount(nextAccount);
       setPassword("");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Please try again.");
     } finally {
+      setAccountLoading(false);
       setLoading(false);
     }
   }
 
   async function signOut() {
-    if (session) {
+    if (!session) return;
+    try {
       await apiFetch<void>("/auth/customers/logout", {
         method: "POST",
-        accessToken: session.accessToken,
-      }).catch(() => undefined);
+      });
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.body.message : "Sign out failed. Please try again.");
+      return;
     }
-    saveSession(null);
+    setSession(null);
     setAccount(null);
     setLiveTabId("");
     setError(null);
@@ -229,7 +188,7 @@ export default function AccountPage() {
   if (liveTabId && session) {
     return (
       <main className="cinema-shell route-page">
-        <LiveRestaurantTab tabId={liveTabId} accessToken={session.accessToken} onClose={() => setLiveTabId("")} />
+        <LiveRestaurantTab tabId={liveTabId} onClose={() => setLiveTabId("")} />
       </main>
     );
   }
@@ -251,8 +210,8 @@ export default function AccountPage() {
           <section className="content-panel account-session-bar">
             <div>
               <span className="eyebrow">SIGNED IN</span>
-              <h2>{account?.customer.name ?? session.customer.name ?? session.customer.email}</h2>
-              <p className="secondary-copy">{account?.customer.email ?? session.customer.email}</p>
+              <h2>{account?.customer.name ?? session.name ?? session.email}</h2>
+              <p className="secondary-copy">{account?.customer.email ?? session.email}</p>
             </div>
             <button className="account-secondary-button" onClick={signOut}>Sign out</button>
           </section>
