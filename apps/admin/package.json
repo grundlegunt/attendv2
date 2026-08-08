@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start -p 3003",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint app --ext .ts,.tsx"
+    "lint": "eslint app --ext .ts,.tsx",
+    "test": "node --test test/admin-navigation.spec.cjs"
   },
   "dependencies": {
     "@cinema/shared": "workspace:*",

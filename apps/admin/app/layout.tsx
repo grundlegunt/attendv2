@@ -12,7 +12,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme="pos">
-      <body><AdminSessionProvider><AdminNav />{children}</AdminSessionProvider></body>
+      <body><AdminSessionProvider><div className="admin-app-layout"><AdminNav /><div className="admin-content">{children}</div></div></AdminSessionProvider></body>
     </html>
   );
 }
