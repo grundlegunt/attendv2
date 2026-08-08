@@ -298,7 +298,7 @@ export default function AdminPage() {
       <div><strong>30 + 15</strong><span>Pre-show + cleaning</span></div>
     </section>
 
-    {data && <div className="schedule-with-inspector"><SchedulingCalendar
+    {data && <div className={`schedule-with-inspector ${showtimeEditorOpen ? "inspector-open" : ""}`}><SchedulingCalendar
       locationName={data.location.name}
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}
@@ -316,8 +316,8 @@ export default function AdminPage() {
       onDuplicateDay={duplicateDay}
     />
 
-    <aside className="schedule-inspector" aria-label="Selected showtime">
-      {showtimeEditorOpen ? <form id="showtime-editor" onSubmit={createShowtime}>
+    {showtimeEditorOpen && <aside className="schedule-inspector" aria-label="Selected showtime">
+      <form id="showtime-editor" onSubmit={createShowtime}>
         <div className="drawer-heading">
           <div><p className="kicker">SELECTED SHOWTIME</p><h2>{selectedMovie?.title ?? (editingShowtimeId ? "Edit showing" : "Add showing")}</h2>{selectedRoom && <p className="inspector-room">{selectedRoom.name} · {selectedRoom.capacity} seats</p>}</div>
           <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
@@ -351,8 +351,8 @@ export default function AdminPage() {
         {editingShowtimeId && <button type="button" className={onSale ? "sale-action close-sale" : "sale-action open-sale"} onClick={() => void changeSaleStatus()}>{onSale ? "Close sales" : "Open sales"}</button>}
         {editingShowtimeId && <button type="button" className="secondary destructive-outline" onClick={() => void removeShowtime()}>Remove from schedule</button>}
         <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Close</button>
-      </form> : <div className="inspector-empty"><p className="kicker">SELECTED SHOWTIME</p><h2>Choose a showing</h2><p>Select a block—or click an open time—to edit it here without leaving the calendar.</p></div>}
-    </aside></div>}
+      </form>
+    </aside>}</div>}
 
     {movieEditorOpen && <div className="editor-backdrop" role="presentation" onMouseDown={() => setMovieEditorOpen(false)}>
       <form className="showtime-drawer" onSubmit={createMovie} onMouseDown={(event) => event.stopPropagation()}>

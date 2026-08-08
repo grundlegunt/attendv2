@@ -20,6 +20,7 @@ type Bootstrap = {
 
 type RevenueReport = {
   totals: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number };
+  movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; startsAt: string; ticketsSold: number }>;
 };
 
@@ -93,6 +94,8 @@ export function AdminDashboard() {
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const navigation = visibleAdminNavigation(employee.permissions);
   const quickActions = navigation.flatMap((group) => group.items).filter((item) => item.href !== "/").slice(0, 5);
+  const topFilms = [...(revenue?.movies ?? [])].sort((a, b) => b.ticketsSold - a.ticketsSold || b.ticketRevenueCents - a.ticketRevenueCents).slice(0, 5);
+  const topTicketCount = Math.max(1, ...topFilms.map((film) => film.ticketsSold));
 
   return <main className="admin-route-page dashboard-page">
     <section className="dashboard-heading">
@@ -106,6 +109,12 @@ export function AdminDashboard() {
       {canFinancial && <Link href="/reports" className="dashboard-metric"><span>F&amp;B revenue</span><strong>{revenue ? money(revenue.totals.fnbRevenueCents) : "—"}</strong><small>Occupancy is not available in current reporting</small></Link>}
       {canCinema && <Link href="/film-series" className="dashboard-metric"><span>Film series</span><strong>{bootstrap?.location.organization.filmSeries.filter((series) => series.active).length ?? "—"}</strong><small>{bootstrap?.location.organization.movies.length ?? 0} movies in library</small></Link>}
     </section>
+    {canFinancial && <section className="panel dashboard-top-films" aria-labelledby="top-films-heading">
+      <div className="dashboard-section-heading"><div><p className="kicker">TICKET SALES · TODAY</p><h2 id="top-films-heading">Top performing films</h2></div><Link href="/reports">View report</Link></div>
+      {topFilms.length ? <div className="top-film-list">{topFilms.map((film, index) => <div className="top-film-row" key={film.movieId}>
+        <span className="top-film-rank">{index + 1}</span><strong>{film.title}</strong><div className="top-film-track"><span style={{ width: `${Math.max(5, (film.ticketsSold / topTicketCount) * 100)}%` }} /></div><b>{film.ticketsSold} {film.ticketsSold === 1 ? "ticket" : "tickets"}</b><small>{money(film.ticketRevenueCents)}</small>
+      </div>)}</div> : <p className="dashboard-empty">No ticket sales have been recorded today.</p>}
+    </section>}
     <section className="dashboard-grid">
       {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">TODAY</p><h2 id="today-schedule-heading">Schedule</h2></div><Link href="/scheduling">View calendar</Link></div>
         <div className="dashboard-list">{todaysShowtimes.slice(0, 6).map((showtime) => <Link href="/scheduling" key={showtime.id}><time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}</small></span><b>{showtime.onSale ? "On sale" : "Draft"}</b></Link>)}{!loading && todaysShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled today.</p>}</div>
