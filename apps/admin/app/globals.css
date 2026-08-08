@@ -135,16 +135,19 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-appearances > p { margin: 0; color: #77786f; font-size: .76rem; }
 .film-detail-empty { grid-column: 1 / -1; align-self: center; max-width: 620px; color: #aaa99f; }
 .schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; margin: 24px 0; border: 1px solid #3a3b35; background: #171815; }
-.schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr) clamp(350px, 22vw, 430px); }
+.schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr) clamp(520px, 32vw, 620px); }
 .schedule-with-inspector .schedule-workspace { min-width: 0; border: 0; }
 .schedule-with-inspector .film-card { grid-template-columns: 44px minmax(0, 1fr) 74px 90px; }
-.schedule-inspector { min-height: 620px; padding: 22px; border-left: 1px solid #484943; background: #170d14; }
+.schedule-inspector { min-height: 620px; padding: 18px; border-left: 1px solid #484943; background: #170d14; }
 .schedule-inspector form, .inspector-empty { position: sticky; top: 18px; }
-.schedule-inspector form { max-height: calc(100vh - 36px); overflow-y: auto; padding-right: 6px; }
+.schedule-inspector form { overflow: visible; }
+.schedule-inspector .drawer-heading { margin-bottom: 14px; }
+.schedule-inspector .drawer-heading h2 { margin: 4px 0 0; font-size: 1.65rem; }
+.schedule-inspector .calculation-note { margin: 8px 0 10px; padding: 9px 11px; font-size: .72rem; }
 .inspector-empty { color: #aaa99f; }
 .inspector-empty h2 { color: white; }
 .inspector-room { margin: 8px 0 0; color: #aaa0a5; font-weight: 700; }
-.showtime-inspector-summary { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 14px; }
+.showtime-inspector-summary { display: grid; grid-template-columns: 1.1fr .9fr; gap: 10px; margin-bottom: 10px; }
 .timing-summary { display: grid; grid-template-columns: 1fr 1fr; margin: 0; border-top: 1px solid #654d5c; border-left: 1px solid #654d5c; }
 .timing-summary div { display: grid; gap: 5px; padding: 12px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
 .timing-summary span { color: #ad9fa7; font-size: .64rem; letter-spacing: .04em; text-transform: uppercase; }
@@ -156,10 +159,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .selected-film-details span { margin-top: 5px; color: #ad9fa7; font-size: .75rem; }
 .film-details-button { margin-top: 12px; padding: 0; border: 0; background: transparent; color: #f0bd2d; font-size: .72rem; font-weight: 900; text-align: left; cursor: pointer; }
 .film-details-button:hover { text-decoration: underline; }
-.showtime-inspector-fields { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.showtime-inspector-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; }
 .showtime-inspector-fields label { margin: 0; }
 .showtime-inspector-fields input, .showtime-inspector-fields select { margin-bottom: 0; }
-.showtime-time-editor { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.showtime-time-editor { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(220px, 1fr) 1fr; align-items: end; gap: 8px; }
 .time-nudges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; }
 .time-nudges button { min-height: 42px; border: 1px solid #806d78; background: transparent; color: white; font-weight: 900; cursor: pointer; }
 .time-nudges button:hover { border-color: #f0bd2d; color: #f0bd2d; }
