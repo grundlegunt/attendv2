@@ -278,6 +278,23 @@ export default function AdminPage() {
     } catch (reason) { showError(reason); }
   }
 
+  async function quickRemoveShowtime(showtime: CalendarShowtime) {
+    if (!window.confirm(`Remove ${showtime.movie.title} from the schedule? This is only allowed for a future showing with no ticket, hold, or restaurant activity.`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/cinema/showtimes/${showtime.id}`, {
+        accessToken: token ?? undefined,
+        method: "DELETE",
+      });
+      if (editingShowtimeId === showtime.id) {
+        setEditingShowtimeId(null);
+        setShowtimeEditorOpen(false);
+      }
+      await refresh();
+      setNotice(`${showtime.movie.title} was removed from the schedule.`);
+    } catch (reason) { showError(reason); }
+  }
+
   const selectedMovie = data?.location.organization.movies.find((movie) => movie.id === movieId);
   const selectedRoom = data?.location.auditoriums.find((room) => room.id === auditoriumId);
   const selectedTiming = useMemo(() => {
@@ -351,6 +368,7 @@ export default function AdminPage() {
       onCreate={createShowtimeAt}
       onQuickCreate={quickCreateShowtime}
       onEdit={editShowtime}
+      onRemoveShowtime={quickRemoveShowtime}
       onMove={moveShowtime}
       onAddMovie={() => openMovieEditor()}
       onEditMovie={openMovieEditor}

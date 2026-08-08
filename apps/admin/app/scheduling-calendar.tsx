@@ -54,6 +54,7 @@ interface SchedulingCalendarProps {
   onCreate: (auditoriumId: string, startsAt: Date, movieId?: string) => void;
   onQuickCreate: (auditoriumId: string, startsAt: Date, movieId: string) => Promise<void>;
   onEdit: (showtime: CalendarShowtime) => void;
+  onRemoveShowtime: (showtime: CalendarShowtime) => Promise<void>;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onAddMovie: () => void;
   onEditMovie: (movie: ScheduleMovie) => void;
@@ -110,6 +111,7 @@ export function SchedulingCalendar({
   onCreate,
   onQuickCreate,
   onEdit,
+  onRemoveShowtime,
   onMove,
   onAddMovie,
   onEditMovie,
@@ -303,7 +305,7 @@ export function SchedulingCalendar({
             <div className="room-label"><strong>{auditorium.name}</strong><span>{auditorium.capacity} seats</span></div>
             <div
               className={`room-timeline ${draggingKey ? "drag-target" : ""}`}
-              onClick={(event) => createAtPointer(event, auditorium.id)}
+              onDoubleClick={(event) => createAtPointer(event, auditorium.id)}
               onDragOver={(event) => {
                 event.preventDefault();
                 const startsAt = timeAtPointer(event, dayStart);
@@ -333,18 +335,12 @@ export function SchedulingCalendar({
                 const width = Math.max(82, ((endMinutes - startMinutes) / 60) * HOUR_WIDTH - 8);
                 const isPast = new Date(showtime.startsAt) < now;
                 const status = isPast ? "past" : showtime.onSale ? "on-sale" : "draft";
-                return <button
-                  type="button"
+                return <div
                   draggable={!isPast}
-                  className={`showtime-block ${status}`}
+                  className={`showtime-block-shell ${status}`}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
                   onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onEdit(showtime);
-                  }}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "move";
                     const key = `showtime:${showtime.id}`;
@@ -352,12 +348,14 @@ export function SchedulingCalendar({
                     setDraggingKey(key);
                   }}
                   onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-                  title={`Edit ${showtime.movie.title}`}
                 >
+                  <button type="button" className="showtime-block" onClick={(event) => { event.stopPropagation(); onEdit(showtime); }} title={`Edit ${showtime.movie.title}`}>
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
                   <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
-                </button>;
+                  </button>
+                  {!isPast && <button type="button" className="showtime-quick-remove" aria-label={`Remove ${showtime.movie.title} from schedule`} title="Remove from schedule" onClick={(event) => { event.stopPropagation(); void onRemoveShowtime(showtime); }}>×</button>}
+                </div>;
               })}
             </div>
           </div>;

@@ -185,15 +185,20 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .room-timeline { position: relative; min-height: 112px; border-bottom: 1px solid #3d3d37; background: #121311; cursor: crosshair; }
 .drag-target { background-color: #1b211c; box-shadow: inset 0 0 0 2px rgba(240,189,45,.25); }
 .room-timeline > i { position: absolute; inset: 0 auto 0 0; width: 1px; background: #2e302c; pointer-events: none; }
-.showtime-block { position: absolute; top: 12px; bottom: 12px; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 10px 12px; border: 1px solid #55a77c; border-radius: 2px; background: #2f7653; color: white; text-align: left; box-shadow: 0 6px 16px rgba(0,0,0,.22); cursor: pointer; }
-.showtime-block:hover, .showtime-block:focus-visible { filter: brightness(1.12); outline: 2px solid white; outline-offset: 2px; z-index: 3; }
+.showtime-block-shell { position: absolute; top: 12px; bottom: 12px; z-index: 1; }
+.showtime-block { display: grid; align-content: center; gap: 4px; width: 100%; height: 100%; overflow: hidden; padding: 10px 12px; border: 1px solid #55a77c; border-radius: 2px; background: #2f7653; color: white; text-align: left; box-shadow: 0 6px 16px rgba(0,0,0,.22); cursor: pointer; }
+.showtime-block-shell:hover, .showtime-block-shell:focus-within { z-index: 3; }
+.showtime-block:hover, .showtime-block:focus-visible { filter: brightness(1.12); outline: 2px solid white; outline-offset: 2px; }
 .showtime-block strong { overflow: hidden; font-family: Georgia, serif; font-size: .95rem; text-overflow: ellipsis; white-space: nowrap; }
 .showtime-block span, .showtime-block small { overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .showtime-block small { color: rgba(255,255,255,.72); }
-.showtime-block.draft { border-color: #ad8b46; background: #665022; }
-.showtime-block.past { border-color: #5d6059; background: #3a3d38; color: #aaa; box-shadow: none; }
-.showtime-block[draggable="true"] { cursor: grab; }
-.showtime-block[draggable="true"]:active { cursor: grabbing; opacity: .72; }
+.showtime-block-shell.draft .showtime-block { border-color: #ad8b46; background: #665022; }
+.showtime-block-shell.past .showtime-block { border-color: #5d6059; background: #3a3d38; color: #aaa; box-shadow: none; }
+.showtime-block-shell[draggable="true"] { cursor: grab; }
+.showtime-block-shell[draggable="true"]:active { cursor: grabbing; opacity: .72; }
+.showtime-quick-remove { position: absolute; top: 6px; right: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: #171815; color: white; font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
+.showtime-block-shell:hover .showtime-quick-remove, .showtime-quick-remove:focus-visible { opacity: 1; transform: scale(1); }
+.showtime-quick-remove:hover { border-color: #f05a45; background: #f05a45; }
 .drop-preview { position: absolute; top: 16px; bottom: 16px; z-index: 5; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 12px 14px; border: 2px dashed #f0bd2d; border-radius: 4px; background: rgba(240,189,45,.2); color: white; pointer-events: none; }
 .drop-preview strong, .drop-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drop-preview strong { font-family: Georgia, serif; }
