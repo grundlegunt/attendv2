@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { AdminDashboard } from "./admin-dashboard";
 
 export default function AdminIndex() {
-  redirect("/scheduling");
+  return <AdminDashboard />;
 }
