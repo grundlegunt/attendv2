@@ -12,8 +12,8 @@ export type AdminNavGroup = {
 
 export const adminNavigation: readonly AdminNavGroup[] = [
   { label: "Overview", items: [{ href: "/", label: "Dashboard", permissions: [] }] },
-  { label: "Scheduling", items: [
-    { href: "/scheduling", label: "Calendar, Showtimes & Movies", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
+  { label: "Films", items: [
+    { href: "/scheduling", label: "Schedule", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
     { href: "/film-series", label: "Film Series", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
   ] },
   { label: "Cinema Setup", items: [
