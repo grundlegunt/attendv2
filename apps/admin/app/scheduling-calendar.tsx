@@ -220,6 +220,13 @@ export function SchedulingCalendar({
   const filteredMovies = movies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
   const filteredArchivedMovies = archivedMovies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
 
+  function quickAddToSchedule(movieId: string) {
+    const firstRoom = auditoriums[0];
+    if (!firstRoom) return;
+    const start = new Date(`${selectedDate}T12:00:00`);
+    onCreate(firstRoom.id, start, movieId);
+  }
+
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
       <div>
@@ -387,7 +394,7 @@ export function SchedulingCalendar({
 
     <div className="film-library" aria-label="Film library">
       <div className="film-library-overview">
-      <div className="film-library-heading"><b>Film library</b><span>Click a film for its details. Drag it into an open room time to schedule it.</span></div>
+      <div className="film-library-heading"><div><b>Film library</b><button type="button" className="film-library-add" onClick={onAddMovie}>Add movie +</button></div><span>Search, review, or quickly add a film to the schedule.</span></div>
       <section className="film-library-detail" aria-live="polite">
         {selectedLibraryMovie ? <>
           <div className="film-detail-poster">
@@ -473,7 +480,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button type="button" className="film-quick-add" onClick={(event) => { event.stopPropagation(); quickAddToSchedule(movie.id); }} onMouseDown={(event) => event.stopPropagation()}>Add +</button><button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}

@@ -70,8 +70,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-library { display: grid; grid-template-columns: minmax(300px, .7fr) minmax(500px, 1.3fr); gap: 32px; align-items: start; padding: 28px 32px; border-top: 1px solid #34342f; background: #171815; }
 .film-library-overview { display: grid; align-content: start; gap: 22px; min-width: 0; }
 .film-library-heading { z-index: 1; display: grid; align-content: start; gap: 8px; }
+.film-library-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .film-library-heading b { font-family: Georgia, serif; font-size: 2rem; }
 .film-library-heading span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
+.film-library-add, .film-quick-add { border: 1px solid #f0bd2d; background: transparent; color: #f0bd2d; font-weight: 900; cursor: pointer; }
+.film-library-add { padding: 8px 10px; white-space: nowrap; }
+.film-quick-add { padding: 7px 9px; font-size: .7rem; white-space: nowrap; }
+.film-library-add:hover, .film-quick-add:hover { background: #f0bd2d; color: #11120f; }
 .film-library-content { display: grid; gap: 14px; min-width: 0; }
 .film-library-search { display: block; }
 .film-library-search input { width: 100%; min-height: 42px; margin: 0; border-color: #55564f; background: #11120f; }
@@ -97,7 +102,6 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-card:active { cursor: grabbing; opacity: .72; }
 .film-card strong { overflow: hidden; font-family: Georgia, serif; font-size: 1rem; text-overflow: ellipsis; white-space: nowrap; }
 .film-card span { color: #aaa99f; font-size: .7rem; }
-.film-card::after { content: "Drag to schedule"; color: #aaa99f; font-size: .68rem; text-align: right; }
 .film-archive { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border: 1px solid #55564f; border-radius: 50%; background: #1d1e1a; color: #bdbdb5; font-size: 1rem; line-height: 1; cursor: pointer; }
 .film-archive:hover { border-color: #f05a45; color: #f05a45; }
 .film-library-empty { display: grid; justify-items: start; gap: 6px; padding: 28px 12px; border-bottom: 1px solid #55564f; color: #aaa99f; }
@@ -140,13 +144,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .schedule-with-inspector .film-library-overview { display: contents; }
 .schedule-with-inspector .film-library-heading { grid-area: library-heading; }
 .schedule-with-inspector .film-library-content { grid-area: library-content; }
-.schedule-with-inspector .film-library-detail { grid-area: library-detail; grid-template-columns: 110px minmax(0, 1fr); min-height: 0; padding: 14px; }
+.schedule-with-inspector .film-library-detail { display: none; }
 .schedule-with-inspector .film-detail-poster { min-height: 0; aspect-ratio: 2 / 3; }
 .schedule-with-inspector .film-detail-poster img { max-height: none; }
 .schedule-with-inspector .film-programming-summary, .schedule-with-inspector .film-appearances ul { grid-template-columns: 1fr; }
 .schedule-with-inspector .archived-films { grid-area: library-archive; }
-.schedule-with-inspector .film-card { grid-template-columns: 40px minmax(0, 1fr) 60px; gap: 8px; }
-.schedule-with-inspector .film-card::after { display: none; }
+.schedule-with-inspector .film-card { grid-template-columns: 40px minmax(0, 1fr) 60px 62px; gap: 8px; }
 .schedule-inspector { grid-area: inspector; width: 100%; padding: 22px; border-top: 1px solid #484943; background: #170d14; }
 .schedule-inspector form, .inspector-empty { position: static; }
 .schedule-inspector form { max-height: none; overflow: visible; padding: 0; }
