@@ -11,9 +11,19 @@ export function AdminNav() {
   const { employee, signOut } = useAdminSession();
   const groups = useMemo(() => visibleAdminNavigation(employee.permissions), [employee.permissions]);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => { setSidebarCollapsed(window.localStorage.getItem("attend-admin-sidebar") === "collapsed"); }, []);
+
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem("attend-admin-sidebar", next ? "collapsed" : "expanded");
+      return next;
+    });
+  }
 
   function toggleGroup(label: string) {
     setCollapsedGroups((current) => current.includes(label) ? current.filter((item) => item !== label) : [...current, label]);
@@ -27,8 +37,9 @@ export function AdminNav() {
       </button>
     </header>
     {mobileOpen && <button type="button" className="admin-sidebar-backdrop" aria-label="Dismiss navigation" onClick={() => setMobileOpen(false)} />}
-    <aside id="admin-sidebar" className={`admin-sidebar ${mobileOpen ? "open" : ""}`} aria-label="Admin navigation">
-      <div className="admin-sidebar-header"><Link href="/" className="admin-brand"><span>ATTEND</span><strong>Admin</strong></Link><button type="button" className="admin-sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}>×</button></div>
+    <aside id="admin-sidebar" className={`admin-sidebar ${mobileOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`} aria-label="Admin navigation">
+      <div className="admin-sidebar-header"><Link href="/" className="admin-brand"><span>ATTEND</span><strong>Admin</strong></Link><button type="button" className="admin-sidebar-collapse" aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} aria-pressed={sidebarCollapsed} onClick={toggleSidebar}>{sidebarCollapsed ? "›" : "‹"}</button><button type="button" className="admin-sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}>×</button></div>
+      {sidebarCollapsed && <button type="button" className="admin-sidebar-rail-button" onClick={toggleSidebar}><span aria-hidden="true">☰</span><span className="sr-only">Expand navigation</span></button>}
       <nav className="admin-nav" aria-label="Admin sections">
         {groups.map((group) => {
           const expanded = !collapsedGroups.includes(group.label);
