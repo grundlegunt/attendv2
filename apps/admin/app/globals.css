@@ -498,6 +498,20 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .dashboard-list time, .dashboard-list small { color: var(--color-text-secondary); font-size: .72rem; }
 .dashboard-list span { display: grid; gap: 3px; }
 .dashboard-list b { color: var(--color-text-secondary); font-size: .68rem; text-transform: uppercase; }
+.schedule-heading-actions { display: flex; align-items: center; gap: 16px; }
+.dashboard-day-switch { display: flex; }
+.dashboard-day-switch button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--color-border); border-left: 0; background: transparent; color: var(--color-text-secondary); font-size: .7rem; font-weight: 900; cursor: pointer; }
+.dashboard-day-switch button:first-child { border-left: 1px solid var(--color-border); }
+.dashboard-day-switch button.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elevated)); color: var(--color-accent); }
+.schedule-dashboard-list.loading { opacity: .55; pointer-events: none; }
+.schedule-dashboard-list > a { grid-template-columns: 68px minmax(170px, 1fr) minmax(110px, .55fr) 76px; }
+.schedule-dashboard-list > a > em { color: var(--color-text-secondary); font-size: .64rem; font-style: normal; font-weight: 900; text-align: right; text-transform: uppercase; }
+.schedule-dashboard-list > a.selling-fast > em { color: #8ad1a7; }
+.schedule-dashboard-list > a.sales-low > em { color: #f0bd2d; }
+.schedule-occupancy { display: grid !important; grid-template-columns: minmax(60px, 1fr) 34px; align-items: center; gap: 8px !important; }
+.schedule-occupancy > i { height: 8px; overflow: hidden; background: color-mix(in srgb, var(--color-text-primary) 8%, transparent); }
+.schedule-occupancy > i > span { display: block; height: 100%; background: var(--color-accent); }
+.schedule-occupancy > b { color: var(--color-text-secondary); font-size: .68rem; text-align: right; }
 .dashboard-empty { margin: 0; padding: 20px 0; color: var(--color-text-secondary); }
 .setup-status { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 14px; align-items: baseline; }
 .setup-status strong { color: var(--color-accent); font: 1.5rem Georgia, serif; }
@@ -547,6 +561,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .dashboard-primary-action { width: 100%; }
   .dashboard-list > a { grid-template-columns: 62px minmax(0, 1fr); }
   .dashboard-list > a > b { grid-column: 2; }
+  .schedule-heading-actions { align-items: stretch; flex-direction: column; }
+  .dashboard-day-switch { display: grid; grid-template-columns: 1fr 1fr; }
+  .dashboard-day-switch button { border-left: 1px solid var(--color-border); }
+  .schedule-dashboard-list > a { grid-template-columns: 62px minmax(0, 1fr) 66px; }
+  .schedule-dashboard-list .schedule-occupancy { grid-column: 2 / -1; }
+  .schedule-dashboard-list > a > em { grid-column: 3; grid-row: 1; }
   .top-film-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 10px; }
   .top-film-heading-actions { align-items: stretch; flex-direction: column; }
   .top-film-range { display: grid; grid-template-columns: repeat(3, 1fr); }

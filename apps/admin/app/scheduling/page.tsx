@@ -69,6 +69,7 @@ export default function AdminPage() {
   const [showtimeFormat, setShowtimeFormat] = useState("");
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
+  const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -86,6 +87,7 @@ export default function AdminPage() {
   }
 
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
+  const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
 
   async function createMovie(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -194,6 +196,13 @@ export default function AdminPage() {
     setShowtimeFormat(showtime.format ?? "");
     setShowtimeEditorOpen(true);
   }
+
+  useEffect(() => {
+    if (!data || !linkedShowtimeId || linkedShowtimeHandled) return;
+    const showtime = data.showtimes.find((candidate) => candidate.id === linkedShowtimeId);
+    if (showtime) editShowtime(showtime);
+    setLinkedShowtimeHandled(true);
+  }, [data, linkedShowtimeHandled, linkedShowtimeId]);
 
   function createShowtimeAt(auditorium: string, date: Date, selectedMovieId?: string) {
     const local = new Date(date);

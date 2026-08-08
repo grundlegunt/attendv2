@@ -27,6 +27,7 @@ type RevenueReport = {
 type AuditEvent = { id: string; action: string; entityType: string; occurredAt: string };
 type Settings = { timeClockEnabled: boolean; ticketTaxRateBasisPoints: number };
 type FilmPerformanceRange = "today" | "7d" | "30d";
+type ScheduleDay = "today" | "tomorrow";
 
 function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -46,6 +47,15 @@ function performanceRange(range: FilmPerformanceRange) {
   return { from, to };
 }
 
+function scheduleRange(day: ScheduleDay) {
+  const { from, to } = dayRange();
+  if (day === "tomorrow") {
+    from.setDate(from.getDate() + 1);
+    to.setDate(to.getDate() + 1);
+  }
+  return { from, to };
+}
+
 function messageFor(reason: unknown) {
   return reason instanceof ApiRequestError ? reason.body.message : "Some dashboard data could not be loaded.";
 }
@@ -57,6 +67,9 @@ export function AdminDashboard() {
   const [filmRevenue, setFilmRevenue] = useState<RevenueReport | null>(null);
   const [filmRange, setFilmRange] = useState<FilmPerformanceRange>("today");
   const [filmRevenueLoading, setFilmRevenueLoading] = useState(false);
+  const [scheduleDay, setScheduleDay] = useState<ScheduleDay>("today");
+  const [scheduleRevenue, setScheduleRevenue] = useState<RevenueReport | null>(null);
+  const [scheduleRevenueLoading, setScheduleRevenueLoading] = useState(false);
   const [activity, setActivity] = useState<AuditEvent[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -109,11 +122,29 @@ export function AdminDashboard() {
     return () => { cancelled = true; };
   }, [accessToken, canFinancial, filmRange]);
 
+  useEffect(() => {
+    if (!canFinancial || !canCinema) return;
+    let cancelled = false;
+    const { from, to } = scheduleRange(scheduleDay);
+    setScheduleRevenueLoading(true);
+    apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
+      .then((result) => { if (!cancelled) setScheduleRevenue(result); })
+      .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
+      .finally(() => { if (!cancelled) setScheduleRevenueLoading(false); });
+    return () => { cancelled = true; };
+  }, [accessToken, canCinema, canFinancial, scheduleDay]);
+
   const { from, to } = dayRange();
   const todaysShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
     const startsAt = new Date(showtime.startsAt);
     return startsAt >= from && startsAt < to;
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const selectedScheduleRange = scheduleRange(scheduleDay);
+  const scheduleShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
+    const startsAt = new Date(showtime.startsAt);
+    return startsAt >= selectedScheduleRange.from && startsAt < selectedScheduleRange.to;
+  }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const scheduleSales = new Map((scheduleRevenue?.showtimes ?? []).map((showtime) => [showtime.showtimeId, showtime.ticketsSold]));
   const navigation = visibleAdminNavigation(employee.permissions);
   const quickActions = navigation.flatMap((group) => group.items).filter((item) => item.href !== "/").slice(0, 5);
   const topFilms = [...(filmRevenue?.movies ?? [])].sort((a, b) => b.ticketsSold - a.ticketsSold || b.ticketRevenueCents - a.ticketRevenueCents).slice(0, 5);
@@ -139,8 +170,14 @@ export function AdminDashboard() {
       </Link>)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
     </section>}
     <section className="dashboard-grid">
-      {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">TODAY</p><h2 id="today-schedule-heading">Schedule</h2></div><Link href="/scheduling">View calendar</Link></div>
-        <div className="dashboard-list">{todaysShowtimes.slice(0, 6).map((showtime) => <Link href="/scheduling" key={showtime.id}><time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}</small></span><b>{showtime.onSale ? "On sale" : "Draft"}</b></Link>)}{!loading && todaysShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled today.</p>}</div>
+      {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">PROGRAMMING</p><h2 id="today-schedule-heading">Schedule</h2></div><div className="schedule-heading-actions"><div className="dashboard-day-switch" role="group" aria-label="Schedule day"><button type="button" className={scheduleDay === "today" ? "active" : ""} onClick={() => setScheduleDay("today")}>Today</button><button type="button" className={scheduleDay === "tomorrow" ? "active" : ""} onClick={() => setScheduleDay("tomorrow")}>Tomorrow</button></div><Link href="/scheduling">View calendar</Link></div></div>
+        <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.slice(0, 8).map((showtime) => {
+          const ticketsSold = scheduleSales.get(showtime.id) ?? 0;
+          const occupancy = showtime.auditorium.capacity ? Math.min(100, Math.round((ticketsSold / showtime.auditorium.capacity) * 100)) : 0;
+          const salesVisible = canFinancial && scheduleRevenue !== null;
+          const salesClass = !salesVisible ? "sales-normal" : occupancy >= 80 ? "selling-fast" : showtime.onSale && occupancy < 20 ? "sales-low" : "sales-normal";
+          return <Link href={`/scheduling?showtimeId=${encodeURIComponent(showtime.id)}`} className={salesClass} key={showtime.id}><time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}{salesVisible ? ` · ${ticketsSold}/${showtime.auditorium.capacity} seats` : ` · ${showtime.auditorium.capacity} seats`}</small></span>{salesVisible ? <span className="schedule-occupancy"><i><span style={{ width: `${occupancy}%` }} /></i><b>{occupancy}%</b></span> : <span aria-hidden="true" />}<em>{salesVisible && occupancy >= 80 ? "Selling fast" : salesVisible && showtime.onSale && occupancy < 20 ? "Low sales" : showtime.onSale ? "On sale" : "Draft"}</em></Link>;
+        })}{!loading && scheduleShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled {scheduleDay}.</p>}</div>
       </section>}
       {canCinema && <section className="panel" aria-labelledby="setup-status-heading"><div className="dashboard-section-heading"><div><p className="kicker">READINESS</p><h2 id="setup-status-heading">Cinema setup</h2></div><Link href="/cinema-setup">Manage</Link></div>
         <div className="setup-status"><strong>{bootstrap?.location.auditoriums.length ?? "—"}</strong><span>auditoriums</span><strong>{bootstrap?.location.auditoriums.reduce((total, room) => total + room.capacity, 0) ?? "—"}</strong><span>total seats</span><strong>{bootstrap?.location.auditoriums.filter((room) => room.seatMap).length ?? "—"}</strong><span>seat maps ready</span></div>
