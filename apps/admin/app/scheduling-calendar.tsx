@@ -156,13 +156,38 @@ export function SchedulingCalendar({
     setSelectedDate(dateInputValue(next));
   }
 
+  function roundToFive(date: Date, direction: "nearest" | "up" = "nearest") {
+    const interval = 5 * 60000;
+    const value = direction === "up" ? Math.ceil(date.getTime() / interval) : Math.round(date.getTime() / interval);
+    return new Date(value * interval);
+  }
+
+  function availableStart(auditoriumId: string, proposed: Date, durationMinutes: number, ignoredShowtimeId?: string) {
+    let candidate = roundToFive(proposed);
+    const durationMs = durationMinutes * 60000;
+    for (let attempt = 0; attempt <= showtimes.length; attempt += 1) {
+      const candidateEnd = candidate.getTime() + durationMs;
+      const conflicts = showtimes.filter((showtime) => showtime.id !== ignoredShowtimeId
+        && showtime.auditorium.id === auditoriumId
+        && candidate.getTime() < new Date(showtime.roomReadyAt).getTime()
+        && candidateEnd > new Date(showtime.startsAt).getTime());
+      if (!conflicts.length) return candidate;
+      candidate = roundToFive(new Date(Math.max(...conflicts.map((showtime) => new Date(showtime.roomReadyAt).getTime()))), "up");
+    }
+    return candidate;
+  }
+
   function createAtPointer(event: React.MouseEvent<HTMLDivElement>, auditoriumId: string) {
     const target = event.target as HTMLElement;
     if (target.closest(".showtime-block") || target.closest(".drop-preview")) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const rawMinutes = ((event.clientX - bounds.left) / bounds.width) * TOTAL_HOURS * 60;
     const roundedMinutes = Math.max(0, Math.min(TOTAL_HOURS * 60 - 5, Math.round(rawMinutes / 5) * 5));
-    onCreate(auditoriumId, new Date(dayStart.getTime() + roundedMinutes * 60000));
+    const clickedTime = new Date(dayStart.getTime() + roundedMinutes * 60000);
+    const previous = visibleShowtimes
+      .filter((showtime) => showtime.auditorium.id === auditoriumId && new Date(showtime.startsAt) < clickedTime)
+      .sort((left, right) => new Date(right.startsAt).getTime() - new Date(left.startsAt).getTime())[0];
+    onCreate(auditoriumId, previous ? roundToFive(new Date(previous.roomReadyAt), "up") : clickedTime);
   }
 
   function timeAtPointer(event: React.DragEvent<HTMLDivElement>, start: Date) {
@@ -179,13 +204,23 @@ export function SchedulingCalendar({
     setDraggingKey(null);
     setDropPreview(null);
     if (key?.startsWith("movie:")) {
-      onCreate(auditoriumId, targetTime, key.slice("movie:".length));
+      const movieId = key.slice("movie:".length);
+      const movie = movies.find((item) => item.id === movieId);
+      const duration = preShowBufferMinutes + (movie?.runtimeMinutes ?? 90) + cleaningBufferMinutes;
+      onCreate(auditoriumId, availableStart(auditoriumId, targetTime, duration), movieId);
       return;
     }
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
-    await onMove(showtime, auditoriumId, targetTime);
+    const duration = preShowBufferMinutes + showtime.movie.runtimeMinutes + cleaningBufferMinutes;
+    await onMove(showtime, auditoriumId, availableStart(auditoriumId, targetTime, duration, showtime.id));
+  }
+
+  async function duplicateAfter(showtime: CalendarShowtime) {
+    const duration = preShowBufferMinutes + showtime.movie.runtimeMinutes + cleaningBufferMinutes;
+    const startsAt = availableStart(showtime.auditorium.id, new Date(showtime.roomReadyAt), duration);
+    await onQuickCreate(showtime.auditorium.id, startsAt, showtime.movie.id);
   }
 
   async function dropOnWeekRoom(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, targetDay: Date) {
@@ -355,6 +390,7 @@ export function SchedulingCalendar({
                   <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                   </button>
                   {!isPast && <button type="button" className="showtime-quick-remove" aria-label={`Remove ${showtime.movie.title} from schedule`} title="Remove from schedule" onClick={(event) => { event.stopPropagation(); void onRemoveShowtime(showtime); }}>×</button>}
+                  {!isPast && <button type="button" className="showtime-quick-duplicate" aria-label={`Schedule ${showtime.movie.title} again afterward`} title="Schedule this film again afterward" onClick={(event) => { event.stopPropagation(); void duplicateAfter(showtime); }}>+</button>}
                 </div>;
               })}
             </div>

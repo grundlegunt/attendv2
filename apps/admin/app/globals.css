@@ -199,6 +199,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-quick-remove { position: absolute; top: 6px; right: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: #171815; color: white; font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
 .showtime-block-shell:hover .showtime-quick-remove, .showtime-quick-remove:focus-visible { opacity: 1; transform: scale(1); }
 .showtime-quick-remove:hover { border-color: #f05a45; background: #f05a45; }
+.showtime-quick-duplicate { position: absolute; top: 38px; right: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: #171815; color: white; font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
+.showtime-block-shell:hover .showtime-quick-duplicate, .showtime-quick-duplicate:focus-visible { opacity: 1; transform: scale(1); }
+.showtime-quick-duplicate:hover { border-color: #f0bd2d; background: #f0bd2d; color: #171815; }
 .drop-preview { position: absolute; top: 16px; bottom: 16px; z-index: 5; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 12px 14px; border: 2px dashed #f0bd2d; border-radius: 4px; background: rgba(240,189,45,.2); color: white; pointer-events: none; }
 .drop-preview strong, .drop-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drop-preview strong { font-family: Georgia, serif; }

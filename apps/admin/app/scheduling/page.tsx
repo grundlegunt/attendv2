@@ -207,7 +207,7 @@ export default function AdminPage() {
   function createShowtimeAt(auditorium: string, date: Date, selectedMovieId?: string) {
     const local = new Date(date);
     setEditingShowtimeId(null);
-    if (selectedMovieId) setMovieId(selectedMovieId);
+    setMovieId(selectedMovieId ?? "");
     setAuditoriumId(auditorium);
     setStartsAt(dateTimeInputValue(local));
     setOnSale(true);
