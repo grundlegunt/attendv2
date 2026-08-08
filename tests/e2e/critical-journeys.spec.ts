@@ -25,6 +25,11 @@ test("customer browses a live program and safely holds a seat", async ({ page })
 });
 
 test("customer account session restores from HttpOnly cookies and clears on logout", async ({ page, context }) => {
+  for (const path of ["cinema/branding", "cinema/content"]) {
+    const publicResponse = await page.request.get(`http://127.0.0.1:3000/api/v1/${path}`);
+    expect(publicResponse.status()).toBe(200);
+  }
+
   await page.goto("http://127.0.0.1:3000/account");
   await page.getByLabel("Email").fill("customer@ridgelinecinema.test");
   await page.getByLabel("Password").fill(password);

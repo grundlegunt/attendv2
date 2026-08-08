@@ -57,12 +57,6 @@ export function validateCustomerApiPath(path: string[]): void {
   }
 }
 
-function requestOrigin(request: Request): string {
-  const inboundOrigin = request.headers.get("origin");
-  if (inboundOrigin) return inboundOrigin;
-  return new URL(request.url).origin;
-}
-
 function upstreamSetCookies(headers: Headers): string[] {
   const cookieHeaders = headers as Headers & { getSetCookie?: () => string[] };
   if (cookieHeaders.getSetCookie) return cookieHeaders.getSetCookie();
@@ -90,7 +84,8 @@ export async function proxyCustomerApiRequest(
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  headers.set("origin", requestOrigin(request));
+  const origin = request.headers.get("origin");
+  if (origin) headers.set("origin", origin);
 
   const method = request.method.toUpperCase();
   const body = method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer();

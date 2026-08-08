@@ -61,6 +61,27 @@ describe("customer-web API proxy", () => {
     expect(getSetCookie.every((cookie) => cookie.includes("HttpOnly"))).toBe(true);
   });
 
+  it("does not invent an Origin for safe GETs that arrive without one", async () => {
+    const fetchImpl = jest.fn(async (_url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      const requestHeaders = new Headers(init?.headers);
+      expect(init?.method).toBe("GET");
+      expect(requestHeaders.get("origin")).toBeNull();
+      return Response.json({ content: { heroTitle: "Cinema" } });
+    }) as typeof fetch;
+
+    const response = await proxyCustomerApiRequest(
+      new Request("http://127.0.0.1:3000/api/v1/cinema/content"),
+      ["cinema", "content"],
+      { upstreamBaseUrl: "http://127.0.0.1:4000/api/v1", fetchImpl },
+    );
+
+    expect(response.status).toBe(200);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      new URL("http://127.0.0.1:4000/api/v1/cinema/content"),
+      expect.any(Object),
+    );
+  });
+
   it("returns 404 without contacting the upstream for disallowed paths", async () => {
     const fetchImpl = jest.fn() as typeof fetch;
     const response = await proxyCustomerApiRequest(
