@@ -118,6 +118,8 @@ export function SchedulingCalendar({
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
+  const [filmQuery, setFilmQuery] = useState("");
+  const [filmFilter, setFilmFilter] = useState<"all" | "scheduled" | "unscheduled">("all");
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState("");
   const [duplicateTargets, setDuplicateTargets] = useState<string[]>([]);
@@ -211,6 +213,15 @@ export function SchedulingCalendar({
     .flatMap((showtime) => showtime.filmSeries ? [[showtime.filmSeries.id, showtime.filmSeries] as const] : [])).values());
   const presentations = Array.from(new Set(selectedMovieShowtimes
     .map((showtime) => showtime.presentation ?? "STANDARD")));
+  const upcomingMovieIds = new Set(showtimes.filter((showtime) => new Date(showtime.startsAt) >= now).map((showtime) => showtime.movie.id));
+  const normalizedFilmQuery = filmQuery.trim().toLocaleLowerCase();
+  const filteredMovies = movies.filter((movie) => {
+    const matchesSearch = !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery);
+    const hasUpcomingShowtime = upcomingMovieIds.has(movie.id);
+    const matchesFilter = filmFilter === "all" || (filmFilter === "scheduled" ? hasUpcomingShowtime : !hasUpcomingShowtime);
+    return matchesSearch && matchesFilter;
+  });
+  const scheduledMovieCount = movies.filter((movie) => upcomingMovieIds.has(movie.id)).length;
 
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
@@ -380,8 +391,16 @@ export function SchedulingCalendar({
     <div className="film-library" aria-label="Film library">
       <div className="film-library-heading"><b>Film library</b><span>Click a film for its details. Drag it into an open room time to schedule it.</span></div>
       <div className="film-library-content">
+      <div className="film-library-tools" aria-label="Film library filters">
+        <label><span className="sr-only">Search films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search films…" /></label>
+        <div className="film-filter-tabs" role="group" aria-label="Filter films by schedule status">
+          <button type="button" className={filmFilter === "all" ? "active" : ""} aria-pressed={filmFilter === "all"} onClick={() => setFilmFilter("all")}>All <span>{movies.length}</span></button>
+          <button type="button" className={filmFilter === "scheduled" ? "active" : ""} aria-pressed={filmFilter === "scheduled"} onClick={() => setFilmFilter("scheduled")}>Scheduled <span>{scheduledMovieCount}</span></button>
+          <button type="button" className={filmFilter === "unscheduled" ? "active" : ""} aria-pressed={filmFilter === "unscheduled"} onClick={() => setFilmFilter("unscheduled")}>Unscheduled <span>{movies.length - scheduledMovieCount}</span></button>
+        </div>
+      </div>
       <div className="film-library-list">
-        {movies.map((movie) => <div
+        {filteredMovies.map((movie) => <div
           className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
           draggable
           key={movie.id}
@@ -403,7 +422,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+        ><div className="film-card-poster">{movie.posterUrl ? <img src={movie.posterUrl} alt="" /> : <span aria-hidden="true">{movie.title.slice(0, 1)}</span>}</div><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><b className={`film-schedule-status ${upcomingMovieIds.has(movie.id) ? "scheduled" : "unscheduled"}`}>{upcomingMovieIds.has(movie.id) ? "Scheduled" : "Unscheduled"}</b><button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}
@@ -411,6 +430,7 @@ export function SchedulingCalendar({
           onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
           onMouseDown={(event) => event.stopPropagation()}
         >×</button></div>)}
+        {!filteredMovies.length && <div className="film-library-empty"><strong>No films found</strong><span>Try a different search or schedule filter.</span><button type="button" onClick={() => { setFilmQuery(""); setFilmFilter("all"); }}>Clear filters</button></div>}
       </div>
       <section className="film-library-detail" aria-live="polite">
         {selectedLibraryMovie ? <>
