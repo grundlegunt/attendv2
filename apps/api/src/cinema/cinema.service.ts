@@ -612,8 +612,6 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       {
         isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-        maxWait: DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS,
-        timeout: DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS,
       },
     );
   }
@@ -849,7 +847,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         });
         return showtime;
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS,
+        timeout: DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS,
+      },
     );
   }
 
