@@ -136,6 +136,16 @@ export default function AdminPage() {
     } catch (reason) { showError(reason); }
   }
 
+  async function permanentlyDeleteMovie(movie: Movie) {
+    if (!window.confirm(`Permanently delete ${movie.title}? This cannot be undone.`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/cinema/movies/${movie.id}/permanent`, { accessToken: token ?? undefined, method: "DELETE" });
+      await refresh();
+      setNotice(`${movie.title} was permanently deleted.`);
+    } catch (reason) { showError(reason); }
+  }
+
   async function duplicateDay(sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") {
     setError(null);
     const result = await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
@@ -313,6 +323,7 @@ export default function AdminPage() {
       onEditMovie={openMovieEditor}
       onArchiveMovie={archiveMovie}
       onRestoreMovie={restoreMovie}
+      onDeleteMovie={permanentlyDeleteMovie}
       onDuplicateDay={duplicateDay}
     />
 

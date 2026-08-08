@@ -946,6 +946,31 @@ describe("Milestone 1 cinema configuration", () => {
     expect(restored.body.archivedMovies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
   });
 
+  it("permanently deletes an unused archived movie", async () => {
+    const movie = await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ title: "Disposable Feature", runtimeMinutes: 88 })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/movies/${movie.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/movies/${movie.body.id}/permanent`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200)
+      .expect({ deleted: true, id: movie.body.id });
+
+    const bootstrap = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(bootstrap.body.archivedMovies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
+  });
+
   it("rejects a server role from creating a movie", async () => {
     const login = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")
