@@ -26,6 +26,7 @@ type RevenueReport = {
 
 type AuditEvent = { id: string; action: string; entityType: string; occurredAt: string };
 type Settings = { timeClockEnabled: boolean; ticketTaxRateBasisPoints: number };
+type FilmPerformanceRange = "today" | "7d" | "30d";
 
 function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -39,6 +40,12 @@ function dayRange() {
   return { from, to };
 }
 
+function performanceRange(range: FilmPerformanceRange) {
+  const { from, to } = dayRange();
+  if (range !== "today") from.setDate(from.getDate() - (range === "7d" ? 6 : 29));
+  return { from, to };
+}
+
 function messageFor(reason: unknown) {
   return reason instanceof ApiRequestError ? reason.body.message : "Some dashboard data could not be loaded.";
 }
@@ -47,6 +54,9 @@ export function AdminDashboard() {
   const { employee, accessToken } = useAdminSession();
   const [bootstrap, setBootstrap] = useState<Bootstrap | null>(null);
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [filmRevenue, setFilmRevenue] = useState<RevenueReport | null>(null);
+  const [filmRange, setFilmRange] = useState<FilmPerformanceRange>("today");
+  const [filmRevenueLoading, setFilmRevenueLoading] = useState(false);
   const [activity, setActivity] = useState<AuditEvent[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +97,18 @@ export function AdminDashboard() {
     return () => { cancelled = true; };
   }, [accessToken, canAudit, canCinema, canFinancial, canSettings]);
 
+  useEffect(() => {
+    if (!canFinancial) return;
+    let cancelled = false;
+    const { from, to } = performanceRange(filmRange);
+    setFilmRevenueLoading(true);
+    apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
+      .then((result) => { if (!cancelled) setFilmRevenue(result); })
+      .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
+      .finally(() => { if (!cancelled) setFilmRevenueLoading(false); });
+    return () => { cancelled = true; };
+  }, [accessToken, canFinancial, filmRange]);
+
   const { from, to } = dayRange();
   const todaysShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
     const startsAt = new Date(showtime.startsAt);
@@ -94,8 +116,9 @@ export function AdminDashboard() {
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const navigation = visibleAdminNavigation(employee.permissions);
   const quickActions = navigation.flatMap((group) => group.items).filter((item) => item.href !== "/").slice(0, 5);
-  const topFilms = [...(revenue?.movies ?? [])].sort((a, b) => b.ticketsSold - a.ticketsSold || b.ticketRevenueCents - a.ticketRevenueCents).slice(0, 5);
+  const topFilms = [...(filmRevenue?.movies ?? [])].sort((a, b) => b.ticketsSold - a.ticketsSold || b.ticketRevenueCents - a.ticketRevenueCents).slice(0, 5);
   const topTicketCount = Math.max(1, ...topFilms.map((film) => film.ticketsSold));
+  const filmRangeLabel = filmRange === "today" ? "Today" : filmRange === "7d" ? "Last 7 days" : "Last 30 days";
 
   return <main className="admin-route-page dashboard-page">
     <section className="dashboard-heading">
@@ -110,10 +133,10 @@ export function AdminDashboard() {
       {canCinema && <Link href="/film-series" className="dashboard-metric"><span>Film series</span><strong>{bootstrap?.location.organization.filmSeries.filter((series) => series.active).length ?? "—"}</strong><small>{bootstrap?.location.organization.movies.length ?? 0} movies in library</small></Link>}
     </section>
     {canFinancial && <section className="panel dashboard-top-films" aria-labelledby="top-films-heading">
-      <div className="dashboard-section-heading"><div><p className="kicker">TICKET SALES · TODAY</p><h2 id="top-films-heading">Top performing films</h2></div><Link href="/reports">View report</Link></div>
-      {topFilms.length ? <div className="top-film-list">{topFilms.map((film, index) => <div className="top-film-row" key={film.movieId}>
+      <div className="dashboard-section-heading"><div><p className="kicker">TICKET SALES · {filmRangeLabel.toUpperCase()}</p><h2 id="top-films-heading">Top performing films</h2></div><div className="top-film-heading-actions"><div className="top-film-range" role="group" aria-label="Top performing films reporting period"><button type="button" className={filmRange === "today" ? "active" : ""} onClick={() => setFilmRange("today")}>Today</button><button type="button" className={filmRange === "7d" ? "active" : ""} onClick={() => setFilmRange("7d")}>7 days</button><button type="button" className={filmRange === "30d" ? "active" : ""} onClick={() => setFilmRange("30d")}>30 days</button></div><Link href="/reports">View report</Link></div></div>
+      {filmRevenueLoading && !filmRevenue ? <p className="dashboard-empty">Loading film performance…</p> : topFilms.length ? <div className={`top-film-list ${filmRevenueLoading ? "loading" : ""}`}>{topFilms.map((film, index) => <Link className="top-film-row" href={`/scheduling?movieId=${encodeURIComponent(film.movieId)}`} key={film.movieId} aria-label={`Open ${film.title} in scheduling`}>
         <span className="top-film-rank">{index + 1}</span><strong>{film.title}</strong><div className="top-film-track"><span style={{ width: `${Math.max(5, (film.ticketsSold / topTicketCount) * 100)}%` }} /></div><b>{film.ticketsSold} {film.ticketsSold === 1 ? "ticket" : "tickets"}</b><small>{money(film.ticketRevenueCents)}</small>
-      </div>)}</div> : <p className="dashboard-empty">No ticket sales have been recorded today.</p>}
+      </Link>)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
     </section>}
     <section className="dashboard-grid">
       {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">TODAY</p><h2 id="today-schedule-heading">Schedule</h2></div><Link href="/scheduling">View calendar</Link></div>

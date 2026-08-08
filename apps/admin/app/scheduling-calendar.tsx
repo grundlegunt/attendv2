@@ -47,6 +47,7 @@ interface SchedulingCalendarProps {
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
   archivedMovies: ScheduleMovie[];
+  initialSelectedMovieId?: string | null;
   showtimes: CalendarShowtime[];
   preShowBufferMinutes: number;
   cleaningBufferMinutes: number;
@@ -101,6 +102,7 @@ export function SchedulingCalendar({
   auditoriums,
   movies,
   archivedMovies,
+  initialSelectedMovieId = null,
   showtimes,
   preShowBufferMinutes,
   cleaningBufferMinutes,
@@ -119,7 +121,7 @@ export function SchedulingCalendar({
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
+  const [selectedMovieId, setSelectedMovieId] = useState<string | null>(initialSelectedMovieId);
   const [filmQuery, setFilmQuery] = useState("");
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState("");
