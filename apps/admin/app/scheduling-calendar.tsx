@@ -57,6 +57,7 @@ interface SchedulingCalendarProps {
   onEditMovie: (movie: ScheduleMovie) => void;
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
   onRestoreMovie: (movie: ScheduleMovie) => Promise<void>;
+  onDeleteMovie: (movie: ScheduleMovie) => Promise<void>;
   onDuplicateDay: (sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") => Promise<void>;
 }
 
@@ -110,6 +111,7 @@ export function SchedulingCalendar({
   onEditMovie,
   onArchiveMovie,
   onRestoreMovie,
+  onDeleteMovie,
   onDuplicateDay,
 }: SchedulingCalendarProps) {
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
@@ -382,43 +384,8 @@ export function SchedulingCalendar({
     </div>}
 
     <div className="film-library" aria-label="Film library">
+      <div className="film-library-overview">
       <div className="film-library-heading"><b>Film library</b><span>Click a film for its details. Drag it into an open room time to schedule it.</span></div>
-      <div className="film-library-content">
-        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search active and archived films…" /></label>
-      <div className="film-library-list">
-        {filteredMovies.map((movie) => <div
-          className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
-          draggable
-          key={movie.id}
-          role="button"
-          tabIndex={0}
-          aria-pressed={selectedMovieId === movie.id}
-          onClick={() => setSelectedMovieId(movie.id)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              setSelectedMovieId(movie.id);
-            }
-          }}
-          onDragStart={(event) => {
-            const key = `movie:${movie.id}`;
-            event.dataTransfer.effectAllowed = "copy";
-            event.dataTransfer.setData("text/plain", key);
-            setDraggingKey(key);
-          }}
-          onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-          title="Drag this film onto the daily schedule"
-        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
-          type="button"
-          className="film-archive"
-          aria-label={`Remove ${movie.title} from the film library`}
-          title="Remove from film library"
-          onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
-          onMouseDown={(event) => event.stopPropagation()}
-        >×</button></div>)}
-        {!filteredMovies.length && <div className="film-library-empty"><strong>No active films found</strong><span>{filteredArchivedMovies.length ? "Matching archived films are shown below." : "Try a different title."}</span><button type="button" onClick={() => setFilmQuery("")}>Clear search</button></div>}
-      </div>
-      </div>
       <section className="film-library-detail" aria-live="polite">
         {selectedLibraryMovie ? <>
           <div className="film-detail-poster">
@@ -469,16 +436,56 @@ export function SchedulingCalendar({
           <p>Its poster, synopsis, event or series labels, presentation types, and upcoming appearances will appear here.</p>
         </div>}
       </section>
-    </div>
 
-    <details className="archived-films" open={normalizedFilmQuery ? true : undefined}>
-      <summary>Archived films <span>{normalizedFilmQuery ? filteredArchivedMovies.length : archivedMovies.length}</span></summary>
-      <p>Archived films stay connected to their historical showtimes, ticket sales, and reports.</p>
-      {filteredArchivedMovies.length ? <div className="archived-film-list">{filteredArchivedMovies.map((movie) => <div key={movie.id}>
-        <span><strong>{movie.title}</strong><small>{movie.runtimeMinutes} min</small></span>
-        <button type="button" onClick={() => void onRestoreMovie(movie)}>Restore</button>
-      </div>)}</div> : <p>{normalizedFilmQuery ? "No archived films match this search." : "No archived films."}</p>}
-    </details>
+      <details className="archived-films" open={normalizedFilmQuery ? true : undefined}>
+        <summary>Archived films <span>{normalizedFilmQuery ? filteredArchivedMovies.length : archivedMovies.length}</span></summary>
+        <p>Archived films stay connected to their historical showtimes, ticket sales, and reports.</p>
+        {filteredArchivedMovies.length ? <div className="archived-film-list">{filteredArchivedMovies.map((movie) => <div key={movie.id}>
+          <span><strong>{movie.title}</strong><small>{movie.runtimeMinutes} min</small></span>
+          <div><button type="button" onClick={() => void onRestoreMovie(movie)}>Restore</button><button type="button" className="danger" onClick={() => void onDeleteMovie(movie)}>Delete permanently</button></div>
+        </div>)}</div> : <p>{normalizedFilmQuery ? "No archived films match this search." : "No archived films."}</p>}
+      </details>
+      </div>
+      <div className="film-library-content">
+        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search" /></label>
+      <div className="film-library-list">
+        {filteredMovies.map((movie) => <div
+          className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
+          draggable
+          key={movie.id}
+          role="button"
+          tabIndex={0}
+          aria-pressed={selectedMovieId === movie.id}
+          onClick={() => setSelectedMovieId(movie.id)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setSelectedMovieId(movie.id);
+            }
+          }}
+          onDragStart={(event) => {
+            const key = `movie:${movie.id}`;
+            event.dataTransfer.effectAllowed = "copy";
+            event.dataTransfer.setData("text/plain", key);
+            setDraggingKey(key);
+          }}
+          onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
+          title="Drag this film onto the daily schedule"
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+          type="button"
+          className="film-archive"
+          aria-label={`Remove ${movie.title} from the film library`}
+          title="Remove from film library"
+          onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
+          onMouseDown={(event) => event.stopPropagation()}
+        >×</button></div>)}
+        {normalizedFilmQuery && filteredArchivedMovies.map((movie) => <div className="archived-search-result" key={`archived-${movie.id}`}>
+          <span><small>Archived</small><strong>{movie.title}</strong></span><span>{movie.runtimeMinutes} min</span><button type="button" onClick={() => void onRestoreMovie(movie)}>Restore</button><button type="button" className="danger" onClick={() => void onDeleteMovie(movie)}>Delete permanently</button>
+        </div>)}
+        {!filteredMovies.length && <div className="film-library-empty"><strong>No active films found</strong><span>{filteredArchivedMovies.length ? "Matching archived films are shown below." : "Try a different title."}</span><button type="button" onClick={() => setFilmQuery("")}>Clear search</button></div>}
+      </div>
+      </div>
+    </div>
 
     {duplicateOpen && <div className="editor-backdrop duplicate-day-backdrop" role="presentation" onMouseDown={() => setDuplicateOpen(false)}>
       <form className="showtime-drawer duplicate-day-drawer" onMouseDown={(event) => event.stopPropagation()} onSubmit={async (event) => {

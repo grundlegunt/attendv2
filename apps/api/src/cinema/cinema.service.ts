@@ -384,6 +384,27 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async permanentlyDeleteMovie(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const movie = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: false } });
+      if (!movie) throw AppError.notFound("Archived movie not found.");
+      const showtimeCount = await tx.showtime.count({ where: { movieId: id } });
+      if (showtimeCount) {
+        throw AppError.conflict("This film has showtime or sales history and cannot be permanently deleted. Keep it archived to preserve reporting records.");
+      }
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "movie.deleted",
+        entityType: "Movie", entityId: movie.id, locationId,
+        beforeState: { active: false, title: movie.title, runtimeMinutes: movie.runtimeMinutes },
+      } });
+      await tx.movie.delete({ where: { id } });
+      return { deleted: true, id };
+    });
+  }
+
   async updateMovie(actor: RequestActor, id: string, input: MovieUpdateInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(async (tx) => {

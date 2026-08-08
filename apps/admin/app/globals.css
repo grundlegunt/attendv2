@@ -67,24 +67,27 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .legend-swatch.draft { background: #775d26; }
 .legend-swatch.past { background: #474944; }
 .schedule-legend span:last-child { margin-left: auto; }
-.film-library { display: grid; grid-template-columns: minmax(300px, .7fr) minmax(500px, 1.3fr); grid-template-areas: "heading list" "detail list"; gap: 22px 32px; align-items: start; padding: 28px 32px; border-top: 1px solid #34342f; background: #171815; }
-.film-library-heading { grid-area: heading; z-index: 1; display: grid; align-content: start; gap: 8px; }
+.film-library { display: grid; grid-template-columns: minmax(300px, .7fr) minmax(500px, 1.3fr); gap: 32px; align-items: start; padding: 28px 32px; border-top: 1px solid #34342f; background: #171815; }
+.film-library-overview { display: grid; align-content: start; gap: 22px; min-width: 0; }
+.film-library-heading { z-index: 1; display: grid; align-content: start; gap: 8px; }
 .film-library-heading b { font-family: Georgia, serif; font-size: 2rem; }
 .film-library-heading span { max-width: 380px; color: #aaa99f; font-size: .85rem; line-height: 1.5; }
-.film-library-content { grid-area: list; display: grid; gap: 14px; min-width: 0; }
+.film-library-content { display: grid; gap: 14px; min-width: 0; }
 .film-library-search { display: block; }
 .film-library-search input { width: 100%; min-height: 42px; margin: 0; border-color: #55564f; background: #11120f; }
-.archived-films { margin: 0 32px 28px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.archived-films { margin: 0; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .archived-films > summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; color: var(--color-text-primary); font-weight: 900; cursor: pointer; list-style: none; }
 .archived-films > summary::-webkit-details-marker { display: none; }
 .archived-films > summary span { display: grid; place-items: center; min-width: 28px; min-height: 28px; border: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .72rem; }
 .archived-films > p { margin: 0; padding: 0 20px 18px; color: var(--color-text-secondary); font-size: .82rem; }
 .archived-film-list { display: grid; border-top: 1px solid var(--color-border); }
-.archived-film-list > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
+.archived-film-list > div { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--color-border); }
 .archived-film-list > div:last-child { border-bottom: 0; }
 .archived-film-list span { display: grid; gap: 3px; }
 .archived-film-list small { color: var(--color-text-secondary); }
+.archived-film-list > div > div { display: flex; flex-wrap: wrap; gap: 8px; }
 .archived-film-list button { padding: 9px 14px; border: 1px solid var(--color-accent); background: transparent; color: var(--color-accent); font-weight: 900; cursor: pointer; }
+.archived-film-list button.danger, .archived-search-result button.danger { border-color: #f05a45; color: #f05a45; }
 .film-library-list { display: grid; min-width: 0; border-top: 1px solid #55564f; }
 .film-card { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr) 74px 110px; align-items: center; gap: 12px; min-width: 0; min-height: 62px; padding: 8px 42px 8px 8px; border: 0; border-bottom: 1px solid #55564f; border-radius: 0; background: transparent; color: white; cursor: grab; user-select: none; }
 .film-edit { border: 0; background: transparent; color: #f0bd2d; font-size: .7rem; font-weight: 900; cursor: pointer; }
@@ -100,7 +103,11 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-library-empty { display: grid; justify-items: start; gap: 6px; padding: 28px 12px; border-bottom: 1px solid #55564f; color: #aaa99f; }
 .film-library-empty strong { color: white; }
 .film-library-empty button { margin-top: 6px; padding: 8px 11px; border: 1px solid #f0bd2d; background: transparent; color: #f0bd2d; font-weight: 900; cursor: pointer; }
-.film-library-detail { grid-area: detail; display: grid; grid-template-columns: 1fr; gap: 20px; min-height: 260px; padding: 20px; border: 1px solid #45463f; background: #20211d; }
+.film-library-detail { display: grid; grid-template-columns: 1fr; gap: 20px; min-height: 260px; padding: 20px; border: 1px solid #45463f; background: #20211d; }
+.archived-search-result { display: grid; grid-template-columns: minmax(0, 1fr) 74px auto auto; align-items: center; gap: 12px; min-height: 62px; padding: 8px 10px; border-bottom: 1px solid #55564f; }
+.archived-search-result > span:first-child { display: grid; gap: 3px; }
+.archived-search-result small { color: var(--color-accent); font-size: .6rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.archived-search-result button { padding: 8px 10px; border: 1px solid var(--color-accent); background: transparent; color: var(--color-accent); font-weight: 900; cursor: pointer; }
 .film-detail-poster { display: grid; place-items: center; min-height: 250px; overflow: hidden; border: 1px solid #4d4e47; background: #11120f; color: #77786f; font-size: .75rem; text-align: center; }
 .film-detail-poster img { width: 100%; height: 100%; max-height: 320px; object-fit: cover; }
 .film-detail-copy { display: grid; align-content: start; gap: 12px; min-width: 0; }
@@ -301,10 +308,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .schedule-legend span:last-child { width: 100%; margin-left: 0; }
   .cinema-calendar { --room-column: 132px; }
   .room-label strong { font-size: 1.05rem; }
-  .film-library { grid-template-columns: 1fr; grid-template-areas: "heading" "list" "detail"; gap: 18px; padding: 22px 18px; }
+  .film-library { grid-template-columns: 1fr; gap: 18px; padding: 22px 18px; }
   .film-card { grid-template-columns: minmax(0, 1fr) 70px; gap: 10px; }
   .film-edit { display: none; }
   .film-card::after { display: none; }
+  .archived-search-result { grid-template-columns: minmax(0, 1fr) auto; }
+  .archived-search-result > span:nth-child(2) { display: none; }
   .film-library-detail { grid-template-columns: 1fr; }
   .film-detail-poster { min-height: 0; aspect-ratio: 2 / 3; max-width: 220px; }
   .film-detail-heading { flex-direction: column; }
