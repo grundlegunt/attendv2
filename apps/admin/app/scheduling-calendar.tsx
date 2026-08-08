@@ -119,7 +119,6 @@ export function SchedulingCalendar({
   const [exporting, setExporting] = useState(false);
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(null);
   const [filmQuery, setFilmQuery] = useState("");
-  const [filmFilter, setFilmFilter] = useState<"all" | "scheduled" | "unscheduled">("all");
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState("");
   const [duplicateTargets, setDuplicateTargets] = useState<string[]>([]);
@@ -213,15 +212,9 @@ export function SchedulingCalendar({
     .flatMap((showtime) => showtime.filmSeries ? [[showtime.filmSeries.id, showtime.filmSeries] as const] : [])).values());
   const presentations = Array.from(new Set(selectedMovieShowtimes
     .map((showtime) => showtime.presentation ?? "STANDARD")));
-  const upcomingMovieIds = new Set(showtimes.filter((showtime) => new Date(showtime.startsAt) >= now).map((showtime) => showtime.movie.id));
   const normalizedFilmQuery = filmQuery.trim().toLocaleLowerCase();
-  const filteredMovies = movies.filter((movie) => {
-    const matchesSearch = !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery);
-    const hasUpcomingShowtime = upcomingMovieIds.has(movie.id);
-    const matchesFilter = filmFilter === "all" || (filmFilter === "scheduled" ? hasUpcomingShowtime : !hasUpcomingShowtime);
-    return matchesSearch && matchesFilter;
-  });
-  const scheduledMovieCount = movies.filter((movie) => upcomingMovieIds.has(movie.id)).length;
+  const filteredMovies = movies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
+  const filteredArchivedMovies = archivedMovies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
 
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
@@ -391,14 +384,7 @@ export function SchedulingCalendar({
     <div className="film-library" aria-label="Film library">
       <div className="film-library-heading"><b>Film library</b><span>Click a film for its details. Drag it into an open room time to schedule it.</span></div>
       <div className="film-library-content">
-      <div className="film-library-tools" aria-label="Film library filters">
-        <label><span className="sr-only">Search films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search films…" /></label>
-        <div className="film-filter-tabs" role="group" aria-label="Filter films by schedule status">
-          <button type="button" className={filmFilter === "all" ? "active" : ""} aria-pressed={filmFilter === "all"} onClick={() => setFilmFilter("all")}>All <span>{movies.length}</span></button>
-          <button type="button" className={filmFilter === "scheduled" ? "active" : ""} aria-pressed={filmFilter === "scheduled"} onClick={() => setFilmFilter("scheduled")}>Scheduled <span>{scheduledMovieCount}</span></button>
-          <button type="button" className={filmFilter === "unscheduled" ? "active" : ""} aria-pressed={filmFilter === "unscheduled"} onClick={() => setFilmFilter("unscheduled")}>Unscheduled <span>{movies.length - scheduledMovieCount}</span></button>
-        </div>
-      </div>
+        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search active and archived films…" /></label>
       <div className="film-library-list">
         {filteredMovies.map((movie) => <div
           className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
@@ -422,7 +408,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><div className="film-card-poster">{movie.posterUrl ? <img src={movie.posterUrl} alt="" /> : <span aria-hidden="true">{movie.title.slice(0, 1)}</span>}</div><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><b className={`film-schedule-status ${upcomingMovieIds.has(movie.id) ? "scheduled" : "unscheduled"}`}>{upcomingMovieIds.has(movie.id) ? "Scheduled" : "Unscheduled"}</b><button
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}
@@ -430,7 +416,8 @@ export function SchedulingCalendar({
           onClick={(event) => { event.stopPropagation(); void onArchiveMovie(movie); }}
           onMouseDown={(event) => event.stopPropagation()}
         >×</button></div>)}
-        {!filteredMovies.length && <div className="film-library-empty"><strong>No films found</strong><span>Try a different search or schedule filter.</span><button type="button" onClick={() => { setFilmQuery(""); setFilmFilter("all"); }}>Clear filters</button></div>}
+        {!filteredMovies.length && <div className="film-library-empty"><strong>No active films found</strong><span>{filteredArchivedMovies.length ? "Matching archived films are shown below." : "Try a different title."}</span><button type="button" onClick={() => setFilmQuery("")}>Clear search</button></div>}
+      </div>
       </div>
       <section className="film-library-detail" aria-live="polite">
         {selectedLibraryMovie ? <>
@@ -482,16 +469,15 @@ export function SchedulingCalendar({
           <p>Its poster, synopsis, event or series labels, presentation types, and upcoming appearances will appear here.</p>
         </div>}
       </section>
-      </div>
     </div>
 
-    <details className="archived-films">
-      <summary>Archived films <span>{archivedMovies.length}</span></summary>
+    <details className="archived-films" open={normalizedFilmQuery ? true : undefined}>
+      <summary>Archived films <span>{normalizedFilmQuery ? filteredArchivedMovies.length : archivedMovies.length}</span></summary>
       <p>Archived films stay connected to their historical showtimes, ticket sales, and reports.</p>
-      {archivedMovies.length ? <div className="archived-film-list">{archivedMovies.map((movie) => <div key={movie.id}>
+      {filteredArchivedMovies.length ? <div className="archived-film-list">{filteredArchivedMovies.map((movie) => <div key={movie.id}>
         <span><strong>{movie.title}</strong><small>{movie.runtimeMinutes} min</small></span>
         <button type="button" onClick={() => void onRestoreMovie(movie)}>Restore</button>
-      </div>)}</div> : <p>No archived films.</p>}
+      </div>)}</div> : <p>{normalizedFilmQuery ? "No archived films match this search." : "No archived films."}</p>}
     </details>
 
     {duplicateOpen && <div className="editor-backdrop duplicate-day-backdrop" role="presentation" onMouseDown={() => setDuplicateOpen(false)}>
