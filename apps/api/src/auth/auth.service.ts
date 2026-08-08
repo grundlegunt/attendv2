@@ -257,11 +257,15 @@ export class AuthService {
     return { tokens, customer: this.customerToProfile(customer) };
   }
 
-  async customerLogout(customerId: string): Promise<void> {
-    await prisma.customerAuthAccount.update({
-      where: { customerId },
+  async customerLogout(refreshToken: string): Promise<void> {
+    const env = loadEnv();
+    const payload = this.safeVerifyRefresh(refreshToken, env.JWT_REFRESH_SECRET);
+    if (payload.actorType !== "CUSTOMER") throw AppError.unauthenticated();
+    const result = await prisma.customerAuthAccount.updateMany({
+      where: { customerId: payload.sub, refreshTokenVersion: payload.tokenVersion },
       data: { refreshTokenVersion: { increment: 1 } },
     });
+    if (result.count !== 1) throw AppError.unauthenticated("Session has already been invalidated.");
   }
 
   async customerAccount(customerId: string): Promise<CustomerAccountResponse> {

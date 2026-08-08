@@ -3,29 +3,36 @@ import { Request } from "express";
 import { InvalidTokenError, verifyAccessToken } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { AppError } from "../../common/app-error";
+import {
+  assertTrustedCustomerOrigin,
+  CUSTOMER_ACCESS_COOKIE,
+  isUnsafeMethod,
+  readCookie,
+} from "../customer-session";
 
 /**
- * Verifies the `Authorization: Bearer <token>` header and attaches the
- * decoded payload to `request.actor`. This is the *only* mechanism by
- * which a request is considered authenticated — per AGENTS.md §5, this
- * check happens server-side on every guarded route, never inferred from
- * anything client-supplied beyond the token itself.
+ * Verifies staff bearer tokens or the customer's HttpOnly access-token
+ * cookie and attaches the decoded payload to `request.actor`.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<Request>();
     const header = request.headers.authorization;
+    const bearerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
+    const cookieToken = bearerToken ? undefined : readCookie(request, CUSTOMER_ACCESS_COOKIE);
+    const token = bearerToken ?? cookieToken;
+    if (!token) throw AppError.unauthenticated();
 
-    if (!header || !header.startsWith("Bearer ")) {
-      throw AppError.unauthenticated();
+    if (cookieToken && isUnsafeMethod(request.method)) {
+      assertTrustedCustomerOrigin(request);
     }
-
-    const token = header.slice("Bearer ".length);
     const env = loadEnv();
 
     try {
-      request.actor = verifyAccessToken(token, env.JWT_ACCESS_SECRET);
+      const actor = verifyAccessToken(token, env.JWT_ACCESS_SECRET);
+      if (cookieToken && actor.actorType !== "CUSTOMER") throw AppError.unauthenticated();
+      request.actor = actor;
     } catch (err) {
       if (err instanceof InvalidTokenError) {
         throw AppError.unauthenticated("Session expired or invalid. Please log in again.");

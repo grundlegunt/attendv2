@@ -24,6 +24,26 @@ test("customer browses a live program and safely holds a seat", async ({ page })
   await expect(page.getByRole("button", { name: "Continue to tickets" })).toBeEnabled();
 });
 
+test("customer account session restores from HttpOnly cookies and clears on logout", async ({ page, context }) => {
+  await page.goto("http://127.0.0.1:3000/account");
+  await page.getByLabel("Email").fill("customer@ridgelinecinema.test");
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByText("SIGNED IN")).toBeVisible();
+
+  expect(await page.evaluate(() => window.sessionStorage.getItem("attend-customer-session"))).toBeNull();
+  const sessionCookies = (await context.cookies()).filter((cookie) => cookie.name.startsWith("attend_customer_"));
+  expect(sessionCookies).toHaveLength(2);
+  expect(sessionCookies.every((cookie) => cookie.httpOnly)).toBe(true);
+
+  await page.reload();
+  await expect(page.getByText("SIGNED IN")).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+});
+
 test("staff signs in, clocks in, and reaches live operational tools", async ({ page }) => {
   await page.goto("http://127.0.0.1:3001");
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
