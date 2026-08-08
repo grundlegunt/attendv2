@@ -26,9 +26,9 @@ export function AdminNav() {
         <span aria-hidden="true">☰</span><span>{mobileOpen ? "Close" : "Menu"}</span>
       </button>
     </header>
-    {mobileOpen && <button type="button" className="admin-sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
+    {mobileOpen && <button type="button" className="admin-sidebar-backdrop" aria-label="Dismiss navigation" onClick={() => setMobileOpen(false)} />}
     <aside id="admin-sidebar" className={`admin-sidebar ${mobileOpen ? "open" : ""}`} aria-label="Admin navigation">
-      <div className="admin-sidebar-header"><Link href="/" className="admin-brand"><span>ATTEND</span><strong>Admin</strong></Link></div>
+      <div className="admin-sidebar-header"><Link href="/" className="admin-brand"><span>ATTEND</span><strong>Admin</strong></Link><button type="button" className="admin-sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}>×</button></div>
       <nav className="admin-nav" aria-label="Admin sections">
         {groups.map((group) => {
           const expanded = !collapsedGroups.includes(group.label);

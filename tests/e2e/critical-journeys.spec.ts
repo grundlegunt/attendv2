@@ -87,6 +87,7 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
   await page.getByRole("button", { name: "Menu" }).click();
   await expect(page.getByRole("navigation", { name: "Admin sections" })).toBeVisible();
-  await page.getByRole("button", { name: "Close navigation" }).click();
+  const mobileSidebar = page.getByRole("complementary", { name: "Admin navigation" });
+  await mobileSidebar.getByRole("button", { name: "Close navigation" }).click();
   await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
 });

@@ -1,6 +1,21 @@
-import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { adminNavigation, isAdminItemActive, visibleAdminNavigation } from "../app/admin-navigation.ts";
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const Module = require("node:module");
+const { resolve } = require("node:path");
+const { describe, it } = require("node:test");
+const ts = require("typescript");
+
+const navigationPath = resolve(__dirname, "../app/admin-navigation.ts");
+const source = readFileSync(navigationPath, "utf8");
+const compiled = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  fileName: navigationPath,
+});
+const navigationModule = new Module(navigationPath, module);
+navigationModule.filename = navigationPath;
+navigationModule.paths = module.paths;
+navigationModule._compile(compiled.outputText, navigationPath);
+const { adminNavigation, isAdminItemActive, visibleAdminNavigation } = navigationModule.exports;
 
 describe("admin navigation", () => {
   it("keeps Dashboard first and active only at the admin root", () => {
