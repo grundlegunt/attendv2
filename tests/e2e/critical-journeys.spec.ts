@@ -31,10 +31,14 @@ test("customer account session restores from HttpOnly cookies and clears on logo
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("SIGNED IN")).toBeVisible();
 
+  const accountResponse = await page.request.get("http://127.0.0.1:3000/api/v1/auth/customers/me");
+  expect(accountResponse.status()).toBe(200);
+
   expect(await page.evaluate(() => window.sessionStorage.getItem("attend-customer-session"))).toBeNull();
   const sessionCookies = (await context.cookies()).filter((cookie) => cookie.name.startsWith("attend_customer_"));
   expect(sessionCookies).toHaveLength(2);
   expect(sessionCookies.every((cookie) => cookie.httpOnly)).toBe(true);
+  expect(sessionCookies.every((cookie) => cookie.domain === "127.0.0.1")).toBe(true);
 
   await page.reload();
   await expect(page.getByText("SIGNED IN")).toBeVisible();

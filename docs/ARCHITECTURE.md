@@ -9,6 +9,8 @@ One deployable API service (NestJS) with hard internal module boundaries, backed
 
 ## 2. Why NestJS for the API, not a Next.js backend
 
+`customer-web` has one deliberately thin exception at `/api/v1`: a fixed-upstream same-origin proxy for browser customer traffic. It owns no domain logic or authorization and only relays an allowlisted set of customer-facing routes to NestJS. This boundary ensures HttpOnly customer session cookies remain first-party when the frontend and API are deployed on different provider domains; staff and administrative clients continue to call NestJS directly with bearer tokens.
+
 The spec allows either. NestJS is chosen because:
 
 - The domain has many long-lived server-side concerns that don't map well to Next.js route handlers: a real-time gateway (WebSocket rooms per showtime/auditorium/tab), scheduled jobs (settlement sweep, hold expiry reconciliation), a payment webhook processor with strict ordering/idempotency needs, and fine-grained RBAC guards applied uniformly across ~40+ endpoints.
