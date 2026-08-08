@@ -71,7 +71,6 @@ export default function AdminPage() {
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -92,7 +91,6 @@ export default function AdminPage() {
   async function createMovie(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
-      const addedTitle = movieTitle;
       await apiFetch(editingMovieId ? `/cinema/movies/${editingMovieId}` : "/cinema/movies", {
         accessToken: token ?? undefined, method: editingMovieId ? "PATCH" : "POST",
         body: JSON.stringify({
@@ -116,7 +114,6 @@ export default function AdminPage() {
       setEditingMovieId(null);
       setMovieEditorOpen(false);
       await refresh();
-      setNotice(`${addedTitle} was ${editingMovieId ? "updated" : "added to the film library"}.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -127,7 +124,6 @@ export default function AdminPage() {
       await apiFetch(`/cinema/movies/${movie.id}`, { accessToken: token ?? undefined, method: "DELETE" });
       if (movieId === movie.id) setMovieId("");
       await refresh();
-      setNotice(`${movie.title} was removed from the film library. Historical records were preserved.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -136,7 +132,6 @@ export default function AdminPage() {
     try {
       await apiFetch(`/cinema/movies/${movie.id}/restore`, { accessToken: token ?? undefined, method: "POST" });
       await refresh();
-      setNotice(`${movie.title} was restored to the film library.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -146,19 +141,17 @@ export default function AdminPage() {
     try {
       await apiFetch(`/cinema/movies/${movie.id}/permanent`, { accessToken: token ?? undefined, method: "DELETE" });
       await refresh();
-      setNotice(`${movie.title} was permanently deleted.`);
     } catch (reason) { showError(reason); }
   }
 
   async function duplicateDay(sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") {
     setError(null);
-    const result = await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
+    await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
       accessToken: token ?? undefined,
       method: "POST",
       body: JSON.stringify({ sourceDate, targetDates, saleStatus }),
     });
     await refresh();
-    setNotice(`${result.createdCount} showing${result.createdCount === 1 ? "" : "s"} copied to ${targetDates.length} day${targetDates.length === 1 ? "" : "s"}.`);
   }
 
   async function createShowtime(event: FormEvent) {
@@ -233,8 +226,6 @@ export default function AdminPage() {
         }),
       });
       await refresh();
-      const movie = data?.location.organization.movies.find((candidate) => candidate.id === selectedMovieId);
-      setNotice(`${movie?.title ?? "Film"} was added to the next available schedule slot.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -257,7 +248,6 @@ export default function AdminPage() {
       });
       setOnSale(nextOnSale);
       await refresh();
-      setNotice(nextOnSale ? "Ticket sales are now open." : "Ticket sales are now closed. The showtime remains on the schedule.");
     } catch (reason) { showError(reason); }
   }
 
@@ -274,7 +264,6 @@ export default function AdminPage() {
       setEditingShowtimeId(null);
       setShowtimeEditorOpen(false);
       await refresh();
-      setNotice(`${label} was removed from the schedule.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -291,7 +280,6 @@ export default function AdminPage() {
         setShowtimeEditorOpen(false);
       }
       await refresh();
-      setNotice(`${showtime.movie.title} was removed from the schedule.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -324,7 +312,6 @@ export default function AdminPage() {
         }),
       });
       await refresh();
-      setNotice(`${showtime.movie.title} moved to ${nextStartsAt.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.`);
     } catch (reason) {
       showError(reason);
     }
@@ -348,7 +335,6 @@ export default function AdminPage() {
   return <main className="admin-shell">
     <header><div><p className="kicker">ATTEND · CINEMA CONFIG</p><h1>{data?.location.name ?? "Loading…"}</h1></div><span>{employee.name}</span></header>
     {error && <div className="error-banner">{error}</div>}
-    {notice && <button type="button" className="status-toast" onClick={() => setNotice(null)}>{notice}<span>×</span></button>}
     <section className="stats">
       <div><strong>{data?.location.auditoriums.length ?? 0}</strong><span>Auditoriums</span></div>
       <div><strong>{data?.location.organization.movies.length ?? 0}</strong><span>Movies</span></div>
