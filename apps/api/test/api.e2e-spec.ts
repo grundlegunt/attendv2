@@ -464,6 +464,21 @@ describe("RBAC permission enforcement", () => {
     expect(res.body.length).toBeGreaterThan(0);
   });
 
+  it("pages through audit events without repeating the first row", async () => {
+    const first = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?limit=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    const second = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?limit=1&offset=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+
+    expect(first.body).toHaveLength(1);
+    expect(second.body).toHaveLength(1);
+    expect(second.body[0].id).not.toBe(first.body[0].id);
+  });
+
   it("rejects a Server (lacks audit.log.view) from listing audit events, even with a valid session (403)", async () => {
     const loginRes = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")
