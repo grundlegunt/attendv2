@@ -221,7 +221,13 @@ describe("Staff authentication", () => {
 
     await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ pin: "1234" }).expect(200);
     const { prisma } = await import("@cinema/database");
+    await prisma.staffAuthAccount.update({ where: { employeeId: server.body.id }, data: { mfaEnabled: true, mfaSecretEncrypted: "test-encrypted-secret" } });
+    await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ resetMfa: true }).expect(200).expect(({ body }) => expect(body.mfaReset).toBe(true));
+    const resetAccount = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: server.body.id } });
+    expect(resetAccount.mfaEnabled).toBe(false);
+    expect(resetAccount.mfaSecretEncrypted).toBeNull();
     const audit = await prisma.auditEvent.findFirst({ where: { action: "employee.credentials_reset", entityId: server.body.id }, orderBy: { occurredAt: "desc" } });
+    expect(audit?.afterState).toMatchObject({ mfaReset: true });
     expect(JSON.stringify(audit?.afterState)).not.toContain("TemporaryPassword123!");
     expect(JSON.stringify(audit?.afterState)).not.toContain("5678");
   });

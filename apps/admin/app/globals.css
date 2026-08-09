@@ -691,3 +691,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .admin-sidebar { transition: none; }
 }
 .mfa-setup-key { display: block; margin-top: .5rem; padding: .85rem; border: 1px solid var(--color-border); overflow-wrap: anywhere; font-family: monospace; letter-spacing: .08em; user-select: all; }
+.mfa-enrollment { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; }
+.mfa-enrollment h2 { margin-top: 0; }
+.mfa-qr { padding: .65rem; background: #fff; line-height: 0; }
+@media (max-width: 640px) { .mfa-enrollment { grid-template-columns: 1fr; } .mfa-qr { width: fit-content; } }
