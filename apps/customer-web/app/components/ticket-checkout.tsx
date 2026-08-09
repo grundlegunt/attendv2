@@ -19,7 +19,8 @@ interface CheckoutConfig {
 }
 
 interface StripeElement {
-  mount(selector: string): void;
+  mount(target: string | HTMLElement): void;
+  unmount(): void;
   destroy(): void;
   on(event: "ready", handler: () => void): void;
   on(
@@ -29,7 +30,8 @@ interface StripeElement {
 }
 
 interface StripeExpressCheckoutElement {
-  mount(selector: string): void;
+  mount(target: string | HTMLElement): void;
+  unmount(): void;
   destroy(): void;
   on(event: "confirm", handler: () => void): void;
 }
@@ -113,10 +115,14 @@ export function TicketCheckout({
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [paymentElementReady, setPaymentElementReady] = useState(false);
+  const [mountableElements, setMountableElements] = useState<{
+    payment: StripeElement;
+    express: StripeExpressCheckoutElement;
+  } | null>(null);
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
-  const paymentElementRef = useRef<StripeElement | null>(null);
-  const expressCheckoutElementRef = useRef<StripeExpressCheckoutElement | null>(null);
+  const paymentContainerRef = useRef<HTMLDivElement | null>(null);
+  const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     apiFetch<CheckoutConfig>(
@@ -132,10 +138,19 @@ export function TicketCheckout({
       );
   }, [showtimeId]);
 
-  useEffect(() => () => {
-    expressCheckoutElementRef.current?.destroy();
-    paymentElementRef.current?.destroy();
-  }, []);
+  useEffect(() => {
+    if (!mountableElements || confirmation) return;
+    const paymentContainer = paymentContainerRef.current;
+    const expressContainer = expressCheckoutContainerRef.current;
+    if (!paymentContainer || !expressContainer) return;
+
+    mountableElements.express.mount(expressContainer);
+    mountableElements.payment.mount(paymentContainer);
+    return () => {
+      mountableElements.express.unmount();
+      mountableElements.payment.unmount();
+    };
+  }, [confirmation, mountableElements]);
 
   async function confirmAndFinalize(
     stripe: StripeClient,
@@ -235,13 +250,11 @@ export function TicketCheckout({
       });
       stripeRef.current = stripe;
       elementsRef.current = elements;
-      paymentElementRef.current = paymentElement;
-      expressCheckoutElementRef.current = expressCheckoutElement;
       setPaymentElementReady(false);
-      window.setTimeout(() => {
-        expressCheckoutElement.mount("#attend-express-checkout-element");
-        paymentElement.mount("#attend-payment-element");
-      }, 0);
+      setMountableElements({
+        payment: paymentElement,
+        express: expressCheckoutElement,
+      });
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -388,8 +401,8 @@ export function TicketCheckout({
             {!paymentElementReady && !error && (
               <p role="status">Loading secure payment form…</p>
             )}
-            <div id="attend-express-checkout-element" />
-            <div id="attend-payment-element" />
+            <div id="attend-express-checkout-element" ref={expressCheckoutContainerRef} />
+            <div id="attend-payment-element" ref={paymentContainerRef} />
           </div>
           <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
