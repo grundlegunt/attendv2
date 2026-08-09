@@ -35,6 +35,7 @@ const employeeUpdateSchema = z.object({ active: z.boolean().optional(), roleIds:
 const employeeCredentialsSchema = z.object({ password: z.string().min(12).max(200).optional(), pin: z.string().regex(/^\d{4,8}$/).nullable().optional() }).strict().refine((value) => value.password !== undefined || value.pin !== undefined, "Provide a password or PIN reset.");
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
+const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
 
 @Controller("management")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -88,6 +89,9 @@ export class ManagementController {
 
   @Get("refunds") @RequirePermissions(Permission.PaymentRefund)
   refundsList(@CurrentActor() actor: RequestActor, @Query("query") query?: string) { return this.refunds.refundable(this.location(actor), query); }
+
+  @Get("refunds/history") @RequirePermissions(Permission.PaymentRefund)
+  refundsHistory(@CurrentActor() actor: RequestActor, @Query() query: unknown) { return this.refunds.history(this.location(actor), refundHistorySchema.parse(query)); }
 
   @Post("refunds/ticket-orders/:orderId") @RequirePermissions(Permission.TicketRefund)
   refundTicket(@CurrentActor() actor: RequestActor, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(refundSchema)) body: unknown) { return this.refunds.refundTicket({ ...refundSchema.parse(body), orderId, locationId: this.location(actor), employeeId: actor.sub }); }

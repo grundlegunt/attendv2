@@ -27,6 +27,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   const [settings, setSettings] = useState<Settings | null>(null);
   const [people, setPeople] = useState<People | null>(null);
   const [refunds, setRefunds] = useState<Refunds | null>(null);
+  const [refundHistory, setRefundHistory] = useState<Refunds | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tax, setTax] = useState({ name: "", appliesTo: "ALL", ratePermille: 0 });
   const [charge, setCharge] = useState({ name: "", appliesTo: "ALL", ratePermille: 0 });
@@ -38,6 +39,8 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   const [refundReason, setRefundReason] = useState("Customer-requested full refund");
   const [drawerId, setDrawerId] = useState("");
   const [refundQuery, setRefundQuery] = useState("");
+  const [historyFrom, setHistoryFrom] = useState(() => new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10));
+  const [historyTo, setHistoryTo] = useState(() => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
   const canConfig = permissions.includes("ticket.price.edit");
   const canMenuConfig = permissions.includes("menu.edit");
   const canPeople = permissions.includes("employee.edit");
@@ -46,12 +49,13 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
 
   async function refresh() {
     try {
-      const [nextSettings, nextPeople, nextRefunds] = await Promise.all([
+      const [nextSettings, nextPeople, nextRefunds, nextRefundHistory] = await Promise.all([
         section === "taxes" && canConfig ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
         section === "users" && canPeople ? apiFetch<People>("/management/people", { accessToken }) : null,
         section === "refunds" && canRefund ? apiFetch<Refunds>(`/management/refunds${refundQuery.trim() ? `?query=${encodeURIComponent(refundQuery.trim())}` : ""}`, { accessToken }) : null,
+        section === "refunds" && canRefund ? apiFetch<Refunds>(`/management/refunds/history?from=${encodeURIComponent(new Date(`${historyFrom}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${historyTo}T00:00:00`).toISOString())}${refundQuery.trim() ? `&query=${encodeURIComponent(refundQuery.trim())}` : ""}`, { accessToken }) : null,
       ]);
-      setSettings(nextSettings); setPeople(nextPeople); setRefunds(nextRefunds);
+      setSettings(nextSettings); setPeople(nextPeople); setRefunds(nextRefunds); setRefundHistory(nextRefundHistory);
       if (nextPeople) {
         if (!selectedRoleId) setSelectedRoleId(nextPeople.roles[0]?.id ?? "");
         setEmployeeRoleDrafts(Object.fromEntries(nextPeople.employees.map((person) => [person.id, person.employeeRoles.map((entry) => entry.roleId)])));
@@ -129,6 +133,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
 
     {refunds && <RefundWorkbench
       refunds={refunds}
+      history={refundHistory}
       refundReason={refundReason}
       drawerId={drawerId}
       query={refundQuery}
@@ -136,19 +141,28 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
       onDrawerChange={setDrawerId}
       onQueryChange={setRefundQuery}
       onSearch={() => void refresh()}
+      historyFrom={historyFrom}
+      historyTo={historyTo}
+      onHistoryFromChange={setHistoryFrom}
+      onHistoryToChange={setHistoryTo}
       onRefund={(scope, id, cashRequired) => void refund(scope, id, cashRequired)}
     />}
   </section>;
 }
 
-function RefundWorkbench({ refunds, refundReason, drawerId, query, onReasonChange, onDrawerChange, onQueryChange, onSearch, onRefund }: {
+function RefundWorkbench({ refunds, history, refundReason, drawerId, query, historyFrom, historyTo, onReasonChange, onDrawerChange, onQueryChange, onHistoryFromChange, onHistoryToChange, onSearch, onRefund }: {
   refunds: Refunds;
+  history: Refunds | null;
   refundReason: string;
   drawerId: string;
   query: string;
+  historyFrom: string;
+  historyTo: string;
   onReasonChange: (value: string) => void;
   onDrawerChange: (value: string) => void;
   onQueryChange: (value: string) => void;
+  onHistoryFromChange: (value: string) => void;
+  onHistoryToChange: (value: string) => void;
   onSearch: () => void;
   onRefund: (scope: "ticket" | "restaurant", id: string, cashRequired?: boolean) => void;
 }) {
@@ -193,7 +207,24 @@ function RefundWorkbench({ refunds, refundReason, drawerId, query, onReasonChang
       </article>;
     })}</div>
     {!restaurantTabs.length && <p className="muted">No refundable restaurant tabs match this search.</p>}
+    <hr />
+    <h3>Completed refund history</h3>
+    <form className="refund-history-filters" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
+      <label>From<input type="date" value={historyFrom} onChange={(event) => onHistoryFromChange(event.target.value)} /></label>
+      <label>To<input type="date" value={historyTo} onChange={(event) => onHistoryToChange(event.target.value)} /></label>
+      <button className="secondary">Refresh history</button>
+    </form>
+    <RefundHistoryList history={history} />
   </section>;
+}
+
+function RefundHistoryList({ history }: { history: Refunds | null }) {
+  if (!history) return null;
+  return <div className="refund-list refund-history-list">
+    {history.ticketOrders.map((order) => <article key={`ticket-${order.id}`}><div><strong>{order.orderNumber} · {money(order.totalCents)}</strong><span>Ticket order · {order.guestName || order.guestEmail || "Walk-up customer"} · {order.tickets[0]?.showtimeSeat.showtime.movie.title ?? "Film"}</span><div className="status-row">{order.payment?.refunds.map((attempt, index) => <RefundAttemptBadge attempt={attempt} key={`${attempt.createdAt}-${index}`} />)}{order.cashTransactions.map((entry, index) => <b className="status-chip" key={index}>Cash refund {money(entry.amountCents)}</b>)}</div></div></article>)}
+    {history.restaurantTabs.map((tab) => <article key={`restaurant-${tab.id}`}><div><strong>{tab.receipt?.receiptNumber ?? tab.label ?? "Restaurant tab"} · {money(tab.totalCents ?? 0)}</strong><span>Restaurant · {tab.primaryCustomer?.name || tab.primaryCustomer?.email || "Guest"} · {tab.showtime?.movie.title ?? "Walk-in"}</span><div className="status-row">{tab.payments.flatMap((payment) => payment.refunds).map((attempt, index) => <RefundAttemptBadge attempt={attempt} key={`${attempt.createdAt}-${index}`} />)}</div></div></article>)}
+    {!history.ticketOrders.length && !history.restaurantTabs.length && <p className="muted">No completed refunds match this search and date range.</p>}
+  </div>;
 }
 
 function RefundAttemptBadge({ attempt }: { attempt: RefundAttempt }) {
