@@ -22,6 +22,7 @@ export const adminBrandingDefaults = {
 export type AdminColorHistoryEntry = {
   savedAt: string; accentColor: string; accentMutedColor: string; backgroundColor: string; surfaceColor: string;
   textColor: string; mutedTextColor: string; onSaleColor: string; draftColor: string; pastColor: string;
+  removeControlColor: string; duplicateControlColor: string;
 };
 
 export const adminUiDefaults = {
@@ -29,6 +30,8 @@ export const adminUiDefaults = {
   onSaleColor: "#2f7653",
   draftColor: "#665022",
   pastColor: "#3a3d38",
+  removeControlColor: "#f05a45",
+  duplicateControlColor: "#ffb800",
   colorHistory: [] as AdminColorHistoryEntry[],
   labels: {
     scheduleTitle: "Daily theater schedule",
@@ -77,11 +80,15 @@ export const adminUiConfigSchema = z.object({
   onSaleColor: hexColorSchema,
   draftColor: hexColorSchema,
   pastColor: hexColorSchema,
+  removeControlColor: hexColorSchema.default(adminUiDefaults.removeControlColor),
+  duplicateControlColor: hexColorSchema.default(adminUiDefaults.duplicateControlColor),
   colorHistory: z.array(z.object({
     savedAt: z.string().datetime(),
     accentColor: hexColorSchema, accentMutedColor: hexColorSchema, backgroundColor: hexColorSchema,
     surfaceColor: hexColorSchema, textColor: hexColorSchema, mutedTextColor: hexColorSchema,
     onSaleColor: hexColorSchema, draftColor: hexColorSchema, pastColor: hexColorSchema,
+    removeControlColor: hexColorSchema.default(adminUiDefaults.removeControlColor),
+    duplicateControlColor: hexColorSchema.default(adminUiDefaults.duplicateControlColor),
   }).strict()).max(20).default([]),
   labels: z.object({
     scheduleTitle: adminUiLabelSchema,

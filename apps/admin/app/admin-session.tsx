@@ -87,6 +87,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--muted": branding?.mutedTextColor ?? adminBrandingDefaults.mutedTextColor,
     "--line": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
     "--admin-font-family": fontFamilies[adminUi.fontFamily], "--schedule-on-sale": adminUi.onSaleColor, "--schedule-draft": adminUi.draftColor, "--schedule-past": adminUi.pastColor,
+    "--showtime-remove-control": adminUi.removeControlColor, "--showtime-duplicate-control": adminUi.duplicateControlColor,
   } as CSSProperties;
   if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
   if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>

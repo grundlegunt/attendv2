@@ -1,4 +1,6 @@
 import {
+  adminUiConfigSchema,
+  adminUiDefaults,
   createFilmSeriesRequestSchema,
   customerBrandingSchema,
   createMovieRequestSchema,
@@ -15,6 +17,22 @@ import {
   validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "./cinema-schemas";
+
+describe("admin schedule appearance", () => {
+  it("adds default showtime control colors to previously saved configurations", () => {
+    const legacyConfig = {
+      ...adminUiDefaults,
+      colorHistory: [],
+    } as Record<string, unknown>;
+    delete legacyConfig.removeControlColor;
+    delete legacyConfig.duplicateControlColor;
+
+    const parsed = adminUiConfigSchema.parse(legacyConfig);
+
+    expect(parsed.removeControlColor).toBe(adminUiDefaults.removeControlColor);
+    expect(parsed.duplicateControlColor).toBe(adminUiDefaults.duplicateControlColor);
+  });
+});
 
 describe("customer branding settings", () => {
   it("accepts safe six-digit colors and a hosted logo", () => {
