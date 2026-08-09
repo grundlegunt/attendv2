@@ -901,6 +901,8 @@ model Promotion {
   type                  PromotionType
   amountCents           Int?
   percentageBasisPoints Int?
+  minimumSubtotalCents  Int?
+  maximumRedemptions    Int?
   active                Boolean       @default(true)
   startsAt              DateTime?
   endsAt                DateTime?

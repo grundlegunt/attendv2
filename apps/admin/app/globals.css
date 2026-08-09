@@ -399,6 +399,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .promotion-list article > div { display: grid; gap: .2rem; }
 .promotion-list article span { color: var(--muted); font-size: .82rem; }
 .promotion-list article small { color: var(--color-accent); font-size: .75rem; font-weight: 800; }
+.promotion-list article b { display: grid; gap: .2rem; }
 .promotion-list article em { padding: .35rem .55rem; border: 1px solid var(--line); color: var(--muted); font-size: .72rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
 .promotion-list article button { width: auto; margin: 0; }
 .branding-editor .management-heading { align-items: start; }

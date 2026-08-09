@@ -17,7 +17,7 @@ type AuditEvent = {
 };
 type PromotionType = "FIXED_AMOUNT" | "PERCENTAGE" | "COMP";
 type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
-type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalDiscountCents: number }> };
+type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalDiscountCents: number }> };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -37,7 +37,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
-  const [promotion, setPromotion] = useState({ code: "", name: "", type: "FIXED_AMOUNT" as PromotionType, value: 0, startsAt: "", endsAt: "" });
+  const [promotion, setPromotion] = useState({ code: "", name: "", type: "FIXED_AMOUNT" as PromotionType, value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
   const canReports = permissions.includes("reports.view");
@@ -84,12 +84,14 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       code: promotion.code, name: promotion.name, type: promotion.type, active: true,
       ...(promotion.type === "FIXED_AMOUNT" ? { amountCents: Math.round(promotion.value * 100) } : {}),
       ...(promotion.type === "PERCENTAGE" ? { percentageBasisPoints: Math.round(promotion.value * 100) } : {}),
+      ...(promotion.minimumSubtotal > 0 ? { minimumSubtotalCents: Math.round(promotion.minimumSubtotal * 100) } : {}),
+      ...(promotion.maximumRedemptions > 0 ? { maximumRedemptions: promotion.maximumRedemptions } : {}),
       ...(promotion.startsAt ? { startsAt: new Date(promotion.startsAt).toISOString() } : {}),
       ...(promotion.endsAt ? { endsAt: new Date(promotion.endsAt).toISOString() } : {}),
     };
     try {
       await apiFetch("/management/settings/promotions", { accessToken, method: "POST", body: JSON.stringify(body) });
-      setPromotion({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, startsAt: "", endsAt: "" });
+      setPromotion({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
       await refresh();
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
   }
@@ -179,11 +181,13 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Name<input required maxLength={100} value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} placeholder="Summer member offer" /></label>
         <label>Discount type<select value={promotion.type} onChange={(event) => setPromotion({ ...promotion, type: event.target.value as PromotionType, value: 0 })}><option value="FIXED_AMOUNT">Fixed amount</option><option value="PERCENTAGE">Percentage</option><option value="COMP">Complimentary</option></select></label>
         {promotion.type !== "COMP" && <label>{promotion.type === "FIXED_AMOUNT" ? "Amount ($)" : "Percentage (%)"}<input type="number" min="0.01" max={promotion.type === "PERCENTAGE" ? 100 : undefined} step="0.01" required value={promotion.value || ""} onChange={(event) => setPromotion({ ...promotion, value: Number(event.target.value) })} /></label>}
+        <label>Minimum ticket subtotal ($)<input type="number" min="0" step="0.01" value={promotion.minimumSubtotal || ""} onChange={(event) => setPromotion({ ...promotion, minimumSubtotal: Number(event.target.value) })} placeholder="No minimum" /></label>
+        <label>Maximum redemptions<input type="number" min="1" step="1" value={promotion.maximumRedemptions || ""} onChange={(event) => setPromotion({ ...promotion, maximumRedemptions: Number(event.target.value) })} placeholder="Unlimited" /></label>
         <label>Starts (optional)<input type="datetime-local" value={promotion.startsAt} onChange={(event) => setPromotion({ ...promotion, startsAt: event.target.value })} /></label>
         <label>Ends (optional)<input type="datetime-local" value={promotion.endsAt} onChange={(event) => setPromotion({ ...promotion, endsAt: event.target.value })} /></label>
         <button className="primary">Create promotion</button>
       </form>
-      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount} redemptions · {item.discountedTicketCount} tickets · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}</b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></article>)}</div>
+      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></article>)}</div>
     </section>}
 
     {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2>

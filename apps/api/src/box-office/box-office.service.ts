@@ -58,9 +58,11 @@ export class BoxOfficeService {
     const subtotalCents = priceTier.ticketPriceMinor * holds.length;
     const feesCents = priceTier.feeMinor * holds.length;
     const promotion = input.promotionCode
-      ? await prisma.promotion.findFirst({ where: { locationId: input.locationId, code: input.promotionCode.toUpperCase(), active: true, AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] } })
+      ? await prisma.promotion.findFirst({ where: { locationId: input.locationId, code: input.promotionCode.toUpperCase(), active: true, AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { id: true } } } })
       : null;
     if (input.promotionCode && !promotion) throw AppError.notFound("Promotion was not found or is inactive.");
+    if (promotion?.minimumSubtotalCents != null && subtotalCents < promotion.minimumSubtotalCents) throw AppError.validationFailed(`Promotion requires a minimum ticket subtotal of ${promotion.minimumSubtotalCents} cents.`);
+    if (promotion?.maximumRedemptions != null && promotion.ticketOrders.length >= promotion.maximumRedemptions) throw AppError.conflict("Promotion redemption limit has been reached.");
     const discountCents = !promotion ? 0 : promotion.type === "COMP" ? subtotalCents : promotion.type === "FIXED_AMOUNT" ? Math.min(subtotalCents, promotion.amountCents ?? 0) : Math.min(subtotalCents, Math.round(subtotalCents * (promotion.percentageBasisPoints ?? 0) / 10_000));
     const taxableSubtotal = subtotalCents - discountCents;
     const taxCents = Math.round(taxableSubtotal * location.ticketTaxRateBasisPoints / 10_000);
