@@ -80,6 +80,25 @@ export class ManagementService {
     });
   }
 
+  async updatePromotion(input: { locationId: string; employeeId: string; promotionId: string; code?: string; name?: string; type?: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number | null; percentageBasisPoints?: number | null; active?: boolean; startsAt?: Date | null; endsAt?: Date | null }) {
+    const before = await prisma.promotion.findFirst({ where: { id: input.promotionId, locationId: input.locationId } });
+    if (!before) throw AppError.notFound("Promotion was not found.");
+    const type = input.type ?? before.type;
+    const amountCents = input.amountCents === undefined ? before.amountCents : input.amountCents;
+    const percentageBasisPoints = input.percentageBasisPoints === undefined ? before.percentageBasisPoints : input.percentageBasisPoints;
+    if (type === "FIXED_AMOUNT" && amountCents == null) throw AppError.validationFailed("A fixed promotion requires an amount.");
+    if (type === "PERCENTAGE" && percentageBasisPoints == null) throw AppError.validationFailed("A percentage promotion requires a percentage.");
+    const startsAt = input.startsAt === undefined ? before.startsAt : input.startsAt;
+    const endsAt = input.endsAt === undefined ? before.endsAt : input.endsAt;
+    if (startsAt && endsAt && startsAt >= endsAt) throw AppError.validationFailed("Promotion end time must be after its start time.");
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.promotion.update({ where: { id: before.id }, data: { code: input.code?.toUpperCase(), name: input.name, type, amountCents: type === "FIXED_AMOUNT" ? amountCents : null, percentageBasisPoints: type === "PERCENTAGE" ? percentageBasisPoints : null, active: input.active, startsAt, endsAt } });
+      const state = (promotion: typeof updated) => ({ code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, active: promotion.active, startsAt: promotion.startsAt, endsAt: promotion.endsAt });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.updated", entityType: "Promotion", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
+      return updated;
+    });
+  }
+
   async people(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId } });
     const [employees, roles, permissions] = await Promise.all([

@@ -761,6 +761,34 @@ describe("Milestone 1 cinema configuration", () => {
     expect(serviceAudit.body[0]).toEqual(expect.objectContaining({ action: "service_charge_rule.updated", entityId: serviceCharge.body.id }));
   });
 
+  it("lets managers deactivate and reactivate promotions with an audit trail", async () => {
+    const promotion = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/promotions")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ code: `LIFE${Date.now()}`, name: "Integration lifecycle", type: "PERCENTAGE", percentageBasisPoints: 1500, active: true });
+    expect(promotion.status).toBe(201);
+
+    const deactivated = await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/promotions/${promotion.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ active: false });
+    expect(deactivated.status).toBe(200);
+    expect(deactivated.body).toEqual(expect.objectContaining({ active: false, percentageBasisPoints: 1500 }));
+
+    const reactivated = await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/promotions/${promotion.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ active: true });
+    expect(reactivated.status).toBe(200);
+    expect(reactivated.body.active).toBe(true);
+
+    const audit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=promotion.updated&limit=2")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(audit.status).toBe(200);
+    expect(audit.body.filter((event: { entityId: string }) => event.entityId === promotion.body.id)).toHaveLength(2);
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")
