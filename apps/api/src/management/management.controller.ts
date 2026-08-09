@@ -11,7 +11,18 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { ManagementService } from "./management.service";
 import { ManagementRefundService } from "./management-refund.service";
 
-const locationSchema = z.object({ timeClockEnabled: z.boolean().optional(), ticketTaxRateBasisPoints: z.number().int().min(0).max(10_000).optional() }).strict();
+const locationSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  address: z.string().trim().max(500).nullable().optional(),
+  timezone: z.string().trim().min(1).max(100).optional(),
+  timeClockEnabled: z.boolean().optional(),
+  ticketTaxRateBasisPoints: z.number().int().min(0).max(10_000).optional(),
+  preShowBufferMinutes: z.number().int().min(0).max(240).optional(),
+  cleaningBufferMinutes: z.number().int().min(15).max(240).optional(),
+  checkDropMinutesBeforeEnd: z.number().int().min(0).max(240).optional(),
+  autoSettleGraceMinutes: z.number().int().min(0).max(240).optional(),
+  autoSettleTipBasisPoints: z.number().int().min(0).max(10_000).optional(),
+}).strict();
 const appliesTo = z.enum(["ALL", "FOOD", "ALCOHOL", "NA_BEVERAGE"]);
 const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000), active: z.boolean().default(true) }).strict();
 const serviceSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000).optional(), flatCents: z.number().int().min(0).optional(), autoApply: z.boolean().default(true), active: z.boolean().default(true) }).strict();

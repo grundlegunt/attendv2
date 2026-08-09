@@ -676,6 +676,51 @@ describe("Milestone 1 cinema configuration", () => {
     expect(response.body.code).toBe("VALIDATION_FAILED");
   });
 
+  it("lets cinema managers update audited operating settings", async () => {
+    const current = await request(app.getHttpServer())
+      .get("/api/v1/management/settings")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(current.status).toBe(200);
+
+    const update = {
+      name: current.body.name,
+      address: current.body.address,
+      timezone: current.body.timezone,
+      ticketTaxRateBasisPoints: 925,
+      preShowBufferMinutes: 25,
+      cleaningBufferMinutes: 20,
+      checkDropMinutesBeforeEnd: 35,
+      autoSettleGraceMinutes: 10,
+      autoSettleTipBasisPoints: 1800,
+      timeClockEnabled: false,
+    };
+    const updated = await request(app.getHttpServer())
+      .patch("/api/v1/management/settings/location")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send(update);
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual(expect.objectContaining(update));
+
+    const audit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=location.settings_updated&limit=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(audit.status).toBe(200);
+    expect(audit.body[0].afterState).toEqual(expect.objectContaining({ cleaningBufferMinutes: 20, autoSettleTipBasisPoints: 1800 }));
+
+    await request(app.getHttpServer())
+      .patch("/api/v1/management/settings/location")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        ticketTaxRateBasisPoints: current.body.ticketTaxRateBasisPoints,
+        preShowBufferMinutes: current.body.preShowBufferMinutes,
+        cleaningBufferMinutes: current.body.cleaningBufferMinutes,
+        checkDropMinutesBeforeEnd: current.body.checkDropMinutesBeforeEnd,
+        autoSettleGraceMinutes: current.body.autoSettleGraceMinutes,
+        autoSettleTipBasisPoints: current.body.autoSettleTipBasisPoints,
+        timeClockEnabled: current.body.timeClockEnabled,
+      });
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")

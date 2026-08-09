@@ -8,17 +8,21 @@ export class ManagementService {
   async settings(locationId: string) {
     return prisma.location.findUniqueOrThrow({
       where: { id: locationId },
-      select: { id: true, name: true, customerLogoUrl: true, customerAccentColor: true, customerAccentMutedColor: true, customerBackgroundColor: true, customerBackgroundGlowColor: true, customerSurfaceColor: true, customerTextColor: true, customerMutedTextColor: true, adminAccentColor: true, adminAccentMutedColor: true, adminBackgroundColor: true, adminSurfaceColor: true, adminTextColor: true, adminMutedTextColor: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" } } },
+      select: { id: true, name: true, address: true, timezone: true, currency: true, customerLogoUrl: true, customerAccentColor: true, customerAccentMutedColor: true, customerBackgroundColor: true, customerBackgroundGlowColor: true, customerSurfaceColor: true, customerTextColor: true, customerMutedTextColor: true, adminAccentColor: true, adminAccentMutedColor: true, adminBackgroundColor: true, adminSurfaceColor: true, adminTextColor: true, adminMutedTextColor: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, preShowBufferMinutes: true, cleaningBufferMinutes: true, checkDropMinutesBeforeEnd: true, autoSettleGraceMinutes: true, autoSettleTipBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" } } },
     });
   }
 
-  async updateLocation(input: { locationId: string; employeeId: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number }) {
+  async updateLocation(input: { locationId: string; employeeId: string; name?: string; address?: string | null; timezone?: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; autoSettleTipBasisPoints?: number }) {
     return prisma.$transaction(async (tx) => {
       const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
       const updated = await tx.location.update({ where: { id: input.locationId }, data: {
+        name: input.name, address: input.address, timezone: input.timezone,
         timeClockEnabled: input.timeClockEnabled, ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints,
+        preShowBufferMinutes: input.preShowBufferMinutes, cleaningBufferMinutes: input.cleaningBufferMinutes,
+        checkDropMinutesBeforeEnd: input.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: input.autoSettleGraceMinutes,
+        autoSettleTipBasisPoints: input.autoSettleTipBasisPoints,
       } });
-      const settingsState = (location: typeof updated) => ({ timeClockEnabled: location.timeClockEnabled, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints });
+      const settingsState = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, timeClockEnabled: location.timeClockEnabled, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, autoSettleTipBasisPoints: location.autoSettleTipBasisPoints });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.settings_updated", entityType: "Location", entityId: input.locationId, beforeState: settingsState(before), afterState: settingsState(updated) } });
       return updated;
     });
