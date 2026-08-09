@@ -19,20 +19,13 @@ export default function ShowtimesPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
-  const nowPlayingMovies = useMemo(() => {
-    if (!program) return [];
-    const today = localDateKey(new Date(), program.location.timezone);
-    return program.movies.filter((movie) => {
-      const firstDate = movie.showtimes[0] ? localDateKey(movie.showtimes[0].startsAt, program.location.timezone) : null;
-      return firstDate !== null && firstDate <= today;
-    });
-  }, [program]);
+  const programMovies = useMemo(() => program?.movies ?? [], [program]);
 
   const availableDates = useMemo(
     () => Array.from(new Set(
-      nowPlayingMovies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, program!.location.timezone))),
+      programMovies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, program!.location.timezone))),
     )).sort(),
-    [program, nowPlayingMovies],
+    [program, programMovies],
   );
   const visibleDates = useMemo(() => {
     if (!program) return [];
@@ -56,7 +49,7 @@ export default function ShowtimesPage() {
 
   const moviesForActiveDate = useMemo(() => {
     if (!program || !activeDate) return [];
-    return nowPlayingMovies
+    return programMovies
       .map((movie) => ({
         movie,
         showtimes: movie.showtimes
@@ -68,7 +61,7 @@ export default function ShowtimesPage() {
         (a, b) =>
           new Date(a.showtimes[0]!.startsAt).getTime() - new Date(b.showtimes[0]!.startsAt).getTime(),
       );
-  }, [program, activeDate, nowPlayingMovies]);
+  }, [program, activeDate, programMovies]);
 
   useEffect(() => {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
@@ -131,8 +124,8 @@ export default function ShowtimesPage() {
         <>
           {programError && <div className="error-banner">{programError}</div>}
           {!program && !programError && <p className="loading-copy">Loading the program…</p>}
-          {program && nowPlayingMovies.length === 0 && <p className="loading-copy">No movies are playing today.</p>}
-          {program && nowPlayingMovies.length > 0 && moviesForActiveDate.length === 0 && (
+          {program && programMovies.length === 0 && <p className="loading-copy">No showtimes are currently on sale.</p>}
+          {program && programMovies.length > 0 && moviesForActiveDate.length === 0 && (
             <p className="loading-copy">No showtimes are scheduled for this date.</p>
           )}
 
