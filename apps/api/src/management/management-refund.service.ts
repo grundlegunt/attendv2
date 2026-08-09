@@ -39,6 +39,28 @@ export class ManagementRefundService {
     return { ticketOrders, restaurantTabs };
   }
 
+  async history(locationId: string, input: { query?: string; from?: Date; to?: Date }) {
+    const normalized = input.query?.trim();
+    const createdAt = input.from || input.to ? { ...(input.from ? { gte: input.from } : {}), ...(input.to ? { lt: input.to } : {}) } : undefined;
+    const [ticketOrders, restaurantTabs] = await Promise.all([
+      prisma.ticketOrder.findMany({
+        where: { locationId, status: { in: ["REFUNDED", "PARTIALLY_REFUNDED"] }, ...(createdAt ? { updatedAt: createdAt } : {}), ...(normalized ? { OR: [{ orderNumber: { contains: normalized, mode: "insensitive" } }, { guestEmail: { contains: normalized, mode: "insensitive" } }, { guestName: { contains: normalized, mode: "insensitive" } }] } : {}) },
+        include: {
+          tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true } } } } } },
+          payment: { include: { refunds: { orderBy: { createdAt: "desc" } } } },
+          cashTransactions: { where: { type: "REFUND" }, orderBy: { createdAt: "desc" } },
+        },
+        orderBy: { updatedAt: "desc" }, take: 100,
+      }),
+      prisma.restaurantTab.findMany({
+        where: { locationId, status: "REFUNDED", ...(createdAt ? { updatedAt: createdAt } : {}), ...(normalized ? { OR: [{ label: { contains: normalized, mode: "insensitive" } }, { primaryCustomer: { is: { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { name: { contains: normalized, mode: "insensitive" } }] } } }] } : {}) },
+        include: { primaryCustomer: { select: { name: true, email: true } }, showtime: { include: { movie: true } }, receipt: true, payments: { include: { refunds: { orderBy: { createdAt: "desc" } } } } },
+        orderBy: { updatedAt: "desc" }, take: 100,
+      }),
+    ]);
+    return { ticketOrders, restaurantTabs };
+  }
+
   refundTicket(input: { orderId: string; locationId: string; employeeId: string; requestId: string; reason: string; cashDrawerId?: string }) {
     return this.boxOffice.refundOrder(input);
   }

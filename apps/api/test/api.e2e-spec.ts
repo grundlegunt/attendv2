@@ -3478,6 +3478,12 @@ describe("Milestone 9 box office and workforce", () => {
     expect(refunded.body.status).toBe("REFUNDED");
     expect(refunded.body.tickets[0].status).toBe("REFUNDED");
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
+    const history = await request(app.getHttpServer()).get(`/api/v1/management/refunds/history?query=${encodeURIComponent(sale.body.orderNumber)}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(history.body.ticketOrders.map((order: { id: string }) => order.id)).toContain(sale.body.id);
+    expect(history.body.ticketOrders.find((order: { id: string }) => order.id === sale.body.id).cashTransactions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "REFUND" })]),
+    );
   });
 
   it("refunds a successful card-present charge exactly once when seat finalization loses its hold", async () => {
