@@ -18,6 +18,7 @@ interface Movie {
   synopsis?: string | null;
   rating?: string | null;
   posterUrl?: string | null;
+  detailPosterUrl?: string | null;
   director?: string | null; starring?: string | null; trailerUrl?: string | null; releaseYear?: number | null;
   pairings?: Array<{ menuItemId: string; sortOrder: number }>;
 }
@@ -54,6 +55,7 @@ export default function AdminPage() {
   const [movieSynopsis, setMovieSynopsis] = useState("");
   const [movieRating, setMovieRating] = useState("");
   const [moviePosterUrl, setMoviePosterUrl] = useState("");
+  const [movieDetailPosterUrl, setMovieDetailPosterUrl] = useState("");
   const [movieDirector, setMovieDirector] = useState("");
   const [movieStarring, setMovieStarring] = useState("");
   const [movieTrailerUrl, setMovieTrailerUrl] = useState("");
@@ -100,6 +102,7 @@ export default function AdminPage() {
           synopsis: movieSynopsis.trim() || null,
           rating: movieRating.trim() || null,
           posterUrl: moviePosterUrl.trim() || null,
+          detailPosterUrl: movieDetailPosterUrl.trim() || null,
           director: movieDirector.trim() || null,
           starring: movieStarring.trim() || null,
           trailerUrl: movieTrailerUrl.trim() || null,
@@ -111,6 +114,7 @@ export default function AdminPage() {
       setMovieSynopsis("");
       setMovieRating("");
       setMoviePosterUrl("");
+      setMovieDetailPosterUrl("");
       setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
       setEditingMovieId(null);
       setMovieEditorOpen(false);
@@ -339,6 +343,7 @@ export default function AdminPage() {
     setMovieSynopsis(movie?.synopsis ?? "");
     setMovieRating(movie?.rating ?? "");
     setMoviePosterUrl(movie?.posterUrl ?? "");
+    setMovieDetailPosterUrl(movie?.detailPosterUrl ?? "");
     setMovieDirector(movie?.director ?? "");
     setMovieStarring(movie?.starring ?? "");
     setMovieTrailerUrl(movie?.trailerUrl ?? "");
@@ -432,7 +437,8 @@ export default function AdminPage() {
         <label>Title<input required autoFocus value={movieTitle} onChange={(event) => setMovieTitle(event.target.value)} /></label>
         <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(event) => setRuntime(Number(event.target.value))} /></label>
         <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} placeholder="PG, PG-13, R…" /></label>
-        <label>Poster URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="https://… or /posters/film.png" /></label>
+        <label>Showtimes artwork URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="Landscape image used on film cards" /></label>
+        <label>Movie detail poster URL<input type="text" value={movieDetailPosterUrl} onChange={(event) => setMovieDetailPosterUrl(event.target.value)} placeholder="Vertical one-sheet used on the film page" /></label>
         <label>Director<input value={movieDirector} onChange={(event) => setMovieDirector(event.target.value)} /></label>
         <label>Starring<input value={movieStarring} onChange={(event) => setMovieStarring(event.target.value)} placeholder="Comma-separated cast" /></label>
         <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>

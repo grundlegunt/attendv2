@@ -26,7 +26,7 @@ export async function GET(request: Request) {
           startsAt: true,
           presentation: true,
           format: true,
-          movie: { select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, director: true, starring: true, trailerUrl: true, releaseYear: true } },
+          movie: { select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, detailPosterUrl: true, director: true, starring: true, trailerUrl: true, releaseYear: true } },
           auditorium: { select: { id: true, name: true, capacity: true } },
           priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
         },
