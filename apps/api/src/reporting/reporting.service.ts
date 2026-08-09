@@ -92,6 +92,26 @@ export class ReportingService {
     return { range, rows, totalMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0) };
   }
 
+  revenueCsv(report: Awaited<ReturnType<ReportingService["revenue"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const totals = [
+      ["Gross revenue (cents)", report.totals.grossRevenueCents], ["Refunds (cents)", report.totals.refundedCents],
+      ["Net revenue (cents)", report.totals.combinedRevenueCents], ["Ticket revenue (cents)", report.totals.ticketRevenueCents],
+      ["F&B revenue (cents)", report.totals.fnbRevenueCents], ["Tickets sold", report.totals.ticketsSold],
+      ["F&B orders", report.totals.fnbOrders], ["Average F&B per order (cents)", report.totals.averageFnbSpendPerOrderCents],
+      ["Average F&B per occupied seat (cents)", report.totals.averageFnbSpendPerSeatCents],
+    ];
+    return [
+      row(["Report from", report.range.from.toISOString()]), row(["Report to", report.range.to.toISOString()]),
+      row(["Summary metric", "Value"]), ...totals.map(row), "",
+      row(["Movie", "Tickets sold", "Ticket revenue (cents)", "F&B revenue (cents)"]),
+      ...report.movies.map((movie) => row([movie.title, movie.ticketsSold, movie.ticketRevenueCents, movie.fnbRevenueCents])), "",
+      row(["Showtime", "Starts at", "Tickets sold", "Ticket revenue (cents)", "F&B revenue (cents)"]),
+      ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents, showtime.fnbRevenueCents])),
+    ].join("\n");
+  }
+
   laborCsv(rows: Awaited<ReturnType<ReportingService["labor"]>>["rows"]) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     return ["Employee,Roles,Clock in,Clock out,Break minutes,Worked minutes", ...rows.map((row) => [row.employeeName, row.roles.join("; "), row.clockInAt.toISOString(), row.clockOutAt?.toISOString() ?? "", row.breakMinutes, row.workedMinutes].map(quote).join(","))].join("\n");

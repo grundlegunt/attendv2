@@ -362,6 +362,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .management-heading { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem; }
 .report-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; }
 .report-range label { min-width: 150px; }
+.report-export { margin-top: 1rem; }
 .management-table { display: grid; margin-top: 1rem; border-top: 1px solid var(--line); }
 .table-row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)); gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); align-items: center; }
 .table-row strong { display: grid; gap: .2rem; }
