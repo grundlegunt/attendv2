@@ -3429,6 +3429,7 @@ describe("Milestone 10 management reporting", () => {
     const report = await request(app.getHttpServer()).get(`/api/v1/reports/labor?from=${from}&to=${to}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(report.body.totalMinutes).toBe(690);
     expect(report.body.rows.map((row: { workedMinutes: number }) => row.workedMinutes)).toEqual([450, 240]);
+    expect(report.body.rows[0]).toEqual(expect.objectContaining({ breakStartAt: "2024-03-04T12:00:00.000Z", breakEndAt: "2024-03-04T12:30:00.000Z" }));
     const csv = await request(app.getHttpServer()).get(`/api/v1/reports/labor.csv?from=${from}&to=${to}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.text).toContain("Break minutes,Worked minutes");

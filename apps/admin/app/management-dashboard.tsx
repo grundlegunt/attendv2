@@ -9,7 +9,8 @@ type RevenueReport = {
   movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
 };
-type LaborReport = { totalMinutes: number; rows: Array<{ shiftId: string; employeeName: string; roles: string[]; clockInAt: string; clockOutAt: string | null; breakMinutes: number; workedMinutes: number }> };
+type LaborRow = { shiftId: string; employeeName: string; roles: string[]; clockInAt: string; clockOutAt: string | null; breakStartAt: string | null; breakEndAt: string | null; breakMinutes: number; workedMinutes: number };
+type LaborReport = { totalMinutes: number; rows: LaborRow[] };
 type AuditEvent = {
   id: string; occurredAt: string; action: string; entityType: string; entityId: string;
   actorType: string; actorId: string | null; beforeState: unknown; afterState: unknown;
@@ -20,6 +21,7 @@ type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: A
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
+const dateTimeInput = (value: string | null) => { if (!value) return ""; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
 
 type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
 
@@ -28,6 +30,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [to, setTo] = useState(dateInput(new Date(Date.now() + 86_400_000)));
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
   const [labor, setLabor] = useState<LaborReport | null>(null);
+  const [shiftDraft, setShiftDraft] = useState<{ shiftId: string; employeeName: string; clockInAt: string; clockOutAt: string; breakStartAt: string; breakEndAt: string; notes: string } | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
@@ -38,6 +41,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
   const canReports = permissions.includes("reports.view");
+  const canEditEmployees = permissions.includes("employee.edit");
   const canAudit = permissions.includes("audit.log.view");
   const canSettings = permissions.includes("ticket.price.edit");
 
@@ -101,6 +105,23 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-hours.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
 
+  function editShift(row: LaborRow) {
+    setShiftDraft({ shiftId: row.shiftId, employeeName: row.employeeName, clockInAt: dateTimeInput(row.clockInAt), clockOutAt: dateTimeInput(row.clockOutAt), breakStartAt: dateTimeInput(row.breakStartAt), breakEndAt: dateTimeInput(row.breakEndAt), notes: "" });
+  }
+
+  async function saveShift(event: FormEvent) {
+    event.preventDefault();
+    if (!shiftDraft) return;
+    setError(null);
+    if (shiftDraft.clockOutAt && new Date(shiftDraft.clockOutAt) <= new Date(shiftDraft.clockInAt)) { setError("Clock-out must be after clock-in."); return; }
+    if (shiftDraft.breakEndAt && (!shiftDraft.breakStartAt || new Date(shiftDraft.breakEndAt) <= new Date(shiftDraft.breakStartAt))) { setError("Break end must be after break start."); return; }
+    try {
+      await apiFetch(`/shifts/${shiftDraft.shiftId}`, { accessToken, method: "PATCH", body: JSON.stringify({ clockInAt: new Date(shiftDraft.clockInAt).toISOString(), clockOutAt: shiftDraft.clockOutAt ? new Date(shiftDraft.clockOutAt).toISOString() : null, breakStartAt: shiftDraft.breakStartAt ? new Date(shiftDraft.breakStartAt).toISOString() : null, breakEndAt: shiftDraft.breakEndAt ? new Date(shiftDraft.breakEndAt).toISOString() : null, notes: shiftDraft.notes }) });
+      setShiftDraft(null);
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The shift could not be adjusted."); }
+  }
+
   async function exportRevenue() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
       (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
@@ -124,7 +145,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket revenue</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
     </section>}
 
-    {labor && <section className="panel"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span>{(row.workedMinutes / 60).toFixed(2)}</span></div>)}</div></section>}
+    {labor && <section className="panel labor-report"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span className="labor-hours">{(row.workedMinutes / 60).toFixed(2)}{canEditEmployees && <button type="button" className="secondary" onClick={() => editShift(row)}>Adjust</button>}</span></div>)}</div>
+      {shiftDraft && <form className="shift-adjustment" onSubmit={(event) => void saveShift(event)}><div className="management-heading"><div><p className="kicker">MANAGER CORRECTION</p><h3>{shiftDraft.employeeName}</h3></div><button type="button" className="secondary" onClick={() => setShiftDraft(null)}>Cancel</button></div><div className="shift-adjustment-grid"><label>Clock in<input type="datetime-local" required value={shiftDraft.clockInAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockInAt: event.target.value })} /></label><label>Clock out<input type="datetime-local" value={shiftDraft.clockOutAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockOutAt: event.target.value })} /></label><label>Break start<input type="datetime-local" value={shiftDraft.breakStartAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakStartAt: event.target.value })} /></label><label>Break end<input type="datetime-local" value={shiftDraft.breakEndAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakEndAt: event.target.value })} /></label></div><label>Correction note<textarea required maxLength={500} value={shiftDraft.notes} onChange={(event) => setShiftDraft({ ...shiftDraft, notes: event.target.value })} placeholder="Why this shift was changed" /></label><button className="primary">Save correction</button></form>}
+    </section>}
 
     {settings && section === "branding" && <BrandingSummary settings={settings} />}
     {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>

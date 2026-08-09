@@ -363,6 +363,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .report-range { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; }
 .report-range label { min-width: 150px; }
 .report-export { margin-top: 1rem; }
+.labor-hours { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.labor-hours button { min-height: 34px; padding: .4rem .65rem; }
+.shift-adjustment { display: grid; gap: 1rem; margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--line); background: var(--color-bg); }
+.shift-adjustment h3 { margin: 0; }
+.shift-adjustment-grid { display: grid; grid-template-columns: repeat(2, minmax(180px, 1fr)); gap: 1rem; }
+.shift-adjustment textarea { min-height: 90px; resize: vertical; }
+.shift-adjustment > button { justify-self: start; }
 .management-table { display: grid; margin-top: 1rem; border-top: 1px solid var(--line); }
 .table-row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)); gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); align-items: center; }
 .table-row strong { display: grid; gap: .2rem; }
@@ -646,6 +653,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .promotion-list article > span { grid-column: auto; grid-row: auto; }
   .promotion-list article em { justify-self: start; }
   .location-settings-grid { grid-template-columns: 1fr; }
+  .shift-adjustment-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
