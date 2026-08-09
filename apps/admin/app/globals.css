@@ -191,6 +191,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-block { display: grid; align-content: center; gap: 4px; width: 100%; height: 100%; overflow: hidden; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--schedule-on-sale) 70%, white); border-radius: 2px; background: var(--schedule-on-sale); color: white; text-align: left; box-shadow: 0 6px 16px rgba(0,0,0,.22); cursor: pointer; }
 .showtime-block-shell:hover, .showtime-block-shell:focus-within { z-index: 3; }
 .showtime-block:hover, .showtime-block:focus-visible { filter: brightness(1.12); outline: 2px solid white; outline-offset: 2px; }
+.showtime-block-shell.selected { z-index: 2; }
+.showtime-block-shell.selected .showtime-block { outline: 3px solid var(--color-accent); outline-offset: 3px; box-shadow: 0 0 0 2px #fff, 0 9px 24px rgba(0,0,0,.45); }
+.showtime-selection-summary { margin-left: auto; color: var(--color-text-primary); }
+.showtime-selection-summary button { margin-left: 8px; padding: 4px 8px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; cursor: pointer; }
 .showtime-block strong { overflow: hidden; font-family: Georgia, serif; font-size: .95rem; text-overflow: ellipsis; white-space: nowrap; }
 .showtime-block span, .showtime-block small { overflow: hidden; font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .showtime-block small { color: rgba(255,255,255,.72); }

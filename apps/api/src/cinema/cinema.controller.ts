@@ -6,6 +6,7 @@ import {
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   duplicateShowtimeDayRequestSchema,
+  moveShowtimeGroupRequestSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
@@ -237,6 +238,19 @@ export class CinemaController {
     return this.cinemaService.duplicateShowtimeDay(
       actor,
       body as ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>,
+    );
+  }
+
+  @Patch("showtimes/group")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  moveShowtimeGroup(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(moveShowtimeGroupRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.moveShowtimeGroup(
+      actor,
+      body as ReturnType<typeof moveShowtimeGroupRequestSchema.parse>,
     );
   }
 
