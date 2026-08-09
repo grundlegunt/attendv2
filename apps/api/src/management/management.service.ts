@@ -36,12 +36,37 @@ export class ManagementService {
     });
   }
 
+  async updateTaxRule(input: { locationId: string; employeeId: string; ruleId: string; name?: string; appliesTo?: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number; active?: boolean }) {
+    const before = await prisma.taxRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
+    if (!before) throw AppError.notFound("Tax rule was not found.");
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.taxRule.update({ where: { id: before.id }, data: { name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, active: input.active } });
+      const state = (rule: typeof updated) => ({ name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, active: rule.active });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "tax_rule.updated", entityType: "TaxRule", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
+      return updated;
+    });
+  }
+
   async createServiceCharge(input: { locationId: string; employeeId: string; name: string; appliesTo: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number; flatCents?: number; autoApply: boolean; active: boolean }) {
     if ((input.ratePermille == null) === (input.flatCents == null)) throw AppError.validationFailed("Provide exactly one percentage rate or flat amount.");
     return prisma.$transaction(async (tx) => {
       const rule = await tx.serviceChargeRule.create({ data: { locationId: input.locationId, name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, flatCents: input.flatCents, autoApply: input.autoApply, active: input.active } });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "service_charge_rule.created", entityType: "ServiceChargeRule", entityId: rule.id, afterState: { name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, flatCents: rule.flatCents, autoApply: rule.autoApply, active: rule.active } } });
       return rule;
+    });
+  }
+
+  async updateServiceCharge(input: { locationId: string; employeeId: string; ruleId: string; name?: string; appliesTo?: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number | null; flatCents?: number | null; autoApply?: boolean; active?: boolean }) {
+    const before = await prisma.serviceChargeRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
+    if (!before) throw AppError.notFound("Service-charge rule was not found.");
+    const ratePermille = input.ratePermille === undefined ? before.ratePermille : input.ratePermille;
+    const flatCents = input.flatCents === undefined ? before.flatCents : input.flatCents;
+    if ((ratePermille == null) === (flatCents == null)) throw AppError.validationFailed("Provide exactly one percentage rate or flat amount.");
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.serviceChargeRule.update({ where: { id: before.id }, data: { name: input.name, appliesTo: input.appliesTo, ratePermille, flatCents, autoApply: input.autoApply, active: input.active } });
+      const state = (rule: typeof updated) => ({ name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, flatCents: rule.flatCents, autoApply: rule.autoApply, active: rule.active });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "service_charge_rule.updated", entityType: "ServiceChargeRule", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
+      return updated;
     });
   }
 

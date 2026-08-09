@@ -422,6 +422,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 @media (max-width: 900px) { .branding-layout { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .branding-colors { grid-template-columns: 1fr; } }
 .people-list, .refund-list { display: grid; margin-top: 1rem; }
+.rule-list { display: grid; margin-top: 1rem; border-top: 1px solid var(--line); }
+.rule-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
+.rule-list article > div:first-child { display: grid; gap: .2rem; }
+.rule-list span { color: var(--muted); font-size: .85rem; }
+.rule-actions { display: flex; gap: .5rem; }
+.rule-list button { width: auto; margin: 0; }
 .people-list article, .refund-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
 .people-list article div, .refund-list article div { display: grid; gap: .2rem; }
 .people-list span, .refund-list span { color: var(--muted); font-size: .85rem; }
