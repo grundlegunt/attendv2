@@ -58,6 +58,7 @@ beforeAll(async () => {
   process.env.EMAIL_PROVIDER = "test";
   process.env.RESTAURANT_SETTLEMENT_INTERVAL_MS = "0";
   process.env.OBSERVABILITY_TOKEN = "test-observability-token-at-least-32-characters";
+  process.env.AUTH_RATE_LIMIT_ATTEMPTS = "100";
 
   const { __resetEnvCacheForTests } = await import("../../../packages/config/src/env");
   __resetEnvCacheForTests();
