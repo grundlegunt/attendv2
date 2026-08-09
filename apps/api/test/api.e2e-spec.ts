@@ -721,6 +721,46 @@ describe("Milestone 1 cinema configuration", () => {
       });
   });
 
+  it("lets managers update and deactivate restaurant charge rules", async () => {
+    const tax = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/tax-rules")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: `Integration tax ${Date.now()}`, appliesTo: "FOOD", ratePermille: 90, active: true });
+    expect(tax.status).toBe(201);
+
+    const updatedTax = await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/tax-rules/${tax.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ratePermille: 95, active: false });
+    expect(updatedTax.status).toBe(200);
+    expect(updatedTax.body).toEqual(expect.objectContaining({ ratePermille: 95, active: false }));
+
+    const serviceCharge = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/service-charge-rules")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: `Integration service ${Date.now()}`, appliesTo: "ALL", ratePermille: 180, autoApply: true, active: true });
+    expect(serviceCharge.status).toBe(201);
+
+    const updatedServiceCharge = await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/service-charge-rules/${serviceCharge.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ autoApply: false, active: false });
+    expect(updatedServiceCharge.status).toBe(200);
+    expect(updatedServiceCharge.body).toEqual(expect.objectContaining({ autoApply: false, active: false }));
+
+    const taxAudit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=tax_rule.updated&limit=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(taxAudit.status).toBe(200);
+    expect(taxAudit.body[0]).toEqual(expect.objectContaining({ action: "tax_rule.updated", entityId: tax.body.id }));
+
+    const serviceAudit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=service_charge_rule.updated&limit=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(serviceAudit.status).toBe(200);
+    expect(serviceAudit.body[0]).toEqual(expect.objectContaining({ action: "service_charge_rule.updated", entityId: serviceCharge.body.id }));
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")

@@ -25,7 +25,9 @@ const locationSchema = z.object({
 }).strict();
 const appliesTo = z.enum(["ALL", "FOOD", "ALCOHOL", "NA_BEVERAGE"]);
 const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000), active: z.boolean().default(true) }).strict();
+const taxUpdateSchema = taxSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one tax-rule change.");
 const serviceSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000).optional(), flatCents: z.number().int().min(0).optional(), autoApply: z.boolean().default(true), active: z.boolean().default(true) }).strict();
+const serviceUpdateSchema = z.object({ name: z.string().trim().min(1).max(100).optional(), appliesTo: appliesTo.optional(), ratePermille: z.number().int().min(0).max(1000).nullable().optional(), flatCents: z.number().int().min(0).nullable().optional(), autoApply: z.boolean().optional(), active: z.boolean().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one service-charge change.");
 const promotionSchema = z.object({ code: z.string().trim().min(1).max(50), name: z.string().trim().min(1).max(100), type: z.enum(["FIXED_AMOUNT", "PERCENTAGE", "COMP"]), amountCents: z.number().int().positive().optional(), percentageBasisPoints: z.number().int().min(1).max(10_000).optional(), active: z.boolean().default(true), startsAt: z.coerce.date().optional(), endsAt: z.coerce.date().optional() }).strict();
 const employeeSchema = z.object({ name: z.string().trim().min(1).max(100), email: z.string().email(), password: z.string().min(12).max(200), pin: z.string().regex(/^\d{4,8}$/).optional(), roleIds: z.array(z.string().uuid()).min(1) }).strict();
 const employeeUpdateSchema = z.object({ active: z.boolean().optional(), roleIds: z.array(z.string().uuid()).min(1).optional() }).strict();
@@ -47,8 +49,14 @@ export class ManagementController {
   @Post("settings/tax-rules") @RequirePermissions(Permission.MenuEdit)
   tax(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
 
+  @Patch("settings/tax-rules/:ruleId") @RequirePermissions(Permission.MenuEdit)
+  updateTax(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Body(new ZodValidationPipe(taxUpdateSchema)) body: unknown) { return this.management.updateTaxRule({ ...taxUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub }); }
+
   @Post("settings/service-charge-rules") @RequirePermissions(Permission.MenuEdit)
   service(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(serviceSchema)) body: unknown) { return this.management.createServiceCharge({ ...serviceSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("settings/service-charge-rules/:ruleId") @RequirePermissions(Permission.MenuEdit)
+  updateService(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Body(new ZodValidationPipe(serviceUpdateSchema)) body: unknown) { return this.management.updateServiceCharge({ ...serviceUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Post("settings/promotions") @RequirePermissions(Permission.TicketPriceEdit)
   promotion(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(promotionSchema)) body: unknown) { return this.management.createPromotion({ ...promotionSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
