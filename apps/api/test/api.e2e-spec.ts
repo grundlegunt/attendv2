@@ -748,8 +748,17 @@ describe("Milestone 1 cinema configuration", () => {
     expect(updatedServiceCharge.status).toBe(200);
     expect(updatedServiceCharge.body).toEqual(expect.objectContaining({ autoApply: false, active: false }));
 
-    const audit = await prisma.auditEvent.findMany({ where: { entityId: { in: [tax.body.id, serviceCharge.body.id] } } });
-    expect(audit.map((event) => event.action)).toEqual(expect.arrayContaining(["tax_rule.updated", "service_charge_rule.updated"]));
+    const taxAudit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=tax_rule.updated&limit=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(taxAudit.status).toBe(200);
+    expect(taxAudit.body[0]).toEqual(expect.objectContaining({ action: "tax_rule.updated", entityId: tax.body.id }));
+
+    const serviceAudit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=service_charge_rule.updated&limit=1")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(serviceAudit.status).toBe(200);
+    expect(serviceAudit.body[0]).toEqual(expect.objectContaining({ action: "service_charge_rule.updated", entityId: serviceCharge.body.id }));
   });
 
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
