@@ -1,20 +1,23 @@
 "use client";
 
-import { adminBrandingDefaults, type AuthenticatedEmployee, type AuthTokenResponse } from "@cinema/shared";
+import { adminBrandingDefaults, adminUiDefaults, type AdminUiConfig, type AuthenticatedEmployee, type AuthTokenResponse } from "@cinema/shared";
 import { FormEvent, createContext, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string };
-type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null };
+type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type AdminSessionValue = Session & { signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
 const AdminSessionContext = createContext<AdminSessionValue | null>(null);
+const AdminUiContext = createContext<AdminUiConfig>(adminUiDefaults);
 
 export function useAdminSession() {
   const session = useContext(AdminSessionContext);
   if (!session) throw new Error("useAdminSession must be used inside AdminSessionProvider");
   return session;
 }
+
+export function useAdminUi() { return useContext(AdminUiContext); }
 
 export function AdminSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -36,11 +39,11 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    const locationId = process.env.NEXT_PUBLIC_LOCATION_ID;
+    const locationId = session?.employee.locationId ?? process.env.NEXT_PUBLIC_LOCATION_ID;
     apiFetch<PublicAdminBranding>(`/cinema/admin-branding${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`)
       .then(setPublicBranding)
       .catch(() => undefined);
-  }, []);
+  }, [session?.employee.locationId]);
 
   async function login(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -56,6 +59,8 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
 
   const value = useMemo(() => session ? { ...session, signOut: () => { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); } } : null, [session]);
   const branding = value?.employee.adminBranding ?? publicBranding;
+  const adminUi = publicBranding?.ui ?? adminUiDefaults;
+  const fontFamilies: Record<AdminUiConfig["fontFamily"], string> = { SYSTEM: "Inter, ui-sans-serif, system-ui, sans-serif", SERIF: "Georgia, 'Times New Roman', serif", MODERN: "'Avenir Next', 'Helvetica Neue', Arial, sans-serif", MONO: "'SFMono-Regular', Consolas, monospace" };
   const theme = {
     "--color-accent": branding?.accentColor ?? adminBrandingDefaults.accentColor,
     "--color-accent-muted": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
@@ -67,6 +72,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--accent": branding?.accentColor ?? adminBrandingDefaults.accentColor,
     "--muted": branding?.mutedTextColor ?? adminBrandingDefaults.mutedTextColor,
     "--line": branding?.accentMutedColor ?? adminBrandingDefaults.accentMutedColor,
+    "--admin-font-family": fontFamilies[adminUi.fontFamily], "--schedule-on-sale": adminUi.onSaleColor, "--schedule-draft": adminUi.draftColor, "--schedule-past": adminUi.pastColor,
   } as CSSProperties;
   if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
   if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
@@ -75,5 +81,5 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
     <button className="primary">Sign in</button>
   </form></main></div>;
-  return <AdminSessionContext.Provider value={value}><div className="admin-theme-root" style={theme}>{children}</div></AdminSessionContext.Provider>;
+  return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className="admin-theme-root" style={theme}>{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
 }

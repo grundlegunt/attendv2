@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingSchema, cinemaContentSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
+import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
@@ -38,6 +38,7 @@ const locationUpdateSchema = z.object({
   checkDropMinutesBeforeEnd: z.number().int().min(0).max(240).optional(),
   autoSettleGraceMinutes: z.number().int().min(0).max(240).optional(),
   timeClockEnabled: z.boolean().optional(),
+  adminUi: adminUiConfigSchema.optional(),
 }).merge(customerBrandingSchema).merge(adminBrandingSchema).strict();
 
 @Controller("platform")

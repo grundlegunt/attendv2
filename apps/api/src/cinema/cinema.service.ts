@@ -2,6 +2,8 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { AuditActorType, Prisma, prisma } from "@cinema/database";
 import {
+  adminUiConfigSchema,
+  adminUiDefaults,
   createAuditoriumRequestSchema,
   createFilmSeriesRequestSchema,
   createMovieRequestSchema,
@@ -959,6 +961,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       surfaceColor: location.adminSurfaceColor,
       textColor: location.adminTextColor,
       mutedTextColor: location.adminMutedTextColor,
+      ui: adminUiConfigSchema.safeParse(location.adminUiConfig).success ? adminUiConfigSchema.parse(location.adminUiConfig) : adminUiDefaults,
     };
   }
 

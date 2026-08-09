@@ -5,7 +5,7 @@ import type { SeatMapLayout } from "@cinema/shared";
 import type { SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
-import { useAdminSession } from "../admin-session";
+import { useAdminSession, useAdminUi } from "../admin-session";
 
 interface Auditorium {
   id: string; name: string; capacity: number;
@@ -46,6 +46,7 @@ function dateTimeInputValue(date: Date) {
 
 export default function AdminPage() {
   const { employee, accessToken: token } = useAdminSession();
+  const adminUi = useAdminUi();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [movieTitle, setMovieTitle] = useState("");
@@ -69,8 +70,8 @@ export default function AdminPage() {
   const [showtimeFormat, setShowtimeFormat] = useState("");
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
+  const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -86,11 +87,11 @@ export default function AdminPage() {
   }
 
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
+  const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
 
   async function createMovie(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
-      const addedTitle = movieTitle;
       await apiFetch(editingMovieId ? `/cinema/movies/${editingMovieId}` : "/cinema/movies", {
         accessToken: token ?? undefined, method: editingMovieId ? "PATCH" : "POST",
         body: JSON.stringify({
@@ -114,7 +115,6 @@ export default function AdminPage() {
       setEditingMovieId(null);
       setMovieEditorOpen(false);
       await refresh();
-      setNotice(`${addedTitle} was ${editingMovieId ? "updated" : "added to the film library"}.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -125,7 +125,6 @@ export default function AdminPage() {
       await apiFetch(`/cinema/movies/${movie.id}`, { accessToken: token ?? undefined, method: "DELETE" });
       if (movieId === movie.id) setMovieId("");
       await refresh();
-      setNotice(`${movie.title} was removed from the film library. Historical records were preserved.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -134,7 +133,6 @@ export default function AdminPage() {
     try {
       await apiFetch(`/cinema/movies/${movie.id}/restore`, { accessToken: token ?? undefined, method: "POST" });
       await refresh();
-      setNotice(`${movie.title} was restored to the film library.`);
     } catch (reason) { showError(reason); }
   }
 
@@ -144,19 +142,17 @@ export default function AdminPage() {
     try {
       await apiFetch(`/cinema/movies/${movie.id}/permanent`, { accessToken: token ?? undefined, method: "DELETE" });
       await refresh();
-      setNotice(`${movie.title} was permanently deleted.`);
     } catch (reason) { showError(reason); }
   }
 
   async function duplicateDay(sourceDate: string, targetDates: string[], saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE") {
     setError(null);
-    const result = await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
+    await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
       accessToken: token ?? undefined,
       method: "POST",
       body: JSON.stringify({ sourceDate, targetDates, saleStatus }),
     });
     await refresh();
-    setNotice(`${result.createdCount} showing${result.createdCount === 1 ? "" : "s"} copied to ${targetDates.length} day${targetDates.length === 1 ? "" : "s"}.`);
   }
 
   async function createShowtime(event: FormEvent) {
@@ -195,10 +191,17 @@ export default function AdminPage() {
     setShowtimeEditorOpen(true);
   }
 
+  useEffect(() => {
+    if (!data || !linkedShowtimeId || linkedShowtimeHandled) return;
+    const showtime = data.showtimes.find((candidate) => candidate.id === linkedShowtimeId);
+    if (showtime) editShowtime(showtime);
+    setLinkedShowtimeHandled(true);
+  }, [data, linkedShowtimeHandled, linkedShowtimeId]);
+
   function createShowtimeAt(auditorium: string, date: Date, selectedMovieId?: string) {
     const local = new Date(date);
     setEditingShowtimeId(null);
-    if (selectedMovieId) setMovieId(selectedMovieId);
+    setMovieId(selectedMovieId ?? "");
     setAuditoriumId(auditorium);
     setStartsAt(dateTimeInputValue(local));
     setOnSale(true);
@@ -207,6 +210,24 @@ export default function AdminPage() {
     setPresentation("STANDARD");
     setShowtimeFormat("");
     setShowtimeEditorOpen(true);
+  }
+
+  async function quickCreateShowtime(auditorium: string, date: Date, selectedMovieId: string) {
+    setError(null);
+    try {
+      await apiFetch("/cinema/showtimes", {
+        accessToken: token ?? undefined,
+        method: "POST",
+        body: JSON.stringify({
+          movieId: selectedMovieId,
+          auditoriumId: auditorium,
+          startsAt: date.toISOString(),
+          onSale: true,
+          presentation: "STANDARD",
+        }),
+      });
+      await refresh();
+    } catch (reason) { showError(reason); }
   }
 
   function shiftShowtime(minutes: number) {
@@ -228,7 +249,6 @@ export default function AdminPage() {
       });
       setOnSale(nextOnSale);
       await refresh();
-      setNotice(nextOnSale ? "Ticket sales are now open." : "Ticket sales are now closed. The showtime remains on the schedule.");
     } catch (reason) { showError(reason); }
   }
 
@@ -245,7 +265,22 @@ export default function AdminPage() {
       setEditingShowtimeId(null);
       setShowtimeEditorOpen(false);
       await refresh();
-      setNotice(`${label} was removed from the schedule.`);
+    } catch (reason) { showError(reason); }
+  }
+
+  async function quickRemoveShowtime(showtime: CalendarShowtime) {
+    if (!window.confirm(`Remove ${showtime.movie.title} from the schedule? This is only allowed for a future showing with no ticket, hold, or restaurant activity.`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/cinema/showtimes/${showtime.id}`, {
+        accessToken: token ?? undefined,
+        method: "DELETE",
+      });
+      if (editingShowtimeId === showtime.id) {
+        setEditingShowtimeId(null);
+        setShowtimeEditorOpen(false);
+      }
+      await refresh();
     } catch (reason) { showError(reason); }
   }
 
@@ -278,7 +313,6 @@ export default function AdminPage() {
         }),
       });
       await refresh();
-      setNotice(`${showtime.movie.title} moved to ${nextStartsAt.toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" })}.`);
     } catch (reason) {
       showError(reason);
     }
@@ -302,7 +336,6 @@ export default function AdminPage() {
   return <main className="admin-shell">
     <header><div><p className="kicker">ATTEND · CINEMA CONFIG</p><h1>{data?.location.name ?? "Loading…"}</h1></div><span>{employee.name}</span></header>
     {error && <div className="error-banner">{error}</div>}
-    {notice && <button type="button" className="status-toast" onClick={() => setNotice(null)}>{notice}<span>×</span></button>}
     <section className="stats">
       <div><strong>{data?.location.auditoriums.length ?? 0}</strong><span>Auditoriums</span></div>
       <div><strong>{data?.location.organization.movies.length ?? 0}</strong><span>Movies</span></div>
@@ -311,6 +344,7 @@ export default function AdminPage() {
     </section>
 
     {data && <div className={`schedule-with-inspector ${showtimeEditorOpen ? "inspector-open" : ""}`}><SchedulingCalendar
+      labels={adminUi.labels}
       locationName={data.location.name}
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}
@@ -320,7 +354,9 @@ export default function AdminPage() {
       preShowBufferMinutes={data.location.preShowBufferMinutes}
       cleaningBufferMinutes={Math.max(15, data.location.cleaningBufferMinutes)}
       onCreate={createShowtimeAt}
+      onQuickCreate={quickCreateShowtime}
       onEdit={editShowtime}
+      onRemoveShowtime={quickRemoveShowtime}
       onMove={moveShowtime}
       onAddMovie={() => openMovieEditor()}
       onEditMovie={openMovieEditor}
@@ -336,6 +372,7 @@ export default function AdminPage() {
           <div><p className="kicker">SELECTED SHOWTIME</p><h2>{selectedMovie?.title ?? (editingShowtimeId ? "Edit showing" : "Add showing")}</h2>{selectedRoom && <p className="inspector-room">{selectedRoom.name} · {selectedRoom.capacity} seats</p>}</div>
           <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
         </div>
+        <div className="showtime-inspector-summary">
         {selectedTiming && <div className="timing-summary">
           <div><span>Doors / listed time</span><strong>{displayTime(selectedTiming.doors)}</strong></div>
           <div><span>Feature starts</span><strong>{displayTime(selectedTiming.feature)}</strong></div>
@@ -350,21 +387,24 @@ export default function AdminPage() {
             <button type="button" className="film-details-button" onClick={() => openMovieEditor(selectedMovie)}>Edit film details &amp; poster URL</button>
           </div>
         </div>}
+        </div>
+        <div className="showtime-inspector-fields">
         <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
         <label>Move to room<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
-        <label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label>
-        <div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15 min</button><button type="button" onClick={() => shiftShowtime(-5)}>−5 min</button><button type="button" onClick={() => shiftShowtime(5)}>+5 min</button><button type="button" onClick={() => shiftShowtime(15)}>+15 min</button></div>
+        <div className="showtime-time-editor"><label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label><div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15</button><button type="button" onClick={() => shiftShowtime(-5)}>−5</button><button type="button" onClick={() => shiftShowtime(5)}>+5</button><button type="button" onClick={() => shiftShowtime(15)}>+15</button></div></div>
         <label>Sale status<select value={onSale ? "open" : "draft"} onChange={(event) => setOnSale(event.target.value === "open")}><option value="open">Open for sale</option><option value="draft">Closed draft</option></select></label>
         <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}><option value="">Automatic for show date</option>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>
         <label>Film series<select value={filmSeriesId} onChange={(event) => setFilmSeriesId(event.target.value)}><option value="">Regular engagement</option>{data.location.organization.filmSeries.filter((series) => series.active).map((series) => <option key={series.id} value={series.id}>{series.name}</option>)}</select></label>
         <label>Presentation<select value={presentation} onChange={(event) => setPresentation(event.target.value as typeof presentation)}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
         <label>Screening format<input value={showtimeFormat} onChange={(event) => setShowtimeFormat(event.target.value)} placeholder="DCP, 35mm, 70mm…" /></label>
+        </div>
         <div className="calculation-note">Attend includes {data.location.preShowBufferMinutes} minutes of pre-show, the film runtime, and at least 15 minutes of cleaning. Conflicting placements are rejected.</div>
-        <ul className="timing-rules"><li>✓ {data.location.preShowBufferMinutes} minutes for doors, ordering, and trailers</li><li>✓ Film runtime begins at feature start</li><li>✓ 15-minute cleaning gap is enforced automatically</li></ul>
+        <div className="showtime-inspector-actions">
         <button className="primary">{editingShowtimeId ? "Save changes" : "Add to schedule"}</button>
         {editingShowtimeId && <button type="button" className={onSale ? "sale-action close-sale" : "sale-action open-sale"} onClick={() => void changeSaleStatus()}>{onSale ? "Close sales" : "Open sales"}</button>}
         {editingShowtimeId && <button type="button" className="secondary destructive-outline" onClick={() => void removeShowtime()}>Remove from schedule</button>}
         <button type="button" className="secondary" onClick={() => setShowtimeEditorOpen(false)}>Close</button>
+        </div>
       </form>
     </aside>}</div>}
 

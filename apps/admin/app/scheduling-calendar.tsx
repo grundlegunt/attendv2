@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { AdminUiConfig } from "@cinema/shared";
 
 import { downloadScheduleWorkbook } from "./schedule-export";
 
@@ -43,6 +44,7 @@ export interface CalendarShowtime {
 }
 
 interface SchedulingCalendarProps {
+  labels: AdminUiConfig["labels"];
   locationName: string;
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
@@ -52,7 +54,9 @@ interface SchedulingCalendarProps {
   preShowBufferMinutes: number;
   cleaningBufferMinutes: number;
   onCreate: (auditoriumId: string, startsAt: Date, movieId?: string) => void;
+  onQuickCreate: (auditoriumId: string, startsAt: Date, movieId: string) => Promise<void>;
   onEdit: (showtime: CalendarShowtime) => void;
+  onRemoveShowtime: (showtime: CalendarShowtime) => Promise<void>;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onAddMovie: () => void;
   onEditMovie: (movie: ScheduleMovie) => void;
@@ -98,6 +102,7 @@ function minutesFrom(start: Date, value: string | Date) {
 }
 
 export function SchedulingCalendar({
+  labels,
   locationName,
   auditoriums,
   movies,
@@ -107,7 +112,9 @@ export function SchedulingCalendar({
   preShowBufferMinutes,
   cleaningBufferMinutes,
   onCreate,
+  onQuickCreate,
   onEdit,
+  onRemoveShowtime,
   onMove,
   onAddMovie,
   onEditMovie,
@@ -152,13 +159,38 @@ export function SchedulingCalendar({
     setSelectedDate(dateInputValue(next));
   }
 
+  function roundToFive(date: Date, direction: "nearest" | "up" = "nearest") {
+    const interval = 5 * 60000;
+    const value = direction === "up" ? Math.ceil(date.getTime() / interval) : Math.round(date.getTime() / interval);
+    return new Date(value * interval);
+  }
+
+  function availableStart(auditoriumId: string, proposed: Date, durationMinutes: number, ignoredShowtimeId?: string) {
+    let candidate = roundToFive(proposed);
+    const durationMs = durationMinutes * 60000;
+    for (let attempt = 0; attempt <= showtimes.length; attempt += 1) {
+      const candidateEnd = candidate.getTime() + durationMs;
+      const conflicts = showtimes.filter((showtime) => showtime.id !== ignoredShowtimeId
+        && showtime.auditorium.id === auditoriumId
+        && candidate.getTime() < new Date(showtime.roomReadyAt).getTime()
+        && candidateEnd > new Date(showtime.startsAt).getTime());
+      if (!conflicts.length) return candidate;
+      candidate = roundToFive(new Date(Math.max(...conflicts.map((showtime) => new Date(showtime.roomReadyAt).getTime()))), "up");
+    }
+    return candidate;
+  }
+
   function createAtPointer(event: React.MouseEvent<HTMLDivElement>, auditoriumId: string) {
     const target = event.target as HTMLElement;
     if (target.closest(".showtime-block") || target.closest(".drop-preview")) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const rawMinutes = ((event.clientX - bounds.left) / bounds.width) * TOTAL_HOURS * 60;
     const roundedMinutes = Math.max(0, Math.min(TOTAL_HOURS * 60 - 5, Math.round(rawMinutes / 5) * 5));
-    onCreate(auditoriumId, new Date(dayStart.getTime() + roundedMinutes * 60000));
+    const clickedTime = new Date(dayStart.getTime() + roundedMinutes * 60000);
+    const previous = visibleShowtimes
+      .filter((showtime) => showtime.auditorium.id === auditoriumId && new Date(showtime.startsAt) < clickedTime)
+      .sort((left, right) => new Date(right.startsAt).getTime() - new Date(left.startsAt).getTime())[0];
+    onCreate(auditoriumId, previous ? roundToFive(new Date(previous.roomReadyAt), "up") : clickedTime);
   }
 
   function timeAtPointer(event: React.DragEvent<HTMLDivElement>, start: Date) {
@@ -175,13 +207,23 @@ export function SchedulingCalendar({
     setDraggingKey(null);
     setDropPreview(null);
     if (key?.startsWith("movie:")) {
-      onCreate(auditoriumId, targetTime, key.slice("movie:".length));
+      const movieId = key.slice("movie:".length);
+      const movie = movies.find((item) => item.id === movieId);
+      const duration = preShowBufferMinutes + (movie?.runtimeMinutes ?? 90) + cleaningBufferMinutes;
+      onCreate(auditoriumId, availableStart(auditoriumId, targetTime, duration), movieId);
       return;
     }
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
-    await onMove(showtime, auditoriumId, targetTime);
+    const duration = preShowBufferMinutes + showtime.movie.runtimeMinutes + cleaningBufferMinutes;
+    await onMove(showtime, auditoriumId, availableStart(auditoriumId, targetTime, duration, showtime.id));
+  }
+
+  async function duplicateAfter(showtime: CalendarShowtime) {
+    const duration = preShowBufferMinutes + showtime.movie.runtimeMinutes + cleaningBufferMinutes;
+    const startsAt = availableStart(showtime.auditorium.id, new Date(showtime.roomReadyAt), duration);
+    await onQuickCreate(showtime.auditorium.id, startsAt, showtime.movie.id);
   }
 
   async function dropOnWeekRoom(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, targetDay: Date) {
@@ -220,17 +262,41 @@ export function SchedulingCalendar({
   const filteredMovies = movies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
   const filteredArchivedMovies = archivedMovies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
 
+  async function quickAddToSchedule(movie: ScheduleMovie) {
+    const dayStart = startOfCinemaDay(new Date(`${selectedDate}T12:00:00`));
+    const dayEnd = new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000);
+    const now = new Date();
+    let cursor = dayStart;
+    if (dateInputValue(now) === selectedDate && now > dayStart) {
+      cursor = new Date(Math.ceil(now.getTime() / (5 * 60000)) * 5 * 60000);
+    }
+    const durationMs = (preShowBufferMinutes + movie.runtimeMinutes + cleaningBufferMinutes) * 60000;
+    for (let startsAt = cursor; startsAt.getTime() + durationMs <= dayEnd.getTime(); startsAt = new Date(startsAt.getTime() + 5 * 60000)) {
+      for (const room of auditoriums) {
+        const endsAt = startsAt.getTime() + durationMs;
+        const conflicts = showtimes.some((showtime) => showtime.auditorium.id === room.id
+          && startsAt.getTime() < new Date(showtime.roomReadyAt).getTime()
+          && endsAt > new Date(showtime.startsAt).getTime());
+        if (!conflicts) {
+          await onQuickCreate(room.id, startsAt, movie.id);
+          return;
+        }
+      }
+    }
+    window.alert(`No open slot is available for ${movie.title} on the selected day.`);
+  }
+
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
       <div>
         <p className="kicker">PROGRAMMING</p>
-        <h2>Daily theater schedule</h2>
-        <p>Click an open time to add a showing. Click a film to edit it.</p>
+        <h2>{labels.scheduleTitle}</h2>
+        <p>{labels.scheduleInstructions}</p>
       </div>
       <div className="schedule-actions">
         <div className="view-switch" aria-label="Schedule view">
-          <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>Day</button>
-          <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>Week</button>
+          <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>{labels.day}</button>
+          <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>{labels.week}</button>
         </div>
         <button type="button" className="export-schedule-button" disabled={exporting} onClick={async () => {
           setExporting(true);
@@ -239,8 +305,7 @@ export function SchedulingCalendar({
           } finally {
             setExporting(false);
           }
-        }}>{exporting ? "Preparing…" : "Export Excel"}</button>
-        <button type="button" className="add-film-button" onClick={onAddMovie}>+ Add film</button>
+        }}>{exporting ? "Preparing…" : labels.export}</button>
         <button type="button" className="duplicate-day-button" onClick={() => {
           const next = new Date(`${selectedDate}T12:00:00`);
           next.setDate(next.getDate() + 1);
@@ -248,26 +313,26 @@ export function SchedulingCalendar({
           setDuplicateTargets([]);
           setDuplicateError(null);
           setDuplicateOpen(true);
-        }}>Duplicate day</button>
+        }}>{labels.duplicateDay}</button>
       </div>
       <div className="date-controls">
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
-        <button type="button" className="calendar-today" onClick={() => setSelectedDate(dateInputValue(new Date()))}>Today</button>
+        <button type="button" className="calendar-today" onClick={() => setSelectedDate(dateInputValue(new Date()))}>{labels.today}</button>
         <input aria-label="Schedule date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? 7 : 1)} aria-label={`Next ${view}`}>→</button>
       </div>
     </div>
 
     <div className="schedule-legend" aria-label="Schedule legend">
-      <span><i className="legend-swatch on-sale" /> On sale</span>
-      <span><i className="legend-swatch draft" /> Draft</span>
-      <span><i className="legend-swatch past" /> Past</span>
+      <span><i className="legend-swatch on-sale" /> {labels.onSale}</span>
+      <span><i className="legend-swatch draft" /> {labels.draft}</span>
+      <span><i className="legend-swatch past" /> {labels.past}</span>
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
     </div>
 
     {view === "day" && <div className="calendar-scroll">
       <div className="cinema-calendar" style={{ "--timeline-width": `${TOTAL_HOURS * HOUR_WIDTH}px` } as React.CSSProperties}>
-        <div className="calendar-corner"><span>ROOM</span></div>
+        <div className="calendar-corner"><span>{labels.room}</span></div>
         <div className="time-ruler">
           {hours.map((hour) => <span key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }}>{hour.label}</span>)}
         </div>
@@ -278,7 +343,7 @@ export function SchedulingCalendar({
             <div className="room-label"><strong>{auditorium.name}</strong><span>{auditorium.capacity} seats</span></div>
             <div
               className={`room-timeline ${draggingKey ? "drag-target" : ""}`}
-              onClick={(event) => createAtPointer(event, auditorium.id)}
+              onDoubleClick={(event) => createAtPointer(event, auditorium.id)}
               onDragOver={(event) => {
                 event.preventDefault();
                 const startsAt = timeAtPointer(event, dayStart);
@@ -308,18 +373,12 @@ export function SchedulingCalendar({
                 const width = Math.max(82, ((endMinutes - startMinutes) / 60) * HOUR_WIDTH - 8);
                 const isPast = new Date(showtime.startsAt) < now;
                 const status = isPast ? "past" : showtime.onSale ? "on-sale" : "draft";
-                return <button
-                  type="button"
+                return <div
                   draggable={!isPast}
-                  className={`showtime-block ${status}`}
+                  className={`showtime-block-shell ${status}`}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
                   onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onEdit(showtime);
-                  }}
                   onDragStart={(event) => {
                     event.dataTransfer.effectAllowed = "move";
                     const key = `showtime:${showtime.id}`;
@@ -327,12 +386,15 @@ export function SchedulingCalendar({
                     setDraggingKey(key);
                   }}
                   onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-                  title={`Edit ${showtime.movie.title}`}
                 >
+                  <button type="button" className="showtime-block" onClick={(event) => { event.stopPropagation(); onEdit(showtime); }} title={`Edit ${showtime.movie.title}`}>
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
                   <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
-                </button>;
+                  </button>
+                  {!isPast && <button type="button" className="showtime-quick-remove" aria-label={`Remove ${showtime.movie.title} from schedule`} title="Remove from schedule" onClick={(event) => { event.stopPropagation(); void onRemoveShowtime(showtime); }}>×</button>}
+                  {!isPast && <button type="button" className="showtime-quick-duplicate" aria-label={`Schedule ${showtime.movie.title} again afterward`} title="Schedule this film again afterward" onClick={(event) => { event.stopPropagation(); void duplicateAfter(showtime); }}>+</button>}
+                </div>;
               })}
             </div>
           </div>;
@@ -385,9 +447,9 @@ export function SchedulingCalendar({
       </div>
     </div>}
 
-    <div className="film-library" aria-label="Film library">
+    <div className="film-library" aria-label={labels.filmLibrary}>
       <div className="film-library-overview">
-      <div className="film-library-heading"><b>Film library</b><span>Click a film for its details. Drag it into an open room time to schedule it.</span></div>
+      <div className="film-library-heading"><div><b>{labels.filmLibrary}</b><button type="button" className="film-library-add" onClick={onAddMovie}>{labels.addMovie}</button></div><span>{labels.filmLibraryHelp}</span></div>
       <section className="film-library-detail" aria-live="polite">
         {selectedLibraryMovie ? <>
           <div className="film-detail-poster">
@@ -449,7 +511,7 @@ export function SchedulingCalendar({
       </details>
       </div>
       <div className="film-library-content">
-        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search" /></label>
+        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder={labels.search} /></label>
       <div className="film-library-list">
         {filteredMovies.map((movie) => <div
           className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
@@ -473,7 +535,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button type="button" className="film-quick-add" onClick={(event) => { event.stopPropagation(); void quickAddToSchedule(movie); }} onMouseDown={(event) => event.stopPropagation()}>Add +</button><button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}
