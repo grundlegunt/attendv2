@@ -157,6 +157,11 @@
 .program-tile__showtimes span, .program-tile__showtimes small { color: var(--color-text-secondary); }
 .program-tile__showtimes strong { margin: 3px 0; font-size: 1rem; }
 .program-tile__showtimes .past { opacity: .38; cursor: not-allowed; }
+.program-tile__first-date { display: block; padding: 18px 20px; background: var(--color-bg-elevated); color: var(--color-text-primary); text-decoration: none; }
+.program-tile__first-date span, .program-tile__first-date strong { display: block; }
+.program-tile__first-date span { margin-bottom: 4px; color: var(--color-text-secondary); font-size: .68rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+.program-tile__first-date strong { font-size: 1.1rem; }
+.program-tile__first-date:hover strong, .program-tile__first-date:focus-visible strong { color: var(--color-accent); }
 .series-poster { text-decoration: none; }
 .series-film h3 a { color: inherit; text-decoration: none; }
 .movie-detail { padding-top: 54px; }

@@ -20,17 +20,21 @@ export function MovieTile({
   timeZone,
   onSelectShowtime,
   includeDate = false,
+  firstDateOnly = false,
 }: {
   movie: NowPlayingMovie;
   showtimes: PublicShowtime[];
   timeZone: string;
-  onSelectShowtime: (id: string) => void;
+  onSelectShowtime?: (id: string) => void;
   includeDate?: boolean;
+  firstDateOnly?: boolean;
 }) {
   const series = Array.from(new Map(
     showtimes.flatMap((showtime) => showtime.filmSeries ? [[showtime.filmSeries.id, showtime.filmSeries] as const] : []),
   ).values());
   const formats = Array.from(new Set(showtimes.map((showtime) => showtime.format).filter(Boolean)));
+  const firstShowtime = showtimes.reduce<PublicShowtime | undefined>((earliest, showtime) =>
+    !earliest || new Date(showtime.startsAt) < new Date(earliest.startsAt) ? showtime : earliest, undefined);
 
   return (
     <article className="program-tile">
@@ -48,7 +52,10 @@ export function MovieTile({
         </div>
         <h2 className="program-tile__title"><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
       </div>
-      <div className="program-tile__showtimes">
+      {firstDateOnly && firstShowtime ? <Link className="program-tile__first-date" href={`/movie/${movie.id}`}>
+        <span>First showing</span>
+        <strong>{new Intl.DateTimeFormat("en-US", { timeZone, month: "long", day: "numeric" }).format(new Date(firstShowtime.startsAt))}</strong>
+      </Link> : <div className="program-tile__showtimes">
         {showtimes.map((showtime) => {
           const isPast = new Date(showtime.startsAt).getTime() <= Date.now();
           return (
@@ -57,7 +64,7 @@ export function MovieTile({
               className={isPast ? "past" : undefined}
               disabled={isPast}
               aria-disabled={isPast}
-              onClick={() => onSelectShowtime(showtime.id)}
+              onClick={() => onSelectShowtime?.(showtime.id)}
             >
               {includeDate && <span>{new Intl.DateTimeFormat("en-US", { timeZone, month: "short", day: "numeric" }).format(new Date(showtime.startsAt))}</span>}
               <strong>{new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(showtime.startsAt))}</strong>
@@ -65,7 +72,7 @@ export function MovieTile({
             </button>
           );
         })}
-      </div>
+      </div>}
     </article>
   );
 }
