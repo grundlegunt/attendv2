@@ -765,8 +765,9 @@ describe("Milestone 1 cinema configuration", () => {
     const promotion = await request(app.getHttpServer())
       .post("/api/v1/management/settings/promotions")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ code: `LIFE${Date.now()}`, name: "Integration lifecycle", type: "PERCENTAGE", percentageBasisPoints: 1500, active: true });
+      .send({ code: `LIFE${Date.now()}`, name: "Integration lifecycle", type: "PERCENTAGE", percentageBasisPoints: 1500, minimumSubtotalCents: 2500, maximumRedemptions: 20, active: true });
     expect(promotion.status).toBe(201);
+    expect(promotion.body).toEqual(expect.objectContaining({ minimumSubtotalCents: 2500, maximumRedemptions: 20 }));
 
     const deactivated = await request(app.getHttpServer())
       .patch(`/api/v1/management/settings/promotions/${promotion.body.id}`)
@@ -3413,6 +3414,29 @@ describe("Milestone 9 box office and workforce", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ clockOutAt: correctedClockOut, notes: "Manager correction for E2E verification" }).expect(200);
     expect(await prisma.auditEvent.count({ where: { entityType: "Shift", entityId: shift.id, action: "shift.manager_adjusted" } })).toBe(1);
+  });
+
+  it("enforces promotion minimum subtotals and redemption limits", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } }, }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+      include: { showtime: { include: { priceTier: true } } },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const promotion = await prisma.promotion.create({ data: { locationId: owner.locationId, code: `LIMIT${Date.now()}`, name: "Usage controls", type: "FIXED_AMOUNT", amountCents: 100, minimumSubtotalCents: inventory.showtime.priceTier.ticketPriceMinor + 1, maximumRedemptions: 1 } });
+    const holderKey = `promotion-controls-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+    const quoteBody = { holdTokens: [holds.body[0].holdToken], holderKey, promotionCode: promotion.code };
+
+    await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(quoteBody).expect(400);
+
+    await prisma.promotion.update({ where: { id: promotion.id }, data: { minimumSubtotalCents: 0 } });
+    await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), status: "PAID", orderNumber: `LIMIT-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 0, feesCents: 0, taxCents: 0, totalCents: 0, promotionId: promotion.id } });
+    await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(quoteBody).expect(409);
   });
 
   it("uses shared seat inventory for a mixed-tender box-office sale and full refund", async () => {

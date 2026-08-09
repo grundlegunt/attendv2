@@ -71,17 +71,17 @@ export class ManagementService {
     });
   }
 
-  async createPromotion(input: { locationId: string; employeeId: string; code: string; name: string; type: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number; percentageBasisPoints?: number; active: boolean; startsAt?: Date; endsAt?: Date }) {
+  async createPromotion(input: { locationId: string; employeeId: string; code: string; name: string; type: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number; percentageBasisPoints?: number; minimumSubtotalCents?: number; maximumRedemptions?: number; active: boolean; startsAt?: Date; endsAt?: Date }) {
     if (input.type === "FIXED_AMOUNT" && input.amountCents == null) throw AppError.validationFailed("A fixed promotion requires an amount.");
     if (input.type === "PERCENTAGE" && input.percentageBasisPoints == null) throw AppError.validationFailed("A percentage promotion requires a percentage.");
     return prisma.$transaction(async (tx) => {
-      const promotion = await tx.promotion.create({ data: { locationId: input.locationId, code: input.code.toUpperCase(), name: input.name, type: input.type, amountCents: input.type === "FIXED_AMOUNT" ? input.amountCents : null, percentageBasisPoints: input.type === "PERCENTAGE" ? input.percentageBasisPoints : null, active: input.active, startsAt: input.startsAt, endsAt: input.endsAt } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.created", entityType: "Promotion", entityId: promotion.id, afterState: { code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, active: promotion.active } } });
+      const promotion = await tx.promotion.create({ data: { locationId: input.locationId, code: input.code.toUpperCase(), name: input.name, type: input.type, amountCents: input.type === "FIXED_AMOUNT" ? input.amountCents : null, percentageBasisPoints: input.type === "PERCENTAGE" ? input.percentageBasisPoints : null, minimumSubtotalCents: input.minimumSubtotalCents, maximumRedemptions: input.maximumRedemptions, active: input.active, startsAt: input.startsAt, endsAt: input.endsAt } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.created", entityType: "Promotion", entityId: promotion.id, afterState: { code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, minimumSubtotalCents: promotion.minimumSubtotalCents, maximumRedemptions: promotion.maximumRedemptions, active: promotion.active } } });
       return promotion;
     });
   }
 
-  async updatePromotion(input: { locationId: string; employeeId: string; promotionId: string; code?: string; name?: string; type?: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number | null; percentageBasisPoints?: number | null; active?: boolean; startsAt?: Date | null; endsAt?: Date | null }) {
+  async updatePromotion(input: { locationId: string; employeeId: string; promotionId: string; code?: string; name?: string; type?: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number | null; percentageBasisPoints?: number | null; minimumSubtotalCents?: number | null; maximumRedemptions?: number | null; active?: boolean; startsAt?: Date | null; endsAt?: Date | null }) {
     const before = await prisma.promotion.findFirst({ where: { id: input.promotionId, locationId: input.locationId } });
     if (!before) throw AppError.notFound("Promotion was not found.");
     const type = input.type ?? before.type;
@@ -93,8 +93,8 @@ export class ManagementService {
     const endsAt = input.endsAt === undefined ? before.endsAt : input.endsAt;
     if (startsAt && endsAt && startsAt >= endsAt) throw AppError.validationFailed("Promotion end time must be after its start time.");
     return prisma.$transaction(async (tx) => {
-      const updated = await tx.promotion.update({ where: { id: before.id }, data: { code: input.code?.toUpperCase(), name: input.name, type, amountCents: type === "FIXED_AMOUNT" ? amountCents : null, percentageBasisPoints: type === "PERCENTAGE" ? percentageBasisPoints : null, active: input.active, startsAt, endsAt } });
-      const state = (promotion: typeof updated) => ({ code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, active: promotion.active, startsAt: promotion.startsAt, endsAt: promotion.endsAt });
+      const updated = await tx.promotion.update({ where: { id: before.id }, data: { code: input.code?.toUpperCase(), name: input.name, type, amountCents: type === "FIXED_AMOUNT" ? amountCents : null, percentageBasisPoints: type === "PERCENTAGE" ? percentageBasisPoints : null, minimumSubtotalCents: input.minimumSubtotalCents, maximumRedemptions: input.maximumRedemptions, active: input.active, startsAt, endsAt } });
+      const state = (promotion: typeof updated) => ({ code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, minimumSubtotalCents: promotion.minimumSubtotalCents, maximumRedemptions: promotion.maximumRedemptions, active: promotion.active, startsAt: promotion.startsAt, endsAt: promotion.endsAt });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.updated", entityType: "Promotion", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
       return updated;
     });
