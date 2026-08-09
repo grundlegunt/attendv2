@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -87,6 +87,12 @@ export class ManagementController {
 
   @Post("roles") @RequirePermissions(Permission.EmployeePermissionsEdit)
   createRole(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(roleSchema)) body: unknown) { return this.management.createRole({ ...roleSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("roles/:roleId") @RequirePermissions(Permission.EmployeePermissionsEdit)
+  updateRole(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Body(new ZodValidationPipe(roleSchema)) body: unknown) { return this.management.updateRole({ ...roleSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId }); }
+
+  @Delete("roles/:roleId") @RequirePermissions(Permission.EmployeePermissionsEdit)
+  deleteRole(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string) { return this.management.deleteRole({ locationId: this.location(actor), employeeId: actor.sub, roleId }); }
 
   @Patch("roles/:roleId/permissions") @RequirePermissions(Permission.EmployeePermissionsEdit)
   role(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Body(new ZodValidationPipe(rolePermissionsSchema)) body: unknown) { return this.management.updateRolePermissions({ ...rolePermissionsSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId }); }

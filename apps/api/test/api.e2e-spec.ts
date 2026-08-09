@@ -499,6 +499,23 @@ describe("RBAC permission enforcement", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .expect(200);
     expect(people.body.roles.find((role: { id: string }) => role.id === created.body.id).rolePermissions.map((entry: { permission: { key: string } }) => entry.permission.key).sort()).toEqual(["showtime.manage", "ticket.refund"]);
+    const renamed = `${name} renamed`;
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/roles/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: renamed })
+      .expect(200)
+      .expect(({ body }) => expect(body.name).toBe(renamed));
+    await request(app.getHttpServer())
+      .delete(`/api/v1/management/roles/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual({ id: created.body.id, deleted: true }));
+    const builtInRole = people.body.roles.find((role: { key: string }) => !role.key.startsWith("CUSTOM_"));
+    await request(app.getHttpServer())
+      .delete(`/api/v1/management/roles/${builtInRole.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(403);
   });
 
   it("rejects a Server (lacks audit.log.view) from listing audit events, even with a valid session (403)", async () => {

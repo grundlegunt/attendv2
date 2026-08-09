@@ -187,6 +187,33 @@ export class ManagementService {
     });
   }
 
+  async updateRole(input: { locationId: string; employeeId: string; roleId: string; name: string }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
+    const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId } });
+    if (!role) throw AppError.notFound("Role was not found.");
+    if (!role.key.startsWith("CUSTOM_")) throw AppError.forbidden("Built-in roles cannot be renamed.");
+    const duplicate = await prisma.role.findFirst({ where: { organizationId: location.organizationId, id: { not: role.id }, name: { equals: input.name, mode: "insensitive" } } });
+    if (duplicate) throw AppError.conflict("A role with that name already exists.");
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.role.update({ where: { id: role.id }, data: { name: input.name } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.renamed", entityType: "Role", entityId: role.id, beforeState: { name: role.name }, afterState: { name: updated.name } } });
+      return updated;
+    });
+  }
+
+  async deleteRole(input: { locationId: string; employeeId: string; roleId: string }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
+    const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { _count: { select: { employeeRoles: true } } } });
+    if (!role) throw AppError.notFound("Role was not found.");
+    if (!role.key.startsWith("CUSTOM_")) throw AppError.forbidden("Built-in roles cannot be deleted.");
+    if (role._count.employeeRoles > 0) throw AppError.conflict("Remove this role from every employee before deleting it.");
+    await prisma.$transaction(async (tx) => {
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.deleted", entityType: "Role", entityId: role.id, beforeState: { key: role.key, name: role.name } } });
+      await tx.role.delete({ where: { id: role.id } });
+    });
+    return { id: role.id, deleted: true };
+  }
+
   async updateRolePermissions(input: { locationId: string; employeeId: string; roleId: string; permissionKeys: string[] }) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
     const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { rolePermissions: { include: { permission: true } } } });
