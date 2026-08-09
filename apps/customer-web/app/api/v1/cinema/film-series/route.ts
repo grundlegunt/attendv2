@@ -33,6 +33,7 @@ export async function GET(request: Request) {
         orderBy: { startsAt: "asc" },
       },
     },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
 
   const responseSeries = series.map((entry) => {
@@ -56,16 +57,8 @@ export async function GET(request: Request) {
       description: entry.description,
       artworkUrl: entry.artworkUrl,
       movies: Array.from(movies.values()),
-      firstShowtimeAt: entry.showtimes[0]?.startsAt.getTime() ?? Infinity,
     };
-  }).sort((a, b) => a.firstShowtimeAt - b.firstShowtimeAt)
-    .map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      description: entry.description,
-      artworkUrl: entry.artworkUrl,
-      movies: entry.movies,
-    }));
+  });
 
   return NextResponse.json({
     location: { id: location.id, name: location.name, address: location.address, timezone: location.timezone },
