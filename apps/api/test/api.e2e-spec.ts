@@ -789,6 +789,47 @@ describe("Milestone 1 cinema configuration", () => {
     expect(audit.body.filter((event: { entityId: string }) => event.entityId === promotion.body.id)).toHaveLength(2);
   });
 
+  it("reports paid promotion redemptions, discounted tickets, and discount totals", async () => {
+    const promotion = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/promotions")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ code: `REPORT${Date.now()}`, name: "Integration reporting", type: "FIXED_AMOUNT", amountCents: 777, active: true });
+    expect(promotion.status).toBe(201);
+
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findUniqueOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const showtimeSeat = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { showtime: { auditorium: { locationId: owner.locationId } }, tickets: { none: {} } },
+    });
+    await prisma.ticketOrder.create({
+      data: {
+        locationId: owner.locationId,
+        ticketTypeId: ticketType.id,
+        holdTokens: [],
+        holderKey: crypto.randomUUID(),
+        status: "PAID",
+        orderNumber: `PROMO-${crypto.randomUUID()}`,
+        checkoutIdempotencyKey: crypto.randomUUID(),
+        subtotalCents: 2000,
+        feesCents: 0,
+        taxCents: 0,
+        totalCents: 1223,
+        promotionId: promotion.body.id,
+        discountCents: 777,
+        tickets: { create: { showtimeSeatId: showtimeSeat.id, ticketTypeId: ticketType.id, priceCentsPaid: 1223, qrToken: `promo-${crypto.randomUUID()}` } },
+      },
+    });
+
+    const settings = await request(app.getHttpServer())
+      .get("/api/v1/management/settings")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(settings.status).toBe(200);
+    expect(settings.body.promotions.find((item: { id: string }) => item.id === promotion.body.id)).toEqual(
+      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalDiscountCents: 777 }),
+    );
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")
