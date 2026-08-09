@@ -54,7 +54,7 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
     email: employee.email,
     locationId: employee.locationId,
     roles: employee.employeeRoles.map((er) => er.role.key),
-    permissions: flattenEmployeePermissions(employee),
+    permissions: employee.authAccount?.mustChangePassword ? [] : flattenEmployeePermissions(employee),
     timeClockEnabled: employee.location.timeClockEnabled,
     mustChangePassword: employee.authAccount?.mustChangePassword ?? false,
     adminBranding: {
