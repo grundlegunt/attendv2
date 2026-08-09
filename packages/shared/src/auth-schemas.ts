@@ -12,6 +12,12 @@ export const staffLoginRequestSchema = z.object({
 });
 export type StaffLoginRequest = z.infer<typeof staffLoginRequestSchema>;
 
+export const staffPasswordChangeRequestSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(12).max(200),
+}).strict();
+export type StaffPasswordChangeRequest = z.infer<typeof staffPasswordChangeRequestSchema>;
+
 export const platformLoginRequestSchema = staffLoginRequestSchema;
 export type PlatformLoginRequest = z.infer<typeof platformLoginRequestSchema>;
 
@@ -52,6 +58,7 @@ export interface AuthenticatedEmployee {
   roles: string[];
   permissions: string[];
   timeClockEnabled: boolean;
+  mustChangePassword: boolean;
   adminBranding: {
     accentColor: string | null;
     accentMutedColor: string | null;

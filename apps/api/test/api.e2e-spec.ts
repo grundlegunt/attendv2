@@ -169,6 +169,34 @@ describe("Staff authentication", () => {
     expect(res.body.email).toBe(`owner@${SEED_SUFFIX}`);
   });
 
+  it("forces a manager-reset employee to replace the temporary password and invalidates prior sessions", async () => {
+    const people = await request(app.getHttpServer()).get("/api/v1/management/people").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    const server = people.body.employees.find((employee: { email: string }) => employee.email === `server@${SEED_SUFFIX}`);
+    expect(server).toBeTruthy();
+    const previous = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: server.email, password: SEED_PASSWORD }).expect(200);
+
+    await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ password: "TemporaryPassword123!", pin: "5678" }).expect(200);
+    await request(app.getHttpServer()).post("/api/v1/auth/staff/refresh").send({ refreshToken: previous.body.refreshToken }).expect(401);
+    await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: server.email, password: SEED_PASSWORD }).expect(401);
+
+    const temporary = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: server.email, password: "TemporaryPassword123!" }).expect(200);
+    expect(temporary.body.employee.mustChangePassword).toBe(true);
+    expect(temporary.body.employee.permissions).toEqual([]);
+    await request(app.getHttpServer()).get("/api/v1/audit-events").set("Authorization", `Bearer ${temporary.body.accessToken}`).expect(403);
+
+    const changed = await request(app.getHttpServer()).post("/api/v1/auth/staff/change-password").set("Authorization", `Bearer ${temporary.body.accessToken}`).send({ currentPassword: "TemporaryPassword123!", newPassword: SEED_PASSWORD }).expect(200);
+    expect(changed.body.employee.mustChangePassword).toBe(false);
+    expect(changed.body.employee.permissions.length).toBeGreaterThan(0);
+    await request(app.getHttpServer()).post("/api/v1/auth/staff/refresh").send({ refreshToken: temporary.body.refreshToken }).expect(401);
+    await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: server.email, password: SEED_PASSWORD }).expect(200);
+
+    await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ pin: "1234" }).expect(200);
+    const { prisma } = await import("@cinema/database");
+    const audit = await prisma.auditEvent.findFirst({ where: { action: "employee.credentials_reset", entityId: server.id }, orderBy: { occurredAt: "desc" } });
+    expect(JSON.stringify(audit?.afterState)).not.toContain("TemporaryPassword123!");
+    expect(JSON.stringify(audit?.afterState)).not.toContain("5678");
+  });
+
   it("issues a new token pair from a valid refresh token", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/refresh")

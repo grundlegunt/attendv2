@@ -24,6 +24,9 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [restored, setRestored] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
 
@@ -51,10 +54,21 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
       const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
       const next = { employee: response.employee, accessToken: response.accessToken };
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      setSession(next); setPassword("");
+      setSession(next); setCurrentPassword(password); setPassword("");
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
     }
+  }
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
+    try {
+      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken: session!.accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+      const next = { employee: response.employee, accessToken: response.accessToken };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      setSession(next); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
   }
 
   const value = useMemo(() => session ? { ...session, signOut: () => { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); } } : null, [session]);
@@ -80,6 +94,13 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     <label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
     <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
     <button className="primary">Sign in</button>
+  </form></main></div>;
+  if (value.employee.mustChangePassword) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={changePassword}>
+    <p className="kicker">SECURITY UPDATE REQUIRED</p><h1>Choose a new password</h1><p className="muted">A manager issued a temporary password. Replace it before continuing.</p>{error && <div className="error-banner">{error}</div>}
+    <label>Temporary password<input type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
+    <label>New password<input type="password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
+    <label>Confirm new password<input type="password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
+    <button className="primary">Change password</button><button type="button" className="secondary" onClick={value.signOut}>Sign out</button>
   </form></main></div>;
   return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className="admin-theme-root" style={theme}>{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
 }

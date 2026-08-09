@@ -42,6 +42,9 @@ interface SeatDetail {
 export default function StaffLoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [employee, setEmployee] = useState<AuthenticatedEmployee | null>(null);
@@ -67,7 +70,7 @@ export default function StaffLoginPage() {
   }, [selectedShowtimeId]);
 
   useEffect(() => {
-    if (!employee) return;
+    if (!employee || employee.mustChangePassword) return;
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
       .then((response) => {
         setProgram(response);
@@ -95,11 +98,24 @@ export default function StaffLoginPage() {
       );
       setEmployee(res.employee);
       setAccessToken(res.accessToken);
+      setCurrentPassword(password);
+      setPassword("");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
+  }
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
+    setLoading(true);
+    try {
+      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+      setEmployee(res.employee); setAccessToken(res.accessToken); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+    } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
+    finally { setLoading(false); }
   }
 
   async function openTabs(event: FormEvent) {
@@ -129,6 +145,15 @@ export default function StaffLoginPage() {
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Seat detail could not be opened.");
     }
+  }
+
+  if (employee?.mustChangePassword) {
+    return <main className="auth-shell"><div className="auth-card"><h1>Choose a new password</h1><p className="subtitle">Replace the temporary password before continuing.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={changePassword}>
+      <div className="field"><label htmlFor="current-password">Temporary password</label><input id="current-password" type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></div>
+      <button className="primary" disabled={loading}>{loading ? "Changing password..." : "Change password"}</button>
+    </form></div></main>;
   }
 
   if (employee?.timeClockEnabled && !clockReady) {
