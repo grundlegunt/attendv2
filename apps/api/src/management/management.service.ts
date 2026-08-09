@@ -6,10 +6,11 @@ import { AppError } from "../common/app-error";
 @Injectable()
 export class ManagementService {
   async settings(locationId: string) {
-    return prisma.location.findUniqueOrThrow({
+    const location = await prisma.location.findUniqueOrThrow({
       where: { id: locationId },
-      select: { id: true, name: true, address: true, timezone: true, currency: true, customerLogoUrl: true, customerAccentColor: true, customerAccentMutedColor: true, customerBackgroundColor: true, customerBackgroundGlowColor: true, customerSurfaceColor: true, customerTextColor: true, customerMutedTextColor: true, adminAccentColor: true, adminAccentMutedColor: true, adminBackgroundColor: true, adminSurfaceColor: true, adminTextColor: true, adminMutedTextColor: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, preShowBufferMinutes: true, cleaningBufferMinutes: true, checkDropMinutesBeforeEnd: true, autoSettleGraceMinutes: true, autoSettleTipBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" } } },
+      select: { id: true, name: true, address: true, timezone: true, currency: true, customerLogoUrl: true, customerAccentColor: true, customerAccentMutedColor: true, customerBackgroundColor: true, customerBackgroundGlowColor: true, customerSurfaceColor: true, customerTextColor: true, customerMutedTextColor: true, adminAccentColor: true, adminAccentMutedColor: true, adminBackgroundColor: true, adminSurfaceColor: true, adminTextColor: true, adminMutedTextColor: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, preShowBufferMinutes: true, cleaningBufferMinutes: true, checkDropMinutesBeforeEnd: true, autoSettleGraceMinutes: true, autoSettleTipBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { discountCents: true, tickets: { select: { id: true } } } } } } },
     });
+    return { ...location, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
   }
 
   async updateLocation(input: { locationId: string; employeeId: string; name?: string; address?: string | null; timezone?: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; autoSettleTipBasisPoints?: number }) {
