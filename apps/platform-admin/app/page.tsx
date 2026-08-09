@@ -172,9 +172,17 @@ export default function AttendMaster() {
     const nullable = (value: string) => value || null;
     setSaving(true); setError(null);
     try {
-      const updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}/locations/${locationDraft.id}`, { method: "PATCH", body: JSON.stringify({
+      const payload = {
         ...values, address: nullable(values.address), logoUrl: nullable(values.logoUrl), accentColor: nullable(values.accentColor), accentMutedColor: nullable(values.accentMutedColor), backgroundColor: nullable(values.backgroundColor), backgroundGlowColor: nullable(values.backgroundGlowColor), surfaceColor: nullable(values.surfaceColor), textColor: nullable(values.textColor), mutedTextColor: nullable(values.mutedTextColor), adminAccentColor: nullable(values.adminAccentColor), adminAccentMutedColor: nullable(values.adminAccentMutedColor), adminBackgroundColor: nullable(values.adminBackgroundColor), adminSurfaceColor: nullable(values.adminSurfaceColor), adminTextColor: nullable(values.adminTextColor), adminMutedTextColor: nullable(values.adminMutedTextColor), adminUi: values.adminUi,
-      }) }, session.accessToken);
+      };
+      let updated: OrganizationDetail;
+      try {
+        updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}/locations/${locationDraft.id}`, { method: "PATCH", body: JSON.stringify(payload) }, session.accessToken);
+      } catch (reason) {
+        if (!(reason instanceof Error) || reason.message !== "Request validation failed.") throw reason;
+        const legacyPayload = Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "adminUi"));
+        updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}/locations/${locationDraft.id}`, { method: "PATCH", body: JSON.stringify(legacyPayload) }, session.accessToken);
+      }
       setOrganization(updated); setLocationDraft(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save location."); }
     finally { setSaving(false); }
