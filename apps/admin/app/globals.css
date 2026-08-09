@@ -379,6 +379,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .audit-change-grid h3 { margin-top: 0; }
 .audit-change-grid pre { max-height: 320px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: .78rem; line-height: 1.5; }
 .button-link { display: inline-block; text-decoration: none; margin: .5rem 0; }
+.promotion-form { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); align-items: end; gap: 1rem; margin: 1.5rem 0 2rem; }
+.promotion-form button { min-height: 46px; }
+.promotion-list { display: grid; border-top: 1px solid var(--line); }
+.promotion-list article { display: grid; grid-template-columns: minmax(180px, 1fr) 100px minmax(220px, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
+.promotion-list article > div { display: grid; gap: .2rem; }
+.promotion-list article span { color: var(--muted); font-size: .82rem; }
+.promotion-list article em { padding: .35rem .55rem; border: 1px solid var(--line); color: var(--muted); font-size: .72rem; font-style: normal; font-weight: 900; text-transform: uppercase; }
 .branding-editor .management-heading { align-items: start; }
 .branding-editor .secondary { width: auto; margin: 0; }
 .branding-layout { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(360px, 1.1fr); gap: 28px; margin-top: 24px; }
@@ -593,6 +600,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .dashboard-top-films .dashboard-section-heading { align-items: stretch; flex-direction: column; }
   .top-film-heading-actions { justify-content: space-between; }
   .audit-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .promotion-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .promotion-list article { grid-template-columns: minmax(160px, 1fr) 90px auto; }
+  .promotion-list article > span { grid-column: 1 / -1; grid-row: 2; }
 }
 
 @media (max-width: 800px) {
@@ -626,6 +636,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .audit-filters, .audit-change-grid { grid-template-columns: 1fr; }
   .audit-event summary { align-items: flex-start; flex-direction: column; }
   .audit-event summary > span:last-child { justify-items: start; text-align: left; }
+  .promotion-form, .promotion-list article { grid-template-columns: 1fr; }
+  .promotion-list article > span { grid-column: auto; grid-row: auto; }
+  .promotion-list article em { justify-self: start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

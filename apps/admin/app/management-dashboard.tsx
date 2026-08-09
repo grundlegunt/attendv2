@@ -14,7 +14,8 @@ type AuditEvent = {
   id: string; occurredAt: string; action: string; entityType: string; entityId: string;
   actorType: string; actorId: string | null; beforeState: unknown; afterState: unknown;
 };
-type Settings = BrandingSettings & { id: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: string; active: boolean }> };
+type PromotionType = "FIXED_AMOUNT" | "PERCENTAGE" | "COMP";
+type Settings = BrandingSettings & { id: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; active: boolean; startsAt: string | null; endsAt: string | null }> };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -31,7 +32,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
-  const [promotion, setPromotion] = useState({ code: "", name: "", amountCents: 0 });
+  const [promotion, setPromotion] = useState({ code: "", name: "", type: "FIXED_AMOUNT" as PromotionType, value: 0, startsAt: "", endsAt: "" });
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
   const canReports = permissions.includes("reports.view");
@@ -66,8 +67,20 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
   async function createPromotion(event: FormEvent) {
     event.preventDefault();
-    await apiFetch("/management/settings/promotions", { accessToken, method: "POST", body: JSON.stringify({ code: promotion.code, name: promotion.name, type: "FIXED_AMOUNT", amountCents: promotion.amountCents, active: true }) });
-    setPromotion({ code: "", name: "", amountCents: 0 }); await refresh();
+    setError(null);
+    if (promotion.startsAt && promotion.endsAt && new Date(promotion.startsAt) >= new Date(promotion.endsAt)) { setError("Promotion end time must be after its start time."); return; }
+    const body = {
+      code: promotion.code, name: promotion.name, type: promotion.type, active: true,
+      ...(promotion.type === "FIXED_AMOUNT" ? { amountCents: Math.round(promotion.value * 100) } : {}),
+      ...(promotion.type === "PERCENTAGE" ? { percentageBasisPoints: Math.round(promotion.value * 100) } : {}),
+      ...(promotion.startsAt ? { startsAt: new Date(promotion.startsAt).toISOString() } : {}),
+      ...(promotion.endsAt ? { endsAt: new Date(promotion.endsAt).toISOString() } : {}),
+    };
+    try {
+      await apiFetch("/management/settings/promotions", { accessToken, method: "POST", body: JSON.stringify(body) });
+      setPromotion({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, startsAt: "", endsAt: "" });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
   }
 
   async function exportHours() {
@@ -98,7 +111,18 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
     {settings && section === "branding" && <BrandingSummary settings={settings} />}
     {settings && section === "location" && <section className="panel"><p className="kicker">LOCATION</p><h2>Operating settings</h2><label className="checkbox"><input type="checkbox" checked={settings.timeClockEnabled} onChange={() => void toggleClock()} /> Require staff clock-in at this location</label><p>Ticket tax: {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p></section>}
-    {settings && section === "promotions" && <form className="panel" onSubmit={(event) => void createPromotion(event)}><p className="kicker">PROMOTIONS</p><h2>Create fixed discount</h2><label>Code<input required value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value })} /></label><label>Name<input required value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} /></label><label>Amount in cents<input type="number" min="1" required value={promotion.amountCents} onChange={(event) => setPromotion({ ...promotion, amountCents: Number(event.target.value) })} /></label><button className="primary">Create promotion</button><ul>{settings.promotions.map((item) => <li key={item.id}><strong>{item.code}</strong> · {item.name} · {item.active ? "Active" : "Inactive"}</li>)}</ul></form>}
+    {settings && section === "promotions" && <section className="panel promotions-manager"><p className="kicker">PROMOTIONS</p><h2>Discount codes</h2><p>Create a fixed discount, percentage discount, or complimentary-ticket code. Date windows are optional.</p>
+      <form className="promotion-form" onSubmit={(event) => void createPromotion(event)}>
+        <label>Code<input required maxLength={50} value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value.toUpperCase() })} placeholder="SUMMER20" /></label>
+        <label>Name<input required maxLength={100} value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} placeholder="Summer member offer" /></label>
+        <label>Discount type<select value={promotion.type} onChange={(event) => setPromotion({ ...promotion, type: event.target.value as PromotionType, value: 0 })}><option value="FIXED_AMOUNT">Fixed amount</option><option value="PERCENTAGE">Percentage</option><option value="COMP">Complimentary</option></select></label>
+        {promotion.type !== "COMP" && <label>{promotion.type === "FIXED_AMOUNT" ? "Amount ($)" : "Percentage (%)"}<input type="number" min="0.01" max={promotion.type === "PERCENTAGE" ? 100 : undefined} step="0.01" required value={promotion.value || ""} onChange={(event) => setPromotion({ ...promotion, value: Number(event.target.value) })} /></label>}
+        <label>Starts (optional)<input type="datetime-local" value={promotion.startsAt} onChange={(event) => setPromotion({ ...promotion, startsAt: event.target.value })} /></label>
+        <label>Ends (optional)<input type="datetime-local" value={promotion.endsAt} onChange={(event) => setPromotion({ ...promotion, endsAt: event.target.value })} /></label>
+        <button className="primary">Create promotion</button>
+      </form>
+      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}</b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><em>{item.active ? "Active" : "Inactive"}</em></article>)}</div>
+    </section>}
 
     {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2>
       <form className="audit-filters" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
