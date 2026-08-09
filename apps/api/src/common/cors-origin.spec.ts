@@ -11,6 +11,12 @@ describe("isCorsOriginAllowed", () => {
     expect(isCorsOriginAllowed("https://attendv2-admin.vercel.app", configuredOrigins)).toBe(true);
   });
 
+  it("allows this project's production Vercel aliases", () => {
+    expect(isCorsOriginAllowed("https://attend-master-attend3.vercel.app", configuredOrigins)).toBe(true);
+    expect(isCorsOriginAllowed("https://attendv2-admin-attend3.vercel.app", configuredOrigins)).toBe(true);
+    expect(isCorsOriginAllowed("https://attendv2-attend3.vercel.app", configuredOrigins)).toBe(true);
+  });
+
   it("allows the configured loopback hostname used by browser journeys", () => {
     expect(isCorsOriginAllowed("http://127.0.0.1:3000", ["http://127.0.0.1:3000"])).toBe(true);
   });
