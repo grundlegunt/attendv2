@@ -10,7 +10,10 @@ type RevenueReport = {
   showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
 };
 type LaborReport = { totalMinutes: number; rows: Array<{ shiftId: string; employeeName: string; roles: string[]; clockInAt: string; clockOutAt: string | null; breakMinutes: number; workedMinutes: number }> };
-type AuditEvent = { id: string; occurredAt: string; action: string; entityType: string; entityId: string; actorId: string | null };
+type AuditEvent = {
+  id: string; occurredAt: string; action: string; entityType: string; entityId: string;
+  actorType: string; actorId: string | null; beforeState: unknown; afterState: unknown;
+};
 type Settings = BrandingSettings & { id: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: string; active: boolean }> };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -26,6 +29,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [auditAction, setAuditAction] = useState("");
+  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditActorId, setAuditActorId] = useState("");
   const [promotion, setPromotion] = useState({ code: "", name: "", amountCents: 0 });
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
@@ -36,11 +41,15 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   async function refresh() {
     setError(null);
     const range = `from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`;
+    const auditQuery = new URLSearchParams({ limit: "200", from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T00:00:00`).toISOString() });
+    if (auditAction.trim()) auditQuery.set("action", auditAction.trim());
+    if (auditEntityType.trim()) auditQuery.set("entityType", auditEntityType.trim());
+    if (auditActorId.trim()) auditQuery.set("actorId", auditActorId.trim());
     try {
       const [nextRevenue, nextLabor, nextAudit, nextSettings] = await Promise.all([
         section === "reports" && canFinancial ? apiFetch<RevenueReport>(`/reports/revenue?${range}`, { accessToken }) : null,
         section === "labor" && canReports ? apiFetch<LaborReport>(`/reports/labor?${range}`, { accessToken }) : null,
-        section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?limit=100${auditAction ? `&action=${encodeURIComponent(auditAction)}` : ""}`, { accessToken }) : [],
+        section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?${auditQuery.toString()}`, { accessToken }) : [],
         (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
       setRevenue(nextRevenue); setLabor(nextLabor); setAudit(nextAudit); setSettings(nextSettings);
@@ -91,6 +100,19 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     {settings && section === "location" && <section className="panel"><p className="kicker">LOCATION</p><h2>Operating settings</h2><label className="checkbox"><input type="checkbox" checked={settings.timeClockEnabled} onChange={() => void toggleClock()} /> Require staff clock-in at this location</label><p>Ticket tax: {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p></section>}
     {settings && section === "promotions" && <form className="panel" onSubmit={(event) => void createPromotion(event)}><p className="kicker">PROMOTIONS</p><h2>Create fixed discount</h2><label>Code<input required value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value })} /></label><label>Name<input required value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} /></label><label>Amount in cents<input type="number" min="1" required value={promotion.amountCents} onChange={(event) => setPromotion({ ...promotion, amountCents: Number(event.target.value) })} /></label><button className="primary">Create promotion</button><ul>{settings.promotions.map((item) => <li key={item.id}><strong>{item.code}</strong> · {item.name} · {item.active ? "Active" : "Inactive"}</li>)}</ul></form>}
 
-    {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2><div className="report-range"><label>Action filter<input value={auditAction} onChange={(event) => setAuditAction(event.target.value)} placeholder="refund, settings, employee…" /></label><button className="secondary" onClick={() => void refresh()}>Apply</button></div><div className="audit-list">{audit.map((event) => <article key={event.id}><div><strong>{event.action}</strong><span>{event.entityType} · {event.entityId}</span></div><time>{new Date(event.occurredAt).toLocaleString()}</time></article>)}</div></section>}
+    {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2>
+      <form className="audit-filters" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
+        <label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
+        <label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
+        <label>Action<input value={auditAction} onChange={(event) => setAuditAction(event.target.value)} placeholder="refund, settings, employee…" /></label>
+        <label>Entity type<input value={auditEntityType} onChange={(event) => setAuditEntityType(event.target.value)} placeholder="Employee, Promotion…" /></label>
+        <label>Actor ID<input value={auditActorId} onChange={(event) => setAuditActorId(event.target.value)} placeholder="Employee ID" /></label>
+        <button className="primary">Apply filters</button>
+      </form>
+      <div className="audit-list">{audit.map((event) => <details key={event.id} className="audit-event">
+        <summary><span><strong>{event.action}</strong><small>{event.entityType} · {event.entityId}</small></span><span><time>{new Date(event.occurredAt).toLocaleString()}</time><small>{event.actorType}{event.actorId ? ` · ${event.actorId}` : ""}</small></span></summary>
+        <div className="audit-change-grid"><section><h3>Before</h3><pre>{event.beforeState == null ? "No prior state recorded" : JSON.stringify(event.beforeState, null, 2)}</pre></section><section><h3>After</h3><pre>{event.afterState == null ? "No resulting state recorded" : JSON.stringify(event.afterState, null, 2)}</pre></section></div>
+      </details>)}{audit.length === 0 && <p className="dashboard-empty">No activity matches these filters.</p>}</div>
+    </section>}
   </section>;
 }
