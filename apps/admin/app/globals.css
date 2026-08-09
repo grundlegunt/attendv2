@@ -379,6 +379,11 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .audit-change-grid h3 { margin-top: 0; }
 .audit-change-grid pre { max-height: 320px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: .78rem; line-height: 1.5; }
 .button-link { display: inline-block; text-decoration: none; margin: .5rem 0; }
+.location-settings { display: grid; gap: 1.25rem; }
+.location-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 1rem; }
+.location-settings-grid label { min-width: 0; }
+.location-settings-grid small { color: var(--muted); font-size: .74rem; font-weight: 500; }
+.location-settings > button { justify-self: start; }
 .promotion-form { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); align-items: end; gap: 1rem; margin: 1.5rem 0 2rem; }
 .promotion-form button { min-height: 46px; }
 .promotion-list { display: grid; border-top: 1px solid var(--line); }
@@ -639,6 +644,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .promotion-form, .promotion-list article { grid-template-columns: 1fr; }
   .promotion-list article > span { grid-column: auto; grid-row: auto; }
   .promotion-list article em { justify-self: start; }
+  .location-settings-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

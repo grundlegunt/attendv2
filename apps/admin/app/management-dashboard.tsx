@@ -15,7 +15,8 @@ type AuditEvent = {
   actorType: string; actorId: string | null; beforeState: unknown; afterState: unknown;
 };
 type PromotionType = "FIXED_AMOUNT" | "PERCENTAGE" | "COMP";
-type Settings = BrandingSettings & { id: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; active: boolean; startsAt: string | null; endsAt: string | null }> };
+type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
+type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; active: boolean; startsAt: string | null; endsAt: string | null }> };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -29,6 +30,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [labor, setLabor] = useState<LaborReport | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
@@ -54,15 +56,20 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
       setRevenue(nextRevenue); setLabor(nextLabor); setAudit(nextAudit); setSettings(nextSettings);
+      if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
 
   useEffect(() => { void refresh(); }, [accessToken, section]);
 
-  async function toggleClock() {
-    if (!settings) return;
-    await apiFetch("/management/settings/location", { accessToken, method: "PATCH", body: JSON.stringify({ timeClockEnabled: !settings.timeClockEnabled }) });
-    await refresh();
+  async function saveLocation(event: FormEvent) {
+    event.preventDefault();
+    if (!locationDraft) return;
+    setError(null);
+    try {
+      await apiFetch("/management/settings/location", { accessToken, method: "PATCH", body: JSON.stringify({ ...locationDraft, address: locationDraft.address?.trim() || null, currency: undefined }) });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Location settings could not be saved."); }
   }
 
   async function createPromotion(event: FormEvent) {
@@ -110,7 +117,22 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     {labor && <section className="panel"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span>{(row.workedMinutes / 60).toFixed(2)}</span></div>)}</div></section>}
 
     {settings && section === "branding" && <BrandingSummary settings={settings} />}
-    {settings && section === "location" && <section className="panel"><p className="kicker">LOCATION</p><h2>Operating settings</h2><label className="checkbox"><input type="checkbox" checked={settings.timeClockEnabled} onChange={() => void toggleClock()} /> Require staff clock-in at this location</label><p>Ticket tax: {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p></section>}
+    {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>
+      <div className="location-settings-grid">
+        <label>Cinema name<input required maxLength={120} value={locationDraft.name} onChange={(event) => setLocationDraft({ ...locationDraft, name: event.target.value })} /></label>
+        <label>Address<input maxLength={500} value={locationDraft.address ?? ""} onChange={(event) => setLocationDraft({ ...locationDraft, address: event.target.value })} /></label>
+        <label>Timezone<input required maxLength={100} value={locationDraft.timezone} onChange={(event) => setLocationDraft({ ...locationDraft, timezone: event.target.value })} placeholder="America/Chicago" /></label>
+        <label>Currency<input disabled value={locationDraft.currency} /><small>Currency is fixed during onboarding.</small></label>
+        <label>Ticket tax (%)<input type="number" min="0" max="100" step="0.01" required value={locationDraft.ticketTaxRateBasisPoints / 100} onChange={(event) => setLocationDraft({ ...locationDraft, ticketTaxRateBasisPoints: Math.round(Number(event.target.value) * 100) })} /></label>
+        <label>Pre-show buffer (minutes)<input type="number" min="0" max="240" required value={locationDraft.preShowBufferMinutes} onChange={(event) => setLocationDraft({ ...locationDraft, preShowBufferMinutes: Number(event.target.value) })} /></label>
+        <label>Cleaning buffer (minutes)<input type="number" min="15" max="240" required value={locationDraft.cleaningBufferMinutes} onChange={(event) => setLocationDraft({ ...locationDraft, cleaningBufferMinutes: Number(event.target.value) })} /><small>Attend enforces at least 15 minutes.</small></label>
+        <label>Drop checks before film ends (minutes)<input type="number" min="0" max="240" required value={locationDraft.checkDropMinutesBeforeEnd} onChange={(event) => setLocationDraft({ ...locationDraft, checkDropMinutesBeforeEnd: Number(event.target.value) })} /></label>
+        <label>Auto-settlement grace (minutes)<input type="number" min="0" max="240" required value={locationDraft.autoSettleGraceMinutes} onChange={(event) => setLocationDraft({ ...locationDraft, autoSettleGraceMinutes: Number(event.target.value) })} /></label>
+        <label>Auto-settlement tip (%)<input type="number" min="0" max="100" step="0.01" required value={locationDraft.autoSettleTipBasisPoints / 100} onChange={(event) => setLocationDraft({ ...locationDraft, autoSettleTipBasisPoints: Math.round(Number(event.target.value) * 100) })} /></label>
+      </div>
+      <label className="checkbox"><input type="checkbox" checked={locationDraft.timeClockEnabled} onChange={(event) => setLocationDraft({ ...locationDraft, timeClockEnabled: event.target.checked })} /> Require staff clock-in at this location</label>
+      <button className="primary">Save operating settings</button>
+    </form>}
     {settings && section === "promotions" && <section className="panel promotions-manager"><p className="kicker">PROMOTIONS</p><h2>Discount codes</h2><p>Create a fixed discount, percentage discount, or complimentary-ticket code. Date windows are optional.</p>
       <form className="promotion-form" onSubmit={(event) => void createPromotion(event)}>
         <label>Code<input required maxLength={50} value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value.toUpperCase() })} placeholder="SUMMER20" /></label>
