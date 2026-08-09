@@ -948,9 +948,9 @@ model Role {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // One of the fixed role keys in @cinema/auth's RoleKey enum
-  // (OWNER, GENERAL_MANAGER, CINEMA_MANAGER, RESTAURANT_MANAGER, BOX_OFFICE,
-  // SERVER, BARTENDER, KITCHEN, RUNNER, DOOR, ACCOUNTING, SUPPORT).
+  // Seeded roles use @cinema/auth's fixed RoleKey values; cinema-created
+  // roles receive an opaque CUSTOM_* key and still draw permissions only
+  // from the fixed Permission catalog.
   key  String
   name String
 

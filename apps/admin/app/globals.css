@@ -463,6 +463,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .admin-nav a.active { border-color: var(--accent); color: var(--accent); }
 .admin-route-page { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
 .role-assignment-list, .modifier-summary { display: grid; gap: 12px; margin: 16px 0 24px; }
+.custom-role-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; margin: 16px 0 22px; }
+.custom-role-form button { width: auto; margin: 0; }
 .role-assignment-list > article, .modifier-summary > article { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); }
 .role-assignment-list .permission-list { grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: none; margin: 0; }
 .modifier-summary span, .modifier-summary small, .muted { color: var(--muted); }

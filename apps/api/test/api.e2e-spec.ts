@@ -479,6 +479,28 @@ describe("RBAC permission enforcement", () => {
     expect(second.body[0].id).not.toBe(first.body[0].id);
   });
 
+  it("creates a venue-specific role and configures its permissions", async () => {
+    const name = `Floor manager ${crypto.randomUUID()}`;
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/management/roles")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name })
+      .expect(201);
+
+    expect(created.body.name).toBe(name);
+    expect(created.body.key).toMatch(/^CUSTOM_[A-F0-9]{32}$/);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/roles/${created.body.id}/permissions`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ permissionKeys: ["showtime.manage", "ticket.refund"] })
+      .expect(200);
+    const people = await request(app.getHttpServer())
+      .get("/api/v1/management/people")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(people.body.roles.find((role: { id: string }) => role.id === created.body.id).rolePermissions.map((entry: { permission: { key: string } }) => entry.permission.key).sort()).toEqual(["showtime.manage", "ticket.refund"]);
+  });
+
   it("rejects a Server (lacks audit.log.view) from listing audit events, even with a valid session (403)", async () => {
     const loginRes = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")
