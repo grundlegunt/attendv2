@@ -23,10 +23,16 @@ export default function ComingSoonPage() {
   const movies = useMemo(() => {
     if (!program) return [];
     const today = localDateKey(new Date(), program.location.timezone);
-    return program.movies.filter((movie) => {
-      const first = movie.showtimes[0];
-      return first && localDateKey(first.startsAt, program.location.timezone) > today;
-    });
+    return program.movies
+      .filter((movie) => {
+        const first = movie.showtimes[0];
+        return first && localDateKey(first.startsAt, program.location.timezone) > today;
+      })
+      .sort((left, right) => {
+        const leftFirst = Math.min(...left.showtimes.map((showtime) => new Date(showtime.startsAt).getTime()));
+        const rightFirst = Math.min(...right.showtimes.map((showtime) => new Date(showtime.startsAt).getTime()));
+        return leftFirst - rightFirst || left.title.localeCompare(right.title);
+      });
   }, [program]);
 
   return <main className="cinema-shell route-page">
