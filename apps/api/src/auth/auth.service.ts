@@ -16,6 +16,7 @@ import {
   CustomerLoginRequest,
   CustomerRegisterRequest,
   StaffLoginRequest,
+  StaffPasswordChangeRequest,
 } from "@cinema/shared";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
@@ -53,8 +54,9 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
     email: employee.email,
     locationId: employee.locationId,
     roles: employee.employeeRoles.map((er) => er.role.key),
-    permissions: flattenEmployeePermissions(employee),
+    permissions: employee.authAccount?.mustChangePassword ? [] : flattenEmployeePermissions(employee),
     timeClockEnabled: employee.location.timeClockEnabled,
+    mustChangePassword: employee.authAccount?.mustChangePassword ?? false,
     adminBranding: {
       accentColor: employee.location.adminAccentColor,
       accentMutedColor: employee.location.adminAccentMutedColor,
@@ -154,6 +156,20 @@ export class AuthService {
     return employeeToProfile(employee);
   }
 
+  async changeStaffPassword(employeeId: string, input: StaffPasswordChangeRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+    const current = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+    if (!current?.active || !current.authAccount) throw AppError.unauthenticated();
+    if (!(await verifyPassword(current.authAccount.passwordHash, input.currentPassword))) throw AppError.invalidCredentials("Current password is incorrect.");
+    if (await verifyPassword(current.authAccount.passwordHash, input.newPassword)) throw AppError.validationFailed("Choose a password that differs from the temporary password.");
+    const passwordHash = await hashPassword(input.newPassword);
+    await prisma.$transaction(async (tx) => {
+      await tx.staffAuthAccount.update({ where: { employeeId }, data: { passwordHash, mustChangePassword: false, refreshTokenVersion: { increment: 1 } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId: current.locationId, action: "employee.password_changed", entityType: "Employee", entityId: employeeId, afterState: { mustChangePassword: false } } });
+    });
+    const employee = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId }, include: employeeInclude });
+    return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
+  }
+
   private issueEmployeeTokens(employee: EmployeeWithRoles): TokenPair {
     const env = loadEnv();
     return signTokenPair(
@@ -161,7 +177,7 @@ export class AuthService {
         sub: employee.id,
         actorType: "EMPLOYEE",
         locationId: employee.locationId,
-        permissions: flattenEmployeePermissions(employee),
+        permissions: employee.authAccount!.mustChangePassword ? [] : flattenEmployeePermissions(employee),
       },
       {
         sub: employee.id,

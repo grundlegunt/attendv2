@@ -397,6 +397,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .people-list article, .refund-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
 .people-list article div, .refund-list article div { display: grid; gap: .2rem; }
 .people-list span, .refund-list span { color: var(--muted); font-size: .85rem; }
+.employee-credential-list article { align-items: flex-start; }
+.employee-summary { min-width: 0; flex: 1; }
+.credential-reset-fields { display: grid !important; grid-template-columns: minmax(150px, 1fr) auto minmax(110px, .5fr) auto auto; align-items: end; gap: 8px !important; margin-top: 10px; }
+.credential-reset-fields label { margin: 0; }
+.credential-reset-fields button { width: auto; margin: 0; white-space: nowrap; }
+@media (max-width: 1050px) { .credential-reset-fields { grid-template-columns: 1fr auto; } }
 .permission-list { display: grid; gap: .5rem; max-height: 420px; overflow: auto; margin: 1rem 0; padding-right: .5rem; }
 .permission-list .checkbox { align-items: start; }
 .permission-list span { display: grid; gap: .15rem; }

@@ -18,6 +18,7 @@ const serviceSchema = z.object({ name: z.string().trim().min(1).max(100), applie
 const promotionSchema = z.object({ code: z.string().trim().min(1).max(50), name: z.string().trim().min(1).max(100), type: z.enum(["FIXED_AMOUNT", "PERCENTAGE", "COMP"]), amountCents: z.number().int().positive().optional(), percentageBasisPoints: z.number().int().min(1).max(10_000).optional(), active: z.boolean().default(true), startsAt: z.coerce.date().optional(), endsAt: z.coerce.date().optional() }).strict();
 const employeeSchema = z.object({ name: z.string().trim().min(1).max(100), email: z.string().email(), password: z.string().min(12).max(200), pin: z.string().regex(/^\d{4,8}$/).optional(), roleIds: z.array(z.string().uuid()).min(1) }).strict();
 const employeeUpdateSchema = z.object({ active: z.boolean().optional(), roleIds: z.array(z.string().uuid()).min(1).optional() }).strict();
+const employeeCredentialsSchema = z.object({ password: z.string().min(12).max(200).optional(), pin: z.string().regex(/^\d{4,8}$/).nullable().optional() }).strict().refine((value) => value.password !== undefined || value.pin !== undefined, "Provide a password or PIN reset.");
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 
@@ -55,6 +56,9 @@ export class ManagementController {
 
   @Patch("employees/:employeeId") @RequirePermissions(Permission.EmployeeEdit)
   updateEmployee(@CurrentActor() actor: RequestActor, @Param("employeeId") employeeId: string, @Body(new ZodValidationPipe(employeeUpdateSchema)) body: unknown) { return this.management.updateEmployee({ ...employeeUpdateSchema.parse(body), locationId: this.location(actor), actorId: actor.sub, targetId: employeeId }); }
+
+  @Patch("employees/:employeeId/credentials") @RequirePermissions(Permission.EmployeeEdit)
+  resetEmployeeCredentials(@CurrentActor() actor: RequestActor, @Param("employeeId") employeeId: string, @Body(new ZodValidationPipe(employeeCredentialsSchema)) body: unknown) { return this.management.resetEmployeeCredentials({ ...employeeCredentialsSchema.parse(body), locationId: this.location(actor), actorId: actor.sub, targetId: employeeId }); }
 
   @Patch("roles/:roleId/permissions") @RequirePermissions(Permission.EmployeePermissionsEdit)
   role(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Body(new ZodValidationPipe(rolePermissionsSchema)) body: unknown) { return this.management.updateRolePermissions({ ...rolePermissionsSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId }); }

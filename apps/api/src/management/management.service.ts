@@ -105,6 +105,27 @@ export class ManagementService {
     });
   }
 
+  async resetEmployeeCredentials(input: { locationId: string; actorId: string; targetId: string; password?: string; pin?: string | null }) {
+    const target = await prisma.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId }, include: { authAccount: true } });
+    if (!target?.authAccount) throw AppError.notFound("Employee credentials were not found.");
+    const passwordHash = input.password ? await hashPassword(input.password) : undefined;
+    const pinHash = typeof input.pin === "string" ? await hashPin(input.pin) : input.pin === null ? null : undefined;
+    await prisma.$transaction(async (tx) => {
+      await tx.staffAuthAccount.update({ where: { employeeId: target.id }, data: {
+        passwordHash,
+        pinHash,
+        mustChangePassword: input.password ? true : undefined,
+        refreshTokenVersion: { increment: 1 },
+      } });
+      await tx.auditEvent.create({ data: {
+        actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId,
+        action: "employee.credentials_reset", entityType: "Employee", entityId: target.id,
+        afterState: { passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password) },
+      } });
+    });
+    return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password) };
+  }
+
   async updateRolePermissions(input: { locationId: string; employeeId: string; roleId: string; permissionKeys: string[] }) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
     const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { rolePermissions: { include: { permission: true } } } });

@@ -5,6 +5,7 @@ import {
   customerRegisterRequestSchema,
   refreshRequestSchema,
   staffLoginRequestSchema,
+  staffPasswordChangeRequestSchema,
   AuthTokenResponse,
 } from "@cinema/shared";
 import { loadEnv } from "@cinema/config/env";
@@ -71,6 +72,16 @@ export class AuthController {
   async staffMe(@CurrentActor() actor: RequestActor) {
     if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
     return this.authService.staffMe(actor.sub);
+  }
+
+  @Post("staff/change-password")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async changeStaffPassword(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(staffPasswordChangeRequestSchema)) body: unknown) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    const { tokens, employee } = await this.authService.changeStaffPassword(actor.sub, staffPasswordChangeRequestSchema.parse(body));
+    return { ...toTokenResponse(tokens), employee };
   }
 
   // -------------------------------------------------------------------
