@@ -21,9 +21,16 @@ interface CheckoutConfig {
 interface StripeElement {
   mount(selector: string): void;
   destroy(): void;
+  on(event: "ready", handler: () => void): void;
+  on(
+    event: "loaderror",
+    handler: (event: { error?: { message?: string } }) => void,
+  ): void;
 }
 
-interface StripeExpressCheckoutElement extends StripeElement {
+interface StripeExpressCheckoutElement {
+  mount(selector: string): void;
+  destroy(): void;
   on(event: "confirm", handler: () => void): void;
 }
 
@@ -105,6 +112,7 @@ export function TicketCheckout({
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [paymentElementReady, setPaymentElementReady] = useState(false);
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const paymentElementRef = useRef<StripeElement | null>(null);
@@ -210,6 +218,14 @@ export function TicketCheckout({
       const paymentElement = elements.create("payment", {
         layout: "tabs",
       });
+      paymentElement.on("ready", () => setPaymentElementReady(true));
+      paymentElement.on("loaderror", (event) => {
+        setPaymentElementReady(false);
+        setError(
+          event.error?.message ??
+            "The secure payment form could not load. Please refresh and try again.",
+        );
+      });
       const expressCheckoutElement = elements.create("expressCheckout", {
         paymentMethods: { applePay: "always" },
         buttonType: { applePay: "check-out" },
@@ -221,6 +237,7 @@ export function TicketCheckout({
       elementsRef.current = elements;
       paymentElementRef.current = paymentElement;
       expressCheckoutElementRef.current = expressCheckoutElement;
+      setPaymentElementReady(false);
       window.setTimeout(() => {
         expressCheckoutElement.mount("#attend-express-checkout-element");
         paymentElement.mount("#attend-payment-element");
@@ -240,7 +257,12 @@ export function TicketCheckout({
 
   async function pay(event: FormEvent) {
     event.preventDefault();
-    if (!checkout || !stripeRef.current || !elementsRef.current) return;
+    if (
+      !checkout ||
+      !stripeRef.current ||
+      !elementsRef.current ||
+      !paymentElementReady
+    ) return;
     await confirmAndFinalize(stripeRef.current, elementsRef.current, checkout.orderId);
   }
 
@@ -363,12 +385,17 @@ export function TicketCheckout({
           </div>
           <div className="checkout-panel">
             <h3>Payment</h3>
+            {!paymentElementReady && !error && (
+              <p role="status">Loading secure payment form…</p>
+            )}
             <div id="attend-express-checkout-element" />
             <div id="attend-payment-element" />
           </div>
-          <button className="primary" disabled={pending}>
+          <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
               ? "Completing purchase…"
+              : !paymentElementReady
+                ? "Loading secure payment…"
               : `Pay ${money(checkout.totalCents, checkout.currency)}`}
           </button>
         </form>
