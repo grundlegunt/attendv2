@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -60,7 +60,7 @@ export class ManagementController {
   role(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Body(new ZodValidationPipe(rolePermissionsSchema)) body: unknown) { return this.management.updateRolePermissions({ ...rolePermissionsSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId }); }
 
   @Get("refunds") @RequirePermissions(Permission.PaymentRefund)
-  refundsList(@CurrentActor() actor: RequestActor) { return this.refunds.refundable(this.location(actor)); }
+  refundsList(@CurrentActor() actor: RequestActor, @Query("query") query?: string) { return this.refunds.refundable(this.location(actor), query); }
 
   @Post("refunds/ticket-orders/:orderId") @RequirePermissions(Permission.TicketRefund)
   refundTicket(@CurrentActor() actor: RequestActor, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(refundSchema)) body: unknown) { return this.refunds.refundTicket({ ...refundSchema.parse(body), orderId, locationId: this.location(actor), employeeId: actor.sub }); }
