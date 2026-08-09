@@ -2,6 +2,7 @@
 
 import { adminBrandingDefaults, adminUiDefaults, type AdminUiConfig, type AuthenticatedEmployee, type AuthTokenResponse } from "@cinema/shared";
 import { FormEvent, createContext, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string };
@@ -103,7 +104,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
   }
 
-  const value = useMemo(() => session ? { ...session, signOut: () => { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); } } : null, [session]);
+  const value = useMemo(() => session ? { ...session, signOut: () => { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setMfaSetup(null); setMfaCode(""); } } : null, [session]);
   const branding = value?.employee.adminBranding ?? publicBranding;
   const adminUi = publicBranding?.ui ?? adminUiDefaults;
   const fontFamilies: Record<AdminUiConfig["fontFamily"], string> = { SYSTEM: "Inter, ui-sans-serif, system-ui, sans-serif", SERIF: "Georgia, 'Times New Roman', serif", MODERN: "'Avenir Next', 'Helvetica Neue', Arial, sans-serif", MONO: "'SFMono-Regular', Consolas, monospace" };
@@ -143,7 +144,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   if (value.employee.mfaSetupRequired) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={confirmMfaSetup}>
     <p className="kicker">SECURITY SETUP REQUIRED</p><h1>Protect your account</h1><p className="muted">Your role requires two-step verification.</p>{error && <div className="error-banner">{error}</div>}
     {!mfaSetup ? <><p>Add a new account in Google Authenticator, 1Password, Authy, or another authenticator app.</p><button type="button" className="primary" onClick={startMfaSetup}>Set up authenticator</button></> : <>
-      <label>Setup key<output className="mfa-setup-key">{mfaSetup.secret}</output></label><p className="muted">Enter this key in your authenticator app, then confirm with the 6-digit code it shows.</p>
+      <div className="mfa-enrollment"><div className="mfa-qr"><QRCodeSVG value={mfaSetup.uri} size={196} marginSize={2} title="Authenticator enrollment QR code" /></div><div><h2>Scan the QR code</h2><p className="muted">In your authenticator app, add a new account and scan this code. The app does not need your personal Gmail address.</p><label>Can’t scan it? Enter this setup key instead.<output className="mfa-setup-key">{mfaSetup.secret}</output></label></div></div>
       <label>Authenticator code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></label>
       <button className="primary">Enable two-step verification</button>
     </>}

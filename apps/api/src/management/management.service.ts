@@ -104,7 +104,7 @@ export class ManagementService {
   async people(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId } });
     const [employees, roles, permissions] = await Promise.all([
-      prisma.employee.findMany({ where: { locationId }, select: { id: true, name: true, email: true, active: true, employeeRoles: { where: { locationId }, select: { roleId: true, role: { select: { key: true, name: true } } } } }, orderBy: { name: "asc" } }),
+      prisma.employee.findMany({ where: { locationId }, select: { id: true, name: true, email: true, active: true, authAccount: { select: { mfaEnabled: true } }, employeeRoles: { where: { locationId }, select: { roleId: true, role: { select: { key: true, name: true } } } } }, orderBy: { name: "asc" } }),
       prisma.role.findMany({ where: { organizationId: location.organizationId }, include: { rolePermissions: { include: { permission: true } } }, orderBy: { name: "asc" } }),
       prisma.permission.findMany({ orderBy: { key: "asc" } }),
     ]);
@@ -160,27 +160,28 @@ export class ManagementService {
     });
   }
 
-  async resetEmployeeCredentials(input: { locationId: string; actorId: string; targetId: string; password?: string; pin?: string | null }) {
+  async resetEmployeeCredentials(input: { locationId: string; actorId: string; targetId: string; password?: string; pin?: string | null; resetMfa?: boolean }) {
     const target = await prisma.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId }, include: { authAccount: true } });
     if (!target?.authAccount) throw AppError.notFound("Employee credentials were not found.");
     const passwordHash = input.password ? await hashPassword(input.password) : undefined;
     const pinHash = typeof input.pin === "string" ? await hashPin(input.pin) : input.pin === null ? null : undefined;
+    const resetMfa = Boolean(input.password || input.resetMfa);
     await prisma.$transaction(async (tx) => {
       await tx.staffAuthAccount.update({ where: { employeeId: target.id }, data: {
         passwordHash,
         pinHash,
         mustChangePassword: input.password ? true : undefined,
-        mfaEnabled: input.password ? false : undefined,
-        mfaSecretEncrypted: input.password ? null : undefined,
+        mfaEnabled: resetMfa ? false : undefined,
+        mfaSecretEncrypted: resetMfa ? null : undefined,
         refreshTokenVersion: { increment: 1 },
       } });
       await tx.auditEvent.create({ data: {
         actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId,
         action: "employee.credentials_reset", entityType: "Employee", entityId: target.id,
-        afterState: { passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password), mfaReset: Boolean(input.password) },
+        afterState: { passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password), mfaReset: resetMfa },
       } });
     });
-    return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password) };
+    return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password), mfaReset: resetMfa };
   }
 
   async createRole(input: { locationId: string; employeeId: string; name: string }) {
