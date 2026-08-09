@@ -5,7 +5,7 @@ import type { SeatMapLayout } from "@cinema/shared";
 import type { SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
-import { useAdminSession } from "../admin-session";
+import { useAdminSession, useAdminUi } from "../admin-session";
 
 interface Auditorium {
   id: string; name: string; capacity: number;
@@ -46,6 +46,7 @@ function dateTimeInputValue(date: Date) {
 
 export default function AdminPage() {
   const { employee, accessToken: token } = useAdminSession();
+  const adminUi = useAdminUi();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [movieTitle, setMovieTitle] = useState("");
@@ -343,6 +344,7 @@ export default function AdminPage() {
     </section>
 
     {data && <div className={`schedule-with-inspector ${showtimeEditorOpen ? "inspector-open" : ""}`}><SchedulingCalendar
+      labels={adminUi.labels}
       locationName={data.location.name}
       auditoriums={data.location.auditoriums}
       movies={data.location.organization.movies}

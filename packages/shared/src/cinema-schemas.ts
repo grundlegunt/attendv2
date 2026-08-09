@@ -19,6 +19,21 @@ export const adminBrandingDefaults = {
   mutedTextColor: "#cccccc",
 } as const;
 
+export const adminUiDefaults = {
+  fontFamily: "SYSTEM",
+  onSaleColor: "#2f7653",
+  draftColor: "#665022",
+  pastColor: "#3a3d38",
+  labels: {
+    scheduleTitle: "Daily theater schedule",
+    scheduleInstructions: "Click an open time to add a showing. Click a film to edit it.",
+    day: "Day", week: "Week", export: "Export Excel", duplicateDay: "Duplicate day", today: "Today",
+    onSale: "On sale", draft: "Draft", past: "Past", room: "Room",
+    filmLibrary: "Film library", filmLibraryHelp: "Search, review, or quickly add a film to the schedule.",
+    addMovie: "Add movie +", search: "Search",
+  },
+} as const;
+
 const hexColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex color such as #fe2c54.");
 const customerLogoUrlSchema = z.union([
   z.string().trim().url("Logo URL must be a valid URL."),
@@ -49,6 +64,24 @@ export const adminBrandingSchema = z.object({
 }).strict();
 
 export type AdminBranding = z.infer<typeof adminBrandingSchema>;
+
+const adminUiLabelSchema = z.string().trim().min(1).max(120);
+export const adminUiConfigSchema = z.object({
+  fontFamily: z.enum(["SYSTEM", "SERIF", "MODERN", "MONO"]),
+  onSaleColor: hexColorSchema,
+  draftColor: hexColorSchema,
+  pastColor: hexColorSchema,
+  labels: z.object({
+    scheduleTitle: adminUiLabelSchema,
+    scheduleInstructions: z.string().trim().min(1).max(240),
+    day: adminUiLabelSchema, week: adminUiLabelSchema, export: adminUiLabelSchema,
+    duplicateDay: adminUiLabelSchema, today: adminUiLabelSchema,
+    onSale: adminUiLabelSchema, draft: adminUiLabelSchema, past: adminUiLabelSchema, room: adminUiLabelSchema,
+    filmLibrary: adminUiLabelSchema, filmLibraryHelp: z.string().trim().min(1).max(240),
+    addMovie: adminUiLabelSchema, search: adminUiLabelSchema,
+  }).strict(),
+}).strict();
+export type AdminUiConfig = z.infer<typeof adminUiConfigSchema>;
 
 export const seatTypeSchema = z.enum(["STANDARD", "ADA", "COMPANION"]);
 export const tablePositionSchema = z.enum(["LEFT", "RIGHT"]);

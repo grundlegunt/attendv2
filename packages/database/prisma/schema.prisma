@@ -95,6 +95,7 @@ model Location {
   adminSurfaceColor        String?
   adminTextColor           String?
   adminMutedTextColor      String?
+  adminUiConfig            Json?
   contentDraft             Json?
   contentPublished         Json?
   contentPublishedAt       DateTime?

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { AdminUiConfig } from "@cinema/shared";
 
 import { downloadScheduleWorkbook } from "./schedule-export";
 
@@ -43,6 +44,7 @@ export interface CalendarShowtime {
 }
 
 interface SchedulingCalendarProps {
+  labels: AdminUiConfig["labels"];
   locationName: string;
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
@@ -100,6 +102,7 @@ function minutesFrom(start: Date, value: string | Date) {
 }
 
 export function SchedulingCalendar({
+  labels,
   locationName,
   auditoriums,
   movies,
@@ -287,13 +290,13 @@ export function SchedulingCalendar({
     <div className="schedule-toolbar">
       <div>
         <p className="kicker">PROGRAMMING</p>
-        <h2>Daily theater schedule</h2>
-        <p>Click an open time to add a showing. Click a film to edit it.</p>
+        <h2>{labels.scheduleTitle}</h2>
+        <p>{labels.scheduleInstructions}</p>
       </div>
       <div className="schedule-actions">
         <div className="view-switch" aria-label="Schedule view">
-          <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>Day</button>
-          <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>Week</button>
+          <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>{labels.day}</button>
+          <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>{labels.week}</button>
         </div>
         <button type="button" className="export-schedule-button" disabled={exporting} onClick={async () => {
           setExporting(true);
@@ -302,7 +305,7 @@ export function SchedulingCalendar({
           } finally {
             setExporting(false);
           }
-        }}>{exporting ? "Preparing…" : "Export Excel"}</button>
+        }}>{exporting ? "Preparing…" : labels.export}</button>
         <button type="button" className="duplicate-day-button" onClick={() => {
           const next = new Date(`${selectedDate}T12:00:00`);
           next.setDate(next.getDate() + 1);
@@ -310,26 +313,26 @@ export function SchedulingCalendar({
           setDuplicateTargets([]);
           setDuplicateError(null);
           setDuplicateOpen(true);
-        }}>Duplicate day</button>
+        }}>{labels.duplicateDay}</button>
       </div>
       <div className="date-controls">
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
-        <button type="button" className="calendar-today" onClick={() => setSelectedDate(dateInputValue(new Date()))}>Today</button>
+        <button type="button" className="calendar-today" onClick={() => setSelectedDate(dateInputValue(new Date()))}>{labels.today}</button>
         <input aria-label="Schedule date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? 7 : 1)} aria-label={`Next ${view}`}>→</button>
       </div>
     </div>
 
     <div className="schedule-legend" aria-label="Schedule legend">
-      <span><i className="legend-swatch on-sale" /> On sale</span>
-      <span><i className="legend-swatch draft" /> Draft</span>
-      <span><i className="legend-swatch past" /> Past</span>
+      <span><i className="legend-swatch on-sale" /> {labels.onSale}</span>
+      <span><i className="legend-swatch draft" /> {labels.draft}</span>
+      <span><i className="legend-swatch past" /> {labels.past}</span>
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
     </div>
 
     {view === "day" && <div className="calendar-scroll">
       <div className="cinema-calendar" style={{ "--timeline-width": `${TOTAL_HOURS * HOUR_WIDTH}px` } as React.CSSProperties}>
-        <div className="calendar-corner"><span>ROOM</span></div>
+        <div className="calendar-corner"><span>{labels.room}</span></div>
         <div className="time-ruler">
           {hours.map((hour) => <span key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }}>{hour.label}</span>)}
         </div>
@@ -444,9 +447,9 @@ export function SchedulingCalendar({
       </div>
     </div>}
 
-    <div className="film-library" aria-label="Film library">
+    <div className="film-library" aria-label={labels.filmLibrary}>
       <div className="film-library-overview">
-      <div className="film-library-heading"><div><b>Film library</b><button type="button" className="film-library-add" onClick={onAddMovie}>Add movie +</button></div><span>Search, review, or quickly add a film to the schedule.</span></div>
+      <div className="film-library-heading"><div><b>{labels.filmLibrary}</b><button type="button" className="film-library-add" onClick={onAddMovie}>{labels.addMovie}</button></div><span>{labels.filmLibraryHelp}</span></div>
       <section className="film-library-detail" aria-live="polite">
         {selectedLibraryMovie ? <>
           <div className="film-detail-poster">
@@ -508,7 +511,7 @@ export function SchedulingCalendar({
       </details>
       </div>
       <div className="film-library-content">
-        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder="Search" /></label>
+        <label className="film-library-search"><span className="sr-only">Search active and archived films</span><input type="search" value={filmQuery} onChange={(event) => setFilmQuery(event.target.value)} placeholder={labels.search} /></label>
       <div className="film-library-list">
         {filteredMovies.map((movie) => <div
           className={`film-card ${selectedMovieId === movie.id ? "selected" : ""}`}
