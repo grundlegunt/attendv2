@@ -21,6 +21,15 @@ export class ReportingController {
     return this.reporting.revenue(this.location(actor), this.range(from, to));
   }
 
+  @Get("revenue.csv")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  async revenueCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
+    const report = await this.reporting.revenue(this.location(actor), this.range(from, to));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="attend-revenue.csv"');
+    response.send(this.reporting.revenueCsv(report));
+  }
+
   @Get("labor")
   labor(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
     return this.reporting.labor(this.location(actor), this.range(from, to));
