@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, Prisma, prisma } from "@cinema/database";
 import { signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
-import { AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
+import { adminBrandingDefaults, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
 
@@ -188,6 +188,19 @@ export class PlatformService {
     await prisma.$transaction(async (tx) => {
       const before = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
       if (!before) throw AppError.notFound("Cinema location not found.");
+      const currentUi = adminUiConfigSchema.safeParse(before.adminUiConfig).success ? adminUiConfigSchema.parse(before.adminUiConfig) : adminUiDefaults;
+      const previousPalette = {
+        savedAt: new Date().toISOString(),
+        accentColor: before.adminAccentColor ?? adminBrandingDefaults.accentColor,
+        accentMutedColor: before.adminAccentMutedColor ?? adminBrandingDefaults.accentMutedColor,
+        backgroundColor: before.adminBackgroundColor ?? adminBrandingDefaults.backgroundColor,
+        surfaceColor: before.adminSurfaceColor ?? adminBrandingDefaults.surfaceColor,
+        textColor: before.adminTextColor ?? adminBrandingDefaults.textColor,
+        mutedTextColor: before.adminMutedTextColor ?? adminBrandingDefaults.mutedTextColor,
+        onSaleColor: currentUi.onSaleColor, draftColor: currentUi.draftColor, pastColor: currentUi.pastColor,
+      };
+      const paletteChanged = input.adminUi && [input.adminAccentColor, input.adminAccentMutedColor, input.adminBackgroundColor, input.adminSurfaceColor, input.adminTextColor, input.adminMutedTextColor, input.adminUi.onSaleColor, input.adminUi.draftColor, input.adminUi.pastColor].some((color, index) => color !== Object.values(previousPalette).slice(1)[index]);
+      const nextAdminUi = input.adminUi ? { ...input.adminUi, colorHistory: paletteChanged ? [previousPalette, ...currentUi.colorHistory].slice(0, 20) : currentUi.colorHistory } : undefined;
       const updated = await tx.location.update({ where: { id: input.locationId }, data: {
         name: input.name, address: input.address, timezone: input.timezone, active: input.active,
         customerLogoUrl: input.logoUrl, customerAccentColor: input.accentColor, customerAccentMutedColor: input.accentMutedColor,
@@ -195,7 +208,7 @@ export class PlatformService {
         adminAccentColor: input.adminAccentColor, adminAccentMutedColor: input.adminAccentMutedColor,
         adminBackgroundColor: input.adminBackgroundColor, adminSurfaceColor: input.adminSurfaceColor,
         adminTextColor: input.adminTextColor, adminMutedTextColor: input.adminMutedTextColor,
-        adminUiConfig: input.adminUi as Prisma.InputJsonValue | undefined,
+        adminUiConfig: nextAdminUi as Prisma.InputJsonValue | undefined,
         ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints, preShowBufferMinutes: input.preShowBufferMinutes, cleaningBufferMinutes: input.cleaningBufferMinutes,
         checkDropMinutesBeforeEnd: input.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: input.autoSettleGraceMinutes, timeClockEnabled: input.timeClockEnabled,
       } });

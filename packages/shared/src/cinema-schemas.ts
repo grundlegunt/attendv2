@@ -19,11 +19,17 @@ export const adminBrandingDefaults = {
   mutedTextColor: "#cccccc",
 } as const;
 
+export type AdminColorHistoryEntry = {
+  savedAt: string; accentColor: string; accentMutedColor: string; backgroundColor: string; surfaceColor: string;
+  textColor: string; mutedTextColor: string; onSaleColor: string; draftColor: string; pastColor: string;
+};
+
 export const adminUiDefaults = {
   fontFamily: "SYSTEM",
   onSaleColor: "#2f7653",
   draftColor: "#665022",
   pastColor: "#3a3d38",
+  colorHistory: [] as AdminColorHistoryEntry[],
   labels: {
     scheduleTitle: "Daily theater schedule",
     scheduleInstructions: "Click an open time to add a showing. Click a film to edit it.",
@@ -71,6 +77,12 @@ export const adminUiConfigSchema = z.object({
   onSaleColor: hexColorSchema,
   draftColor: hexColorSchema,
   pastColor: hexColorSchema,
+  colorHistory: z.array(z.object({
+    savedAt: z.string().datetime(),
+    accentColor: hexColorSchema, accentMutedColor: hexColorSchema, backgroundColor: hexColorSchema,
+    surfaceColor: hexColorSchema, textColor: hexColorSchema, mutedTextColor: hexColorSchema,
+    onSaleColor: hexColorSchema, draftColor: hexColorSchema, pastColor: hexColorSchema,
+  }).strict()).max(20).default([]),
   labels: z.object({
     scheduleTitle: adminUiLabelSchema,
     scheduleInstructions: z.string().trim().min(1).max(240),
