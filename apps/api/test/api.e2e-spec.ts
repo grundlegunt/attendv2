@@ -814,7 +814,7 @@ describe("Milestone 1 cinema configuration", () => {
         subtotalCents: 2000,
         feesCents: 0,
         taxCents: 0,
-        totalCents: 1223,
+        totalCents: 2000,
         promotionId: promotion.body.id,
         discountCents: 777,
         tickets: { create: { showtimeSeatId: showtimeSeat.id, ticketTypeId: ticketType.id, priceCentsPaid: 1223, qrToken: `promo-${crypto.randomUUID()}` } },
