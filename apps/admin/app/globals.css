@@ -202,12 +202,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-block-shell.past .showtime-block { border-color: color-mix(in srgb, var(--schedule-past) 70%, white); background: var(--schedule-past); color: #aaa; box-shadow: none; }
 .showtime-block-shell[draggable="true"] { cursor: grab; }
 .showtime-block-shell[draggable="true"]:active { cursor: grabbing; opacity: .72; }
-.showtime-quick-remove { position: absolute; top: 6px; right: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: #171815; color: white; font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
+.showtime-quick-remove { position: absolute; top: 6px; left: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--showtime-remove-control); border-radius: 50%; background: #171815; color: var(--showtime-remove-control); font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
 .showtime-block-shell:hover .showtime-quick-remove, .showtime-quick-remove:focus-visible { opacity: 1; transform: scale(1); }
-.showtime-quick-remove:hover { border-color: #f05a45; background: #f05a45; }
-.showtime-quick-duplicate { position: absolute; top: 38px; right: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid rgba(255,255,255,.7); border-radius: 50%; background: #171815; color: white; font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
+.showtime-quick-remove:hover { border-color: var(--showtime-remove-control); background: var(--showtime-remove-control); color: #171815; }
+.showtime-quick-duplicate { position: absolute; top: 6px; right: 6px; z-index: 4; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--showtime-duplicate-control); border-radius: 50%; background: #171815; color: var(--showtime-duplicate-control); font-size: 1rem; line-height: 1; cursor: pointer; opacity: 0; transform: scale(.85); transition: opacity .15s ease, transform .15s ease; }
 .showtime-block-shell:hover .showtime-quick-duplicate, .showtime-quick-duplicate:focus-visible { opacity: 1; transform: scale(1); }
-.showtime-quick-duplicate:hover { border-color: var(--color-accent); background: var(--color-accent); color: #171815; }
+.showtime-quick-duplicate:hover { border-color: var(--showtime-duplicate-control); background: var(--showtime-duplicate-control); color: #171815; }
 .drop-preview { position: absolute; top: 16px; bottom: 16px; z-index: 5; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 12px 14px; border: 2px dashed var(--color-accent); border-radius: 4px; background: color-mix(in srgb, var(--color-accent) 20%, transparent); color: white; pointer-events: none; }
 .drop-preview strong, .drop-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drop-preview strong { font-family: Georgia, serif; }

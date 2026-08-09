@@ -198,8 +198,9 @@ export class PlatformService {
         textColor: before.adminTextColor ?? adminBrandingDefaults.textColor,
         mutedTextColor: before.adminMutedTextColor ?? adminBrandingDefaults.mutedTextColor,
         onSaleColor: currentUi.onSaleColor, draftColor: currentUi.draftColor, pastColor: currentUi.pastColor,
+        removeControlColor: currentUi.removeControlColor, duplicateControlColor: currentUi.duplicateControlColor,
       };
-      const paletteChanged = input.adminUi && [input.adminAccentColor, input.adminAccentMutedColor, input.adminBackgroundColor, input.adminSurfaceColor, input.adminTextColor, input.adminMutedTextColor, input.adminUi.onSaleColor, input.adminUi.draftColor, input.adminUi.pastColor].some((color, index) => color !== Object.values(previousPalette).slice(1)[index]);
+      const paletteChanged = input.adminUi && [input.adminAccentColor, input.adminAccentMutedColor, input.adminBackgroundColor, input.adminSurfaceColor, input.adminTextColor, input.adminMutedTextColor, input.adminUi.onSaleColor, input.adminUi.draftColor, input.adminUi.pastColor, input.adminUi.removeControlColor, input.adminUi.duplicateControlColor].some((color, index) => color !== Object.values(previousPalette).slice(1)[index]);
       const nextAdminUi = input.adminUi ? { ...input.adminUi, colorHistory: paletteChanged ? [previousPalette, ...currentUi.colorHistory].slice(0, 20) : currentUi.colorHistory } : undefined;
       const updated = await tx.location.update({ where: { id: input.locationId }, data: {
         name: input.name, address: input.address, timezone: input.timezone, active: input.active,
