@@ -444,6 +444,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .permission-list .checkbox { align-items: start; }
 .permission-list span { display: grid; gap: .15rem; }
 .permission-list small { color: var(--muted); }
+.permission-groups { display: grid; gap: 14px; margin: 1rem 0; }
+.permission-group { padding: 14px; border: 1px solid var(--line); background: color-mix(in srgb, var(--surface) 75%, var(--background)); }
+.permission-group-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.permission-group-heading h3 { margin: 0 0 2px; }
+.permission-group-heading small { color: var(--muted); }
+.permission-group .permission-list { max-height: none; margin-bottom: 0; }
 .destructive { background: #7c2020; color: white; border: 0; padding: .7rem 1rem; border-radius: 6px; cursor: pointer; }
 .admin-topbar { position: sticky; top: 0; z-index: 80; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 64px; padding: 10px 24px; border-bottom: 1px solid var(--line); background: rgba(12, 12, 12, .96); backdrop-filter: blur(12px); }
 .admin-topbar > div { display: flex; align-items: center; gap: 12px; color: var(--muted); }
