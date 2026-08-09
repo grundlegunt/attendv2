@@ -37,7 +37,7 @@ export default function MovieDetailPage({ params }: { params: Promise<{ id: stri
   return <main className="cinema-shell route-page movie-detail">
     <section className="movie-detail__hero">
       <aside>
-        <div className="movie-detail__poster">{movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}</div>
+        <div className="movie-detail__poster">{movie.detailPosterUrl || movie.posterUrl ? <img src={movie.detailPosterUrl ?? movie.posterUrl!} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}</div>
         {movie.trailerUrl && <a className="primary-link movie-detail__trailer" href={movie.trailerUrl} target="_blank" rel="noreferrer">Watch Trailer ↗</a>}
       </aside>
       <div className="movie-detail__copy">

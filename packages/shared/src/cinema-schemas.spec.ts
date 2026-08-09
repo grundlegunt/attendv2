@@ -46,6 +46,7 @@ describe("cinema programming requests", () => {
       synopsis: "A programmer discovers the world is not what it seems.",
       rating: "R",
       posterUrl: "https://images.example.com/matrix.jpg",
+      detailPosterUrl: "/posters/matrix-one-sheet.jpg",
       director: "Lana Wachowski, Lilly Wachowski",
       starring: "Keanu Reeves, Carrie-Anne Moss",
       trailerUrl: "https://video.example.com/matrix",
@@ -53,6 +54,7 @@ describe("cinema programming requests", () => {
       pairingMenuItemIds: ["10000000-0000-4000-8000-000000000005"],
     });
     expect(parsed.posterUrl).toContain("images.example.com");
+    expect(parsed.detailPosterUrl).toBe("/posters/matrix-one-sheet.jpg");
     expect(parsed.releaseYear).toBe(1999);
     expect(parsed.pairingMenuItemIds).toHaveLength(1);
 

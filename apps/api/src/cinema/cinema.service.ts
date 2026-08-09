@@ -316,6 +316,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           runtimeMinutes: input.runtimeMinutes,
           rating: input.rating ?? null,
           posterUrl: input.posterUrl ?? null,
+          detailPosterUrl: input.detailPosterUrl ?? null,
           director: input.director ?? null,
           starring: input.starring ?? null,
           trailerUrl: input.trailerUrl ?? null,
@@ -335,7 +336,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           locationId,
           afterState: {
             title: movie.title, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating,
-            posterUrl: movie.posterUrl, director: movie.director, starring: movie.starring,
+            posterUrl: movie.posterUrl, detailPosterUrl: movie.detailPosterUrl, director: movie.director, starring: movie.starring,
             trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
             pairingMenuItemIds: input.pairingMenuItemIds,
           },
@@ -439,12 +440,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         locationId,
         beforeState: {
           title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes,
-          rating: existing.rating, posterUrl: existing.posterUrl, director: existing.director,
+          rating: existing.rating, posterUrl: existing.posterUrl, detailPosterUrl: existing.detailPosterUrl, director: existing.director,
           starring: existing.starring, trailerUrl: existing.trailerUrl, releaseYear: existing.releaseYear,
         },
         afterState: {
           title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes,
-          rating: movie.rating, posterUrl: movie.posterUrl, director: movie.director,
+          rating: movie.rating, posterUrl: movie.posterUrl, detailPosterUrl: movie.detailPosterUrl, director: movie.director,
           starring: movie.starring, trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
           ...(pairingMenuItemIds ? { pairingMenuItemIds } : {}),
         },
@@ -1223,6 +1224,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         runtimeMinutes: movie.runtimeMinutes,
         rating: movie.rating,
         posterUrl: movie.posterUrl,
+        detailPosterUrl: movie.detailPosterUrl,
         director: movie.director,
         starring: movie.starring,
         trailerUrl: movie.trailerUrl,
@@ -1273,7 +1275,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             format: true,
             movie: {
               select: {
-                id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true,
+                id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, detailPosterUrl: true,
                 director: true, starring: true, trailerUrl: true, releaseYear: true,
               },
             },
@@ -1292,7 +1294,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         .map((entry) => {
           const movies = new Map<string, {
             id: string; title: string; synopsis: string | null; runtimeMinutes: number;
-            rating: string | null; posterUrl: string | null; director: string | null;
+            rating: string | null; posterUrl: string | null; detailPosterUrl: string | null; director: string | null;
             starring: string | null; trailerUrl: string | null; releaseYear: number | null; showtimes: Array<{
               id: string; startsAt: string; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
               format: string | null; filmSeries: { id: string; name: string } | null;

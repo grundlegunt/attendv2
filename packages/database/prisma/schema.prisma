@@ -251,6 +251,7 @@ model Movie {
   runtimeMinutes Int
   rating         String?
   posterUrl      String?
+  detailPosterUrl String?
   director       String?
   starring       String?
   trailerUrl     String?
