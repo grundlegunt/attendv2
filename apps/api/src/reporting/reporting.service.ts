@@ -87,7 +87,7 @@ export class ReportingService {
       const breakEnd = shift.breakEndAt && shift.breakEndAt < effectiveEnd ? shift.breakEndAt : effectiveEnd;
       const breakMinutes = shift.breakStartAt && shift.breakEndAt ? Math.max(0, Math.round((breakEnd.getTime() - breakStart.getTime()) / 60_000)) : 0;
       const workedMinutes = Math.max(0, Math.round((effectiveEnd.getTime() - effectiveStart.getTime()) / 60_000) - breakMinutes);
-      return { shiftId: shift.id, employeeId: shift.employeeId, employeeName: shift.employee.name, roles: shift.employee.employeeRoles.map((entry) => entry.role.name), clockInAt: shift.clockInAt, clockOutAt: shift.clockOutAt, breakMinutes, workedMinutes };
+      return { shiftId: shift.id, employeeId: shift.employeeId, employeeName: shift.employee.name, roles: shift.employee.employeeRoles.map((entry) => entry.role.name), clockInAt: shift.clockInAt, clockOutAt: shift.clockOutAt, breakStartAt: shift.breakStartAt, breakEndAt: shift.breakEndAt, breakMinutes, workedMinutes };
     });
     return { range, rows, totalMinutes: rows.reduce((sum, row) => sum + row.workedMinutes, 0) };
   }
