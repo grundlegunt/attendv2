@@ -10,6 +10,8 @@ import { TimeClockGate } from "./time-clock-gate";
 import { BoxOfficePos } from "./box-office-pos";
 import { ShiftControls } from "./shift-controls";
 
+type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
+
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
   movies: NowPlayingMovie[];
@@ -59,6 +61,8 @@ export default function StaffLoginPage() {
   const [seatDetail, setSeatDetail] = useState<SeatDetail | null>(null);
   const [clockReady, setClockReady] = useState(false);
   const [clockPin, setClockPin] = useState("");
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
@@ -92,10 +96,11 @@ export default function StaffLoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>(
+      const res = await apiFetch<StaffLoginResponse>(
         "/auth/staff/login",
         { method: "POST", body: JSON.stringify({ email, password }) },
       );
+      if ("mfaRequired" in res) { setMfaChallengeToken(res.challengeToken); setPassword(""); return; }
       setEmployee(res.employee);
       setAccessToken(res.accessToken);
       setCurrentPassword(password);
@@ -105,6 +110,15 @@ export default function StaffLoginPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function verifyMfa(event: FormEvent) {
+    event.preventDefault(); setError(null); setLoading(true);
+    try {
+      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
+      setEmployee(res.employee); setAccessToken(res.accessToken); setMfaChallengeToken(null); setMfaCode("");
+    } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The code could not be verified."); }
+    finally { setLoading(false); }
   }
 
   async function changePassword(event: FormEvent) {
@@ -147,6 +161,13 @@ export default function StaffLoginPage() {
     }
   }
 
+  if (mfaChallengeToken) {
+    return <main className="auth-shell"><div className="auth-card"><h1>Authenticator code</h1><p className="subtitle">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={verifyMfa}>
+      <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
+      <button className="primary" disabled={loading}>{loading ? "Verifying..." : "Verify and sign in"}</button>
+    </form></div></main>;
+  }
+
   if (employee?.mustChangePassword) {
     return <main className="auth-shell"><div className="auth-card"><h1>Choose a new password</h1><p className="subtitle">Replace the temporary password before continuing.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={changePassword}>
       <div className="field"><label htmlFor="current-password">Temporary password</label><input id="current-password" type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
@@ -155,6 +176,8 @@ export default function StaffLoginPage() {
       <button className="primary" disabled={loading}>{loading ? "Changing password..." : "Change password"}</button>
     </form></div></main>;
   }
+
+  if (employee?.mfaSetupRequired) return <main className="auth-shell"><div className="auth-card"><h1>MFA setup required</h1><p className="subtitle">Sign in to Attend Admin to connect an authenticator app before using staff tools.</p></div></main>;
 
   if (employee?.timeClockEnabled && !clockReady) {
     return <TimeClockGate employee={employee} onReady={(pin) => { setClockPin(pin); setClockReady(true); }} />;

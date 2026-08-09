@@ -170,12 +170,14 @@ export class ManagementService {
         passwordHash,
         pinHash,
         mustChangePassword: input.password ? true : undefined,
+        mfaEnabled: input.password ? false : undefined,
+        mfaSecretEncrypted: input.password ? null : undefined,
         refreshTokenVersion: { increment: 1 },
       } });
       await tx.auditEvent.create({ data: {
         actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId,
         action: "employee.credentials_reset", entityType: "Employee", entityId: target.id,
-        afterState: { passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password) },
+        afterState: { passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password), mfaReset: Boolean(input.password) },
       } });
     });
     return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password) };

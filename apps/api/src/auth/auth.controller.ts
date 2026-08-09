@@ -6,6 +6,8 @@ import {
   refreshRequestSchema,
   staffLoginRequestSchema,
   staffPasswordChangeRequestSchema,
+  staffMfaConfirmRequestSchema,
+  staffMfaVerifyRequestSchema,
   AuthTokenResponse,
 } from "@cinema/shared";
 import { loadEnv } from "@cinema/config/env";
@@ -46,9 +48,39 @@ export class AuthController {
   @UseGuards(RequestRateLimitGuard)
   @RateLimit({ scope: "auth", identity: "email" })
   async staffLogin(@Body(new ZodValidationPipe(staffLoginRequestSchema)) body: unknown) {
-    const { tokens, employee } = await this.authService.staffLogin(
+    const result = await this.authService.staffLogin(
       body as ReturnType<typeof staffLoginRequestSchema.parse>,
     );
+    if ("mfaRequired" in result) return result;
+    const { tokens, employee } = result;
+    return { ...toTokenResponse(tokens), employee };
+  }
+
+  @Post("staff/mfa/verify")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth" })
+  async verifyStaffMfa(@Body(new ZodValidationPipe(staffMfaVerifyRequestSchema)) body: unknown) {
+    const { tokens, employee } = await this.authService.verifyStaffMfa(staffMfaVerifyRequestSchema.parse(body));
+    return { ...toTokenResponse(tokens), employee };
+  }
+
+  @Post("staff/mfa/setup")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async beginStaffMfaSetup(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    return this.authService.beginStaffMfaSetup(actor.sub);
+  }
+
+  @Post("staff/mfa/confirm")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async confirmStaffMfa(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(staffMfaConfirmRequestSchema)) body: unknown) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    const { tokens, employee } = await this.authService.confirmStaffMfa(actor.sub, staffMfaConfirmRequestSchema.parse(body));
     return { ...toTokenResponse(tokens), employee };
   }
 

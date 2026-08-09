@@ -7,7 +7,7 @@
  * known test credentials documented in the README, not secrets.
  */
 import { PrismaClient } from "@prisma/client";
-import { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, hashPassword, hashPin } from "@cinema/auth";
+import { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, encryptMfaSecret, hashPassword, hashPin } from "@cinema/auth";
 
 export const SEED_PASSWORD = "DevPassword123!";
 
@@ -43,7 +43,7 @@ function buildPairedSeats(rows: number, seatsPerRow: number) {
 
 export async function seedDatabase(
   prisma: PrismaClient,
-  options: { silent?: boolean; emailSuffix?: string } = {},
+  options: { silent?: boolean; emailSuffix?: string; ownerMfaSecret?: string } = {},
 ): Promise<SeedResult> {
   const log = options.silent ? () => {} : console.log;
   const suffix = options.emailSuffix ?? "ridgelinecinema.test";
@@ -140,6 +140,17 @@ export async function seedDatabase(
       authAccount: { create: { passwordHash, pinHash } },
     },
   });
+  if (options.ownerMfaSecret) {
+    const encryptionSecret = process.env.JWT_REFRESH_SECRET;
+    if (!encryptionSecret) throw new Error("JWT_REFRESH_SECRET is required to seed owner MFA.");
+    await prisma.staffAuthAccount.update({
+      where: { employeeId: owner.id },
+      data: {
+        mfaEnabled: true,
+        mfaSecretEncrypted: encryptMfaSecret(options.ownerMfaSecret, encryptionSecret),
+      },
+    });
+  }
   await prisma.employeeRole.upsert({
     where: {
       employeeId_roleId_locationId: {
@@ -766,7 +777,7 @@ if (require.main === module) {
     throw new Error("Refusing to run the seed script against NODE_ENV=production.");
   }
 
-  seedDatabase(prisma)
+  seedDatabase(prisma, { ownerMfaSecret: process.env.SEED_OWNER_MFA_SECRET })
     .then((result) => {
       console.log("\nSeed complete.");
       console.log(`  Owner login:    owner@ridgelinecinema.test / ${SEED_PASSWORD}`);

@@ -12,6 +12,17 @@ export const staffLoginRequestSchema = z.object({
 });
 export type StaffLoginRequest = z.infer<typeof staffLoginRequestSchema>;
 
+export const staffMfaVerifyRequestSchema = z.object({
+  challengeToken: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+}).strict();
+export type StaffMfaVerifyRequest = z.infer<typeof staffMfaVerifyRequestSchema>;
+
+export const staffMfaConfirmRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+}).strict();
+export type StaffMfaConfirmRequest = z.infer<typeof staffMfaConfirmRequestSchema>;
+
 export const staffPasswordChangeRequestSchema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(12).max(200),
@@ -59,6 +70,8 @@ export interface AuthenticatedEmployee {
   permissions: string[];
   timeClockEnabled: boolean;
   mustChangePassword: boolean;
+  mfaEnabled: boolean;
+  mfaSetupRequired: boolean;
   adminBranding: {
     accentColor: string | null;
     accentMutedColor: string | null;

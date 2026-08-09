@@ -157,7 +157,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
     const draft = credentialDrafts[target.id] ?? { password: "", pin: "" };
     if (field === "password" && draft.password.length < 12) { setError("Temporary passwords must contain at least 12 characters."); return; }
     if (field === "pin" && !removePin && !/^\d{4,8}$/.test(draft.pin)) { setError("PINs must contain 4 to 8 digits."); return; }
-    if (!window.confirm(`${removePin ? "Remove the PIN for" : `Reset ${field} for`} ${target.name}? Existing sessions will not be able to refresh.`)) return;
+    if (!window.confirm(`${removePin ? "Remove the PIN for" : `Reset ${field} for`} ${target.name}? Existing sessions will not be able to refresh.${field === "password" ? " Their authenticator will also be reset so they can enroll again." : ""}`)) return;
     try {
       await apiFetch(`/management/employees/${target.id}/credentials`, { accessToken, method: "PATCH", body: JSON.stringify(field === "password" ? { password: draft.password } : { pin: removePin ? null : draft.pin }) });
       setCredentialDrafts((current) => ({ ...current, [target.id]: { password: "", pin: "" } }));

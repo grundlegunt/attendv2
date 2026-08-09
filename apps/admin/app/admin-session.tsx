@@ -5,6 +5,7 @@ import { FormEvent, createContext, useContext, useEffect, useMemo, useState, typ
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string };
+type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
 type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type AdminSessionValue = Session & { signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
@@ -27,6 +28,9 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaSetup, setMfaSetup] = useState<{ secret: string; uri: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
 
@@ -51,13 +55,41 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   async function login(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
-      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      const response = await apiFetch<StaffLoginResponse>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      if ("mfaRequired" in response) { setMfaChallengeToken(response.challengeToken); setPassword(""); return; }
       const next = { employee: response.employee, accessToken: response.accessToken };
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       setSession(next); setCurrentPassword(password); setPassword("");
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
     }
+  }
+
+  async function verifyMfa(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    try {
+      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
+      const next = { employee: response.employee, accessToken: response.accessToken };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      setSession(next); setMfaChallengeToken(null); setMfaCode("");
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The code could not be verified."); }
+  }
+
+  async function startMfaSetup() {
+    setError(null);
+    try {
+      setMfaSetup(await apiFetch<{ secret: string; uri: string }>("/auth/staff/mfa/setup", { accessToken: session!.accessToken, method: "POST" }));
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "MFA setup could not be started."); }
+  }
+
+  async function confirmMfaSetup(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    try {
+      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/confirm", { accessToken: session!.accessToken, method: "POST", body: JSON.stringify({ code: mfaCode }) });
+      const next = { employee: response.employee, accessToken: response.accessToken };
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      setSession(next); setMfaSetup(null); setMfaCode("");
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The code could not be verified."); }
   }
 
   async function changePassword(event: FormEvent) {
@@ -90,6 +122,11 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--showtime-remove-control": adminUi.removeControlColor, "--showtime-duplicate-control": adminUi.duplicateControlColor,
   } as CSSProperties;
   if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
+  if (!value && mfaChallengeToken) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={verifyMfa}>
+    <p className="kicker">TWO-STEP VERIFICATION</p><h1>Enter your authenticator code</h1><p className="muted">Open your authenticator app and enter the current 6-digit code.</p>{error && <div className="error-banner">{error}</div>}
+    <label>Authenticator code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></label>
+    <button className="primary">Verify and sign in</button><button type="button" className="secondary" onClick={() => { setMfaChallengeToken(null); setMfaCode(""); setError(null); }}>Back</button>
+  </form></main></div>;
   if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
     <p className="kicker">ATTEND ADMIN</p><h1>{publicBranding?.name ? `${publicBranding.name} sign in` : "Manager sign in"}</h1>{error && <div className="error-banner">{error}</div>}
     <label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
@@ -102,6 +139,15 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     <label>New password<input type="password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label>
     <label>Confirm new password<input type="password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
     <button className="primary">Change password</button><button type="button" className="secondary" onClick={value.signOut}>Sign out</button>
+  </form></main></div>;
+  if (value.employee.mfaSetupRequired) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={confirmMfaSetup}>
+    <p className="kicker">SECURITY SETUP REQUIRED</p><h1>Protect your account</h1><p className="muted">Your role requires two-step verification.</p>{error && <div className="error-banner">{error}</div>}
+    {!mfaSetup ? <><p>Add a new account in Google Authenticator, 1Password, Authy, or another authenticator app.</p><button type="button" className="primary" onClick={startMfaSetup}>Set up authenticator</button></> : <>
+      <label>Setup key<output className="mfa-setup-key">{mfaSetup.secret}</output></label><p className="muted">Enter this key in your authenticator app, then confirm with the 6-digit code it shows.</p>
+      <label>Authenticator code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></label>
+      <button className="primary">Enable two-step verification</button>
+    </>}
+    <button type="button" className="secondary" onClick={value.signOut}>Sign out</button>
   </form></main></div>;
   return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className="admin-theme-root" style={theme}>{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
 }
