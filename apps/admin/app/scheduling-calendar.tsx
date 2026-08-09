@@ -129,6 +129,7 @@ export function SchedulingCalendar({
   const [view, setView] = useState<"day" | "week">("day");
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [selectedShowtimeIds, setSelectedShowtimeIds] = useState<string[]>([]);
+  const [shiftMinutes, setShiftMinutes] = useState(60);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(initialSelectedMovieId);
@@ -161,6 +162,27 @@ export function SchedulingCalendar({
     const next = new Date(`${selectedDate}T12:00:00`);
     next.setDate(next.getDate() + days);
     setSelectedDate(dateInputValue(next));
+  }
+
+  function selectVisibleDay() {
+    setSelectedShowtimeIds(visibleShowtimes
+      .filter((showtime) => new Date(showtime.startsAt) >= now)
+      .map((showtime) => showtime.id));
+  }
+
+  async function shiftSelection(direction: -1 | 1) {
+    const selected = showtimes.filter((showtime) => selectedShowtimeIds.includes(showtime.id));
+    if (!selected.length) return;
+    const offsetMs = direction * Math.max(5, shiftMinutes) * 60000;
+    const moves = selected.map((showtime) => ({
+      showtime,
+      startsAt: roundToFive(new Date(new Date(showtime.startsAt).getTime() + offsetMs)),
+    }));
+    if (moves.length === 1) {
+      await onMove(moves[0]!.showtime, moves[0]!.showtime.auditorium.id, moves[0]!.startsAt);
+      return;
+    }
+    await onMoveMany(moves);
   }
 
   function roundToFive(date: Date, direction: "nearest" | "up" = "nearest") {
@@ -379,7 +401,15 @@ export function SchedulingCalendar({
       <span><i className="legend-swatch draft" /> {labels.draft}</span>
       <span><i className="legend-swatch past" /> {labels.past}</span>
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
-      {selectedShowtimeIds.length > 0 && <span className="showtime-selection-summary"><strong>{selectedShowtimeIds.length} selected</strong> · Drag any selected block to move the group <button type="button" onClick={() => setSelectedShowtimeIds([])}>Clear</button></span>}
+      {view === "day" && visibleShowtimes.some((showtime) => new Date(showtime.startsAt) >= now) && <button type="button" className="select-day-showtimes" onClick={selectVisibleDay}>Select entire day</button>}
+      {selectedShowtimeIds.length > 0 && <div className="showtime-selection-summary">
+        <strong>{selectedShowtimeIds.length} selected</strong>
+        <span>Move together by</span>
+        <label><span className="sr-only">Shift minutes</span><input type="number" min="5" max="720" step="5" value={shiftMinutes} onChange={(event) => setShiftMinutes(Math.min(720, Math.max(5, Number(event.target.value) || 5)))} /> min</label>
+        <button type="button" onClick={() => void shiftSelection(-1)}>← Earlier</button>
+        <button type="button" onClick={() => void shiftSelection(1)}>Later →</button>
+        <button type="button" onClick={() => setSelectedShowtimeIds([])}>Clear</button>
+      </div>}
     </div>
 
     {view === "day" && <div className="calendar-scroll">
