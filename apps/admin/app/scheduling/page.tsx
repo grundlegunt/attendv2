@@ -318,6 +318,20 @@ export default function AdminPage() {
     }
   }
 
+  async function moveManyShowtimes(moves: Array<{ showtime: CalendarShowtime; startsAt: Date }>) {
+    setError(null);
+    try {
+      await apiFetch("/cinema/showtimes/group", {
+        accessToken: token ?? undefined,
+        method: "PATCH",
+        body: JSON.stringify({ moves: moves.map(({ showtime, startsAt }) => ({ showtimeId: showtime.id, startsAt: startsAt.toISOString() })) }),
+      });
+      await refresh();
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
   function openMovieEditor(movie?: Movie) {
     setEditingMovieId(movie?.id ?? null);
     setMovieTitle(movie?.title ?? "");
@@ -358,6 +372,7 @@ export default function AdminPage() {
       onEdit={editShowtime}
       onRemoveShowtime={quickRemoveShowtime}
       onMove={moveShowtime}
+      onMoveMany={moveManyShowtimes}
       onAddMovie={() => openMovieEditor()}
       onEditMovie={openMovieEditor}
       onArchiveMovie={archiveMovie}

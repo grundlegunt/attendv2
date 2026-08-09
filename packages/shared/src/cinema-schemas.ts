@@ -244,6 +244,17 @@ export const updateShowtimeRequestSchema = showtimeFieldsSchema.partial().refine
   "At least one showtime field is required.",
 );
 
+export const moveShowtimeGroupRequestSchema = z.object({
+  moves: z.array(z.object({
+    showtimeId: z.string().uuid(),
+    startsAt: z.string().datetime({ offset: true }),
+  })).min(2).max(100),
+}).superRefine((value, context) => {
+  if (new Set(value.moves.map((move) => move.showtimeId)).size !== value.moves.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["moves"], message: "Each showtime may only be moved once." });
+  }
+});
+
 export function validateSeatLayout(seats: SeatInput[]): string[] {
   const errors: string[] = [];
   const labels = new Set<string>();

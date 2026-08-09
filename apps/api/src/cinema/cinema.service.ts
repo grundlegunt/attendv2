@@ -9,6 +9,7 @@ import {
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   duplicateShowtimeDayRequestSchema,
+  moveShowtimeGroupRequestSchema,
   showtimePresentationSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
@@ -34,6 +35,7 @@ type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
 type DuplicateShowtimeDayInput = ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>;
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
+type MoveShowtimeGroupInput = ReturnType<typeof moveShowtimeGroupRequestSchema.parse>;
 
 const DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS = 10_000;
 const DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS = 60_000;
@@ -876,6 +878,72 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  async moveShowtimeGroup(actor: RequestActor, input: MoveShowtimeGroupInput) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const ids = input.moves.map((move) => move.showtimeId);
+      const existing = await tx.showtime.findMany({
+        where: { id: { in: ids }, auditorium: { locationId } },
+        include: { movie: true, auditorium: { include: { location: true } } },
+      });
+      if (existing.length !== ids.length) throw AppError.notFound("One or more showtimes were not found.");
+
+      const byId = new Map(existing.map((showtime) => [showtime.id, showtime]));
+      const auditoriumIds = [...new Set(existing.map((showtime) => showtime.auditoriumId))].sort();
+      for (const auditoriumId of auditoriumIds) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
+      }
+
+      const proposed = input.moves.map((move) => {
+        const showtime = byId.get(move.showtimeId)!;
+        const startsAt = new Date(move.startsAt);
+        const featureStartsAt = new Date(startsAt.getTime() + showtime.auditorium.location.preShowBufferMinutes * 60000);
+        const endsAt = new Date(featureStartsAt.getTime() + showtime.movie.runtimeMinutes * 60000);
+        const roomReadyAt = new Date(endsAt.getTime() + Math.max(this.minimumCinemaCleaningMinutes, showtime.auditorium.location.cleaningBufferMinutes) * 60000);
+        return { showtime, startsAt, featureStartsAt, endsAt, roomReadyAt };
+      });
+
+      for (let leftIndex = 0; leftIndex < proposed.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < proposed.length; rightIndex += 1) {
+          const left = proposed[leftIndex]!;
+          const right = proposed[rightIndex]!;
+          if (left.showtime.auditoriumId === right.showtime.auditoriumId
+            && left.startsAt < right.roomReadyAt && left.roomReadyAt > right.startsAt) {
+            throw AppError.conflict(`The selected move would overlap ${left.showtime.movie.title} and ${right.showtime.movie.title}.`);
+          }
+        }
+      }
+
+      const earliest = new Date(Math.min(...proposed.map((move) => move.startsAt.getTime())));
+      const latest = new Date(Math.max(...proposed.map((move) => move.roomReadyAt.getTime())));
+      const nearby = await tx.showtime.findMany({
+        where: { id: { notIn: ids }, auditoriumId: { in: auditoriumIds }, startsAt: { lt: latest }, roomReadyAt: { gt: earliest } },
+        include: { movie: true },
+      });
+      for (const move of proposed) {
+        const conflict = nearby.find((showtime) => showtime.auditoriumId === move.showtime.auditoriumId
+          && move.startsAt < showtime.roomReadyAt && move.roomReadyAt > showtime.startsAt);
+        if (conflict) throw AppError.conflict(`Conflicts with ${conflict.movie.title} at ${conflict.startsAt.toISOString()}.`);
+      }
+
+      const updated = [];
+      for (const move of proposed) {
+        updated.push(await tx.showtime.update({
+          where: { id: move.showtime.id },
+          data: { startsAt: move.startsAt, featureStartsAt: move.featureStartsAt, endsAt: move.endsAt, roomReadyAt: move.roomReadyAt },
+          include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+        }));
+        await tx.auditEvent.create({ data: {
+          actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "showtime.group_moved",
+          entityType: "Showtime", entityId: move.showtime.id, locationId,
+          beforeState: { startsAt: move.showtime.startsAt.toISOString() },
+          afterState: { startsAt: move.startsAt.toISOString(), roomReadyAt: move.roomReadyAt.toISOString(), groupSize: proposed.length },
+        } });
+      }
+      return { showtimes: updated };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async removeShowtime(actor: RequestActor, id: string) {

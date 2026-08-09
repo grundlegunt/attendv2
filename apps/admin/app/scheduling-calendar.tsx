@@ -58,6 +58,7 @@ interface SchedulingCalendarProps {
   onEdit: (showtime: CalendarShowtime) => void;
   onRemoveShowtime: (showtime: CalendarShowtime) => Promise<void>;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
+  onMoveMany: (moves: Array<{ showtime: CalendarShowtime; startsAt: Date }>) => Promise<void>;
   onAddMovie: () => void;
   onEditMovie: (movie: ScheduleMovie) => void;
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
@@ -116,6 +117,7 @@ export function SchedulingCalendar({
   onEdit,
   onRemoveShowtime,
   onMove,
+  onMoveMany,
   onAddMovie,
   onEditMovie,
   onArchiveMovie,
@@ -126,6 +128,7 @@ export function SchedulingCalendar({
   const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
   const [view, setView] = useState<"day" | "week">("day");
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
+  const [selectedShowtimeIds, setSelectedShowtimeIds] = useState<string[]>([]);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [exporting, setExporting] = useState(false);
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(initialSelectedMovieId);
@@ -154,6 +157,7 @@ export function SchedulingCalendar({
   });
 
   function changeDay(days: number) {
+    setSelectedShowtimeIds([]);
     const next = new Date(`${selectedDate}T12:00:00`);
     next.setDate(next.getDate() + days);
     setSelectedDate(dateInputValue(next));
@@ -216,6 +220,28 @@ export function SchedulingCalendar({
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
+    const groupedShowtimes = selectedShowtimeIds.includes(showtime.id)
+      ? showtimes.filter((item) => selectedShowtimeIds.includes(item.id))
+      : [showtime];
+    if (groupedShowtimes.length > 1) {
+      const target = roundToFive(targetTime);
+      const offsetMs = target.getTime() - new Date(showtime.startsAt).getTime();
+      const selectedIds = new Set(groupedShowtimes.map((item) => item.id));
+      const moves = groupedShowtimes.map((item) => ({ showtime: item, startsAt: new Date(new Date(item.startsAt).getTime() + offsetMs) }));
+      const hasConflict = moves.some(({ showtime: moving, startsAt }) => {
+        const readyAt = startsAt.getTime() + (preShowBufferMinutes + moving.movie.runtimeMinutes + cleaningBufferMinutes) * 60000;
+        return showtimes.some((existing) => !selectedIds.has(existing.id)
+          && existing.auditorium.id === moving.auditorium.id
+          && startsAt.getTime() < new Date(existing.roomReadyAt).getTime()
+          && readyAt > new Date(existing.startsAt).getTime());
+      });
+      if (hasConflict) {
+        window.alert("That group would overlap another showing. Move it to a clear time range and try again.");
+        return;
+      }
+      await onMoveMany(moves);
+      return;
+    }
     const duration = preShowBufferMinutes + showtime.movie.runtimeMinutes + cleaningBufferMinutes;
     await onMove(showtime, auditoriumId, availableStart(auditoriumId, targetTime, duration, showtime.id));
   }
@@ -289,12 +315,15 @@ export function SchedulingCalendar({
   const draggedShowtime = draggingKey?.startsWith("showtime:")
     ? showtimes.find((showtime) => showtime.id === draggingKey.slice("showtime:".length))
     : undefined;
+  const draggedSelection = draggedShowtime && selectedShowtimeIds.includes(draggedShowtime.id)
+    ? showtimes.filter((showtime) => selectedShowtimeIds.includes(showtime.id))
+    : draggedShowtime ? [draggedShowtime] : [];
   const draggedMovie = draggingKey?.startsWith("movie:")
     ? movies.find((movie) => movie.id === draggingKey.slice("movie:".length))
     : draggedShowtime?.movie;
   const resolvedDropPreview = dropPreview && draggedMovie ? {
     auditoriumId: dropPreview.auditoriumId,
-    startsAt: availableStart(
+    startsAt: draggedSelection.length > 1 ? roundToFive(dropPreview.startsAt) : availableStart(
       dropPreview.auditoriumId,
       dropPreview.startsAt,
       preShowBufferMinutes + draggedMovie.runtimeMinutes + cleaningBufferMinutes,
@@ -317,8 +346,8 @@ export function SchedulingCalendar({
       </div>
       <div className="schedule-actions">
         <div className="view-switch" aria-label="Schedule view">
-          <button type="button" className={view === "day" ? "active" : ""} onClick={() => setView("day")}>{labels.day}</button>
-          <button type="button" className={view === "week" ? "active" : ""} onClick={() => setView("week")}>{labels.week}</button>
+          <button type="button" className={view === "day" ? "active" : ""} onClick={() => { setSelectedShowtimeIds([]); setView("day"); }}>{labels.day}</button>
+          <button type="button" className={view === "week" ? "active" : ""} onClick={() => { setSelectedShowtimeIds([]); setView("week"); }}>{labels.week}</button>
         </div>
         <button type="button" className="export-schedule-button" disabled={exporting} onClick={async () => {
           setExporting(true);
@@ -339,8 +368,8 @@ export function SchedulingCalendar({
       </div>
       <div className="date-controls">
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
-        <button type="button" className="calendar-today" onClick={() => setSelectedDate(dateInputValue(new Date()))}>{labels.today}</button>
-        <input aria-label="Schedule date" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+        <button type="button" className="calendar-today" onClick={() => { setSelectedShowtimeIds([]); setSelectedDate(dateInputValue(new Date())); }}>{labels.today}</button>
+        <input aria-label="Schedule date" type="date" value={selectedDate} onChange={(event) => { setSelectedShowtimeIds([]); setSelectedDate(event.target.value); }} />
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? 7 : 1)} aria-label={`Next ${view}`}>→</button>
       </div>
     </div>
@@ -350,6 +379,7 @@ export function SchedulingCalendar({
       <span><i className="legend-swatch draft" /> {labels.draft}</span>
       <span><i className="legend-swatch past" /> {labels.past}</span>
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
+      {selectedShowtimeIds.length > 0 && <span className="showtime-selection-summary"><strong>{selectedShowtimeIds.length} selected</strong> · Drag any selected block to move the group <button type="button" onClick={() => setSelectedShowtimeIds([])}>Clear</button></span>}
     </div>
 
     {view === "day" && <div className="calendar-scroll">
@@ -381,7 +411,7 @@ export function SchedulingCalendar({
               onDrop={(event) => void dropOnTimeline(event, auditorium.id, dayStart)}
             >
               {hours.slice(0, -1).map((hour) => <i key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }} />)}
-              {draggingKey && resolvedDropPreview?.auditoriumId === auditorium.id && (() => {
+              {draggingKey && resolvedDropPreview?.auditoriumId === auditorium.id && draggedSelection.length <= 1 && (() => {
                 const durationMinutes = preShowBufferMinutes + (draggedMovie?.runtimeMinutes ?? 90) + cleaningBufferMinutes;
                 const left = (minutesFrom(dayStart, resolvedDropPreview.startsAt) / 60) * HOUR_WIDTH;
                 const width = Math.max(82, (durationMinutes / 60) * HOUR_WIDTH - 8);
@@ -398,7 +428,7 @@ export function SchedulingCalendar({
                 const status = isPast ? "past" : showtime.onSale ? "on-sale" : "draft";
                 return <div
                   draggable={!isPast}
-                  className={`showtime-block-shell ${status}`}
+                  className={`showtime-block-shell ${status} ${selectedShowtimeIds.includes(showtime.id) ? "selected" : ""}`}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
                   onMouseDown={(event) => event.stopPropagation()}
@@ -406,11 +436,12 @@ export function SchedulingCalendar({
                     event.dataTransfer.effectAllowed = "move";
                     const key = `showtime:${showtime.id}`;
                     event.dataTransfer.setData("text/plain", key);
+                    if (!selectedShowtimeIds.includes(showtime.id)) setSelectedShowtimeIds([showtime.id]);
                     setDraggingKey(key);
                   }}
                   onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
                 >
-                  <button type="button" className="showtime-block" onClick={(event) => { event.stopPropagation(); onEdit(showtime); }} title={`Edit ${showtime.movie.title}`}>
+                  <button type="button" className="showtime-block" onClick={(event) => { event.stopPropagation(); if (isPast) onEdit(showtime); else setSelectedShowtimeIds((current) => current.includes(showtime.id) ? current.filter((id) => id !== showtime.id) : [...current, showtime.id]); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(showtime); }} title={isPast ? `Edit ${showtime.movie.title}` : `Select ${showtime.movie.title}; double-click to edit`} aria-pressed={!isPast ? selectedShowtimeIds.includes(showtime.id) : undefined}>
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
                   <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
