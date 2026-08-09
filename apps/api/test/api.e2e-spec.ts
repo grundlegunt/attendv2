@@ -180,13 +180,24 @@ describe("Staff authentication", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ name: "Reset Test Server", email: resetEmail, password: SEED_PASSWORD, pin: "1234", roleIds: [serverRole.id] })
       .expect(201);
-    const previous = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: resetEmail, password: SEED_PASSWORD }).expect(200);
+    const updatedEmail = `updated-${crypto.randomUUID()}@${SEED_SUFFIX}`;
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/employees/${server.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: "Updated Test Server", email: updatedEmail.toUpperCase() })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.name).toBe("Updated Test Server");
+        expect(body.email).toBe(updatedEmail);
+      });
+    await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: resetEmail, password: SEED_PASSWORD }).expect(401);
+    const previous = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: updatedEmail, password: SEED_PASSWORD }).expect(200);
 
     await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ password: "TemporaryPassword123!", pin: "5678" }).expect(200);
     await request(app.getHttpServer()).post("/api/v1/auth/staff/refresh").send({ refreshToken: previous.body.refreshToken }).expect(401);
     await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: resetEmail, password: SEED_PASSWORD }).expect(401);
 
-    const temporary = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: resetEmail, password: "TemporaryPassword123!" }).expect(200);
+    const temporary = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: updatedEmail, password: "TemporaryPassword123!" }).expect(200);
     expect(temporary.body.employee.mustChangePassword).toBe(true);
     expect(temporary.body.employee.permissions).toEqual([]);
     await request(app.getHttpServer()).get("/api/v1/audit-events").set("Authorization", `Bearer ${temporary.body.accessToken}`).expect(403);
@@ -195,7 +206,7 @@ describe("Staff authentication", () => {
     expect(changed.body.employee.mustChangePassword).toBe(false);
     expect(changed.body.employee.permissions.length).toBeGreaterThan(0);
     await request(app.getHttpServer()).post("/api/v1/auth/staff/refresh").send({ refreshToken: temporary.body.refreshToken }).expect(401);
-    await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: resetEmail, password: SEED_PASSWORD }).expect(200);
+    await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: updatedEmail, password: SEED_PASSWORD }).expect(200);
 
     await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ pin: "1234" }).expect(200);
     const { prisma } = await import("@cinema/database");

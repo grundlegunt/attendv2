@@ -437,10 +437,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .people-list span, .refund-list span { color: var(--muted); font-size: .85rem; }
 .employee-credential-list article { align-items: flex-start; }
 .employee-summary { min-width: 0; flex: 1; }
+.employee-identity-fields { display: grid !important; grid-template-columns: minmax(150px, .7fr) minmax(220px, 1fr) auto; align-items: end; gap: 8px !important; margin-top: 10px; }
+.employee-identity-fields label { margin: 0; }
+.employee-identity-fields button { width: auto; margin: 0; white-space: nowrap; }
 .credential-reset-fields { display: grid !important; grid-template-columns: minmax(150px, 1fr) auto minmax(110px, .5fr) auto auto; align-items: end; gap: 8px !important; margin-top: 10px; }
 .credential-reset-fields label { margin: 0; }
 .credential-reset-fields button { width: auto; margin: 0; white-space: nowrap; }
-@media (max-width: 1050px) { .credential-reset-fields { grid-template-columns: 1fr auto; } }
+@media (max-width: 1050px) { .credential-reset-fields, .employee-identity-fields { grid-template-columns: 1fr auto; } }
 .permission-list { display: grid; gap: .5rem; max-height: 420px; overflow: auto; margin: 1rem 0; padding-right: .5rem; }
 .permission-list .checkbox { align-items: start; }
 .permission-list span { display: grid; gap: .15rem; }
