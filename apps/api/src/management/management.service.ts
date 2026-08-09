@@ -136,9 +136,14 @@ export class ManagementService {
     });
   }
 
-  async updateEmployee(input: { locationId: string; actorId: string; targetId: string; active?: boolean; roleIds?: string[] }) {
+  async updateEmployee(input: { locationId: string; actorId: string; targetId: string; name?: string; email?: string; active?: boolean; roleIds?: string[] }) {
     const target = await prisma.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId } });
     if (!target) throw AppError.notFound("Employee was not found.");
+    const normalizedEmail = input.email?.toLowerCase();
+    if (normalizedEmail) {
+      const duplicate = await prisma.employee.findFirst({ where: { id: { not: target.id }, email: { equals: normalizedEmail, mode: "insensitive" } } });
+      if (duplicate) throw AppError.conflict("An employee with that email already exists.");
+    }
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
     if (input.roleIds) {
       const roleCount = await prisma.role.count({ where: { id: { in: input.roleIds }, organizationId: location.organizationId } });
@@ -149,8 +154,8 @@ export class ManagementService {
         await tx.employeeRole.deleteMany({ where: { employeeId: target.id, locationId: input.locationId } });
         await tx.employeeRole.createMany({ data: [...new Set(input.roleIds)].map((roleId) => ({ employeeId: target.id, roleId, locationId: input.locationId })) });
       }
-      const updated = await tx.employee.update({ where: { id: target.id }, data: { active: input.active } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId, action: "employee.access_updated", entityType: "Employee", entityId: target.id, beforeState: { active: target.active }, afterState: { active: updated.active, roleIds: input.roleIds } } });
+      const updated = await tx.employee.update({ where: { id: target.id }, data: { name: input.name, email: normalizedEmail, active: input.active } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId, action: "employee.access_updated", entityType: "Employee", entityId: target.id, beforeState: { name: target.name, email: target.email, active: target.active }, afterState: { name: updated.name, email: updated.email, active: updated.active, roleIds: input.roleIds } } });
       return updated;
     });
   }
