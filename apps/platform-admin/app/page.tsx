@@ -4,7 +4,10 @@ import { FormEvent, useEffect, useState } from "react";
 import { adminUiDefaults, type AdminUiConfig, type CinemaContent } from "@cinema/shared";
 import { AdminUiEditor } from "./admin-ui-editor";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL
+  ?? (process.env.NODE_ENV === "production"
+    ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
+    : "http://localhost:4000/api/v1");
 const CINEMA_ADMIN_URL = process.env.NEXT_PUBLIC_CINEMA_ADMIN_URL ?? "http://localhost:3003";
 const CUSTOMER_WEB_URL = process.env.NEXT_PUBLIC_CUSTOMER_WEB_URL ?? "http://localhost:3000";
 const STORAGE_KEY = "attend-platform-session";
