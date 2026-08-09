@@ -386,6 +386,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .audit-change-grid section { min-width: 0; padding: 1rem; border: 1px solid var(--line); background: var(--color-bg); }
 .audit-change-grid h3 { margin-top: 0; }
 .audit-change-grid pre { max-height: 320px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-secondary); font-size: .78rem; line-height: 1.5; }
+.audit-load-more { display: block; margin: 18px auto 0; }
 .button-link { display: inline-block; text-decoration: none; margin: .5rem 0; }
 .location-settings { display: grid; gap: 1.25rem; }
 .location-settings-grid { display: grid; grid-template-columns: repeat(2, minmax(220px, 1fr)); gap: 1rem; }

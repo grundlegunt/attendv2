@@ -32,6 +32,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [labor, setLabor] = useState<LaborReport | null>(null);
   const [shiftDraft, setShiftDraft] = useState<{ shiftId: string; employeeName: string; clockInAt: string; clockOutAt: string; breakStartAt: string; breakEndAt: string; notes: string } | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [auditHasMore, setAuditHasMore] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
   const [auditAction, setAuditAction] = useState("");
@@ -45,10 +46,10 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const canAudit = permissions.includes("audit.log.view");
   const canSettings = permissions.includes("ticket.price.edit");
 
-  async function refresh() {
+  async function refresh(appendAudit = false) {
     setError(null);
     const range = `from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`;
-    const auditQuery = new URLSearchParams({ limit: "200", from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T00:00:00`).toISOString() });
+    const auditQuery = new URLSearchParams({ limit: "50", offset: appendAudit ? String(audit.length) : "0", from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T00:00:00`).toISOString() });
     if (auditAction.trim()) auditQuery.set("action", auditAction.trim());
     if (auditEntityType.trim()) auditQuery.set("entityType", auditEntityType.trim());
     if (auditActorId.trim()) auditQuery.set("actorId", auditActorId.trim());
@@ -59,7 +60,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?${auditQuery.toString()}`, { accessToken }) : [],
         (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
-      setRevenue(nextRevenue); setLabor(nextLabor); setAudit(nextAudit); setSettings(nextSettings);
+      setRevenue(nextRevenue); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
       if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
@@ -203,6 +204,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <summary><span><strong>{event.action}</strong><small>{event.entityType} · {event.entityId}</small></span><span><time>{new Date(event.occurredAt).toLocaleString()}</time><small>{event.actorType}{event.actorId ? ` · ${event.actorId}` : ""}</small></span></summary>
         <div className="audit-change-grid"><section><h3>Before</h3><pre>{event.beforeState == null ? "No prior state recorded" : JSON.stringify(event.beforeState, null, 2)}</pre></section><section><h3>After</h3><pre>{event.afterState == null ? "No resulting state recorded" : JSON.stringify(event.afterState, null, 2)}</pre></section></div>
       </details>)}{audit.length === 0 && <p className="dashboard-empty">No activity matches these filters.</p>}</div>
+      {auditHasMore && <button type="button" className="secondary audit-load-more" onClick={() => void refresh(true)}>Load older activity</button>}
     </section>}
   </section>;
 }
