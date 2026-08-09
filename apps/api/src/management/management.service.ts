@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
 import { prisma } from "@cinema/database";
+import { randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 
 @Injectable()
@@ -173,6 +174,17 @@ export class ManagementService {
       } });
     });
     return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password) };
+  }
+
+  async createRole(input: { locationId: string; employeeId: string; name: string }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
+    const duplicate = await prisma.role.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
+    if (duplicate) throw AppError.conflict("A role with that name already exists.");
+    return prisma.$transaction(async (tx) => {
+      const role = await tx.role.create({ data: { organizationId: location.organizationId, key: `CUSTOM_${randomUUID().replaceAll("-", "").toUpperCase()}`, name: input.name } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.created", entityType: "Role", entityId: role.id, afterState: { key: role.key, name: role.name, permissionKeys: [] } } });
+      return { ...role, rolePermissions: [] };
+    });
   }
 
   async updateRolePermissions(input: { locationId: string; employeeId: string; roleId: string; permissionKeys: string[] }) {
