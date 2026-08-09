@@ -7,6 +7,15 @@ import {
   verifyRefreshToken,
   InvalidTokenError,
   TokenPair,
+  MFA_REQUIRED_ROLES,
+  RoleKey,
+  createMfaSecret,
+  createMfaUri,
+  decryptMfaSecret,
+  encryptMfaSecret,
+  signMfaChallenge,
+  verifyMfaChallenge,
+  verifyMfaCode,
 } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import {
@@ -17,6 +26,8 @@ import {
   CustomerRegisterRequest,
   StaffLoginRequest,
   StaffPasswordChangeRequest,
+  StaffMfaConfirmRequest,
+  StaffMfaVerifyRequest,
 } from "@cinema/shared";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
@@ -47,6 +58,14 @@ function flattenEmployeePermissions(employee: EmployeeWithRoles): string[] {
   return [...set];
 }
 
+function employeeRequiresMfa(employee: EmployeeWithRoles): boolean {
+  return employee.employeeRoles.some((er) => MFA_REQUIRED_ROLES.has(er.role.key as RoleKey));
+}
+
+function employeeMfaSetupRequired(employee: EmployeeWithRoles): boolean {
+  return employeeRequiresMfa(employee) && !employee.authAccount?.mfaEnabled;
+}
+
 function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
   return {
     id: employee.id,
@@ -54,9 +73,11 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
     email: employee.email,
     locationId: employee.locationId,
     roles: employee.employeeRoles.map((er) => er.role.key),
-    permissions: employee.authAccount?.mustChangePassword ? [] : flattenEmployeePermissions(employee),
+    permissions: employee.authAccount?.mustChangePassword || employeeMfaSetupRequired(employee) ? [] : flattenEmployeePermissions(employee),
     timeClockEnabled: employee.location.timeClockEnabled,
     mustChangePassword: employee.authAccount?.mustChangePassword ?? false,
+    mfaEnabled: employee.authAccount?.mfaEnabled ?? false,
+    mfaSetupRequired: employeeMfaSetupRequired(employee),
     adminBranding: {
       accentColor: employee.location.adminAccentColor,
       accentMutedColor: employee.location.adminAccentMutedColor,
@@ -76,7 +97,7 @@ export class AuthService {
   // Staff
   // ---------------------------------------------------------------------
 
-  async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+  async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee } | { mfaRequired: true; challengeToken: string }> {
     const employee = await prisma.employee.findUnique({
       where: { email: input.email },
       include: employeeInclude,
@@ -91,6 +112,10 @@ export class AuthService {
       throw AppError.invalidCredentials();
     }
 
+    if (employee.authAccount.mfaEnabled) {
+      return { mfaRequired: true, challengeToken: signMfaChallenge(employee.id, loadEnv().JWT_ACCESS_SECRET) };
+    }
+
     const tokens = this.issueEmployeeTokens(employee);
 
     await this.audit.record({
@@ -103,6 +128,44 @@ export class AuthService {
     });
 
     return { tokens, employee: employeeToProfile(employee) };
+  }
+
+  async verifyStaffMfa(input: StaffMfaVerifyRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+    let employeeId: string;
+    try {
+      employeeId = verifyMfaChallenge(input.challengeToken, loadEnv().JWT_ACCESS_SECRET);
+    } catch {
+      throw AppError.unauthenticated("The MFA challenge expired. Sign in again.");
+    }
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+    if (!employee?.active || !employee.authAccount?.mfaEnabled || !employee.authAccount.mfaSecretEncrypted) throw AppError.unauthenticated();
+    const secret = decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
+    if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
+    await this.audit.record({ actorType: "EMPLOYEE", actorId: employee.id, action: "employee.mfa_verified", entityType: "Employee", entityId: employee.id, locationId: employee.locationId });
+    return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
+  }
+
+  async beginStaffMfaSetup(employeeId: string): Promise<{ secret: string; uri: string }> {
+    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+    if (!employee?.active || !employee.authAccount) throw AppError.unauthenticated();
+    if (employee.authAccount.mustChangePassword) throw AppError.forbidden("Change your temporary password before setting up MFA.");
+    if (employee.authAccount.mfaEnabled) throw AppError.conflict("MFA is already enabled.");
+    const secret = createMfaSecret();
+    await prisma.staffAuthAccount.update({ where: { employeeId }, data: { mfaSecretEncrypted: encryptMfaSecret(secret, loadEnv().JWT_REFRESH_SECRET) } });
+    return { secret, uri: createMfaUri(secret, employee.email, "Attend Admin") };
+  }
+
+  async confirmStaffMfa(employeeId: string, input: StaffMfaConfirmRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+    const current = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+    if (!current?.active || !current.authAccount?.mfaSecretEncrypted) throw AppError.validationFailed("Start MFA setup before confirming a code.");
+    const secret = decryptMfaSecret(current.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
+    if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
+    await prisma.$transaction(async (tx) => {
+      await tx.staffAuthAccount.update({ where: { employeeId }, data: { mfaEnabled: true, refreshTokenVersion: { increment: 1 } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId: current.locationId, action: "employee.mfa_enabled", entityType: "Employee", entityId: employeeId } });
+    });
+    const employee = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId }, include: employeeInclude });
+    return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
   }
 
   async staffRefresh(refreshToken: string): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
@@ -177,7 +240,7 @@ export class AuthService {
         sub: employee.id,
         actorType: "EMPLOYEE",
         locationId: employee.locationId,
-        permissions: employee.authAccount!.mustChangePassword ? [] : flattenEmployeePermissions(employee),
+        permissions: employee.authAccount!.mustChangePassword || employeeMfaSetupRequired(employee) ? [] : flattenEmployeePermissions(employee),
       },
       {
         sub: employee.id,

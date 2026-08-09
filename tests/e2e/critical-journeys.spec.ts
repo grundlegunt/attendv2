@@ -1,6 +1,14 @@
 import { expect, test } from "@playwright/test";
+import { authenticator } from "otplib";
 
 const password = "DevPassword123!";
+const ownerMfaSecret = "AAAAAAAAAAAAAAAA";
+
+async function completeOwnerMfa(page: import("@playwright/test").Page) {
+  await expect(page.getByRole("heading", { name: /authenticator code/i })).toBeVisible();
+  await page.getByLabel("Authenticator code").fill(authenticator.generate(ownerMfaSecret));
+  await page.getByRole("button", { name: "Verify and sign in" }).click();
+}
 
 test("customer browses a live program and safely holds a seat", async ({ page }) => {
   await page.goto("http://127.0.0.1:3000");
@@ -58,6 +66,7 @@ test("staff signs in, clocks in, and reaches live operational tools", async ({ p
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await completeOwnerMfa(page);
   await expect(page.getByRole("heading", { name: /Welcome,/ })).toBeVisible();
   await page.getByLabel("Employee PIN").fill("1234");
   await page.getByRole("button", { name: "Enter POS" }).click();
@@ -71,6 +80,7 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+  await completeOwnerMfa(page);
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();

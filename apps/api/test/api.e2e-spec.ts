@@ -17,6 +17,7 @@
  */
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
+import { authenticator } from "otplib";
 import { startTestDatabase, TestDatabase } from "./test-db";
 
 let testDb: TestDatabase;
@@ -32,6 +33,18 @@ const SEED_SUFFIX = "m0test.local";
 // Matches SEED_PASSWORD in packages/database/prisma/seed.ts.
 const SEED_PASSWORD = "DevPassword123!";
 const CUSTOMER_WEB_ORIGIN = "http://localhost:3000";
+const OWNER_MFA_SECRET = "AAAAAAAAAAAAAAAA";
+
+async function loginOwner() {
+  const login = await request(app.getHttpServer())
+    .post("/api/v1/auth/staff/login")
+    .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+  expect(login.status).toBe(200);
+  expect(login.body).toMatchObject({ mfaRequired: true, challengeToken: expect.any(String) });
+  return request(app.getHttpServer())
+    .post("/api/v1/auth/staff/mfa/verify")
+    .send({ challengeToken: login.body.challengeToken, code: authenticator.generate(OWNER_MFA_SECRET) });
+}
 
 function setCookieHeaders(response: { headers: Record<string, unknown> }): string[] {
   const value = response.headers["set-cookie"];
@@ -65,7 +78,7 @@ beforeAll(async () => {
 
   const { prisma } = await import("@cinema/database");
   const { seedDatabase } = await import("../../../packages/database/prisma/seed");
-  await seedDatabase(prisma, { silent: true, emailSuffix: SEED_SUFFIX });
+  await seedDatabase(prisma, { silent: true, emailSuffix: SEED_SUFFIX, ownerMfaSecret: OWNER_MFA_SECRET });
 
   const { NestFactory } = await import("@nestjs/core");
   const { AppModule } = await import("../src/app.module");
@@ -134,9 +147,7 @@ describe("Staff authentication", () => {
   });
 
   it("logs the seeded Owner in and returns tokens plus a flattened permission set", async () => {
-    const res = await request(app.getHttpServer())
-      .post("/api/v1/auth/staff/login")
-      .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    const res = await loginOwner();
 
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toEqual(expect.any(String));
@@ -238,9 +249,7 @@ describe("Staff authentication", () => {
     // Access token itself remains valid until its own short TTL expires —
     // logout invalidates the refresh token, not already-issued access
     // tokens. Re-establish a fresh session for the tests that follow.
-    const loginAgain = await request(app.getHttpServer())
-      .post("/api/v1/auth/staff/login")
-      .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+    const loginAgain = await loginOwner();
     ownerAccessToken = loginAgain.body.accessToken;
   });
 });

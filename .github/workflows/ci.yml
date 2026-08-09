@@ -232,6 +232,7 @@ jobs:
       OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
       NEXT_PUBLIC_API_URL: http://127.0.0.1:4000/api/v1
       CORS_ORIGINS: http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3003
+      SEED_OWNER_MFA_SECRET: AAAAAAAAAAAAAAAA
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -284,6 +285,8 @@ jobs:
       OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
       CHECKOUT_RATE_LIMIT_ATTEMPTS: 1000
       RESTAURANT_SETTLEMENT_INTERVAL_MS: 0
+      SEED_OWNER_MFA_SECRET: AAAAAAAAAAAAAAAA
+      LOAD_STAFF_MFA_SECRET: AAAAAAAAAAAAAAAA
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

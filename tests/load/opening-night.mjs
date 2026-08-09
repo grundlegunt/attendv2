@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
+import { authenticator } from "otplib";
 
 const api = process.env.LOAD_API_URL ?? "http://127.0.0.1:4000/api/v1";
 const email = process.env.LOAD_STAFF_EMAIL ?? "owner@ridgelinecinema.test";
 const password = process.env.LOAD_STAFF_PASSWORD ?? "DevPassword123!";
+const ownerMfaSecret = process.env.LOAD_STAFF_MFA_SECRET ?? "AAAAAAAAAAAAAAAA";
 const showtimeIds = (process.env.LOAD_SHOWTIME_IDS ?? "").split(",").map((value) => value.trim()).filter(Boolean);
 const ticketTypeId = process.env.LOAD_TICKET_TYPE_ID;
 const ordersPerAuditorium = Number(process.env.LOAD_RESTAURANT_ORDERS_PER_AUDITORIUM ?? 30);
@@ -24,7 +26,10 @@ async function call(path, init = {}, category = "setup") {
 }
 
 const login = await call("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
-const auth = { authorization: `Bearer ${login.accessToken}` };
+const session = login.mfaRequired
+  ? await call("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: login.challengeToken, code: authenticator.generate(ownerMfaSecret) }) })
+  : login;
+const auth = { authorization: `Bearer ${session.accessToken}` };
 const drawers = await Promise.all(showtimeIds.map((_, index) => call("/box-office/cash-drawers", { method: "POST", headers: auth, body: JSON.stringify({ registerId: `opening-night-${index + 1}-${randomUUID()}`, openingBalanceCents: 0 }) })));
 const menu = await call("/restaurant-menu", { headers: auth });
 const menuItem = menu.categories.flatMap((category) => category.items).find((item) => !item.is86d);
