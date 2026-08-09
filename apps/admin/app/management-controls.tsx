@@ -16,6 +16,20 @@ type Refunds = {
 
 type RefundAttempt = { status: string; amountCents: number; createdAt: string; reason: string | null; providerRefundId: string | null };
 
+const permissionGroups = [
+  { label: "Employees & access", prefixes: ["employee."] },
+  { label: "Audit", prefixes: ["audit."] },
+  { label: "Films, showtimes & tickets", prefixes: ["auditorium.", "movie.", "showtime.", "seat.", "ticket."] },
+  { label: "Restaurant & menu", prefixes: ["restaurant.", "kitchen.", "menu."] },
+  { label: "Payments", prefixes: ["payment."] },
+  { label: "Reports & finance", prefixes: ["reports."] },
+  { label: "Other", prefixes: [] },
+] as const;
+
+function permissionGroup(key: string) {
+  return permissionGroups.find((group) => group.prefixes.some((prefix) => key.startsWith(prefix)))?.label ?? "Other";
+}
+
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const unresolvedRefund = (status: string) => status === "CREATED" || status === "PROCESSING" || status === "FAILED";
 const ticketNeedsAttention = (order: Refunds["ticketOrders"][number]) => Boolean(order.payment?.verificationFailedAt) || Boolean(order.payment?.refunds.some((refund) => unresolvedRefund(refund.status)));
@@ -65,7 +79,15 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   useEffect(() => { void refresh(); }, [accessToken, section]);
 
   const selectedRole = useMemo(() => people?.roles.find((role) => role.id === selectedRoleId), [people, selectedRoleId]);
+  const groupedPermissions = useMemo(() => permissionGroups.map((group) => ({
+    label: group.label,
+    permissions: people?.permissions.filter((permission) => permissionGroup(permission.key) === group.label) ?? [],
+  })).filter((group) => group.permissions.length), [people]);
   useEffect(() => { setSelectedPermissions(selectedRole?.rolePermissions.map((entry) => entry.permission.key) ?? []); }, [selectedRole]);
+
+  function setPermissionGroup(keys: string[], enabled: boolean) {
+    setSelectedPermissions((current) => enabled ? [...new Set([...current, ...keys])] : current.filter((key) => !keys.includes(key)));
+  }
 
   async function createTax(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -128,7 +150,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
     </section>}
 
     {people && <section className="admin-grid"><form className="panel" onSubmit={(event) => void createEmployee(event)}><p className="kicker">USERS</p><h2>Add employee</h2><label>Name<input required value={employee.name} onChange={(event) => setEmployee({ ...employee, name: event.target.value })} /></label><label>Email<input type="email" required value={employee.email} onChange={(event) => setEmployee({ ...employee, email: event.target.value })} /></label><label>Temporary password<input type="password" minLength={12} required value={employee.password} onChange={(event) => setEmployee({ ...employee, password: event.target.value })} /></label><label>PIN (optional)<input inputMode="numeric" pattern="[0-9]{4,8}" value={employee.pin} onChange={(event) => setEmployee({ ...employee, pin: event.target.value })} /></label><label>Role<select required value={employee.roleId} onChange={(event) => setEmployee({ ...employee, roleId: event.target.value })}><option value="">Select a role</option>{people.roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><button className="primary">Create employee</button><div className="people-list employee-credential-list">{people.employees.map((person) => { const draft = credentialDrafts[person.id] ?? { password: "", pin: "" }; return <article key={person.id}><div className="employee-summary"><strong>{person.name}</strong><span>{person.email} · {person.employeeRoles.map((entry) => entry.role.name).join(", ")}</span><div className="credential-reset-fields"><label>Temporary password<input type="password" minLength={12} value={draft.password} onChange={(event) => setCredentialDrafts((current) => ({ ...current, [person.id]: { ...draft, password: event.target.value } }))} /></label><button type="button" className="secondary" onClick={() => void resetEmployeeCredentials(person, "password")}>Reset password</button><label>New PIN<input inputMode="numeric" pattern="[0-9]{4,8}" value={draft.pin} onChange={(event) => setCredentialDrafts((current) => ({ ...current, [person.id]: { ...draft, pin: event.target.value } }))} /></label><button type="button" className="secondary" onClick={() => void resetEmployeeCredentials(person, "pin")}>Set PIN</button><button type="button" className="secondary" onClick={() => void resetEmployeeCredentials(person, "pin", true)}>Remove PIN</button></div></div><button type="button" className="secondary" onClick={() => void toggleEmployee(person)}>{person.active ? "Deactivate" : "Reactivate"}</button></article>; })}</div></form>
-      {canPermissions && <div className="panel"><p className="kicker">EMPLOYEE ROLES</p><h2>Assign roles</h2><div className="role-assignment-list">{people.employees.map((person) => <article key={person.id}><strong>{person.name}</strong><div className="permission-list">{people.roles.map((role) => <label className="checkbox" key={role.id}><input type="checkbox" checked={(employeeRoleDrafts[person.id] ?? []).includes(role.id)} onChange={(event) => setEmployeeRoleDrafts((current) => ({ ...current, [person.id]: event.target.checked ? [...(current[person.id] ?? []), role.id] : (current[person.id] ?? []).filter((id) => id !== role.id) }))} /><span>{role.name}</span></label>)}</div><button className="secondary" type="button" onClick={() => void saveEmployeeRoles(person)}>Save roles</button></article>)}</div><hr /><p className="kicker">PERMISSIONS</p><h2>Role access</h2><label>Role<select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)}>{people.roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><div className="permission-list">{people.permissions.map((permission) => <label className="checkbox" key={permission.id}><input type="checkbox" checked={selectedPermissions.includes(permission.key)} onChange={(event) => setSelectedPermissions(event.target.checked ? [...selectedPermissions, permission.key] : selectedPermissions.filter((key) => key !== permission.key))} /><span><strong>{permission.key}</strong><small>{permission.description}</small></span></label>)}</div><button className="primary" onClick={() => void saveRole()}>Save role permissions</button></div>}
+      {canPermissions && <div className="panel"><p className="kicker">EMPLOYEE ROLES</p><h2>Assign roles</h2><div className="role-assignment-list">{people.employees.map((person) => <article key={person.id}><strong>{person.name}</strong><div className="permission-list">{people.roles.map((role) => <label className="checkbox" key={role.id}><input type="checkbox" checked={(employeeRoleDrafts[person.id] ?? []).includes(role.id)} onChange={(event) => setEmployeeRoleDrafts((current) => ({ ...current, [person.id]: event.target.checked ? [...(current[person.id] ?? []), role.id] : (current[person.id] ?? []).filter((id) => id !== role.id) }))} /><span>{role.name}</span></label>)}</div><button className="secondary" type="button" onClick={() => void saveEmployeeRoles(person)}>Save roles</button></article>)}</div><hr /><p className="kicker">PERMISSIONS</p><h2>Role access</h2><label>Role<select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)}>{people.roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><div className="permission-groups">{groupedPermissions.map((group) => { const keys = group.permissions.map((permission) => permission.key); const allSelected = keys.every((key) => selectedPermissions.includes(key)); return <section className="permission-group" key={group.label}><div className="permission-group-heading"><div><h3>{group.label}</h3><small>{keys.filter((key) => selectedPermissions.includes(key)).length} of {keys.length} enabled</small></div><button type="button" className="secondary" onClick={() => setPermissionGroup(keys, !allSelected)}>{allSelected ? "Clear group" : "Select group"}</button></div><div className="permission-list">{group.permissions.map((permission) => <label className="checkbox" key={permission.id}><input type="checkbox" checked={selectedPermissions.includes(permission.key)} onChange={(event) => setSelectedPermissions(event.target.checked ? [...selectedPermissions, permission.key] : selectedPermissions.filter((key) => key !== permission.key))} /><span><strong>{permission.key}</strong><small>{permission.description}</small></span></label>)}</div></section>; })}</div><button className="primary" onClick={() => void saveRole()}>Save role permissions</button></div>}
     </section>}
 
     {refunds && <RefundWorkbench
