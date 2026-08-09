@@ -177,6 +177,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .calendar-corner { left: 0; z-index: 10; display: flex; align-items: flex-end; padding: 0 18px 11px; color: #aaa99f; font-size: .7rem; letter-spacing: .12em; }
 .time-ruler { position: relative; }
 .time-ruler span { position: absolute; bottom: 11px; width: 58px; color: #aaa99f; font-size: .66rem; transform: translateX(-1px); }
+.drag-time-indicator { position: absolute; top: 4px; z-index: 20; display: grid; min-width: 132px; padding: 7px 12px; border: 2px solid white; border-radius: 4px; background: var(--color-accent); color: #0d0e0c; font-size: .9rem; font-weight: 1000; line-height: 1; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.55); transform: translateX(-50%); pointer-events: none; }
+.drag-time-indicator small { margin-top: 4px; font-size: .58rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .calendar-row { display: contents; }
 .room-label { position: sticky; left: 0; z-index: 6; min-height: 112px; padding: 20px 14px; border-right: 1px solid #3d3d37; border-bottom: 1px solid #3d3d37; background: #171815; }
 .room-label strong, .room-label span { display: block; }
@@ -205,7 +207,6 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .drop-preview { position: absolute; top: 16px; bottom: 16px; z-index: 5; display: grid; align-content: center; gap: 4px; overflow: hidden; padding: 12px 14px; border: 2px dashed var(--color-accent); border-radius: 4px; background: color-mix(in srgb, var(--color-accent) 20%, transparent); color: white; pointer-events: none; }
 .drop-preview strong, .drop-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drop-preview strong { font-family: Georgia, serif; }
-.drop-preview span { color: #f5df9c; font-size: .72rem; font-weight: 800; }
 .week-scroll { overflow-x: auto; }
 .week-calendar { display: grid; grid-template-columns: repeat(7, minmax(190px, 1fr)); min-width: 1330px; }
 .week-day { border-right: 1px solid #34342f; }

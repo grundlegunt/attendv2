@@ -286,6 +286,28 @@ export function SchedulingCalendar({
     window.alert(`No open slot is available for ${movie.title} on the selected day.`);
   }
 
+  const draggedShowtime = draggingKey?.startsWith("showtime:")
+    ? showtimes.find((showtime) => showtime.id === draggingKey.slice("showtime:".length))
+    : undefined;
+  const draggedMovie = draggingKey?.startsWith("movie:")
+    ? movies.find((movie) => movie.id === draggingKey.slice("movie:".length))
+    : draggedShowtime?.movie;
+  const resolvedDropPreview = dropPreview && draggedMovie ? {
+    auditoriumId: dropPreview.auditoriumId,
+    startsAt: availableStart(
+      dropPreview.auditoriumId,
+      dropPreview.startsAt,
+      preShowBufferMinutes + draggedMovie.runtimeMinutes + cleaningBufferMinutes,
+      draggedShowtime?.id,
+    ),
+  } : null;
+  const previewAuditorium = resolvedDropPreview
+    ? auditoriums.find((auditorium) => auditorium.id === resolvedDropPreview.auditoriumId)
+    : undefined;
+  const previewLeft = resolvedDropPreview
+    ? (minutesFrom(dayStart, resolvedDropPreview.startsAt) / 60) * HOUR_WIDTH
+    : 0;
+
   return <section className="schedule-workspace" aria-label="Showtime scheduling calendar">
     <div className="schedule-toolbar">
       <div>
@@ -335,6 +357,11 @@ export function SchedulingCalendar({
         <div className="calendar-corner"><span>{labels.room}</span></div>
         <div className="time-ruler">
           {hours.map((hour) => <span key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }}>{hour.label}</span>)}
+          {resolvedDropPreview && <output
+            className="drag-time-indicator"
+            aria-live="polite"
+            style={{ left: `${Math.max(74, Math.min(TOTAL_HOURS * HOUR_WIDTH - 74, previewLeft))}px` }}
+          >{formatTime(resolvedDropPreview.startsAt)}<small>{previewAuditorium?.name}</small></output>}
         </div>
 
         {auditoriums.map((auditorium) => {
@@ -354,16 +381,12 @@ export function SchedulingCalendar({
               onDrop={(event) => void dropOnTimeline(event, auditorium.id, dayStart)}
             >
               {hours.slice(0, -1).map((hour) => <i key={hour.index} style={{ left: `${hour.index * HOUR_WIDTH}px` }} />)}
-              {draggingKey && dropPreview?.auditoriumId === auditorium.id && (() => {
-                const movie = draggingKey.startsWith("movie:")
-                  ? movies.find((item) => item.id === draggingKey.slice("movie:".length))
-                  : showtimes.find((item) => item.id === draggingKey.slice("showtime:".length))?.movie;
-                const durationMinutes = preShowBufferMinutes + (movie?.runtimeMinutes ?? 90) + cleaningBufferMinutes;
-                const left = (minutesFrom(dayStart, dropPreview.startsAt) / 60) * HOUR_WIDTH;
+              {draggingKey && resolvedDropPreview?.auditoriumId === auditorium.id && (() => {
+                const durationMinutes = preShowBufferMinutes + (draggedMovie?.runtimeMinutes ?? 90) + cleaningBufferMinutes;
+                const left = (minutesFrom(dayStart, resolvedDropPreview.startsAt) / 60) * HOUR_WIDTH;
                 const width = Math.max(82, (durationMinutes / 60) * HOUR_WIDTH - 8);
                 return <div className="drop-preview" style={{ left: `${left + 4}px`, width: `${width}px` }}>
-                  <strong>{movie?.title ?? "Showing"}</strong>
-                  <span>{formatTime(dropPreview.startsAt)}</span>
+                  <strong>{draggedMovie?.title ?? "Showing"}</strong>
                 </div>;
               })()}
               {roomShowtimes.map((showtime) => {
