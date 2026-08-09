@@ -10,11 +10,16 @@ type People = {
   permissions: Array<{ id: string; key: string; description: string }>;
 };
 type Refunds = {
-  ticketOrders: Array<{ id: string; status: string; orderNumber: string; totalCents: number; guestName: string | null; guestEmail: string | null; payment: { status: string; verificationFailedAt: string | null; verificationFailureNote: string | null; refunds: Array<{ status: string; amountCents: number }> } | null; tickets: Array<{ id: string; showtimeSeat: { seat: { label: string }; showtime: { movie: { title: string } } } }>; cashTransactions: Array<{ type: string; amountCents: number }> }>;
-  restaurantTabs: Array<{ id: string; status: string; label: string | null; totalCents: number | null; primaryCustomer: { name: string | null; email: string | null } | null; showtime: { movie: { title: string } } | null; receipt: { receiptNumber: string } | null; payments: Array<{ status: string; refunds: Array<{ status: string; amountCents: number }> }> }>;
+  ticketOrders: Array<{ id: string; status: string; orderNumber: string; totalCents: number; guestName: string | null; guestEmail: string | null; payment: { status: string; verificationFailedAt: string | null; verificationFailureNote: string | null; refunds: RefundAttempt[] } | null; tickets: Array<{ id: string; showtimeSeat: { seat: { label: string }; showtime: { movie: { title: string } } } }>; cashTransactions: Array<{ type: string; amountCents: number }> }>;
+  restaurantTabs: Array<{ id: string; status: string; label: string | null; totalCents: number | null; primaryCustomer: { name: string | null; email: string | null } | null; showtime: { movie: { title: string } } | null; receipt: { receiptNumber: string } | null; payments: Array<{ status: string; refunds: RefundAttempt[] }> }>;
 };
 
+type RefundAttempt = { status: string; amountCents: number; createdAt: string; reason: string | null; providerRefundId: string | null };
+
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+const unresolvedRefund = (status: string) => status === "CREATED" || status === "PROCESSING" || status === "FAILED";
+const ticketNeedsAttention = (order: Refunds["ticketOrders"][number]) => Boolean(order.payment?.verificationFailedAt) || Boolean(order.payment?.refunds.some((refund) => unresolvedRefund(refund.status)));
+const tabNeedsAttention = (tab: Refunds["restaurantTabs"][number]) => tab.status === "MANAGER_REVIEW" || tab.payments.some((payment) => payment.refunds.some((refund) => unresolvedRefund(refund.status)));
 
 type ControlSection = "taxes" | "users" | "refunds";
 
@@ -31,6 +36,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   const [employeeRoleDrafts, setEmployeeRoleDrafts] = useState<Record<string, string[]>>({});
   const [refundReason, setRefundReason] = useState("Customer-requested full refund");
   const [drawerId, setDrawerId] = useState("");
+  const [refundQuery, setRefundQuery] = useState("");
   const canConfig = permissions.includes("ticket.price.edit");
   const canMenuConfig = permissions.includes("menu.edit");
   const canPeople = permissions.includes("employee.edit");
@@ -42,7 +48,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
       const [nextSettings, nextPeople, nextRefunds] = await Promise.all([
         section === "taxes" && canConfig ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
         section === "users" && canPeople ? apiFetch<People>("/management/people", { accessToken }) : null,
-        section === "refunds" && canRefund ? apiFetch<Refunds>("/management/refunds", { accessToken }) : null,
+        section === "refunds" && canRefund ? apiFetch<Refunds>(`/management/refunds${refundQuery.trim() ? `?query=${encodeURIComponent(refundQuery.trim())}` : ""}`, { accessToken }) : null,
       ]);
       setSettings(nextSettings); setPeople(nextPeople); setRefunds(nextRefunds);
       if (nextPeople) {
@@ -101,6 +107,77 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
       {canPermissions && <div className="panel"><p className="kicker">EMPLOYEE ROLES</p><h2>Assign roles</h2><div className="role-assignment-list">{people.employees.map((person) => <article key={person.id}><strong>{person.name}</strong><div className="permission-list">{people.roles.map((role) => <label className="checkbox" key={role.id}><input type="checkbox" checked={(employeeRoleDrafts[person.id] ?? []).includes(role.id)} onChange={(event) => setEmployeeRoleDrafts((current) => ({ ...current, [person.id]: event.target.checked ? [...(current[person.id] ?? []), role.id] : (current[person.id] ?? []).filter((id) => id !== role.id) }))} /><span>{role.name}</span></label>)}</div><button className="secondary" type="button" onClick={() => void saveEmployeeRoles(person)}>Save roles</button></article>)}</div><hr /><p className="kicker">PERMISSIONS</p><h2>Role access</h2><label>Role<select value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)}>{people.roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><div className="permission-list">{people.permissions.map((permission) => <label className="checkbox" key={permission.id}><input type="checkbox" checked={selectedPermissions.includes(permission.key)} onChange={(event) => setSelectedPermissions(event.target.checked ? [...selectedPermissions, permission.key] : selectedPermissions.filter((key) => key !== permission.key))} /><span><strong>{permission.key}</strong><small>{permission.description}</small></span></label>)}</div><button className="primary" onClick={() => void saveRole()}>Save role permissions</button></div>}
     </section>}
 
-    {refunds && <section className="panel"><p className="kicker">REFUNDS</p><h2>Full-refund workbench</h2><p className="muted">Status badges reflect the saved payment and provider-refund state. Items marked manager review or failed need staff attention; they are not untouched requests.</p><div className="two-fields"><label>Reason<input value={refundReason} onChange={(event) => setRefundReason(event.target.value)} /></label><label>Open cash drawer ID (cash ticket sales only)<input value={drawerId} onChange={(event) => setDrawerId(event.target.value)} /></label></div><h3>Ticket orders</h3><div className="refund-list">{refunds.ticketOrders.map((order) => { const cashRequired = order.cashTransactions.some((entry) => entry.type === "SALE" && entry.amountCents > 0); const refundState = order.payment?.refunds[0]?.status; const needsReview = Boolean(order.payment?.verificationFailedAt) || refundState === "FAILED"; return <article key={order.id}><div><strong>{order.orderNumber} · {money(order.totalCents)}</strong><span>{order.guestName || order.guestEmail || "Walk-up customer"} · {order.tickets[0]?.showtimeSeat.showtime.movie.title} · {order.tickets.map((ticket) => ticket.showtimeSeat.seat.label).join(", ")}</span><div className="status-row"><b className={needsReview ? "status-alert" : "status-chip"}>Order {order.status}</b><b className={needsReview ? "status-alert" : "status-chip"}>Payment {order.payment?.status ?? "CASH"}</b>{refundState && <b className={refundState === "FAILED" ? "status-alert" : "status-chip"}>Refund {refundState}</b>}{order.payment?.verificationFailureNote && <small>{order.payment.verificationFailureNote}</small>}</div></div><button className="destructive" onClick={() => void refund("ticket", order.id, cashRequired)}>Full refund</button></article>; })}</div><h3>Restaurant tabs</h3><div className="refund-list">{refunds.restaurantTabs.map((tab) => { const refundStates = tab.payments.flatMap((payment) => payment.refunds.map((entry) => entry.status)); const needsReview = tab.status === "MANAGER_REVIEW" || refundStates.includes("FAILED"); return <article key={tab.id}><div><strong>{tab.receipt?.receiptNumber ?? tab.label ?? "Restaurant tab"} · {money(tab.totalCents ?? 0)}</strong><span>{tab.primaryCustomer?.name || tab.primaryCustomer?.email || "Guest"} · {tab.showtime?.movie.title ?? "Walk-in"}</span><div className="status-row"><b className={needsReview ? "status-alert" : "status-chip"}>Tab {tab.status}</b>{tab.payments.map((payment, index) => <b key={index} className={payment.status === "FAILED" ? "status-alert" : "status-chip"}>Tender {payment.status}</b>)}{refundStates.map((status, index) => <b key={`refund-${index}`} className={status === "FAILED" ? "status-alert" : "status-chip"}>Refund {status}</b>)}</div></div><button className="destructive" onClick={() => void refund("restaurant", tab.id)}>Full refund</button></article>; })}</div></section>}
+    {refunds && <RefundWorkbench
+      refunds={refunds}
+      refundReason={refundReason}
+      drawerId={drawerId}
+      query={refundQuery}
+      onReasonChange={setRefundReason}
+      onDrawerChange={setDrawerId}
+      onQueryChange={setRefundQuery}
+      onSearch={() => void refresh()}
+      onRefund={(scope, id, cashRequired) => void refund(scope, id, cashRequired)}
+    />}
   </section>;
+}
+
+function RefundWorkbench({ refunds, refundReason, drawerId, query, onReasonChange, onDrawerChange, onQueryChange, onSearch, onRefund }: {
+  refunds: Refunds;
+  refundReason: string;
+  drawerId: string;
+  query: string;
+  onReasonChange: (value: string) => void;
+  onDrawerChange: (value: string) => void;
+  onQueryChange: (value: string) => void;
+  onSearch: () => void;
+  onRefund: (scope: "ticket" | "restaurant", id: string, cashRequired?: boolean) => void;
+}) {
+  const ticketOrders = [...refunds.ticketOrders].sort((left, right) => Number(ticketNeedsAttention(right)) - Number(ticketNeedsAttention(left)));
+  const restaurantTabs = [...refunds.restaurantTabs].sort((left, right) => Number(tabNeedsAttention(right)) - Number(tabNeedsAttention(left)));
+  const attentionCount = ticketOrders.filter(ticketNeedsAttention).length + restaurantTabs.filter(tabNeedsAttention).length;
+
+  return <section className="panel refund-workbench">
+    <p className="kicker">REFUNDS</p>
+    <div className="refund-heading">
+      <div><h2>Full-refund workbench</h2><p className="muted">Attention items stay at the top and retain their processor-attempt history.</p></div>
+      <strong className={attentionCount ? "attention-summary" : "status-chip"}>{attentionCount ? `${attentionCount} need attention` : "No attention items"}</strong>
+    </div>
+    <form className="refund-search" onSubmit={(event) => { event.preventDefault(); onSearch(); }}>
+      <label>Find an order or guest<input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Order number, receipt, name, or email" /></label>
+      <button className="secondary">Search</button>
+    </form>
+    <div className="two-fields">
+      <label>Reason<input value={refundReason} onChange={(event) => onReasonChange(event.target.value)} /></label>
+      <label>Open cash drawer ID (cash ticket sales only)<input value={drawerId} onChange={(event) => onDrawerChange(event.target.value)} /></label>
+    </div>
+    <h3>Ticket orders</h3>
+    <div className="refund-list">{ticketOrders.map((order) => {
+      const cashRequired = order.cashTransactions.some((entry) => entry.type === "SALE" && entry.amountCents > 0);
+      const needsAttention = ticketNeedsAttention(order);
+      return <article className={needsAttention ? "refund-attention" : undefined} key={order.id}>
+        <div><strong>{order.orderNumber} · {money(order.totalCents)}</strong><span>{order.guestName || order.guestEmail || "Walk-up customer"} · {order.tickets[0]?.showtimeSeat.showtime.movie.title} · {order.tickets.map((ticket) => ticket.showtimeSeat.seat.label).join(", ")}</span>
+          <div className="status-row"><b className={needsAttention ? "status-alert" : "status-chip"}>Order {order.status}</b><b className={needsAttention ? "status-alert" : "status-chip"}>Payment {order.payment?.status ?? "CASH"}</b>{order.payment?.refunds.map((attempt, index) => <RefundAttemptBadge attempt={attempt} key={`${attempt.createdAt}-${index}`} />)}{order.payment?.verificationFailureNote && <small>{order.payment.verificationFailureNote}</small>}</div>
+        </div>
+        <button className={needsAttention ? "primary" : "destructive"} onClick={() => onRefund("ticket", order.id, cashRequired)}>{needsAttention ? "Retry refund" : "Full refund"}</button>
+      </article>;
+    })}</div>
+    {!ticketOrders.length && <p className="muted">No refundable ticket orders match this search.</p>}
+    <h3>Restaurant tabs</h3>
+    <div className="refund-list">{restaurantTabs.map((tab) => {
+      const needsAttention = tabNeedsAttention(tab);
+      return <article className={needsAttention ? "refund-attention" : undefined} key={tab.id}>
+        <div><strong>{tab.receipt?.receiptNumber ?? tab.label ?? "Restaurant tab"} · {money(tab.totalCents ?? 0)}</strong><span>{tab.primaryCustomer?.name || tab.primaryCustomer?.email || "Guest"} · {tab.showtime?.movie.title ?? "Walk-in"}</span>
+          <div className="status-row"><b className={needsAttention ? "status-alert" : "status-chip"}>Tab {tab.status}</b>{tab.payments.map((payment, index) => <b key={index} className={payment.status === "FAILED" ? "status-alert" : "status-chip"}>Tender {payment.status}</b>)}{tab.payments.flatMap((payment) => payment.refunds).map((attempt, index) => <RefundAttemptBadge attempt={attempt} key={`${attempt.createdAt}-${index}`} />)}</div>
+        </div>
+        <button className={needsAttention ? "primary" : "destructive"} onClick={() => onRefund("restaurant", tab.id)}>{needsAttention ? "Retry refund" : "Full refund"}</button>
+      </article>;
+    })}</div>
+    {!restaurantTabs.length && <p className="muted">No refundable restaurant tabs match this search.</p>}
+  </section>;
+}
+
+function RefundAttemptBadge({ attempt }: { attempt: RefundAttempt }) {
+  const attention = unresolvedRefund(attempt.status);
+  const details = [money(attempt.amountCents), new Date(attempt.createdAt).toLocaleString(), attempt.reason].filter(Boolean).join(" · ");
+  return <b className={attention ? "status-alert" : "status-chip"} title={details}>Refund {attempt.status}</b>;
 }
