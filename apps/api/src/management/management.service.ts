@@ -23,7 +23,7 @@ export class ManagementService {
   async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, organization: { select: { ticketFeeMinor: true } } } });
-      const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor } });
+      const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor, appliesOnWeekdays: [] } });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { name: tier.name, ticketPriceMinor: tier.ticketPriceMinor } } });
       return tier;
     });

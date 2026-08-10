@@ -871,6 +871,36 @@ describe("Milestone 1 cinema configuration", () => {
       .send({ ticketPriceMinor: tier.ticketPriceMinor });
   });
 
+  it("lets cinema managers create an organization ticket price", async () => {
+    const name = `Integration price ${Date.now()}`;
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/price-tiers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name, ticketPriceMinor: 2000 });
+    expect(created.status).toBe(201);
+    expect(created.body).toEqual(expect.objectContaining({
+      id: expect.any(String),
+      name,
+      ticketPriceMinor: 2000,
+      appliesOnWeekdays: [],
+      active: true,
+    }));
+
+    const audit = await request(app.getHttpServer())
+      .get(`/api/v1/audit-events?action=ticket.price_tier_created&entityId=${created.body.id}&limit=1`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(audit.status).toBe(200);
+    expect(audit.body[0]).toEqual(expect.objectContaining({
+      action: "ticket.price_tier_created",
+      entityId: created.body.id,
+    }));
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/price-tiers/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketPriceMinor: 2000, active: false });
+  });
+
   it("lets managers update and deactivate restaurant charge rules", async () => {
     const tax = await request(app.getHttpServer())
       .post("/api/v1/management/settings/tax-rules")
