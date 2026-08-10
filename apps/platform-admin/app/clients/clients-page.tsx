@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   adminUiDefaults,
   type AdminUiConfig,
@@ -210,6 +210,10 @@ export default function AttendMaster() {
   const [cinemaManagerDraft, setCinemaManagerDraft] =
     useState<CinemaManagerDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [clientQuery, setClientQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("ALL");
+  const [locationFilter, setLocationFilter] = useState("ALL");
+  const [locationCountFilter, setLocationCountFilter] = useState("ALL");
 
   useEffect(() => {
     const stored = window.sessionStorage.getItem(STORAGE_KEY);
@@ -635,6 +639,27 @@ export default function AttendMaster() {
 
   const locations =
     overview?.organizations.flatMap((item) => item.locations) ?? [];
+  const filteredOrganizations = useMemo(() => {
+    const normalizedQuery = clientQuery.trim().toLowerCase();
+    return (overview?.organizations ?? []).filter((item) => {
+      const matchesQuery = !normalizedQuery || [
+        item.name,
+        item.legalName ?? "",
+        item.timezone,
+        ...item.locations.flatMap((location) => [location.name, location.address ?? "", location.timezone]),
+      ].some((value) => value.toLowerCase().includes(normalizedQuery));
+      const matchesPayment = paymentFilter === "ALL"
+        || (paymentFilter === "COMPLETE" && item.payments.onboardingStatus === "COMPLETE")
+        || (paymentFilter === "INCOMPLETE" && item.payments.onboardingStatus !== "COMPLETE")
+        || item.payments.onboardingStatus === paymentFilter;
+      const matchesLocation = locationFilter === "ALL"
+        || item.locations.some((location) => location.active === (locationFilter === "ACTIVE"));
+      const matchesLocationCount = locationCountFilter === "ALL"
+        || (locationCountFilter === "ONE" && item.locations.length === 1)
+        || (locationCountFilter === "MULTIPLE" && item.locations.length > 1);
+      return matchesQuery && matchesPayment && matchesLocation && matchesLocationCount;
+    });
+  }, [clientQuery, locationCountFilter, locationFilter, overview, paymentFilter]);
   return (
     <main className="shell">
       <header>
@@ -2459,11 +2484,64 @@ export default function AttendMaster() {
               <span>Upcoming showtimes</span>
             </div>
           </section>
+          <section className="client-filters" aria-label="Filter cinema clients">
+            <label>
+              Search
+              <input
+                type="search"
+                placeholder="Client, cinema, address, or timezone"
+                value={clientQuery}
+                onChange={(event) => setClientQuery(event.target.value)}
+              />
+            </label>
+            <label>
+              Stripe onboarding
+              <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
+                <option value="ALL">All statuses</option>
+                <option value="COMPLETE">Complete</option>
+                <option value="IN_PROGRESS">In progress</option>
+                <option value="NOT_STARTED">Not started</option>
+                <option value="INCOMPLETE">Any incomplete</option>
+              </select>
+            </label>
+            <label>
+              Location status
+              <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)}>
+                <option value="ALL">Active or inactive</option>
+                <option value="ACTIVE">Has an active location</option>
+                <option value="INACTIVE">Has an inactive location</option>
+              </select>
+            </label>
+            <label>
+              Location count
+              <select value={locationCountFilter} onChange={(event) => setLocationCountFilter(event.target.value)}>
+                <option value="ALL">Any number</option>
+                <option value="ONE">One location</option>
+                <option value="MULTIPLE">Multiple locations</option>
+              </select>
+            </label>
+            <div className="filter-result">
+              <strong>{filteredOrganizations.length}</strong>
+              <span>of {overview?.organizations.length ?? 0} clients</span>
+            </div>
+          </section>
           <section className="organizations">
             {!overview && !error && (
               <p className="muted">Loading cinema clients…</p>
             )}
-            {overview?.organizations.map((organizationItem) => (
+            {overview && filteredOrganizations.length === 0 && (
+              <div className="client-empty-state">
+                <h2>No clients match</h2>
+                <p className="muted">Try a broader search or clear one of the filters.</p>
+                <button className="quiet" onClick={() => {
+                  setClientQuery("");
+                  setPaymentFilter("ALL");
+                  setLocationFilter("ALL");
+                  setLocationCountFilter("ALL");
+                }}>Clear filters</button>
+              </div>
+            )}
+            {filteredOrganizations.map((organizationItem) => (
               <article className="organization" key={organizationItem.id}>
                 <div className="org-heading">
                   <div>
