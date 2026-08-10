@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { PublicFilmSeries } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { useCinemaContent } from "../components/customer-branding";
 
 interface FilmSeriesResponse {
   location: { id: string; name: string; timezone: string };
@@ -11,26 +12,40 @@ interface FilmSeriesResponse {
 }
 
 export default function FilmSeriesPage() {
+  const { filmSeries: copy } = useCinemaContent();
   const [program, setProgram] = useState<FilmSeriesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch<FilmSeriesResponse>("/cinema/film-series")
       .then(setProgram)
-      .catch((err) => setError(err instanceof ApiRequestError ? err.body.message : "Film series are unavailable."));
+      .catch((err) =>
+        setError(
+          err instanceof ApiRequestError
+            ? err.body.message
+            : "Film series are unavailable.",
+        ),
+      );
   }, []);
 
   return (
     <main className="cinema-shell route-page">
       <section className="route-heading">
-        <span className="eyebrow">CURATED PROGRAMS</span>
-        <h1>Film Series</h1>
-        <p>Special programs, repertory runs, and recurring cinema events at {program?.location.name ?? "the cinema"}.</p>
+        <span className="eyebrow">{copy.eyebrow}</span>
+        <h1>{copy.title}</h1>
+        <p>
+          {copy.intro.replace(
+            "{cinema}",
+            program?.location.name ?? "the cinema",
+          )}
+        </p>
       </section>
 
       {error && <div className="error-banner">{error}</div>}
-      {!program && !error && <p className="loading-copy">Loading film series…</p>}
-      {program && program.series.length === 0 && <p className="loading-copy">No film series are on sale yet.</p>}
+      {!program && !error && <p className="loading-copy">{copy.loading}</p>}
+      {program && program.series.length === 0 && (
+        <p className="loading-copy">{copy.empty}</p>
+      )}
       <section className="series-grid">
         {program?.series.map((series) => (
           <article className="series-card" key={series.id}>

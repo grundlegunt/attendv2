@@ -6,25 +6,41 @@ import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SeatPicker } from "../components/seat-picker";
 import { localDateKey, MovieTile } from "../components/movie-tile";
 import { ShowtimeCalendar } from "../components/showtime-calendar";
+import { useCinemaContent } from "../components/customer-branding";
 
 interface NowPlayingResponse {
-  location: { id: string; name: string; address: string | null; timezone: string };
+  location: {
+    id: string;
+    name: string;
+    address: string | null;
+    timezone: string;
+  };
   movies: NowPlayingMovie[];
 }
 
 export default function ShowtimesPage() {
+  const { showtimes: copy } = useCinemaContent();
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [programError, setProgramError] = useState<string | null>(null);
-  const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
+  const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(
+    null,
+  );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
 
   const programMovies = useMemo(() => program?.movies ?? [], [program]);
 
   const availableDates = useMemo(
-    () => Array.from(new Set(
-      programMovies.flatMap((movie) => movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, program!.location.timezone))),
-    )).sort(),
+    () =>
+      Array.from(
+        new Set(
+          programMovies.flatMap((movie) =>
+            movie.showtimes.map((showtime) =>
+              localDateKey(showtime.startsAt, program!.location.timezone),
+            ),
+          ),
+        ),
+      ).sort(),
     [program, programMovies],
   );
   const visibleDates = useMemo(() => {
@@ -44,7 +60,9 @@ export default function ShowtimesPage() {
     const today = localDateKey(new Date(), program.location.timezone);
     return availableDates.includes(today)
       ? today
-      : availableDates.find((date) => date > today) ?? availableDates[0] ?? null;
+      : (availableDates.find((date) => date > today) ??
+          availableDates[0] ??
+          null);
   }, [availableDates, program, selectedDate]);
 
   const moviesForActiveDate = useMemo(() => {
@@ -53,13 +71,21 @@ export default function ShowtimesPage() {
       .map((movie) => ({
         movie,
         showtimes: movie.showtimes
-          .filter((showtime) => localDateKey(showtime.startsAt, program.location.timezone) === activeDate)
-          .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()),
+          .filter(
+            (showtime) =>
+              localDateKey(showtime.startsAt, program.location.timezone) ===
+              activeDate,
+          )
+          .sort(
+            (a, b) =>
+              new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+          ),
       }))
       .filter((entry) => entry.showtimes.length > 0)
       .sort(
         (a, b) =>
-          new Date(a.showtimes[0]!.startsAt).getTime() - new Date(b.showtimes[0]!.startsAt).getTime(),
+          new Date(a.showtimes[0]!.startsAt).getTime() -
+          new Date(b.showtimes[0]!.startsAt).getTime(),
       );
   }, [program, activeDate, programMovies]);
 
@@ -67,16 +93,20 @@ export default function ShowtimesPage() {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
       .then(setProgram)
       .catch((err) =>
-        setProgramError(err instanceof ApiRequestError ? err.body.message : "Showtimes are unavailable."),
+        setProgramError(
+          err instanceof ApiRequestError
+            ? err.body.message
+            : "Showtimes are unavailable.",
+        ),
       );
   }, []);
 
   return (
     <main className="cinema-shell route-page">
       <section className="program-heading">
-        <span className="eyebrow">NOW PLAYING</span>
-        <h1>Showtimes</h1>
-        {program && <p>Choose a showtime and reserve your seats.</p>}
+        <span className="eyebrow">{copy.eyebrow}</span>
+        <h1>{copy.title}</h1>
+        {program && <p>{copy.intro}</p>}
       </section>
 
       {!selectedShowtimeId && visibleDates.length > 0 && (
@@ -89,8 +119,17 @@ export default function ShowtimesPage() {
                 className={dateKey === activeDate ? "active" : ""}
                 onClick={() => setSelectedDate(dateKey)}
               >
-                <span>{index === 0 ? "Today" : date.toLocaleDateString([], { weekday: "long" })}</span>
-                <strong>{date.toLocaleDateString([], { month: "short", day: "numeric" })}</strong>
+                <span>
+                  {index === 0
+                    ? "Today"
+                    : date.toLocaleDateString([], { weekday: "long" })}
+                </span>
+                <strong>
+                  {date.toLocaleDateString([], {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </strong>
               </button>
             );
           })}
@@ -119,24 +158,35 @@ export default function ShowtimesPage() {
       )}
 
       {selectedShowtimeId ? (
-        <SeatPicker showtimeId={selectedShowtimeId} onClose={() => setSelectedShowtimeId(null)} />
+        <SeatPicker
+          showtimeId={selectedShowtimeId}
+          onClose={() => setSelectedShowtimeId(null)}
+        />
       ) : (
         <>
           {programError && <div className="error-banner">{programError}</div>}
-          {!program && !programError && <p className="loading-copy">Loading the program…</p>}
-          {program && programMovies.length === 0 && <p className="loading-copy">No showtimes are currently on sale.</p>}
-          {program && programMovies.length > 0 && moviesForActiveDate.length === 0 && (
-            <p className="loading-copy">No showtimes are scheduled for this date.</p>
+          {!program && !programError && (
+            <p className="loading-copy">{copy.loading}</p>
           )}
+          {program && programMovies.length === 0 && (
+            <p className="loading-copy">{copy.empty}</p>
+          )}
+          {program &&
+            programMovies.length > 0 &&
+            moviesForActiveDate.length === 0 && (
+              <p className="loading-copy">{copy.emptyDate}</p>
+            )}
 
           <section className="movie-grid">
-            {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
-              key={movie.id}
-              movie={movie}
-              showtimes={showtimes}
-              timeZone={program!.location.timezone}
-              onSelectShowtime={setSelectedShowtimeId}
-            />)}
+            {moviesForActiveDate.map(({ movie, showtimes }) => (
+              <MovieTile
+                key={movie.id}
+                movie={movie}
+                showtimes={showtimes}
+                timeZone={program!.location.timezone}
+                onSelectShowtime={setSelectedShowtimeId}
+              />
+            ))}
           </section>
         </>
       )}
