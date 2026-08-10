@@ -30,6 +30,40 @@ export class ManagementService {
     });
   }
 
+  async updateBranding(input: { locationId: string; employeeId: string; name?: string; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; backgroundGlowColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; adminAccentColor?: string | null; adminAccentMutedColor?: string | null; adminBackgroundColor?: string | null; adminSurfaceColor?: string | null; adminTextColor?: string | null; adminMutedTextColor?: string | null }) {
+    return prisma.$transaction(async (tx) => {
+      const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
+      const updated = await tx.location.update({ where: { id: input.locationId }, data: {
+        name: input.name,
+        customerLogoUrl: input.logoUrl,
+        customerAccentColor: input.accentColor,
+        customerAccentMutedColor: input.accentMutedColor,
+        customerBackgroundColor: input.backgroundColor,
+        customerBackgroundGlowColor: input.backgroundGlowColor,
+        customerSurfaceColor: input.surfaceColor,
+        customerTextColor: input.textColor,
+        customerMutedTextColor: input.mutedTextColor,
+        adminAccentColor: input.adminAccentColor,
+        adminAccentMutedColor: input.adminAccentMutedColor,
+        adminBackgroundColor: input.adminBackgroundColor,
+        adminSurfaceColor: input.adminSurfaceColor,
+        adminTextColor: input.adminTextColor,
+        adminMutedTextColor: input.adminMutedTextColor,
+      } });
+      const state = (location: typeof updated) => ({
+        name: location.name, logoUrl: location.customerLogoUrl,
+        accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor,
+        backgroundColor: location.customerBackgroundColor, backgroundGlowColor: location.customerBackgroundGlowColor,
+        surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor,
+        adminAccentColor: location.adminAccentColor, adminAccentMutedColor: location.adminAccentMutedColor,
+        adminBackgroundColor: location.adminBackgroundColor, adminSurfaceColor: location.adminSurfaceColor,
+        adminTextColor: location.adminTextColor, adminMutedTextColor: location.adminMutedTextColor,
+      });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.branding_updated", entityType: "Location", entityId: input.locationId, beforeState: state(before), afterState: state(updated) } });
+      return updated;
+    });
+  }
+
   async createTaxRule(input: { locationId: string; employeeId: string; name: string; appliesTo: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille: number; active: boolean }) {
     return prisma.$transaction(async (tx) => {
       const rule = await tx.taxRule.create({ data: { locationId: input.locationId, name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, active: input.active } });

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
-import { BrandingSummary, type BrandingSettings } from "./branding-editor";
+import { BrandingSummary, type BrandingDraft, type BrandingSettings } from "./branding-editor";
 
 type RevenueReport = {
   totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
@@ -75,6 +75,14 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       await apiFetch("/management/settings/location", { accessToken, method: "PATCH", body: JSON.stringify({ ...locationDraft, address: locationDraft.address?.trim() || null, currency: undefined }) });
       await refresh();
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Location settings could not be saved."); }
+  }
+
+  async function saveBranding(draft: BrandingDraft) {
+    setError(null);
+    try {
+      await apiFetch("/management/settings/branding", { accessToken, method: "PATCH", body: JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null }) });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved."); throw reason; }
   }
 
   async function createPromotion(event: FormEvent) {
@@ -159,7 +167,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       {shiftDraft && <form className="shift-adjustment" onSubmit={(event) => void saveShift(event)}><div className="management-heading"><div><p className="kicker">MANAGER CORRECTION</p><h3>{shiftDraft.employeeName}</h3></div><button type="button" className="secondary" onClick={() => setShiftDraft(null)}>Cancel</button></div><div className="shift-adjustment-grid"><label>Clock in<input type="datetime-local" required value={shiftDraft.clockInAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockInAt: event.target.value })} /></label><label>Clock out<input type="datetime-local" value={shiftDraft.clockOutAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockOutAt: event.target.value })} /></label><label>Break start<input type="datetime-local" value={shiftDraft.breakStartAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakStartAt: event.target.value })} /></label><label>Break end<input type="datetime-local" value={shiftDraft.breakEndAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakEndAt: event.target.value })} /></label></div><label>Correction note<textarea required maxLength={500} value={shiftDraft.notes} onChange={(event) => setShiftDraft({ ...shiftDraft, notes: event.target.value })} placeholder="Why this shift was changed" /></label><button className="primary">Save correction</button></form>}
     </section>}
 
-    {settings && section === "branding" && <BrandingSummary settings={settings} />}
+    {settings && section === "branding" && <BrandingSummary settings={settings} onSave={saveBranding} />}
     {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>
       <div className="location-settings-grid">
         <label>Cinema name<input required maxLength={120} value={locationDraft.name} onChange={(event) => setLocationDraft({ ...locationDraft, name: event.target.value })} /></label>
