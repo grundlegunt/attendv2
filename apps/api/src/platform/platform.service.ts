@@ -1,14 +1,16 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, Prisma, prisma } from "@cinema/database";
 import { DEFAULT_ROLE_PERMISSIONS, hashPassword, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingDefaults, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
+import type { ConnectAccountState, ConnectOnboardingProvider } from "@cinema/payments";
+import { CONNECT_ONBOARDING_PROVIDER } from "./connect-onboarding.module";
 
 @Injectable()
 export class PlatformService {
-  constructor(private readonly audit: AuditService) {}
+  constructor(private readonly audit: AuditService, @Inject(CONNECT_ONBOARDING_PROVIDER) private readonly connect: ConnectOnboardingProvider) {}
 
   async login(input: PlatformLoginRequest) {
     const user = await prisma.platformUser.findUnique({ where: { email: input.email.toLowerCase() } });
@@ -169,21 +171,60 @@ export class PlatformService {
     };
   }
 
-  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; onboardingStatus?: ConnectOnboardingStatus; ticketFeeMinor?: number }) {
+  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; ticketFeeMinor?: number }) {
     await prisma.$transaction(async (tx) => {
       const before = await tx.organization.findUnique({ where: { id: input.organizationId } });
       if (!before) throw AppError.notFound("Cinema organization not found.");
-      if (input.onboardingStatus === ConnectOnboardingStatus.COMPLETE && !before.stripeConnectedAccountId) {
-        throw AppError.validationFailed("Payments cannot be marked complete until a Stripe connected account exists.");
-      }
       const updated = await tx.organization.update({ where: { id: input.organizationId }, data: {
-        name: input.name, legalName: input.legalName, timezone: input.timezone, connectOnboardingStatus: input.onboardingStatus, ticketFeeMinor: input.ticketFeeMinor,
+        name: input.name, legalName: input.legalName, timezone: input.timezone, ticketFeeMinor: input.ticketFeeMinor,
       } });
       if (input.ticketFeeMinor !== undefined) await tx.priceTier.updateMany({ where: { organizationId: input.organizationId }, data: { feeMinor: input.ticketFeeMinor } });
       const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, onboardingStatus: organization.connectOnboardingStatus, ticketFeeMinor: organization.ticketFeeMinor });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.organization_updated", entityType: "Organization", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
     });
     return this.organization(input.organizationId);
+  }
+
+  async createConnectOnboardingLink(input: { actorId: string; organizationId: string; origin: string }) {
+    const organization = await prisma.organization.findUnique({ where: { id: input.organizationId } });
+    if (!organization) throw AppError.notFound("Cinema organization not found.");
+
+    let accountId = organization.stripeConnectedAccountId;
+    if (!accountId) {
+      const account = await this.connect.createAccount({ organizationId: organization.id, businessName: organization.legalName ?? organization.name, idempotencyKey: `connect-account:${organization.id}` });
+      accountId = account.id;
+      await prisma.$transaction(async (tx) => {
+        await tx.organization.update({ where: { id: organization.id }, data: { stripeConnectedAccountId: account.id, connectOnboardingStatus: ConnectOnboardingStatus.IN_PROGRESS } });
+        await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.connect_account_created", entityType: "Organization", entityId: organization.id, afterState: { accountId: account.id, onboardingStatus: "IN_PROGRESS" } }, tx);
+      });
+    }
+
+    const organizationQuery = `organizationId=${encodeURIComponent(organization.id)}`;
+    const link = await this.connect.createAccountLink({
+      accountId,
+      refreshUrl: `${input.origin}/?${organizationQuery}&connect=refresh`,
+      returnUrl: `${input.origin}/?${organizationQuery}&connect=return`,
+    });
+    return { url: link.url };
+  }
+
+  async refreshConnectStatus(input: { actorId: string; organizationId: string }) {
+    const organization = await prisma.organization.findUnique({ where: { id: input.organizationId } });
+    if (!organization) throw AppError.notFound("Cinema organization not found.");
+    if (!organization.stripeConnectedAccountId) throw AppError.conflict("Stripe onboarding has not started for this organization.");
+    const account = await this.connect.retrieveAccount(organization.stripeConnectedAccountId);
+    const status = this.connectStatus(account);
+    await prisma.$transaction(async (tx) => {
+      await tx.organization.update({ where: { id: organization.id }, data: { connectOnboardingStatus: status } });
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.connect_status_refreshed", entityType: "Organization", entityId: organization.id, beforeState: { onboardingStatus: organization.connectOnboardingStatus }, afterState: { onboardingStatus: status, chargesEnabled: account.chargesEnabled, payoutsEnabled: account.payoutsEnabled, detailsSubmitted: account.detailsSubmitted, currentlyDue: account.currentlyDue, disabledReason: account.disabledReason } }, tx);
+    });
+    return this.organization(organization.id);
+  }
+
+  private connectStatus(account: ConnectAccountState): ConnectOnboardingStatus {
+    if (account.chargesEnabled && account.payoutsEnabled && account.detailsSubmitted) return ConnectOnboardingStatus.COMPLETE;
+    if (account.disabledReason || account.detailsSubmitted) return ConnectOnboardingStatus.RESTRICTED;
+    return ConnectOnboardingStatus.IN_PROGRESS;
   }
 
   async updateLocation(input: { actorId: string; organizationId: string; locationId: string; name?: string; address?: string | null; timezone?: string; active?: boolean; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; backgroundGlowColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; adminAccentColor?: string | null; adminAccentMutedColor?: string | null; adminBackgroundColor?: string | null; adminSurfaceColor?: string | null; adminTextColor?: string | null; adminMutedTextColor?: string | null; adminUi?: AdminUiConfig; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; timeClockEnabled?: boolean }) {
