@@ -696,6 +696,7 @@ export default function AttendMaster() {
         <Link className="active" href="/clients">Clients</Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
+        <Link href="/team">Team</Link>
         <Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}

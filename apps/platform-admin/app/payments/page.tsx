@@ -173,7 +173,7 @@ export default function PlatformPayments() {
         <div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
       <nav className="platform-nav" aria-label="Attend Master">
-        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/onboarding">Onboarding</Link><Link className="active" href="/payments">Payments</Link><Link href="/audit">Audit Log</Link>
+        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/onboarding">Onboarding</Link><Link className="active" href="/payments">Payments</Link><Link href="/team">Team</Link><Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
       <section className="payment-summary" aria-label="Stripe onboarding totals">

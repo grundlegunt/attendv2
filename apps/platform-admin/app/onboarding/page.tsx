@@ -158,7 +158,7 @@ export default function PlatformOnboarding() {
         <div className="identity"><Link className="quiet link-button" href="/clients?create=1">+ Start client</Link><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
       <nav className="platform-nav" aria-label="Attend Master">
-        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/audit">Audit Log</Link>
+        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/team">Team</Link><Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
       <section className="onboarding-summary">

@@ -329,6 +329,28 @@ describe("Attend platform authentication boundary", () => {
       .expect(400);
   });
 
+  it("lets Attend operators add and revoke company team access safely", async () => {
+    await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${ownerAccessToken}`).expect(403);
+    const initial = await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
+    expect(initial.body.users).toEqual(expect.arrayContaining([expect.objectContaining({ email: "platform@attend.test", active: true })]));
+    const current = initial.body.users.find((user: { email: string }) => user.email === "platform@attend.test");
+
+    await request(app.getHttpServer()).patch(`/api/v1/platform/team/${current.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ active: false }).expect(409);
+
+    const email = `platform-support@${SEED_SUFFIX}`;
+    const created = await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Platform Support", email, password: "PlatformSupportPassword123!" }).expect(201);
+    expect(created.body).toMatchObject({ email, active: true });
+    await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Duplicate", email, password: "PlatformSupportPassword123!" }).expect(409);
+
+    const supportLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(200);
+    await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ active: false }).expect(200);
+    expect(supportLogin.body.accessToken).toEqual(expect.any(String));
+    await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);
+
+    const audit = await request(app.getHttpServer()).get("/api/v1/platform/audit-events?action=platform.user_").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
+    expect(audit.body.events).toEqual(expect.arrayContaining([expect.objectContaining({ action: "platform.user_created", entityId: created.body.id }), expect.objectContaining({ action: "platform.user_updated", entityId: created.body.id })]));
+  });
+
   it("returns a detailed organization view only to an Attend operator", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")
