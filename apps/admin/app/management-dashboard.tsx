@@ -16,12 +16,17 @@ type AuditEvent = {
   actorType: string; actorId: string | null; beforeState: unknown; afterState: unknown;
 };
 type PromotionType = "FIXED_AMOUNT" | "PERCENTAGE" | "COMP";
+type PromotionDraft = { code: string; name: string; type: PromotionType; value: number; minimumSubtotal: number; maximumRedemptions: number; startsAt: string; endsAt: string };
+type Promotion = { id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalTicketFaceValueCents: number; totalCollectedCents: number; totalDiscountCents: number };
 type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
-type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalDiscountCents: number }> };
+type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
 const dateTimeInput = (value: string | null) => { if (!value) return ""; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
+const emptyPromotion = (): PromotionDraft => ({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
+const promotionDraft = (item: Promotion): PromotionDraft => ({ code: item.code, name: item.name, type: item.type, value: item.type === "FIXED_AMOUNT" ? (item.amountCents ?? 0) / 100 : item.type === "PERCENTAGE" ? (item.percentageBasisPoints ?? 0) / 100 : 0, minimumSubtotal: (item.minimumSubtotalCents ?? 0) / 100, maximumRedemptions: item.maximumRedemptions ?? 0, startsAt: dateTimeInput(item.startsAt), endsAt: dateTimeInput(item.endsAt) });
+const promotionBody = (draft: PromotionDraft, clearEmpty = false) => ({ code: draft.code, name: draft.name, type: draft.type, ...(draft.type === "FIXED_AMOUNT" ? { amountCents: Math.round(draft.value * 100), ...(clearEmpty ? { percentageBasisPoints: null } : {}) } : {}), ...(draft.type === "PERCENTAGE" ? { percentageBasisPoints: Math.round(draft.value * 100), ...(clearEmpty ? { amountCents: null } : {}) } : {}), ...(draft.type === "COMP" && clearEmpty ? { amountCents: null, percentageBasisPoints: null } : {}), ...(draft.minimumSubtotal > 0 ? { minimumSubtotalCents: Math.round(draft.minimumSubtotal * 100) } : clearEmpty ? { minimumSubtotalCents: null } : {}), ...(draft.maximumRedemptions > 0 ? { maximumRedemptions: draft.maximumRedemptions } : clearEmpty ? { maximumRedemptions: null } : {}), ...(draft.startsAt ? { startsAt: new Date(draft.startsAt).toISOString() } : clearEmpty ? { startsAt: null } : {}), ...(draft.endsAt ? { endsAt: new Date(draft.endsAt).toISOString() } : clearEmpty ? { endsAt: null } : {}) });
 
 type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
 
@@ -38,7 +43,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
-  const [promotion, setPromotion] = useState({ code: "", name: "", type: "FIXED_AMOUNT" as PromotionType, value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
+  const [promotion, setPromotion] = useState<PromotionDraft>(emptyPromotion);
+  const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
   const canReports = permissions.includes("reports.view");
@@ -89,20 +95,23 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     event.preventDefault();
     setError(null);
     if (promotion.startsAt && promotion.endsAt && new Date(promotion.startsAt) >= new Date(promotion.endsAt)) { setError("Promotion end time must be after its start time."); return; }
-    const body = {
-      code: promotion.code, name: promotion.name, type: promotion.type, active: true,
-      ...(promotion.type === "FIXED_AMOUNT" ? { amountCents: Math.round(promotion.value * 100) } : {}),
-      ...(promotion.type === "PERCENTAGE" ? { percentageBasisPoints: Math.round(promotion.value * 100) } : {}),
-      ...(promotion.minimumSubtotal > 0 ? { minimumSubtotalCents: Math.round(promotion.minimumSubtotal * 100) } : {}),
-      ...(promotion.maximumRedemptions > 0 ? { maximumRedemptions: promotion.maximumRedemptions } : {}),
-      ...(promotion.startsAt ? { startsAt: new Date(promotion.startsAt).toISOString() } : {}),
-      ...(promotion.endsAt ? { endsAt: new Date(promotion.endsAt).toISOString() } : {}),
-    };
+    const body = { ...promotionBody(promotion), active: true };
     try {
       await apiFetch("/management/settings/promotions", { accessToken, method: "POST", body: JSON.stringify(body) });
-      setPromotion({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
+      setPromotion(emptyPromotion());
       await refresh();
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
+  }
+  async function savePromotion(event: FormEvent) {
+    event.preventDefault();
+    if (!promotionEdit) return;
+    setError(null);
+    if (promotionEdit.draft.startsAt && promotionEdit.draft.endsAt && new Date(promotionEdit.draft.startsAt) >= new Date(promotionEdit.draft.endsAt)) { setError("Promotion end time must be after its start time."); return; }
+    try {
+      await apiFetch(`/management/settings/promotions/${promotionEdit.id}`, { accessToken, method: "PATCH", body: JSON.stringify(promotionBody(promotionEdit.draft, true)) });
+      setPromotionEdit(null);
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
   }
   async function togglePromotion(item: Settings["promotions"][number]) {
     setError(null);
@@ -196,7 +205,19 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Ends (optional)<input type="datetime-local" value={promotion.endsAt} onChange={(event) => setPromotion({ ...promotion, endsAt: event.target.value })} /></label>
         <button className="primary">Create promotion</button>
       </form>
-      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></article>)}</div>
+      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalTicketFaceValueCents)} face value · {money(item.totalCollectedCents)} collected · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><div className="promotion-actions"><button type="button" className="secondary" onClick={() => setPromotionEdit({ id: item.id, draft: promotionDraft(item) })}>Edit</button><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></div></article>)}</div>
+      {promotionEdit && <form className="promotion-form" onSubmit={(event) => void savePromotion(event)}>
+        <div className="management-heading"><div><p className="kicker">EDIT PROMOTION</p><h3>{promotionEdit.draft.code}</h3></div><button type="button" className="secondary" onClick={() => setPromotionEdit(null)}>Cancel</button></div>
+        <label>Code<input required maxLength={50} value={promotionEdit.draft.code} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, code: event.target.value.toUpperCase() } })} /></label>
+        <label>Name<input required maxLength={100} value={promotionEdit.draft.name} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, name: event.target.value } })} /></label>
+        <label>Discount type<select value={promotionEdit.draft.type} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, type: event.target.value as PromotionType, value: 0 } })}><option value="FIXED_AMOUNT">Fixed amount</option><option value="PERCENTAGE">Percentage</option><option value="COMP">Complimentary</option></select></label>
+        {promotionEdit.draft.type !== "COMP" && <label>{promotionEdit.draft.type === "FIXED_AMOUNT" ? "Amount ($)" : "Percentage (%)"}<input type="number" min="0.01" max={promotionEdit.draft.type === "PERCENTAGE" ? 100 : undefined} step="0.01" required value={promotionEdit.draft.value || ""} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, value: Number(event.target.value) } })} /></label>}
+        <label>Minimum ticket subtotal ($)<input type="number" min="0" step="0.01" value={promotionEdit.draft.minimumSubtotal || ""} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, minimumSubtotal: Number(event.target.value) } })} placeholder="No minimum" /></label>
+        <label>Maximum redemptions<input type="number" min="1" step="1" value={promotionEdit.draft.maximumRedemptions || ""} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, maximumRedemptions: Number(event.target.value) } })} placeholder="Unlimited" /></label>
+        <label>Starts (optional)<input type="datetime-local" value={promotionEdit.draft.startsAt} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, startsAt: event.target.value } })} /></label>
+        <label>Ends (optional)<input type="datetime-local" value={promotionEdit.draft.endsAt} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, endsAt: event.target.value } })} /></label>
+        <button className="primary">Save promotion</button>
+      </form>}
     </section>}
 
     {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2>

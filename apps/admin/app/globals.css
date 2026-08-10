@@ -423,6 +423,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .promotion-list { display: grid; border-top: 1px solid var(--line); }
 .promotion-list article { display: grid; grid-template-columns: minmax(180px, 1fr) 100px minmax(220px, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
 .promotion-list article > div { display: grid; gap: .2rem; }
+.promotion-list article > .promotion-actions { display: flex; gap: .5rem; }
 .promotion-list article span { color: var(--muted); font-size: .82rem; }
 .promotion-list article small { color: var(--color-accent); font-size: .75rem; font-weight: 800; }
 .promotion-list article b { display: grid; gap: .2rem; }

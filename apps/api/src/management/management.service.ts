@@ -13,11 +13,11 @@ export class ManagementService {
         organization: { select: { priceTiers: { orderBy: { name: "asc" }, select: { id: true, name: true, ticketPriceMinor: true, active: true } } } },
         taxRules: { orderBy: { name: "asc" } },
         serviceChargeRules: { orderBy: { name: "asc" } },
-        promotions: { orderBy: { code: "asc" }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { discountCents: true, tickets: { select: { id: true } } } } } },
+        promotions: { orderBy: { code: "asc" }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { subtotalCents: true, totalCents: true, discountCents: true, tickets: { select: { id: true } } } } } },
       },
     });
     const { organization, ...settings } = location;
-    return { ...settings, priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
+    return { ...settings, priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalTicketFaceValueCents: ticketOrders.reduce((sum, order) => sum + order.subtotalCents, 0), totalCollectedCents: ticketOrders.reduce((sum, order) => sum + order.totalCents, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
   }
 
   async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
