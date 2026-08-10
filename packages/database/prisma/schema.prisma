@@ -49,12 +49,19 @@ model PlatformUser {
   name                String
   email               String   @unique
   passwordHash        String
+  role                PlatformUserRole @default(OWNER)
   active              Boolean  @default(true)
   refreshTokenVersion Int      @default(0)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   @@map("platform_users")
+}
+
+enum PlatformUserRole {
+  OWNER
+  OPERATOR
+  VIEWER
 }
 
 model FilmSeries {

@@ -12,7 +12,7 @@ const STORAGE_KEY = "attend-platform-session";
 
 interface Session {
   accessToken: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" };
 }
 
 interface LocationOverview {
@@ -171,7 +171,7 @@ export default function PlatformDashboard() {
         <Link href="/payments">Payments</Link>
         <Link href="/content">Content</Link>
         <Link href="/branding">Branding</Link>
-        <Link href="/team">Team</Link>
+        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
         <Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}

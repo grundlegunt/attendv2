@@ -11,7 +11,7 @@ const API_BASE_URL =
 const STORAGE_KEY = "attend-platform-session";
 interface Session {
   accessToken: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" };
 }
 interface Overview {
   organizations: Array<{ id: string; name: string }>;
@@ -221,7 +221,7 @@ export default function BrandingDashboard() {
         <Link className="active" href="/branding">
           Branding
         </Link>
-        <Link href="/team">Team</Link>
+        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
         <Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}

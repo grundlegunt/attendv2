@@ -6,10 +6,11 @@ import { PlatformController } from "./platform.controller";
 import { PlatformService } from "./platform.service";
 import { ConnectOnboardingModule } from "./connect-onboarding.module";
 import { ReportingModule } from "../reporting/reporting.module";
+import { PlatformPermissionGuard } from "./platform-permission.guard";
 
 @Module({
   imports: [AuditModule, ConnectOnboardingModule, ReportingModule],
   controllers: [PlatformController],
-  providers: [PlatformService, PlatformAuthGuard, RequestRateLimitGuard],
+  providers: [PlatformService, PlatformAuthGuard, PlatformPermissionGuard, RequestRateLimitGuard],
 })
 export class PlatformModule {}

@@ -12,7 +12,7 @@ const STORAGE_KEY = "attend-platform-session";
 
 interface Session {
   accessToken: string;
-  user: { id: string; name: string; email: string };
+  user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" };
 }
 
 interface OrganizationOverview {
@@ -155,10 +155,10 @@ export default function PlatformOnboarding() {
     <main className="shell">
       <header>
         <div><p className="eyebrow">ATTEND MASTER</p><h1>Onboarding</h1><p className="muted">Move every cinema client from account creation to selling tickets.</p></div>
-        <div className="identity"><Link className="quiet link-button" href="/clients?create=1">+ Start client</Link><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
+        <div className="identity">{session.user.role !== "VIEWER" && <Link className="quiet link-button" href="/clients?create=1">+ Start client</Link>}<span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
       <nav className="platform-nav" aria-label="Attend Master">
-        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link><Link href="/team">Team</Link><Link href="/audit">Audit Log</Link>
+        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
       <section className="onboarding-summary">

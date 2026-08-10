@@ -32,6 +32,7 @@ interface PlatformUser {
   id: string;
   name: string;
   email: string;
+  role: "OWNER" | "OPERATOR" | "VIEWER";
 }
 interface Session {
   accessToken: string;
@@ -707,7 +708,7 @@ export default function AttendMaster() {
         <Link href="/payments">Payments</Link>
         <Link href="/content">Content</Link>
         <Link href="/branding">Branding</Link>
-        <Link href="/team">Team</Link>
+        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
         <Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
