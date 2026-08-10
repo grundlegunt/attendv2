@@ -27,6 +27,7 @@ model Organization {
   timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
+  ticketFeeMinor           Int                     @default(0)
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 
@@ -79,32 +80,32 @@ model Location {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name                     String
-  address                  String?
-  customerLogoUrl          String?
-  customerAccentColor      String?
-  customerAccentMutedColor String?
-  customerBackgroundColor  String?
+  name                        String
+  address                     String?
+  customerLogoUrl             String?
+  customerAccentColor         String?
+  customerAccentMutedColor    String?
+  customerBackgroundColor     String?
   customerBackgroundGlowColor String?
-  customerSurfaceColor     String?
-  customerTextColor        String?
-  customerMutedTextColor   String?
-  adminAccentColor         String?
-  adminAccentMutedColor    String?
-  adminBackgroundColor     String?
-  adminSurfaceColor        String?
-  adminTextColor           String?
-  adminMutedTextColor      String?
-  adminUiConfig            Json?
-  contentDraft             Json?
-  contentPublished         Json?
-  contentPublishedAt       DateTime?
-  timezone                 String  @default("America/New_York")
-  currency                 String  @default("USD")
+  customerSurfaceColor        String?
+  customerTextColor           String?
+  customerMutedTextColor      String?
+  adminAccentColor            String?
+  adminAccentMutedColor       String?
+  adminBackgroundColor        String?
+  adminSurfaceColor           String?
+  adminTextColor              String?
+  adminMutedTextColor         String?
+  adminUiConfig               Json?
+  contentDraft                Json?
+  contentPublished            Json?
+  contentPublishedAt          DateTime?
+  timezone                    String    @default("America/New_York")
+  currency                    String    @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the
   // location's tax treatment has been confirmed; the application never
   // invents a jurisdictional tax rate.
-  ticketTaxRateBasisPoints Int     @default(0)
+  ticketTaxRateBasisPoints    Int       @default(0)
 
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
@@ -185,13 +186,13 @@ model SeatMap {
   auditoriumId String     @unique
   auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
 
-  name      String
-  version   Int      @default(1)
+  name       String
+  version    Int      @default(1)
   // Operational geometry belongs here; sellable positions remain normalized
   // as Seat records below. Previous geometry is retained in SeatMapRevision.
   layoutJson Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   seats     Seat[]
   revisions SeatMapRevision[]
@@ -218,13 +219,13 @@ model Seat {
   seatMapId String
   seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
 
-  label    String
-  rowLabel String
-  number   Int
-  x        Int
-  y        Int
-  type     SeatType @default(STANDARD)
-  layoutVersion Int @default(1)
+  label         String
+  rowLabel      String
+  number        Int
+  x             Int
+  y             Int
+  type          SeatType @default(STANDARD)
+  layoutVersion Int      @default(1)
   levelKey      String?
   sectionKey    String?
 
@@ -246,19 +247,19 @@ model Movie {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  title          String
-  synopsis       String?
-  runtimeMinutes Int
-  rating         String?
-  posterUrl      String?
+  title           String
+  synopsis        String?
+  runtimeMinutes  Int
+  rating          String?
+  posterUrl       String?
   detailPosterUrl String?
-  director       String?
-  starring       String?
-  trailerUrl     String?
-  releaseYear    Int?
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  director        String?
+  starring        String?
+  trailerUrl      String?
+  releaseYear     Int?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   showtimes Showtime[]
   pairings  MoviePairing[]
@@ -828,8 +829,8 @@ model StaffAuthAccount {
 
   // argon2id hash — never a plaintext password, never reversible.
   // See /docs/SECURITY.md §1.
-  passwordHash String
-  pinHash      String?
+  passwordHash       String
+  pinHash            String?
   mustChangePassword Boolean @default(false)
 
   mfaEnabled         Boolean @default(false)
@@ -1172,7 +1173,7 @@ model MenuItem {
 
   modifierGroups ModifierGroup[]
   orderItems     RestaurantOrderItem[]
-  moviePairings MoviePairing[]
+  moviePairings  MoviePairing[]
 
   @@unique([menuCategoryId, name])
   @@index([menuCategoryId, active, sortOrder])
@@ -1181,12 +1182,12 @@ model MenuItem {
 }
 
 model MoviePairing {
-  movieId   String
-  movie     Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  movieId    String
+  movie      Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
   menuItemId String
-  menuItem  MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
 
   @@id([movieId, menuItemId])
   @@index([menuItemId])

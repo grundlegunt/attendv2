@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
-type Settings = { taxRules: Array<{ id: string; name: string; appliesTo: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; appliesTo: string; ratePermille: number | null; flatCents: number | null; autoApply: boolean; active: boolean }> };
+type Settings = { priceTiers: Array<{ id: string; name: string; ticketPriceMinor: number; active: boolean }>; taxRules: Array<{ id: string; name: string; appliesTo: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; appliesTo: string; ratePermille: number | null; flatCents: number | null; autoApply: boolean; active: boolean }> };
 type People = {
   employees: Array<{ id: string; name: string; email: string; active: boolean; authAccount: { mfaEnabled: boolean } | null; employeeRoles: Array<{ roleId: string; role: { key: string; name: string } }> }>;
   roles: Array<{ id: string; key: string; name: string; rolePermissions: Array<{ permission: { key: string } }> }>;
@@ -45,6 +45,8 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   const [error, setError] = useState<string | null>(null);
   const [tax, setTax] = useState({ name: "", appliesTo: "ALL", ratePermille: 0 });
   const [charge, setCharge] = useState({ name: "", appliesTo: "ALL", ratePermille: 0 });
+  const [newPriceTier, setNewPriceTier] = useState({ name: "Standard", price: "" });
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
   const [employee, setEmployee] = useState({ name: "", email: "", password: "", pin: "", roleId: "" });
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
@@ -73,6 +75,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
         section === "refunds" && canRefund ? apiFetch<Refunds>(`/management/refunds/history?from=${encodeURIComponent(new Date(`${historyFrom}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${historyTo}T00:00:00`).toISOString())}${refundQuery.trim() ? `&query=${encodeURIComponent(refundQuery.trim())}` : ""}`, { accessToken }) : null,
       ]);
       setSettings(nextSettings); setPeople(nextPeople); setRefunds(nextRefunds); setRefundHistory(nextRefundHistory);
+      if (nextSettings) setPriceDrafts(Object.fromEntries(nextSettings.priceTiers.map((tier) => [tier.id, (tier.ticketPriceMinor / 100).toFixed(2)])));
       if (nextPeople) {
         if (!selectedRoleId) setSelectedRoleId(nextPeople.roles[0]?.id ?? "");
         setEmployeeRoleDrafts(Object.fromEntries(nextPeople.employees.map((person) => [person.id, person.employeeRoles.map((entry) => entry.roleId)])));
@@ -97,6 +100,15 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   async function createTax(event: FormEvent) {
     event.preventDefault(); setError(null);
     try { await apiFetch("/management/settings/tax-rules", { accessToken, method: "POST", body: JSON.stringify({ ...tax, active: true }) }); setTax({ name: "", appliesTo: "ALL", ratePermille: 0 }); await refresh(); } catch (reason) { showError(reason); }
+  }
+  async function createPrice(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    try { await apiFetch("/management/settings/price-tiers", { accessToken, method: "POST", body: JSON.stringify({ name: newPriceTier.name, ticketPriceMinor: Math.round(Number(newPriceTier.price) * 100) }) }); setNewPriceTier({ name: "Standard", price: "" }); await refresh(); } catch (reason) { showError(reason); }
+  }
+  async function savePrice(tier: Settings["priceTiers"][number]) {
+    const ticketPriceMinor = Math.round(Number(priceDrafts[tier.id]) * 100);
+    if (!Number.isFinite(ticketPriceMinor) || ticketPriceMinor < 0) { setError("Enter a valid ticket price."); return; }
+    try { await apiFetch(`/management/settings/price-tiers/${tier.id}`, { accessToken, method: "PATCH", body: JSON.stringify({ ticketPriceMinor }) }); await refresh(); } catch (reason) { showError(reason); }
   }
   async function createCharge(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -185,6 +197,7 @@ export function ManagementControls({ accessToken, permissions, section }: { acce
   return <section className="management-stack">
     {error && <div className="error-banner">{error}</div>}
     {section === "taxes" && (canConfig || canMenuConfig) && <section className="admin-grid">
+      {canConfig && <form className="panel" onSubmit={(event) => void createPrice(event)}><p className="kicker">TICKET PRICES</p><h2>Admission pricing</h2><p className="muted">Set the admission amount for each ticket group. Attend's per-ticket fee is controlled separately by Master.</p><div className="rule-list">{settings?.priceTiers.map((tier) => <article key={tier.id}><div><strong>{tier.name}</strong><span>{tier.active ? "Active" : "Inactive"}</span></div><div className="rule-actions"><label>Price<input type="number" min="0" step="0.01" value={priceDrafts[tier.id] ?? ""} onChange={(event) => setPriceDrafts((current) => ({ ...current, [tier.id]: event.target.value }))} /></label><button type="button" className="secondary" onClick={() => void savePrice(tier)}>Save price</button></div></article>)}</div><hr /><h3>Add ticket group</h3><label>Name<input required value={newPriceTier.name} onChange={(event) => setNewPriceTier({ ...newPriceTier, name: event.target.value })} /></label><label>Ticket price<input required type="number" min="0" step="0.01" value={newPriceTier.price} onChange={(event) => setNewPriceTier({ ...newPriceTier, price: event.target.value })} /></label><button className="primary">Add ticket group</button></form>}
       {canMenuConfig && <form className="panel" onSubmit={(event) => void createTax(event)}><p className="kicker">TAX RULES</p><h2>Add restaurant tax</h2><label>Name<input required value={tax.name} onChange={(event) => setTax({ ...tax, name: event.target.value })} /></label><label>Category<select value={tax.appliesTo} onChange={(event) => setTax({ ...tax, appliesTo: event.target.value })}><option value="ALL">All</option><option value="FOOD">Food</option><option value="ALCOHOL">Alcohol</option><option value="NA_BEVERAGE">Non-alcoholic beverage</option></select></label><label>Rate in tenths of a percent<input type="number" min="0" max="1000" value={tax.ratePermille} onChange={(event) => setTax({ ...tax, ratePermille: Number(event.target.value) })} /></label><button className="primary">Add tax rule</button><div className="rule-list">{settings?.taxRules.map((rule) => <article key={rule.id}><div><strong>{rule.name}</strong><span>{(rule.ratePermille / 10).toFixed(1)}% · {rule.appliesTo}</span></div><button type="button" className="secondary" onClick={() => void updateRule("tax", rule.id, { active: !rule.active })}>{rule.active ? "Deactivate" : "Activate"}</button></article>)}</div></form>}
       {canMenuConfig && <form className="panel" onSubmit={(event) => void createCharge(event)}><p className="kicker">SERVICE CHARGES</p><h2>Add automatic charge</h2><label>Name<input required value={charge.name} onChange={(event) => setCharge({ ...charge, name: event.target.value })} /></label><label>Category<select value={charge.appliesTo} onChange={(event) => setCharge({ ...charge, appliesTo: event.target.value })}><option value="ALL">All</option><option value="FOOD">Food</option><option value="ALCOHOL">Alcohol</option><option value="NA_BEVERAGE">Non-alcoholic beverage</option></select></label><label>Rate in tenths of a percent<input type="number" min="0" max="1000" value={charge.ratePermille} onChange={(event) => setCharge({ ...charge, ratePermille: Number(event.target.value) })} /></label><button className="primary">Add service charge</button><div className="rule-list">{settings?.serviceChargeRules.map((rule) => <article key={rule.id}><div><strong>{rule.name}</strong><span>{rule.ratePermille != null ? `${(rule.ratePermille / 10).toFixed(1)}%` : money(rule.flatCents ?? 0)} · {rule.appliesTo}{rule.active ? "" : " · INACTIVE"}</span></div><div className="rule-actions"><button type="button" className="secondary" disabled={!rule.active} onClick={() => void updateRule("service", rule.id, { autoApply: !rule.autoApply })}>{rule.autoApply ? "Automatic" : "Not applied"}</button><button type="button" className="secondary" onClick={() => void updateRule("service", rule.id, { active: !rule.active })}>{rule.active ? "Deactivate" : "Activate"}</button></div></article>)}</div></form>}
     </section>}

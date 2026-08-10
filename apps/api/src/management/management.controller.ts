@@ -30,6 +30,8 @@ const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo,
 const taxUpdateSchema = taxSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one tax-rule change.");
 const serviceSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000).optional(), flatCents: z.number().int().min(0).optional(), autoApply: z.boolean().default(true), active: z.boolean().default(true) }).strict();
 const serviceUpdateSchema = z.object({ name: z.string().trim().min(1).max(100).optional(), appliesTo: appliesTo.optional(), ratePermille: z.number().int().min(0).max(1000).nullable().optional(), flatCents: z.number().int().min(0).nullable().optional(), autoApply: z.boolean().optional(), active: z.boolean().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one service-charge change.");
+const priceTierSchema = z.object({ name: z.string().trim().min(1).max(100), ticketPriceMinor: z.number().int().min(0).max(1_000_000) }).strict();
+const priceTierUpdateSchema = z.object({ ticketPriceMinor: z.number().int().min(0).max(1_000_000), active: z.boolean().optional() }).strict();
 const promotionSchema = z.object({ code: z.string().trim().min(1).max(50), name: z.string().trim().min(1).max(100), type: z.enum(["FIXED_AMOUNT", "PERCENTAGE", "COMP"]), amountCents: z.number().int().positive().optional(), percentageBasisPoints: z.number().int().min(1).max(10_000).optional(), minimumSubtotalCents: z.number().int().min(0).optional(), maximumRedemptions: z.number().int().positive().optional(), active: z.boolean().default(true), startsAt: z.coerce.date().optional(), endsAt: z.coerce.date().optional() }).strict();
 const promotionUpdateSchema = z.object({ code: z.string().trim().min(1).max(50).optional(), name: z.string().trim().min(1).max(100).optional(), type: z.enum(["FIXED_AMOUNT", "PERCENTAGE", "COMP"]).optional(), amountCents: z.number().int().positive().nullable().optional(), percentageBasisPoints: z.number().int().min(1).max(10_000).nullable().optional(), minimumSubtotalCents: z.number().int().min(0).nullable().optional(), maximumRedemptions: z.number().int().positive().nullable().optional(), active: z.boolean().optional(), startsAt: z.coerce.date().nullable().optional(), endsAt: z.coerce.date().nullable().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one promotion change.");
 const employeeSchema = z.object({ name: z.string().trim().min(1).max(100), email: z.string().email(), password: z.string().min(12).max(200), pin: z.string().regex(/^\d{4,8}$/).optional(), roleIds: z.array(z.string().uuid()).min(1) }).strict();
@@ -58,6 +60,12 @@ export class ManagementController {
 
   @Patch("settings/branding") @RequirePermissions(Permission.TicketPriceEdit)
   updateBranding(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(brandingSchema)) body: unknown) { return this.management.updateBranding({ ...brandingSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Post("settings/price-tiers") @RequirePermissions(Permission.TicketPriceEdit)
+  createPriceTier(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(priceTierSchema)) body: unknown) { return this.management.createPriceTier({ ...priceTierSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("settings/price-tiers/:priceTierId") @RequirePermissions(Permission.TicketPriceEdit)
+  updatePriceTier(@CurrentActor() actor: RequestActor, @Param("priceTierId") priceTierId: string, @Body(new ZodValidationPipe(priceTierUpdateSchema)) body: unknown) { return this.management.updatePriceTier({ ...priceTierUpdateSchema.parse(body), priceTierId, locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Post("settings/tax-rules") @RequirePermissions(Permission.MenuEdit)
   tax(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

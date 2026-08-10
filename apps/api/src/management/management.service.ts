@@ -9,9 +9,35 @@ export class ManagementService {
   async settings(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({
       where: { id: locationId },
-      select: { id: true, name: true, address: true, timezone: true, currency: true, customerLogoUrl: true, customerAccentColor: true, customerAccentMutedColor: true, customerBackgroundColor: true, customerBackgroundGlowColor: true, customerSurfaceColor: true, customerTextColor: true, customerMutedTextColor: true, adminAccentColor: true, adminAccentMutedColor: true, adminBackgroundColor: true, adminSurfaceColor: true, adminTextColor: true, adminMutedTextColor: true, timeClockEnabled: true, ticketTaxRateBasisPoints: true, preShowBufferMinutes: true, cleaningBufferMinutes: true, checkDropMinutesBeforeEnd: true, autoSettleGraceMinutes: true, autoSettleTipBasisPoints: true, taxRules: { orderBy: { name: "asc" } }, serviceChargeRules: { orderBy: { name: "asc" } }, promotions: { orderBy: { code: "asc" }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { discountCents: true, tickets: { select: { id: true } } } } } } },
+      include: {
+        organization: { select: { priceTiers: { orderBy: { name: "asc" }, select: { id: true, name: true, ticketPriceMinor: true, active: true } } } },
+        taxRules: { orderBy: { name: "asc" } },
+        serviceChargeRules: { orderBy: { name: "asc" } },
+        promotions: { orderBy: { code: "asc" }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { discountCents: true, tickets: { select: { id: true } } } } } },
+      },
     });
-    return { ...location, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
+    const { organization, ...settings } = location;
+    return { ...settings, priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
+  }
+
+  async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, organization: { select: { ticketFeeMinor: true } } } });
+      const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { name: tier.name, ticketPriceMinor: tier.ticketPriceMinor } } });
+      return tier;
+    });
+  }
+
+  async updatePriceTier(input: { locationId: string; employeeId: string; priceTierId: string; ticketPriceMinor: number; active?: boolean }) {
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      const before = await tx.priceTier.findFirst({ where: { id: input.priceTierId, organizationId: location.organizationId } });
+      if (!before) throw AppError.notFound("Ticket price group not found.");
+      const updated = await tx.priceTier.update({ where: { id: before.id }, data: { ticketPriceMinor: input.ticketPriceMinor, active: input.active } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_updated", entityType: "PriceTier", entityId: updated.id, beforeState: { ticketPriceMinor: before.ticketPriceMinor, active: before.active }, afterState: { ticketPriceMinor: updated.ticketPriceMinor, active: updated.active } } });
+      return updated;
+    });
   }
 
   async updateLocation(input: { locationId: string; employeeId: string; name?: string; address?: string | null; timezone?: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; autoSettleTipBasisPoints?: number }) {

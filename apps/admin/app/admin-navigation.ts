@@ -35,7 +35,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
   ] },
   { label: "Settings", items: [
     { href: "/promotions", label: "Promotions", permissions: ["ticket.price.edit"] },
-    { href: "/taxes", label: "Tax & Service Charges", permissions: ["menu.edit", "ticket.price.edit"], permissionMode: "any" },
+    { href: "/taxes", label: "Ticket Prices, Tax & Charges", permissions: ["menu.edit", "ticket.price.edit"], permissionMode: "any" },
   ] },
 ] as const;
 

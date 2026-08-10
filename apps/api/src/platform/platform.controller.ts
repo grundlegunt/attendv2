@@ -14,6 +14,7 @@ const organizationUpdateSchema = z.object({
   legalName: z.string().trim().min(1).max(200).nullable().optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
   onboardingStatus: z.enum(["NOT_STARTED", "IN_PROGRESS", "COMPLETE", "RESTRICTED"]).optional(),
+  ticketFeeMinor: z.number().int().min(0).max(100_000).optional(),
 }).strict();
 
 const organizationCreateSchema = z.object({

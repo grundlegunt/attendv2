@@ -34,7 +34,7 @@ interface OrganizationOverview {
 interface Overview { generatedAt: string; organizations: OrganizationOverview[] }
 type BrandPalette = { accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; backgroundGlowColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null };
 interface OrganizationDetail {
-  id: string; name: string; legalName: string | null; timezone: string; createdAt: string;
+  id: string; name: string; legalName: string | null; timezone: string; ticketFeeMinor: number; createdAt: string;
   payments: { connected: boolean; onboardingStatus: string };
   locations: Array<{
     id: string; name: string; address: string | null; timezone: string; currency: string; active: boolean;
@@ -45,7 +45,7 @@ interface OrganizationDetail {
     configuration: { auditoriums: number; employees: number; menuItems: number; upcomingShowtimes: number; activeMovies: number; activeFilmSeries: number };
   }>;
 }
-type OrganizationDraft = { name: string; legalName: string; timezone: string; onboardingStatus: string };
+type OrganizationDraft = { name: string; legalName: string; timezone: string; onboardingStatus: string; ticketFee: string };
 type OrganizationCreateDraft = { name: string; legalName: string; timezone: string; locationName: string; address: string; locationTimezone: string };
 type CinemaManagerDraft = { locationId: string; name: string; email: string; password: string };
 type LocationDetail = OrganizationDetail["locations"][number];
@@ -124,7 +124,7 @@ export default function AttendMaster() {
   }
 
   function beginOrganizationEdit(detail: OrganizationDetail) {
-    setOrganizationDraft({ name: detail.name, legalName: detail.legalName ?? "", timezone: detail.timezone, onboardingStatus: detail.payments.onboardingStatus });
+    setOrganizationDraft({ name: detail.name, legalName: detail.legalName ?? "", timezone: detail.timezone, onboardingStatus: detail.payments.onboardingStatus, ticketFee: (detail.ticketFeeMinor / 100).toFixed(2) });
   }
 
   function beginOrganizationCreate() {
@@ -164,7 +164,8 @@ export default function AttendMaster() {
     if (!session || !organization || !organizationDraft) return;
     setSaving(true); setError(null);
     try {
-      const updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, { method: "PATCH", body: JSON.stringify({ ...organizationDraft, legalName: organizationDraft.legalName || null }) }, session.accessToken);
+      const { ticketFee, ...draft } = organizationDraft;
+      const updated = await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, { method: "PATCH", body: JSON.stringify({ ...draft, legalName: draft.legalName || null, ticketFeeMinor: Math.round(Number(ticketFee) * 100) }) }, session.accessToken);
       setOrganization(updated); setOrganizationDraft(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save organization."); }
     finally { setSaving(false); }
@@ -250,7 +251,7 @@ export default function AttendMaster() {
       {organizationLoading && <p className="muted">Loading cinema profile…</p>}
       {organization && <>
         <div className="detail-heading"><div><p className="eyebrow">ORGANIZATION</p><h2>{organization.name}</h2><p className="muted">{organization.legalName ?? "Legal name not configured"} · Client since {new Date(organization.createdAt).toLocaleDateString()}</p></div><div className="org-actions"><span className={organization.payments.connected ? "status good" : "status warning"}>{organization.payments.connected ? `Payments ${organization.payments.onboardingStatus.toLowerCase()}` : `Payments ${organization.payments.onboardingStatus.toLowerCase().replaceAll("_", " ")}`}</span><button className="edit-button" onClick={() => beginOrganizationEdit(organization)}>Edit organization</button></div></div>
-        {organizationDraft && <form className="editor" onSubmit={saveOrganization}><div className="editor-heading"><div><p className="eyebrow">COMPANY SETTINGS</p><h3>Edit organization</h3></div><button type="button" className="quiet" onClick={() => setOrganizationDraft(null)}>Cancel</button></div><div className="form-grid"><label>Name<input required value={organizationDraft.name} onChange={(event) => setOrganizationDraft({ ...organizationDraft, name: event.target.value })} /></label><label>Legal name<input value={organizationDraft.legalName} onChange={(event) => setOrganizationDraft({ ...organizationDraft, legalName: event.target.value })} /></label><label>Timezone<input required value={organizationDraft.timezone} onChange={(event) => setOrganizationDraft({ ...organizationDraft, timezone: event.target.value })} /></label><label>Payment onboarding<select value={organizationDraft.onboardingStatus} onChange={(event) => setOrganizationDraft({ ...organizationDraft, onboardingStatus: event.target.value })}><option value="NOT_STARTED">Not started</option><option value="IN_PROGRESS">In progress</option><option value="RESTRICTED">Restricted</option><option value="COMPLETE">Complete</option></select></label></div><p className="form-note">Complete requires a Stripe connected account. This status does not create or alter a Stripe account.</p><button disabled={saving}>{saving ? "Saving…" : "Save organization"}</button></form>}
+        {organizationDraft && <form className="editor" onSubmit={saveOrganization}><div className="editor-heading"><div><p className="eyebrow">COMPANY SETTINGS</p><h3>Edit organization</h3></div><button type="button" className="quiet" onClick={() => setOrganizationDraft(null)}>Cancel</button></div><div className="form-grid"><label>Name<input required value={organizationDraft.name} onChange={(event) => setOrganizationDraft({ ...organizationDraft, name: event.target.value })} /></label><label>Legal name<input value={organizationDraft.legalName} onChange={(event) => setOrganizationDraft({ ...organizationDraft, legalName: event.target.value })} /></label><label>Timezone<input required value={organizationDraft.timezone} onChange={(event) => setOrganizationDraft({ ...organizationDraft, timezone: event.target.value })} /></label><label>Attend ticket fee per ticket<input required type="number" min="0" step="0.01" value={organizationDraft.ticketFee} onChange={(event) => setOrganizationDraft({ ...organizationDraft, ticketFee: event.target.value })} /></label><label>Payment onboarding<select value={organizationDraft.onboardingStatus} onChange={(event) => setOrganizationDraft({ ...organizationDraft, onboardingStatus: event.target.value })}><option value="NOT_STARTED">Not started</option><option value="IN_PROGRESS">In progress</option><option value="RESTRICTED">Restricted</option><option value="COMPLETE">Complete</option></select></label></div><p className="form-note">The ticket fee is controlled by Attend and applies to every ticket group for this client. Complete requires a Stripe connected account.</p><button disabled={saving}>{saving ? "Saving…" : "Save organization"}</button></form>}
         {organization.locations.map((location) => <article className="location-detail" key={location.id}>
           <div className="location-detail-heading"><div><div className="location-title"><h3>{location.name}</h3><span className={location.active ? "dot active" : "dot"}>{location.active ? "Active" : "Inactive"}</span></div><p className="muted">{location.address ?? "Address not configured"} · {location.timezone}</p></div><div className="actions horizontal"><button className="edit-button" onClick={() => beginLocationEdit(location)}>Edit cinema</button><button className="edit-button" onClick={() => setContentDraft({ id: location.id, values: structuredClone(location.content.draft) })}>Content Studio</button><button className="edit-button" disabled={saving} onClick={() => void publishContent(location)}>Publish draft</button><button className="edit-button" onClick={() => setCinemaManagerDraft({ locationId: location.id, name: "", email: "", password: "" })}>Add cinema manager</button><a href={CINEMA_ADMIN_URL} target="_blank" rel="noreferrer">Open cinema admin ↗</a><a href={`${CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(location.id)}`} target="_blank" rel="noreferrer">Open customer site ↗</a></div></div>
           <div className="readiness-grid branding-readiness">
