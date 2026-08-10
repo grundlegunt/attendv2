@@ -504,10 +504,17 @@ describe("Attend platform authentication boundary", () => {
     const link = await request(app.getHttpServer())
       .post(`/api/v1/platform/organizations/${organizationId}/connect/onboarding-link`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ origin: "http://localhost:3004" })
+      .send({ origin: "http://localhost:3004", returnPath: "/payments" })
       .expect(201);
     expect(link.body.url).toContain(`organizationId=${organizationId}`);
+    expect(link.body.url).toContain("/payments?");
     expect(link.body.url).toContain("connect=return");
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${organizationId}/connect/onboarding-link`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ origin: "http://localhost:3004", returnPath: "/not-allowed" })
+      .expect(400);
 
     const refreshed = await request(app.getHttpServer())
       .post(`/api/v1/platform/organizations/${organizationId}/connect/refresh`)

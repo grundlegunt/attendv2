@@ -425,7 +425,7 @@ export default function AttendMaster() {
     try {
       const result = await request<{ url: string }>(`/platform/organizations/${organizationId}/connect/onboarding-link`, {
         method: "POST",
-        body: JSON.stringify({ origin: window.location.origin }),
+        body: JSON.stringify({ origin: window.location.origin, returnPath: "/clients" }),
       }, session.accessToken);
       window.location.assign(result.url);
     } catch (reason) {
@@ -663,6 +663,7 @@ export default function AttendMaster() {
       <nav className="platform-nav" aria-label="Attend Master">
         <Link href="/">Dashboard</Link>
         <Link className="active" href="/clients">Clients</Link>
+        <Link href="/payments">Payments</Link>
       </nav>
       {error && <div className="error">{error}</div>}
       {!selectedOrganizationId && organizationCreateDraft && (

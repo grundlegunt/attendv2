@@ -18,7 +18,10 @@ const organizationUpdateSchema = z.object({
   ticketFeeMinor: z.number().int().min(0).max(100_000).optional(),
 }).strict();
 
-const connectOnboardingSchema = z.object({ origin: z.string().url() }).strict();
+const connectOnboardingSchema = z.object({
+  origin: z.string().url(),
+  returnPath: z.enum(["/clients", "/payments"]).default("/clients"),
+}).strict();
 
 const organizationCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -91,11 +94,11 @@ export class PlatformController {
   @Post("organizations/:organizationId/connect/onboarding-link")
   @UseGuards(PlatformAuthGuard)
   connectOnboardingLink(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(connectOnboardingSchema)) body: unknown) {
-    const { origin } = connectOnboardingSchema.parse(body);
+    const { origin, returnPath } = connectOnboardingSchema.parse(body);
     if (new URL(origin).origin !== origin || !isPlatformOriginAllowed(origin)) {
       throw AppError.validationFailed("Stripe onboarding must return to an allowed Attend Master origin.");
     }
-    return this.platform.createConnectOnboardingLink({ actorId: actor.sub, organizationId, origin });
+    return this.platform.createConnectOnboardingLink({ actorId: actor.sub, organizationId, origin, returnPath });
   }
 
   @Post("organizations/:organizationId/connect/refresh")
