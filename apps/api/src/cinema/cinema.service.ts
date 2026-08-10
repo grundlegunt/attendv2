@@ -892,25 +892,38 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (existing.length !== ids.length) throw AppError.notFound("One or more showtimes were not found.");
 
       const byId = new Map(existing.map((showtime) => [showtime.id, showtime]));
-      const auditoriumIds = [...new Set(existing.map((showtime) => showtime.auditoriumId))].sort();
+      const requestedAuditoriumIds = [...new Set(input.moves.map((move) => move.auditoriumId).filter((id): id is string => Boolean(id)))];
+      const targetAuditoriums = requestedAuditoriumIds.length ? await tx.auditorium.findMany({
+        where: { id: { in: requestedAuditoriumIds }, locationId, active: true },
+        include: { location: true },
+      }) : [];
+      if (targetAuditoriums.length !== requestedAuditoriumIds.length) throw AppError.notFound("One or more target auditoriums were not found.");
+      const targetAuditoriumById = new Map(targetAuditoriums.map((auditorium) => [auditorium.id, auditorium]));
+      const auditoriumIds = [...new Set([
+        ...existing.map((showtime) => showtime.auditoriumId),
+        ...requestedAuditoriumIds,
+      ])].sort();
       for (const auditoriumId of auditoriumIds) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
       }
 
       const proposed = input.moves.map((move) => {
         const showtime = byId.get(move.showtimeId)!;
+        const auditorium = move.auditoriumId
+          ? targetAuditoriumById.get(move.auditoriumId)!
+          : showtime.auditorium;
         const startsAt = new Date(move.startsAt);
-        const featureStartsAt = new Date(startsAt.getTime() + showtime.auditorium.location.preShowBufferMinutes * 60000);
+        const featureStartsAt = new Date(startsAt.getTime() + auditorium.location.preShowBufferMinutes * 60000);
         const endsAt = new Date(featureStartsAt.getTime() + showtime.movie.runtimeMinutes * 60000);
-        const roomReadyAt = new Date(endsAt.getTime() + Math.max(this.minimumCinemaCleaningMinutes, showtime.auditorium.location.cleaningBufferMinutes) * 60000);
-        return { showtime, startsAt, featureStartsAt, endsAt, roomReadyAt };
+        const roomReadyAt = new Date(endsAt.getTime() + Math.max(this.minimumCinemaCleaningMinutes, auditorium.location.cleaningBufferMinutes) * 60000);
+        return { showtime, auditorium, startsAt, featureStartsAt, endsAt, roomReadyAt };
       });
 
       for (let leftIndex = 0; leftIndex < proposed.length; leftIndex += 1) {
         for (let rightIndex = leftIndex + 1; rightIndex < proposed.length; rightIndex += 1) {
           const left = proposed[leftIndex]!;
           const right = proposed[rightIndex]!;
-          if (left.showtime.auditoriumId === right.showtime.auditoriumId
+          if (left.auditorium.id === right.auditorium.id
             && left.startsAt < right.roomReadyAt && left.roomReadyAt > right.startsAt) {
             throw AppError.conflict(`The selected move would overlap ${left.showtime.movie.title} and ${right.showtime.movie.title}.`);
           }
@@ -924,23 +937,43 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         include: { movie: true },
       });
       for (const move of proposed) {
-        const conflict = nearby.find((showtime) => showtime.auditoriumId === move.showtime.auditoriumId
+        const conflict = nearby.find((showtime) => showtime.auditoriumId === move.auditorium.id
           && move.startsAt < showtime.roomReadyAt && move.roomReadyAt > showtime.startsAt);
         if (conflict) throw AppError.conflict(`Conflicts with ${conflict.movie.title} at ${conflict.startsAt.toISOString()}.`);
       }
 
       const updated = [];
       for (const move of proposed) {
+        if (move.auditorium.id !== move.showtime.auditoriumId) {
+          const activeHolds = await tx.seatHold.count({
+            where: {
+              showtimeSeat: { showtimeId: move.showtime.id },
+              releasedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          });
+          if (activeHolds) throw AppError.conflict("A showtime with active seat holds cannot be moved to another room.");
+        }
         updated.push(await tx.showtime.update({
           where: { id: move.showtime.id },
-          data: { startsAt: move.startsAt, featureStartsAt: move.featureStartsAt, endsAt: move.endsAt, roomReadyAt: move.roomReadyAt },
+          data: { auditoriumId: move.auditorium.id, startsAt: move.startsAt, featureStartsAt: move.featureStartsAt, endsAt: move.endsAt, roomReadyAt: move.roomReadyAt },
           include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         }));
+        if (move.auditorium.id !== move.showtime.auditoriumId) {
+          await tx.showtimeSeat.deleteMany({ where: { showtimeId: move.showtime.id } });
+          const seats = await tx.seat.findMany({
+            where: { seatMap: { auditoriumId: move.auditorium.id }, active: true },
+            select: { id: true },
+          });
+          await tx.showtimeSeat.createMany({
+            data: seats.map((seat) => ({ showtimeId: move.showtime.id, seatId: seat.id })),
+          });
+        }
         await tx.auditEvent.create({ data: {
           actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "showtime.group_moved",
           entityType: "Showtime", entityId: move.showtime.id, locationId,
-          beforeState: { startsAt: move.showtime.startsAt.toISOString() },
-          afterState: { startsAt: move.startsAt.toISOString(), roomReadyAt: move.roomReadyAt.toISOString(), groupSize: proposed.length },
+          beforeState: { auditoriumId: move.showtime.auditoriumId, startsAt: move.showtime.startsAt.toISOString() },
+          afterState: { auditoriumId: move.auditorium.id, startsAt: move.startsAt.toISOString(), roomReadyAt: move.roomReadyAt.toISOString(), groupSize: proposed.length },
         } });
       }
       return { showtimes: updated };

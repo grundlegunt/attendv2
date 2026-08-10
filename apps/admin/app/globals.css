@@ -140,12 +140,17 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-appearances > p { margin: 0; color: #77786f; font-size: .76rem; }
 .film-detail-empty { grid-column: 1 / -1; align-self: center; max-width: 620px; color: #aaa99f; }
 .schedule-with-inspector { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; margin: 24px 0; border: 1px solid #3a3b35; background: #171815; }
-.schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr) clamp(520px, 32vw, 620px); }
+.schedule-with-inspector.inspector-open { grid-template-columns: minmax(0, 1fr); }
+.schedule-with-inspector.inspector-open .schedule-workspace { grid-row: 2; }
 .schedule-with-inspector .schedule-workspace { min-width: 0; border: 0; }
 .schedule-with-inspector .film-card { grid-template-columns: 44px minmax(0, 1fr) 74px 90px; }
-.schedule-inspector { min-height: 620px; padding: 18px; border-left: 1px solid #484943; background: #170d14; }
-.schedule-inspector form, .inspector-empty { position: sticky; top: 18px; }
-.schedule-inspector form { overflow: visible; }
+.schedule-inspector { grid-row: 1; min-height: 0; padding: 18px; border-bottom: 1px solid #484943; background: #170d14; }
+.schedule-inspector form { display: grid; grid-template-columns: minmax(280px, .75fr) minmax(0, 1.25fr); gap: 10px 18px; overflow: visible; }
+.schedule-inspector .drawer-heading { grid-column: 1 / -1; }
+.schedule-inspector .showtime-inspector-summary { grid-column: 1; }
+.schedule-inspector .showtime-inspector-fields { grid-column: 2; }
+.schedule-inspector .calculation-note { grid-column: 1; }
+.schedule-inspector .showtime-inspector-actions { grid-column: 2; align-self: end; }
 .schedule-inspector .drawer-heading { margin-bottom: 14px; }
 .schedule-inspector .drawer-heading h2 { margin: 4px 0 0; font-size: 1.65rem; }
 .schedule-inspector .calculation-note { margin: 8px 0 10px; padding: 9px 11px; font-size: .72rem; }
@@ -200,6 +205,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-block-shell.selected .showtime-block { outline: 3px solid var(--color-accent); outline-offset: 3px; box-shadow: 0 0 0 2px #fff, 0 9px 24px rgba(0,0,0,.45); }
 .select-day-showtimes { margin-left: auto; padding: 4px 9px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; cursor: pointer; }
 .showtime-selection-summary { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--color-border); color: var(--color-text-primary); }
+.selection-hint { color: var(--color-text-secondary); font-size: .72rem; }
 .showtime-selection-summary label { display: inline-flex; align-items: center; gap: 5px; }
 .showtime-selection-summary input { width: 68px; padding: 5px 7px; border: 1px solid var(--color-border); background: var(--color-background); color: var(--color-text-primary); font: inherit; }
 .showtime-selection-summary button { padding: 5px 9px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font: inherit; cursor: pointer; }
@@ -332,7 +338,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 1100px) {
   .schedule-with-inspector, .schedule-with-inspector.inspector-open { grid-template-columns: 1fr; }
-  .schedule-inspector { min-height: 0; border-top: 1px solid #484943; border-left: 0; }
+  .schedule-inspector { min-height: 0; border-left: 0; }
 }
 @media (min-width: 1500px) { .admin-shell { padding-right: 24px; padding-left: 24px; } }
 @media (max-width: 760px) {
@@ -358,6 +364,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .film-detail-heading { flex-direction: column; }
   .film-programming-summary, .film-appearances ul { grid-template-columns: 1fr; }
   .showtime-inspector-summary, .showtime-inspector-fields, .showtime-time-editor { grid-template-columns: 1fr; }
+  .schedule-inspector form { grid-template-columns: 1fr; }
+  .schedule-inspector .drawer-heading,
+  .schedule-inspector .showtime-inspector-summary,
+  .schedule-inspector .showtime-inspector-fields,
+  .schedule-inspector .calculation-note,
+  .schedule-inspector .showtime-inspector-actions { grid-column: 1; }
   .showtime-inspector-actions { grid-template-columns: 1fr 1fr; }
   .cinema-setup-workspace { grid-template-columns: 1fr; margin: 0 0 20px; }
   .setup-location-rail { border-right: 0; border-bottom: 1px solid var(--color-border); }

@@ -135,10 +135,11 @@ describe("cinema programming requests", () => {
   it("validates atomic multi-showtime moves", () => {
     const moves = [
       { showtimeId: "10000000-0000-4000-8000-000000000011", startsAt: "2026-08-04T19:00:00.000Z" },
-      { showtimeId: "10000000-0000-4000-8000-000000000012", startsAt: "2026-08-04T20:00:00.000Z" },
+      { showtimeId: "10000000-0000-4000-8000-000000000012", auditoriumId: "10000000-0000-4000-8000-000000000013", startsAt: "2026-08-04T20:00:00.000Z" },
     ];
 
     expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves).toHaveLength(2);
+    expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves[1]?.auditoriumId).toBe("10000000-0000-4000-8000-000000000013");
     expect(() => moveShowtimeGroupRequestSchema.parse({ moves: moves.slice(0, 1) })).toThrow();
     expect(() => moveShowtimeGroupRequestSchema.parse({ moves: [moves[0], moves[0]] })).toThrow();
   });

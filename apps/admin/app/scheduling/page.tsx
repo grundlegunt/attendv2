@@ -322,13 +322,13 @@ export default function AdminPage() {
     }
   }
 
-  async function moveManyShowtimes(moves: Array<{ showtime: CalendarShowtime; startsAt: Date }>) {
+  async function moveManyShowtimes(moves: Array<{ showtime: CalendarShowtime; auditoriumId: string; startsAt: Date }>) {
     setError(null);
     try {
       await apiFetch("/cinema/showtimes/group", {
         accessToken: token ?? undefined,
         method: "PATCH",
-        body: JSON.stringify({ moves: moves.map(({ showtime, startsAt }) => ({ showtimeId: showtime.id, startsAt: startsAt.toISOString() })) }),
+        body: JSON.stringify({ moves: moves.map(({ showtime, auditoriumId, startsAt }) => ({ showtimeId: showtime.id, auditoriumId, startsAt: startsAt.toISOString() })) }),
       });
       await refresh();
     } catch (reason) {

@@ -258,6 +258,7 @@ export const updateShowtimeRequestSchema = showtimeFieldsSchema.partial().refine
 export const moveShowtimeGroupRequestSchema = z.object({
   moves: z.array(z.object({
     showtimeId: z.string().uuid(),
+    auditoriumId: z.string().uuid().optional(),
     startsAt: z.string().datetime({ offset: true }),
   })).min(2).max(100),
 }).superRefine((value, context) => {

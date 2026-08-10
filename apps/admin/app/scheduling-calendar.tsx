@@ -58,7 +58,7 @@ interface SchedulingCalendarProps {
   onEdit: (showtime: CalendarShowtime) => void;
   onRemoveShowtime: (showtime: CalendarShowtime) => Promise<void>;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
-  onMoveMany: (moves: Array<{ showtime: CalendarShowtime; startsAt: Date }>) => Promise<void>;
+  onMoveMany: (moves: Array<{ showtime: CalendarShowtime; auditoriumId: string; startsAt: Date }>) => Promise<void>;
   onAddMovie: () => void;
   onEditMovie: (movie: ScheduleMovie) => void;
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
@@ -176,6 +176,7 @@ export function SchedulingCalendar({
     const offsetMs = direction * Math.max(5, shiftMinutes) * 60000;
     const moves = selected.map((showtime) => ({
       showtime,
+      auditoriumId: showtime.auditorium.id,
       startsAt: roundToFive(new Date(new Date(showtime.startsAt).getTime() + offsetMs)),
     }));
     if (moves.length === 1) {
@@ -226,6 +227,34 @@ export function SchedulingCalendar({
     return new Date(start.getTime() + roundedMinutes * 60000);
   }
 
+  function swappedRoomMoves(dragged: CalendarShowtime, target: CalendarShowtime) {
+    function reflowRoom(auditoriumId: string, slot: Date, inserted: CalendarShowtime, removedId: string) {
+      const downstream = visibleShowtimes
+        .filter((item) => item.auditorium.id === auditoriumId
+          && item.id !== removedId
+          && item.id !== inserted.id
+          && new Date(item.startsAt) >= slot)
+        .sort((left, right) => new Date(left.startsAt).getTime() - new Date(right.startsAt).getTime());
+      const sequence = [{ showtime: inserted, desired: slot }, ...downstream.map((showtime) => ({
+        showtime,
+        desired: new Date(showtime.startsAt),
+      }))];
+      let cursor = slot;
+      return sequence.map(({ showtime, desired }) => {
+        const startsAt = roundToFive(new Date(Math.max(desired.getTime(), cursor.getTime())), "up");
+        const durationMs = new Date(showtime.roomReadyAt).getTime() - new Date(showtime.startsAt).getTime();
+        cursor = new Date(startsAt.getTime() + durationMs);
+        return { showtime, auditoriumId, startsAt };
+      });
+    }
+
+    return [
+      ...reflowRoom(target.auditorium.id, new Date(target.startsAt), dragged, target.id),
+      ...reflowRoom(dragged.auditorium.id, new Date(dragged.startsAt), target, dragged.id),
+    ].filter(({ showtime, auditoriumId, startsAt }) => auditoriumId !== showtime.auditorium.id
+      || startsAt.getTime() !== new Date(showtime.startsAt).getTime());
+  }
+
   async function dropOnTimeline(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, start: Date) {
     event.preventDefault();
     const key = event.dataTransfer.getData("text/plain") || draggingKey;
@@ -242,6 +271,13 @@ export function SchedulingCalendar({
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
+    const dropTargetId = (event.target as HTMLElement).closest<HTMLElement>("[data-showtime-id]")?.dataset.showtimeId;
+    const dropTarget = showtimes.find((item) => item.id === dropTargetId);
+    if (dropTarget && dropTarget.id !== showtime.id && dropTarget.auditorium.id !== showtime.auditorium.id) {
+      await onMoveMany(swappedRoomMoves(showtime, dropTarget));
+      setSelectedShowtimeIds([showtime.id, dropTarget.id]);
+      return;
+    }
     const groupedShowtimes = selectedShowtimeIds.includes(showtime.id)
       ? showtimes.filter((item) => selectedShowtimeIds.includes(item.id))
       : [showtime];
@@ -249,7 +285,7 @@ export function SchedulingCalendar({
       const target = roundToFive(targetTime);
       const offsetMs = target.getTime() - new Date(showtime.startsAt).getTime();
       const selectedIds = new Set(groupedShowtimes.map((item) => item.id));
-      const moves = groupedShowtimes.map((item) => ({ showtime: item, startsAt: new Date(new Date(item.startsAt).getTime() + offsetMs) }));
+      const moves = groupedShowtimes.map((item) => ({ showtime: item, auditoriumId: item.auditorium.id, startsAt: new Date(new Date(item.startsAt).getTime() + offsetMs) }));
       const hasConflict = moves.some(({ showtime: moving, startsAt }) => {
         const readyAt = startsAt.getTime() + (preShowBufferMinutes + moving.movie.runtimeMinutes + cleaningBufferMinutes) * 60000;
         return showtimes.some((existing) => !selectedIds.has(existing.id)
@@ -402,14 +438,16 @@ export function SchedulingCalendar({
       <span><i className="legend-swatch past" /> {labels.past}</span>
       <span>{preShowBufferMinutes}m pre-show + runtime + {cleaningBufferMinutes}m cleaning</span>
       {view === "day" && visibleShowtimes.some((showtime) => new Date(showtime.startsAt) >= now) && <button type="button" className="select-day-showtimes" onClick={selectVisibleDay}>Select entire day</button>}
-      {selectedShowtimeIds.length > 0 && <div className="showtime-selection-summary">
-        <strong>{selectedShowtimeIds.length} selected</strong>
-        <span>Move together by</span>
-        <label><span className="sr-only">Shift minutes</span><input type="number" min="5" max="720" step="5" value={shiftMinutes} onChange={(event) => setShiftMinutes(Math.min(720, Math.max(5, Number(event.target.value) || 5)))} /> min</label>
-        <button type="button" onClick={() => void shiftSelection(-1)}>← Earlier</button>
-        <button type="button" onClick={() => void shiftSelection(1)}>Later →</button>
-        <button type="button" onClick={() => setSelectedShowtimeIds([])}>Clear</button>
-      </div>}
+      <div className="showtime-selection-summary">
+        {selectedShowtimeIds.length > 0 ? <>
+          <strong>{selectedShowtimeIds.length} selected</strong>
+          <span>Move together by</span>
+          <label><span className="sr-only">Shift minutes</span><input type="number" min="5" max="720" step="5" value={shiftMinutes} onChange={(event) => setShiftMinutes(Math.min(720, Math.max(5, Number(event.target.value) || 5)))} /> min</label>
+          <button type="button" onClick={() => void shiftSelection(-1)}>← Earlier</button>
+          <button type="button" onClick={() => void shiftSelection(1)}>Later →</button>
+          <button type="button" onClick={() => setSelectedShowtimeIds([])}>Clear</button>
+        </> : <span className="selection-hint">Hold Command or Ctrl while clicking to select multiple showtimes.</span>}
+      </div>
     </div>
 
     {view === "day" && <div className="calendar-scroll">
@@ -430,6 +468,9 @@ export function SchedulingCalendar({
             <div className="room-label"><strong>{auditorium.name}</strong><span>{auditorium.capacity} seats</span></div>
             <div
               className={`room-timeline ${draggingKey ? "drag-target" : ""}`}
+              onClick={(event) => {
+                if (!(event.target as HTMLElement).closest(".showtime-block-shell")) setSelectedShowtimeIds([]);
+              }}
               onDoubleClick={(event) => createAtPointer(event, auditorium.id)}
               onDragOver={(event) => {
                 event.preventDefault();
@@ -459,6 +500,7 @@ export function SchedulingCalendar({
                 return <div
                   draggable={!isPast}
                   className={`showtime-block-shell ${status} ${selectedShowtimeIds.includes(showtime.id) ? "selected" : ""}`}
+                  data-showtime-id={showtime.id}
                   key={showtime.id}
                   style={{ left: `${left + 4}px`, width: `${width}px` }}
                   onMouseDown={(event) => event.stopPropagation()}
@@ -471,7 +513,17 @@ export function SchedulingCalendar({
                   }}
                   onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
                 >
-                  <button type="button" className="showtime-block" onClick={(event) => { event.stopPropagation(); if (isPast) onEdit(showtime); else setSelectedShowtimeIds((current) => current.includes(showtime.id) ? current.filter((id) => id !== showtime.id) : [...current, showtime.id]); }} onDoubleClick={(event) => { event.stopPropagation(); onEdit(showtime); }} title={isPast ? `Edit ${showtime.movie.title}` : `Select ${showtime.movie.title}; double-click to edit`} aria-pressed={!isPast ? selectedShowtimeIds.includes(showtime.id) : undefined}>
+                  <button type="button" className="showtime-block" onClick={(event) => {
+                    event.stopPropagation();
+                    if (isPast) { onEdit(showtime); return; }
+                    if (event.metaKey || event.ctrlKey) {
+                      setSelectedShowtimeIds((current) => current.includes(showtime.id)
+                        ? current.filter((id) => id !== showtime.id)
+                        : [...current, showtime.id]);
+                    } else {
+                      setSelectedShowtimeIds([showtime.id]);
+                    }
+                  }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedShowtimeIds([showtime.id]); onEdit(showtime); }} title={isPast ? `Edit ${showtime.movie.title}` : `Select ${showtime.movie.title}; double-click to edit`} aria-pressed={!isPast ? selectedShowtimeIds.includes(showtime.id) : undefined}>
                   <strong>{showtime.movie.title}</strong>
                   <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
                   <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
