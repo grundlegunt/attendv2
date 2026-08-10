@@ -3934,6 +3934,10 @@ describe("Milestone 10 management reporting", () => {
     await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 750, feesCents: 25, taxCents: 25, totalCents: 800, createdAt: new Date("2024-01-15T12:00:00.000Z") } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", label: "Refunded reporting fixture", status: "REFUNDED", subtotalCents: 275, taxCents: 25, serviceChargeCents: 0, totalCents: 300, closedAt: new Date("2024-01-15T16:00:00.000Z") } });
 
+    const segment = await request(app.getHttpServer()).get(`/api/v1/reports/customer-recency?inactiveSince=${encodeURIComponent(new Date(Date.now() + 86_400_000).toISOString())}&limit=5`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    expect(segment.body.total).toBeGreaterThan(0);
+    expect(segment.body.preview[0]).toEqual(expect.objectContaining({ id: expect.any(String), name: expect.any(String), email: expect.any(String), lastPurchaseAt: expect.any(String), lastOrderNumber: expect.any(String), lastOrderTotalCents: expect.any(Number) }));
+
     const response = await request(app.getHttpServer()).get(`/api/v1/reports/revenue?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(response.body.totals).toMatchObject({ grossRevenueCents: 6366, refundedCents: 1100, ticketRefundedCents: 800, fnbRefundedCents: 300, ticketRevenueCents: 3500, ticketFeesCents: 300, ticketTaxCents: 266, ticketCollectedCents: 4066, fnbRevenueCents: 1200, combinedRevenueCents: 5266, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
     expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, ticketRevenueCents: 3500, ticketsSold: 2, fnbRevenueCents: 1200 }]);

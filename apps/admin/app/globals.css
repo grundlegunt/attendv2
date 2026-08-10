@@ -420,6 +420,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .location-settings > button { justify-self: start; }
 .promotion-form { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); align-items: end; gap: 1rem; margin: 1.5rem 0 2rem; }
 .promotion-form button { min-height: 46px; }
+.segment-preview { margin: 0 0 2rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: 14px; }
+.segment-preview .report-range { justify-content: flex-start; margin: 1rem 0; }
 .promotion-list { display: grid; border-top: 1px solid var(--line); }
 .promotion-list article { display: grid; grid-template-columns: minmax(180px, 1fr) 100px minmax(220px, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--line); }
 .promotion-list article > div { display: grid; gap: .2rem; }
