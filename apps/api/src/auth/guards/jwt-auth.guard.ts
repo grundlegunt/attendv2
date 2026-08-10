@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Request } from "express";
 import { InvalidTokenError, verifyAccessToken } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
+import { prisma } from "@cinema/database";
 import { AppError } from "../../common/app-error";
 import {
   assertTrustedCustomerOrigin,
@@ -16,7 +17,7 @@ import {
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
     const header = request.headers.authorization;
     const bearerToken = header?.startsWith("Bearer ") ? header.slice("Bearer ".length) : undefined;
@@ -32,6 +33,15 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const actor = verifyAccessToken(token, env.JWT_ACCESS_SECRET);
       if (cookieToken && actor.actorType !== "CUSTOMER") throw AppError.unauthenticated();
+      if (actor.actorType === "EMPLOYEE") {
+        const employee = await prisma.employee.findUnique({
+          where: { id: actor.sub },
+          select: { active: true, location: { select: { active: true, organization: { select: { active: true } } } } },
+        });
+        if (!employee?.active || !employee.location.active || !employee.location.organization.active) {
+          throw AppError.unauthenticated("This cinema account is currently inactive.");
+        }
+      }
       request.actor = actor;
     } catch (err) {
       if (err instanceof InvalidTokenError) {

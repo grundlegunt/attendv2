@@ -20,6 +20,7 @@ Verified directly against `apps/api/src/platform/platform.service.ts` and `apps/
 - **Branding** — sets each client's customer-facing and admin-facing color palette and logo, applied live to that client's `customer-web`/`admin` instances.
 - **Content Studio** — a real draft → publish workflow (`contentDraft`/`contentPublished`/`contentPublishedAt` on `Location`) for editing the About, Afterglow, Dining & Bar, and Private Events page copy, without a code deploy.
 - **Create the client's first staff login** — `POST .../cinema-manager` creates the first cinema-admin employee account for a newly onboarded location, so the client can actually get into their own `apps/admin` after Attend Master sets them up. (This closes part of what used to be a real onboarding gap — a client previously had no way to ever log into their own admin app at all.)
+- **Suspend or reactivate a client** — an organization-level status pauses customer discovery and all cinema-staff access across every location without overwriting the individual locations' active/inactive settings. Suspension revokes staff refresh sessions and is enforced against existing access tokens.
 - **Audit trail** — every platform action (login, org created/updated, location updated, content draft/publish) is written as an `actorType: "PLATFORM"` audit event, tenant-isolation-scoped correctly (`updateLocation`/`updateOrganization` both verify the location actually belongs to the given `organizationId` before touching it — matches the existing cross-tenant isolation discipline from `docs/SECURITY.md` §2.2).
 
 This is real, working infrastructure, not a stub — the tenant-isolation and audit discipline already established elsewhere in the codebase carried over correctly.
@@ -37,7 +38,6 @@ Checked against the actual code, not assumed. Ranked by how much each one blocks
 - **No platform-user management.** `PlatformUser` has no create/list/manage endpoints at all — only `/auth/login` exists. Whoever is already a row in that table can use Attend Master; there's no way to invite a co-worker, and no roles (every platform user has identical, full access to every client — no read-only or scoped access exists). If Attend ever has more than one person running the company side, this needs to exist.
 - **No password reset for platform users**, same gap already flagged for cinema `Employee` accounts in `docs/ADMIN_APP_STRUCTURE.md` — worth fixing in both places together rather than twice.
 - **No audit log viewer inside Attend Master.** The audit trail is being written correctly (see above) but there's no route or screen to read it back. Right now that data is only inspectable via direct database access.
-- **No way to suspend or offboard an entire client organization.** `Location.active` can be toggled per-location, but `updateOrganization` has no equivalent — there's no single action to pause a client across all of their locations (e.g., for a lapsed or terminated relationship).
 
 ### Worth deciding on, not urgent
 
