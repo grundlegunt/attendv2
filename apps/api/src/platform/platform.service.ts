@@ -2,13 +2,20 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, PlatformUserRole, Prisma, prisma } from "@cinema/database";
 import { DEFAULT_ROLE_PERMISSIONS, hashPassword, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingDefaults, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
+import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, customerBrandingSchema, PlatformLoginRequest } from "@cinema/shared";
+import { z } from "zod";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
 import type { ConnectAccountState, ConnectOnboardingProvider } from "@cinema/payments";
 import { CONNECT_ONBOARDING_PROVIDER } from "./connect-onboarding.module";
 import { ReportingService } from "../reporting/reporting.service";
 import { permissionsForPlatformRole } from "./platform-permissions";
+
+const platformBrandingDraftSchema = customerBrandingSchema.omit({ name: true })
+  .merge(adminBrandingSchema)
+  .extend({ adminUi: adminUiConfigSchema })
+  .strict();
+type PlatformBrandingDraft = z.infer<typeof platformBrandingDraftSchema>;
 
 @Injectable()
 export class PlatformService {
@@ -304,6 +311,9 @@ export class PlatformService {
             mutedTextColor: location.adminMutedTextColor,
             ui: adminUiConfigSchema.safeParse(location.adminUiConfig).success ? adminUiConfigSchema.parse(location.adminUiConfig) : adminUiDefaults,
           },
+          brandingDraft: platformBrandingDraftSchema.safeParse(location.brandingDraft).success
+            ? { values: platformBrandingDraftSchema.parse(location.brandingDraft), draftedAt: location.brandingDraftedAt?.toISOString() ?? null }
+            : null,
           content: {
             draft: cinemaContentSchema.safeParse(location.contentDraft).success ? cinemaContentSchema.parse(location.contentDraft) : cinemaContentDefaults,
             published: cinemaContentSchema.safeParse(location.contentPublished).success ? cinemaContentSchema.parse(location.contentPublished) : cinemaContentDefaults,
@@ -416,6 +426,57 @@ export class PlatformService {
       } });
       const state = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, active: location.active, logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor, backgroundColor: location.customerBackgroundColor, backgroundGlowColor: location.customerBackgroundGlowColor, surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor, adminAccentColor: location.adminAccentColor, adminAccentMutedColor: location.adminAccentMutedColor, adminBackgroundColor: location.adminBackgroundColor, adminSurfaceColor: location.adminSurfaceColor, adminTextColor: location.adminTextColor, adminMutedTextColor: location.adminMutedTextColor, adminUi: location.adminUiConfig, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, timeClockEnabled: location.timeClockEnabled });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: updated.id, action: "platform.location_updated", entityType: "Location", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
+    });
+    return this.organization(input.organizationId);
+  }
+
+  async updateBrandingDraft(input: { actorId: string; organizationId: string; locationId: string; branding: PlatformBrandingDraft }) {
+    await prisma.$transaction(async (tx) => {
+      const location = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
+      if (!location) throw AppError.notFound("Cinema location not found.");
+      const previous = platformBrandingDraftSchema.safeParse(location.brandingDraft);
+      const draftedAt = new Date();
+      await tx.location.update({ where: { id: location.id }, data: { brandingDraft: input.branding as Prisma.InputJsonValue, brandingDraftedAt: draftedAt } });
+      await this.audit.record({
+        actorType: "PLATFORM", actorId: input.actorId, locationId: location.id,
+        action: "platform.branding_draft_updated", entityType: "Location", entityId: location.id,
+        beforeState: previous.success ? previous.data : undefined,
+        afterState: { ...input.branding, draftedAt: draftedAt.toISOString() },
+      }, tx);
+    });
+    return this.organization(input.organizationId);
+  }
+
+  async publishBranding(input: { actorId: string; organizationId: string; locationId: string }) {
+    await prisma.$transaction(async (tx) => {
+      const location = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
+      if (!location) throw AppError.notFound("Cinema location not found.");
+      const parsed = platformBrandingDraftSchema.safeParse(location.brandingDraft);
+      if (!parsed.success) throw AppError.conflict("Save a branding draft before publishing.");
+      const branding = parsed.data;
+      const previous = {
+        logoUrl: location.customerLogoUrl, accentColor: location.customerAccentColor, accentMutedColor: location.customerAccentMutedColor,
+        backgroundColor: location.customerBackgroundColor, backgroundGlowColor: location.customerBackgroundGlowColor,
+        surfaceColor: location.customerSurfaceColor, textColor: location.customerTextColor, mutedTextColor: location.customerMutedTextColor,
+        adminAccentColor: location.adminAccentColor, adminAccentMutedColor: location.adminAccentMutedColor,
+        adminBackgroundColor: location.adminBackgroundColor, adminSurfaceColor: location.adminSurfaceColor,
+        adminTextColor: location.adminTextColor, adminMutedTextColor: location.adminMutedTextColor,
+        adminUi: adminUiConfigSchema.safeParse(location.adminUiConfig).success ? adminUiConfigSchema.parse(location.adminUiConfig) : adminUiDefaults,
+      };
+      await tx.location.update({ where: { id: location.id }, data: {
+        customerLogoUrl: branding.logoUrl, customerAccentColor: branding.accentColor, customerAccentMutedColor: branding.accentMutedColor,
+        customerBackgroundColor: branding.backgroundColor, customerBackgroundGlowColor: branding.backgroundGlowColor,
+        customerSurfaceColor: branding.surfaceColor, customerTextColor: branding.textColor, customerMutedTextColor: branding.mutedTextColor,
+        adminAccentColor: branding.adminAccentColor, adminAccentMutedColor: branding.adminAccentMutedColor,
+        adminBackgroundColor: branding.adminBackgroundColor, adminSurfaceColor: branding.adminSurfaceColor,
+        adminTextColor: branding.adminTextColor, adminMutedTextColor: branding.adminMutedTextColor,
+        adminUiConfig: branding.adminUi as Prisma.InputJsonValue, brandingDraft: Prisma.DbNull, brandingDraftedAt: null,
+      } });
+      await this.audit.record({
+        actorType: "PLATFORM", actorId: input.actorId, locationId: location.id,
+        action: "platform.branding_published", entityType: "Location", entityId: location.id,
+        beforeState: previous, afterState: branding,
+      }, tx);
     });
     return this.organization(input.organizationId);
   }

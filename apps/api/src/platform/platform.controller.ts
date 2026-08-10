@@ -51,6 +51,11 @@ const locationUpdateSchema = z.object({
   adminUi: adminUiConfigSchema.optional(),
 }).merge(customerBrandingSchema).merge(adminBrandingSchema).strict();
 
+const brandingDraftSchema = customerBrandingSchema.omit({ name: true })
+  .merge(adminBrandingSchema)
+  .extend({ adminUi: adminUiConfigSchema })
+  .strict();
+
 const cinemaManagerCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(254),
@@ -176,6 +181,20 @@ export class PlatformController {
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   updateLocation(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(locationUpdateSchema)) body: unknown) {
     return this.platform.updateLocation({ actorId: actor.sub, organizationId, locationId, ...locationUpdateSchema.parse(body) });
+  }
+
+  @Patch("organizations/:organizationId/locations/:locationId/branding/draft")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  updateBrandingDraft(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(brandingDraftSchema)) body: unknown) {
+    return this.platform.updateBrandingDraft({ actorId: actor.sub, organizationId, locationId, branding: brandingDraftSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/locations/:locationId/branding/publish")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  publishBranding(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string) {
+    return this.platform.publishBranding({ actorId: actor.sub, organizationId, locationId });
   }
 
   @Post("organizations/:organizationId/locations/:locationId/cinema-manager")
