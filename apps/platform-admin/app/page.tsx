@@ -169,6 +169,7 @@ export default function PlatformDashboard() {
         <Link href="/clients">Clients</Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
+        <Link href="/content">Content</Link>
         <Link href="/team">Team</Link>
         <Link href="/audit">Audit Log</Link>
       </nav>
