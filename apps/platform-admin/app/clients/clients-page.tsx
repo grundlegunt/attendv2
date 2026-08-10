@@ -241,6 +241,12 @@ export default function AttendMaster() {
   useEffect(() => {
     if (!session) return;
     const params = new URLSearchParams(window.location.search);
+    if (params.get("create") === "1") {
+      window.history.replaceState({}, "", window.location.pathname);
+      setSelectedOrganizationId(null);
+      beginOrganizationCreate();
+      return;
+    }
     const organizationId = params.get("organizationId");
     const connectAction = params.get("connect");
     if (!organizationId) return;
@@ -688,6 +694,7 @@ export default function AttendMaster() {
       <nav className="platform-nav" aria-label="Attend Master">
         <Link href="/">Dashboard</Link>
         <Link className="active" href="/clients">Clients</Link>
+        <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
       </nav>
       {error && <div className="error">{error}</div>}
