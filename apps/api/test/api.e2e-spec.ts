@@ -1440,6 +1440,11 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   }
 
   async function createCheckout(holderKey: string, holdToken: string) {
+    const { prisma } = await import("@cinema/database");
+    const showtime = await prisma.showtime.findUniqueOrThrow({
+      where: { id: showtimeId },
+      select: { priceTier: { select: { ticketPriceMinor: true, feeMinor: true } } },
+    });
     const config = await request(app.getHttpServer()).get(
       `/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`,
     );
@@ -1455,8 +1460,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
         diningAuthorizationRequested: true,
       });
     expect(result.status).toBe(201);
-    expect(result.body.subtotalCents).toBe(1700);
-    expect(result.body.feesCents).toBe(200);
+    expect(result.body.subtotalCents).toBe(showtime.priceTier.ticketPriceMinor);
+    expect(result.body.feesCents).toBe(showtime.priceTier.feeMinor);
     expect(result.body.taxCents).toBe(0);
     return result.body as {
       orderId: string;
