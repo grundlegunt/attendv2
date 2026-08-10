@@ -103,7 +103,7 @@ export default function ShowtimesPage() {
 
   return (
     <main className="cinema-shell route-page">
-      <section className="program-heading">
+      <section className="route-heading">
         <span className="eyebrow">{copy.eyebrow}</span>
         <h1>{copy.title}</h1>
         {program && <p>{copy.intro}</p>}
