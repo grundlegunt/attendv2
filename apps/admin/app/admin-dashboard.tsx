@@ -19,7 +19,7 @@ type Bootstrap = {
 };
 
 type RevenueReport = {
-  totals: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
+  totals: { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
   movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; startsAt: string; ticketsSold: number }>;
 };
@@ -159,7 +159,7 @@ export function AdminDashboard() {
     {errors.map((error) => <div className="error-banner" role="alert" key={error}>{error}</div>)}
     <section className="dashboard-metrics" aria-label="Today at a glance">
       {canCinema && <Link href="/scheduling" className="dashboard-metric"><span>Today’s schedule</span><strong>{loading && !bootstrap ? "—" : todaysShowtimes.length}</strong><small>{todaysShowtimes.filter((showtime) => showtime.onSale).length} on sale</small></Link>}
-      {canFinancial && <Link href="/reports" className="dashboard-metric"><span>Ticket revenue</span><strong>{revenue ? money(revenue.totals.ticketRevenueCents) : "—"}</strong><small>{revenue?.totals.ticketsSold ?? 0} tickets sold today</small></Link>}
+      {canFinancial && <Link href="/reports" className="dashboard-metric"><span>Ticket face value</span><strong>{revenue ? money(revenue.totals.ticketRevenueCents) : "—"}</strong><small>{revenue ? `${money(revenue.totals.ticketCollectedCents)} collected · ${revenue.totals.ticketsSold} tickets` : "0 tickets sold today"}</small></Link>}
       {canFinancial && <Link href="/reports" className="dashboard-metric"><span>F&amp;B revenue</span><strong>{revenue ? money(revenue.totals.fnbRevenueCents) : "—"}</strong><small>{revenue ? `${revenue.totals.fnbOrders} orders · ${money(revenue.totals.averageFnbSpendPerOrderCents)} average` : "Average spend unavailable"}</small></Link>}
       {canCinema && <Link href="/film-series" className="dashboard-metric"><span>Film series</span><strong>{bootstrap?.location.organization.filmSeries.filter((series) => series.active).length ?? "—"}</strong><small>{bootstrap?.location.organization.movies.length ?? 0} movies in library</small></Link>}
     </section>
