@@ -4,16 +4,22 @@
 
 Filmbot (a named competitor — see `docs/PRODUCT_SPEC.md` §1.1) ran a documented A/B win-back campaign for Nitehawk Cinema (Feb–Mar 2024): a 2-for-1 promo code emailed to 1,500 customers who hadn't attended in 12+ months, measured against a 1,500-customer control group that received nothing. Results: the targeted group returned at 2x the rate of the control group, and spent 75% more in total revenue (ticket + food & beverage combined) over the test period. 60% of code users said they wouldn't have bought without it — i.e., mostly incremental revenue, not cannibalized sales.
 
-This is good evidence that targeted win-back promotions are a real, high-leverage lever for a dine-in independent cinema. Attend's current Promotions feature is far short of what this campaign required.
+This is good evidence that targeted win-back promotions are a real, high-leverage lever for a dine-in independent cinema. Attend now has the promotion foundation needed for offers like this; segmentation, consent, campaign delivery, and attribution remain separate capabilities.
 
-## Phase 1 — Finish the existing Promotions feature
+## Phase 1 — Promotions foundation (mostly implemented)
 
-No new infrastructure needed — the schema already supports all of this, it just isn't reachable from the admin UI:
+Implemented:
 
-- Expose `PERCENTAGE` and `COMP` promotion types in the admin form. The `Promotion` model already supports `FIXED_AMOUNT`/`PERCENTAGE`/`COMP` (`PromotionType` in `packages/database/prisma/schema.prisma`), but the admin form hardcodes every new promotion to `FIXED_AMOUNT` only.
-- Expose the `startsAt`/`endsAt` expiration fields in the form — also schema-supported, not in the UI. (A 2-for-1-style offer like Filmbot's is effectively a `PERCENTAGE` or `COMP` type with a 30-day expiration.)
-- Add edit and deactivate for a promotion. There is currently no `PATCH`/`DELETE` endpoint or UI control at all — a promotion can only be created, never turned off or changed.
-- Add redemption reporting: aggregate ticket count and revenue by `promotionId` in `ReportingService`. The link already exists (`TicketOrder.promotionId`), it's just never queried or surfaced. Show it on the reports page — how many times a code was used and how much revenue it drove, mirroring the ticket-revenue/refund reporting that already exists.
+- `FIXED_AMOUNT`, `PERCENTAGE`, and `COMP` promotion creation in Admin.
+- Optional start/end windows, minimum ticket subtotal, and maximum-redemption controls.
+- API support for updating every promotion field, plus Admin activation/deactivation controls.
+- Per-promotion redemption count, discounted-ticket count, and total discount reporting in Admin.
+- Enforcement across customer checkout and box-office quoting, with audited promotion changes.
+
+Remaining:
+
+- Expose full promotion editing in Admin; the API supports it, but the current UI only toggles active status after creation.
+- Add gross/face-value revenue attributed to each promotion to the reports view. Current promotion metrics show usage and discount cost, not the revenue attached to redeemed orders.
 
 ## Phase 2 — Customer segmentation
 
@@ -36,5 +42,5 @@ Lowest priority, treat as optional: a way to hold out a control group when runni
 ## Guardrails
 
 - No changes to ticketing, checkout, or payment architecture.
-- Phase 1 is pure UI + reporting work on top of what already exists and can start immediately.
-- Phases 2–4 should not begin until Phase 1 is done and the Phase 3 provider/consent questions are actually answered — don't infer an email provider or a consent model on your own.
+- The remaining Phase 1 work is UI + reporting on top of existing promotion and order data; it does not require a parallel discount system.
+- Phases 2–4 should not begin until the Phase 3 provider/consent questions are actually answered — don't infer an email provider or a consent model on your own.
