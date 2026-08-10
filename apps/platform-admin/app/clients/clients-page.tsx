@@ -269,7 +269,14 @@ export default function AttendMaster() {
       undefined,
       session.accessToken,
     )
-      .then(setOrganization)
+      .then((nextOrganization) => {
+        setOrganization(nextOrganization);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("section") !== "content") return;
+        const locationId = params.get("locationId");
+        const location = nextOrganization.locations.find((item) => item.id === locationId) ?? nextOrganization.locations[0];
+        if (location) setContentDraft({ id: location.id, values: structuredClone(location.content.draft) });
+      })
       .catch((reason: unknown) =>
         setError(
           reason instanceof Error
@@ -696,6 +703,7 @@ export default function AttendMaster() {
         <Link className="active" href="/clients">Clients</Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
+        <Link href="/content">Content</Link>
         <Link href="/team">Team</Link>
         <Link href="/audit">Audit Log</Link>
       </nav>
