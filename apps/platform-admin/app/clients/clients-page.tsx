@@ -58,6 +58,7 @@ interface OrganizationOverview {
   name: string;
   legalName: string | null;
   timezone: string;
+  active: boolean;
   payments: { connected: boolean; onboardingStatus: string };
   locations: LocationOverview[];
 }
@@ -79,6 +80,7 @@ interface OrganizationDetail {
   name: string;
   legalName: string | null;
   timezone: string;
+  active: boolean;
   ticketFeeMinor: number;
   createdAt: string;
   payments: { connected: boolean; onboardingStatus: string };
@@ -427,6 +429,30 @@ export default function AttendMaster() {
           ? reason.message
           : "Could not save organization.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setOrganizationActive(active: boolean) {
+    if (!session || !organization) return;
+    const action = active ? "reactivate" : "suspend";
+    if (!window.confirm(active
+      ? `Reactivate ${organization.name}? Cinema staff and customers will regain access to active locations.`
+      : `Suspend ${organization.name}? Cinema staff sessions will be revoked and customer access will stop across every location.`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}`,
+        { method: "PATCH", body: JSON.stringify({ active }) },
+        session.accessToken,
+      );
+      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Could not ${action} organization.`);
     } finally {
       setSaving(false);
     }
@@ -829,6 +855,9 @@ export default function AttendMaster() {
                 <div>
                   <p className="eyebrow">ORGANIZATION</p>
                   <h2>{organization.name}</h2>
+                  <span className={organization.active ? "status good" : "status warning"}>
+                    {organization.active ? "Active client" : "Suspended client"}
+                  </span>
                   <p className="muted">
                     {organization.legalName ?? "Legal name not configured"} ·
                     Client since{" "}
@@ -859,6 +888,13 @@ export default function AttendMaster() {
                   >
                     Edit organization
                   </button>
+                  {session.user.role !== "VIEWER" && <button
+                    className={organization.active ? "quiet" : "edit-button"}
+                    disabled={saving}
+                    onClick={() => void setOrganizationActive(!organization.active)}
+                  >
+                    {organization.active ? "Suspend client" : "Reactivate client"}
+                  </button>}
                 </div>
               </div>
               {organizationDraft && (

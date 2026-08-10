@@ -1032,8 +1032,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async publicBranding(locationId?: string) {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
     return {
       locationId: location.id,
@@ -1051,8 +1051,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async publicAdminBranding(locationId?: string) {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
     return {
       locationId: location.id,
@@ -1069,8 +1069,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async publicContent(locationId?: string) {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
     const parsed = cinemaContentSchema.safeParse(location.contentPublished);
     return { locationId: location.id, content: parsed.success ? parsed.data : cinemaContentDefaults, publishedAt: location.contentPublishedAt?.toISOString() ?? null };
@@ -1078,8 +1078,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async nowPlaying(locationId?: string) {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
 
     // Round trip fix: a showtime that already started must remain visible
@@ -1160,8 +1160,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async publicDiningMenu(locationId?: string): Promise<PublicDiningMenuResponse> {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
 
     const [categories, movies] = await Promise.all([
@@ -1222,8 +1222,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async publicMovieDetail(id: string, locationId?: string) {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
     const movie = await prisma.movie.findFirst({
       where: { id, organizationId: location.organizationId, active: true },
@@ -1277,8 +1277,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
   async publicFilmSeries(locationId?: string) {
     const now = new Date();
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
 
     const series = await prisma.filmSeries.findMany({

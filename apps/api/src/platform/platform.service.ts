@@ -44,6 +44,7 @@ export class PlatformService {
         name: organization.name,
         legalName: organization.legalName,
         timezone: organization.timezone,
+        active: organization.active,
         payments: {
           connected: Boolean(organization.stripeConnectedAccountId),
           onboardingStatus: organization.connectOnboardingStatus,
@@ -261,6 +262,7 @@ export class PlatformService {
       name: organization.name,
       legalName: organization.legalName,
       timezone: organization.timezone,
+      active: organization.active,
       ticketFeeMinor: organization.ticketFeeMinor,
       createdAt: organization.createdAt.toISOString(),
       payments: {
@@ -321,15 +323,21 @@ export class PlatformService {
     };
   }
 
-  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; ticketFeeMinor?: number }) {
+  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; ticketFeeMinor?: number; active?: boolean }) {
     await prisma.$transaction(async (tx) => {
       const before = await tx.organization.findUnique({ where: { id: input.organizationId } });
       if (!before) throw AppError.notFound("Cinema organization not found.");
       const updated = await tx.organization.update({ where: { id: input.organizationId }, data: {
-        name: input.name, legalName: input.legalName, timezone: input.timezone, ticketFeeMinor: input.ticketFeeMinor,
+        name: input.name, legalName: input.legalName, timezone: input.timezone, ticketFeeMinor: input.ticketFeeMinor, active: input.active,
       } });
+      if (input.active === false && before.active) {
+        await tx.staffAuthAccount.updateMany({
+          where: { employee: { location: { organizationId: input.organizationId } } },
+          data: { refreshTokenVersion: { increment: 1 } },
+        });
+      }
       if (input.ticketFeeMinor !== undefined) await tx.priceTier.updateMany({ where: { organizationId: input.organizationId }, data: { feeMinor: input.ticketFeeMinor } });
-      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, onboardingStatus: organization.connectOnboardingStatus, ticketFeeMinor: organization.ticketFeeMinor });
+      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, active: organization.active, onboardingStatus: organization.connectOnboardingStatus, ticketFeeMinor: organization.ticketFeeMinor });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.organization_updated", entityType: "Organization", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
     });
     return this.organization(input.organizationId);

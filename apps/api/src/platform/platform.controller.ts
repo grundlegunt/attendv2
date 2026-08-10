@@ -18,6 +18,7 @@ const organizationUpdateSchema = z.object({
   legalName: z.string().trim().min(1).max(200).nullable().optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
   ticketFeeMinor: z.number().int().min(0).max(100_000).optional(),
+  active: z.boolean().optional(),
 }).strict();
 
 const connectOnboardingSchema = z.object({

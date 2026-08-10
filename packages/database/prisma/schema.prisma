@@ -28,6 +28,7 @@ model Organization {
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
   ticketFeeMinor           Int                     @default(0)
+  active                   Boolean                 @default(true)
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 

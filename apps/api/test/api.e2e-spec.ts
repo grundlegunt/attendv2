@@ -550,6 +550,50 @@ describe("Attend platform authentication boundary", () => {
       .expect(200);
   });
 
+  it("suspends a client across staff and customer access without changing location status", async () => {
+    const overview = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200);
+    const meridian = overview.body.organizations.find(
+      (organization: { name: string }) => organization.name === "Meridian Cinema Co.",
+    );
+    const organizationId = meridian.id as string;
+    const locationId = meridian.locations[0].id as string;
+    const locationWasActive = meridian.locations[0].active as boolean;
+
+    const suspended = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ active: false })
+      .expect(200);
+    expect(suspended.body.active).toBe(false);
+    expect(suspended.body.locations[0].active).toBe(locationWasActive);
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/cinema/branding?locationId=${locationId}`)
+      .expect(404);
+    await request(app.getHttpServer())
+      .get("/api/v1/auth/staff/me")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD })
+      .expect(401);
+
+    const reactivated = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ active: true })
+      .expect(200);
+    expect(reactivated.body.active).toBe(true);
+    expect(reactivated.body.locations[0].active).toBe(locationWasActive);
+    const loginAgain = await loginOwner();
+    ownerAccessToken = loginAgain.body.accessToken;
+    ownerRefreshToken = loginAgain.body.refreshToken;
+  });
+
   it("creates hosted Stripe onboarding and derives payment status from the connected account", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")
