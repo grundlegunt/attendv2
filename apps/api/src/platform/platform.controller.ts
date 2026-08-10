@@ -197,6 +197,13 @@ export class PlatformController {
     return this.platform.publishBranding({ actorId: actor.sub, organizationId, locationId });
   }
 
+  @Post("organizations/:organizationId/locations/:locationId/support-session")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  createSupportSession(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string) {
+    return this.platform.createSupportSession({ actorId: actor.sub, organizationId, locationId });
+  }
+
   @Post("organizations/:organizationId/locations/:locationId/cinema-manager")
   @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)

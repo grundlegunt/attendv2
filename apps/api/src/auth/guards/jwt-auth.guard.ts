@@ -33,6 +33,9 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const actor = verifyAccessToken(token, env.JWT_ACCESS_SECRET);
       if (cookieToken && actor.actorType !== "CUSTOMER") throw AppError.unauthenticated();
+      if (actor.supportSession && isUnsafeMethod(request.method)) {
+        throw AppError.forbidden("Attend support sessions are read-only.");
+      }
       if (actor.actorType === "EMPLOYEE") {
         if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
         const location = await prisma.location.findUnique({

@@ -4,7 +4,7 @@ import { adminBrandingDefaults, adminUiDefaults, type AdminUiConfig, type Authen
 import { FormEvent, createContext, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
-type Session = { employee: AuthenticatedEmployee; accessToken: string };
+type Session = { employee: AuthenticatedEmployee; accessToken: string; supportSession?: boolean };
 type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type AdminSessionValue = Session & { signOut: () => void };
@@ -32,14 +32,27 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = window.sessionStorage.getItem(STORAGE_KEY);
-      if (stored) setSession(JSON.parse(stored) as Session);
-    } catch {
-      window.sessionStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setRestored(true);
-    }
+    const restore = async () => {
+      try {
+        const supportToken = new URLSearchParams(window.location.hash.slice(1)).get("support");
+        if (supportToken) {
+          window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
+          const employee = await apiFetch<AuthenticatedEmployee & { supportSession: true }>("/auth/staff/me", { accessToken: supportToken });
+          const next = { employee, accessToken: supportToken, supportSession: true };
+          window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+          setSession(next);
+          return;
+        }
+        const stored = window.sessionStorage.getItem(STORAGE_KEY);
+        if (stored) setSession(JSON.parse(stored) as Session);
+      } catch {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        setError("The Attend support session is invalid or expired.");
+      } finally {
+        setRestored(true);
+      }
+    };
+    void restore();
   }, []);
 
   useEffect(() => {
@@ -104,5 +117,5 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     <label>Confirm new password<input type="password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
     <button className="primary">Change password</button><button type="button" className="secondary" onClick={value.signOut}>Sign out</button>
   </form></main></div>;
-  return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className="admin-theme-root" style={theme}>{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
+  return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className={`admin-theme-root ${value.supportSession ? "support-read-only" : ""}`} style={theme}>{value.supportSession && <div className="support-session-banner" role="status"><strong>Attend Support · Read only</strong><span>This temporary session cannot change cinema data.</span><button type="button" className="support-exit" onClick={value.signOut}>Exit support view</button></div>}{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
 }

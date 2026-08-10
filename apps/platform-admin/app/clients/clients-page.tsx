@@ -588,6 +588,32 @@ export default function AttendMaster() {
     }
   }
 
+  async function openSupportSession(location: LocationDetail) {
+    if (!session || !organization) return;
+    if (!window.confirm(`Open ${location.name} in a 15-minute read-only support session? The session is visibly bannered and audited.`)) return;
+    const supportWindow = window.open("about:blank", "_blank");
+    if (!supportWindow) {
+      setError("Your browser blocked the support tab. Allow pop-ups for Attend Master and try again.");
+      return;
+    }
+    supportWindow.opener = null;
+    setSaving(true);
+    setError(null);
+    try {
+      const support = await request<{ accessToken: string }>(
+        `/platform/organizations/${organization.id}/locations/${location.id}/support-session`,
+        { method: "POST" },
+        session.accessToken,
+      );
+      supportWindow.location.href = `${CINEMA_ADMIN_URL}/#support=${encodeURIComponent(support.accessToken)}`;
+    } catch (reason) {
+      supportWindow.close();
+      setError(reason instanceof Error ? reason.message : "Could not open read-only support.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveContentDraft(event: FormEvent) {
     event.preventDefault();
     if (!session || !organization || !contentDraft) return;
@@ -1085,6 +1111,13 @@ export default function AttendMaster() {
                       >
                         Open cinema admin ↗
                       </a>
+                      {session.user.role !== "VIEWER" && <button
+                        className="quiet"
+                        disabled={saving || !organization.active || !location.active}
+                        onClick={() => void openSupportSession(location)}
+                      >
+                        Open read-only support ↗
+                      </button>}
                       <a
                         href={`${CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(location.id)}`}
                         target="_blank"

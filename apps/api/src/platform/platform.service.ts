@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, PlatformUserRole, Prisma, prisma } from "@cinema/database";
-import { DEFAULT_ROLE_PERMISSIONS, hashPassword, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
+import { DEFAULT_ROLE_PERMISSIONS, hashPassword, Permission, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, customerBrandingSchema, PlatformLoginRequest } from "@cinema/shared";
 import { z } from "zod";
@@ -479,6 +479,26 @@ export class PlatformService {
       }, tx);
     });
     return this.organization(input.organizationId);
+  }
+
+  async createSupportSession(input: { actorId: string; organizationId: string; locationId: string }) {
+    const location = await prisma.location.findFirst({
+      where: { id: input.locationId, organizationId: input.organizationId, active: true, organization: { active: true } },
+      include: { organization: { select: { name: true } } },
+    });
+    if (!location) throw AppError.notFound("Active cinema location not found.");
+    const env = loadEnv();
+    const accessToken = signTokenPair(
+      { sub: input.actorId, actorType: "EMPLOYEE", locationId: location.id, permissions: Object.values(Permission), supportSession: true },
+      { sub: input.actorId, actorType: "EMPLOYEE", tokenVersion: 0 },
+      { accessSecret: env.JWT_ACCESS_SECRET, refreshSecret: env.JWT_REFRESH_SECRET, accessTtlSeconds: 15 * 60, refreshTtlSeconds: 15 * 60 },
+    ).accessToken;
+    await this.audit.record({
+      actorType: "PLATFORM", actorId: input.actorId, locationId: location.id,
+      action: "platform.support_session_created", entityType: "Location", entityId: location.id,
+      afterState: { organizationId: input.organizationId, organizationName: location.organization.name, locationName: location.name, readOnly: true, expiresInSeconds: 900 },
+    });
+    return { accessToken, expiresInSeconds: 900, location: { id: location.id, name: location.name } };
   }
 
   async createCinemaManager(input: { actorId: string; organizationId: string; locationId: string; name: string; email: string; password: string }) {

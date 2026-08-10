@@ -51,4 +51,13 @@ describe("session token issuance", () => {
 
     expect(() => verifyAccessToken(refreshToken, options.accessSecret)).toThrow(InvalidTokenError);
   });
+
+  it("preserves the explicit read-only support marker", () => {
+    const { accessToken } = signTokenPair(
+      { sub: "platform-user-123", actorType: "EMPLOYEE", locationId: "location-123", permissions: [], supportSession: true },
+      { sub: "platform-user-123", actorType: "EMPLOYEE", tokenVersion: 0 },
+      options,
+    );
+    expect(verifyAccessToken(accessToken, options.accessSecret).supportSession).toBe(true);
+  });
 });

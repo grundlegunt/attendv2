@@ -21,6 +21,7 @@ export interface AccessTokenPayload {
   actorType: ActorType;
   locationId?: string; // present for employee tokens
   permissions: string[]; // flattened Permission keys, empty for customers
+  supportSession?: boolean;
 }
 
 export interface RefreshTokenPayload {
