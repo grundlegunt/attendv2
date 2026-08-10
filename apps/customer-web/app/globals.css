@@ -102,7 +102,7 @@
   padding: 64px 0 28px;
 }
 .program-heading h1 {
-  font-size: clamp(3rem, 8vw, 6.5rem);
+  font-size: var(--font-size-page-title, clamp(3rem, 8vw, 6.5rem));
   font-weight: 400;
   line-height: 0.95;
 }
@@ -117,12 +117,16 @@
 }
 .route-heading h1 {
   margin: 8px 0 14px;
-  font: clamp(3rem, 8vw, 6.5rem) var(--font-family-display);
+  font: var(--font-size-page-title, clamp(3rem, 8vw, 6.5rem)) var(--font-family-display);
   line-height: 0.95;
 }
 .route-heading p,
 .secondary-copy {
   color: var(--color-text-secondary);
+}
+
+.cinema-shell {
+  font-size: var(--font-size-body, 1rem);
 }
 .content-panel {
   padding: clamp(24px, 4vw, 42px);

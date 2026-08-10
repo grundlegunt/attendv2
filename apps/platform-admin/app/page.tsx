@@ -1596,11 +1596,54 @@ export default function AttendMaster() {
                             <option value="SERIF">Serif</option>
                           </select>
                         </label>
+                        <label>
+                          Heading size
+                          <select
+                            value={contentDraft.values.typography.headingSize}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  typography: {
+                                    ...contentDraft.values.typography,
+                                    headingSize: event.target.value as CinemaContent["typography"]["headingSize"],
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            <option value="COMPACT">Compact</option>
+                            <option value="STANDARD">Standard</option>
+                            <option value="LARGE">Large</option>
+                          </select>
+                        </label>
+                        <label>
+                          Body size
+                          <select
+                            value={contentDraft.values.typography.bodySize}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  typography: {
+                                    ...contentDraft.values.typography,
+                                    bodySize: event.target.value as CinemaContent["typography"]["bodySize"],
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            <option value="COMPACT">Compact</option>
+                            <option value="STANDARD">Standard</option>
+                            <option value="LARGE">Large</option>
+                          </select>
+                        </label>
                       </div>
                       <p className="form-note">
-                        These two font choices now apply consistently across
-                        every customer page, including Showtimes and Coming
-                        Soon.
+                        Font families and sizes apply consistently across every
+                        customer page, including Showtimes and Coming Soon.
                       </p>
                       <h4>Showtimes page</h4>
                       <div className="form-grid">

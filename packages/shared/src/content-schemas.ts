@@ -18,6 +18,8 @@ export const cinemaContentSchema = z
       .object({
         headingFont: z.enum(["EDITORIAL", "CLASSIC", "MODERN"]),
         bodyFont: z.enum(["SANS", "HUMANIST", "SERIF"]),
+        headingSize: z.enum(["COMPACT", "STANDARD", "LARGE"]).default("STANDARD"),
+        bodySize: z.enum(["COMPACT", "STANDARD", "LARGE"]).default("STANDARD"),
       })
       .strict(),
     showtimes: z
@@ -169,7 +171,12 @@ export type CinemaContent = z.infer<typeof cinemaContentSchema>;
 
 export const cinemaContentDefaults: CinemaContent = {
   version: 1,
-  typography: { headingFont: "EDITORIAL", bodyFont: "SANS" },
+  typography: {
+    headingFont: "EDITORIAL",
+    bodyFont: "SANS",
+    headingSize: "STANDARD",
+    bodySize: "STANDARD",
+  },
   showtimes: {
     eyebrow: "NOW PLAYING",
     title: "Showtimes",

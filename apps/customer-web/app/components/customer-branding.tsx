@@ -44,8 +44,16 @@ export function CustomerBrandingProvider({ children }: { children: ReactNode }) 
     Object.entries(tokens).forEach(([property, value]) => root.style.setProperty(property, value));
     const headingFonts = { EDITORIAL: 'Georgia, "Times New Roman", serif', CLASSIC: 'Baskerville, Georgia, serif', MODERN: 'Arial Black, Arial, sans-serif' };
     const bodyFonts = { SANS: 'Inter, Arial, sans-serif', HUMANIST: 'Optima, Candara, sans-serif', SERIF: 'Georgia, "Times New Roman", serif' };
+    const headingSizes = {
+      COMPACT: "clamp(2.5rem, 6vw, 5rem)",
+      STANDARD: "clamp(3rem, 8vw, 6.5rem)",
+      LARGE: "clamp(3.5rem, 9vw, 7.5rem)",
+    };
+    const bodySizes = { COMPACT: "0.9rem", STANDARD: "1rem", LARGE: "1.1rem" };
     root.style.setProperty("--font-family-display", headingFonts[content.typography.headingFont]);
     root.style.setProperty("--font-family-body", bodyFonts[content.typography.bodyFont]);
+    root.style.setProperty("--font-size-page-title", headingSizes[content.typography.headingSize]);
+    root.style.setProperty("--font-size-body", bodySizes[content.typography.bodySize]);
   }, [branding, content]);
   const identity = useMemo(() => ({ name: branding?.name ?? "Cinema", logoUrl: branding?.logoUrl ?? null }), [branding]);
   return <BrandingContext.Provider value={identity}><ContentContext.Provider value={content}>{children}</ContentContext.Provider></BrandingContext.Provider>;
