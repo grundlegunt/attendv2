@@ -10,6 +10,8 @@
 
 **Scheduling and the auditorium/theater-layout builder are explicitly out of scope for this doc.** That work is already in progress separately — see `docs/PROGRAMMING_AND_SCHEDULING.md`, `docs/ADVANCED_THEATER_LAYOUT_BUILDER.md`, and the in-progress `agent/admin-calendar-scheduling` branch. Once that work has its own page, this doc's page-split proposal below should slot it in as its own route, but don't re-scope or touch it as part of this task.
 
+> Status note: this document captured an earlier audit. The routed page split and the operational gaps listed below—including location controls, refund state/history, tax and service-charge updates, shift corrections, promotion controls/reporting, employee credential and role management, audit filters/pagination/diffs, and full menu setup—have since shipped. Treat the findings as implementation history, not the current backlog.
+
 ## Proposed page split
 
 Move from one page to separate routed pages under a persistent nav (top nav or left rail — match whatever the scheduling calendar work lands on, don't introduce a second, inconsistent nav pattern). Suggested breakdown, one page per domain rather than per current file (the current files don't reflect natural domain boundaries):

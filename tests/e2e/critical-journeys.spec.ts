@@ -72,6 +72,10 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  const adminSession = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem("attend-admin-session") ?? "null"));
+  expect(adminSession).toEqual(expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String), expiresInSeconds: expect.any(Number) }));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
   await page.getByRole("button", { name: /Reports & Finance/ }).click();
