@@ -516,7 +516,7 @@ describe("Attend platform authentication boundary", () => {
     expect(refreshed.body.payments).toEqual({ connected: true, onboardingStatus: "COMPLETE" });
 
     const { prisma } = await import("@cinema/database");
-    const audit = await prisma.auditEvent.findFirst({ where: { actorType: "PLATFORM", action: "platform.connect_status_refreshed", entityId: organizationId }, orderBy: { createdAt: "desc" } });
+    const audit = await prisma.auditEvent.findFirst({ where: { actorType: "PLATFORM", action: "platform.connect_status_refreshed", entityId: organizationId }, orderBy: { occurredAt: "desc" } });
     expect(audit?.afterState).toEqual(expect.objectContaining({ onboardingStatus: "COMPLETE", chargesEnabled: true, payoutsEnabled: true }));
   });
 
