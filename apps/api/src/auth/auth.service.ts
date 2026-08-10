@@ -13,6 +13,7 @@ import {
   encryptMfaSecret,
   verifyMfaChallenge,
   verifyMfaCode,
+  Permission,
 } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import {
@@ -26,6 +27,7 @@ import {
   StaffMfaConfirmRequest,
   StaffMfaVerifyRequest,
 } from "@cinema/shared";
+import type { RequestActor } from "./types";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
 
@@ -113,6 +115,36 @@ export class AuthService {
     });
 
     return { tokens, employee: employeeToProfile(employee) };
+  }
+
+  async supportStaffMe(actor: RequestActor): Promise<AuthenticatedEmployee & { supportSession: true }> {
+    if (!actor.locationId) throw AppError.unauthenticated("Support session is missing its location.");
+    const [operator, location] = await Promise.all([
+      prisma.platformUser.findUnique({ where: { id: actor.sub } }),
+      prisma.location.findUnique({ where: { id: actor.locationId } }),
+    ]);
+    if (!operator?.active || !location) throw AppError.unauthenticated("Support session is no longer valid.");
+    return {
+      id: operator.id,
+      name: `${operator.name} (Attend Support)`,
+      email: operator.email,
+      locationId: location.id,
+      roles: [],
+      permissions: Object.values(Permission),
+      timeClockEnabled: false,
+      mustChangePassword: false,
+      mfaEnabled: false,
+      mfaSetupRequired: false,
+      adminBranding: {
+        accentColor: location.adminAccentColor,
+        accentMutedColor: location.adminAccentMutedColor,
+        backgroundColor: location.adminBackgroundColor,
+        surfaceColor: location.adminSurfaceColor,
+        textColor: location.adminTextColor,
+        mutedTextColor: location.adminMutedTextColor,
+      },
+      supportSession: true,
+    };
   }
 
   async verifyStaffMfa(input: StaffMfaVerifyRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {

@@ -715,3 +715,24 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .mfa-enrollment h2 { margin-top: 0; }
 .mfa-qr { padding: .65rem; background: #fff; line-height: 0; }
 @media (max-width: 640px) { .mfa-enrollment { grid-template-columns: 1fr; } .mfa-qr { width: fit-content; } }
+.support-session-banner {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.65rem 1rem;
+  color: #160f00;
+  background: #ffd166;
+  border-bottom: 2px solid #ffb800;
+}
+.support-session-banner button { width: auto; }
+.support-read-only .admin-app-layout button:not(.support-exit),
+.support-read-only .admin-app-layout input,
+.support-read-only .admin-app-layout select,
+.support-read-only .admin-app-layout textarea {
+  pointer-events: none;
+  opacity: 0.55;
+}

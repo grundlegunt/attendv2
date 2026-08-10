@@ -102,6 +102,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async staffMe(@CurrentActor() actor: RequestActor) {
     if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    if (actor.supportSession) return this.authService.supportStaffMe(actor);
     return this.authService.staffMe(actor.sub);
   }
 

@@ -609,6 +609,24 @@ describe("Attend platform authentication boundary", () => {
     ownerRefreshToken = loginAgain.body.refreshToken;
   });
 
+  it("issues audited, location-scoped support sessions that cannot mutate cinema data", async () => {
+    const overview = await request(app.getHttpServer()).get("/api/v1/platform/overview").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
+    const meridian = overview.body.organizations.find((organization: { name: string }) => organization.name === "Meridian Cinema Co.");
+    const support = await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${meridian.id}/locations/${meridian.locations[0].id}/support-session`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(201);
+    expect(support.body).toEqual(expect.objectContaining({ accessToken: expect.any(String), expiresInSeconds: 900 }));
+
+    const profile = await request(app.getHttpServer()).get("/api/v1/auth/staff/me").set("Authorization", `Bearer ${support.body.accessToken}`).expect(200);
+    expect(profile.body).toEqual(expect.objectContaining({ name: expect.stringContaining("Attend Support"), locationId: meridian.locations[0].id, supportSession: true }));
+    await request(app.getHttpServer()).get("/api/v1/management/settings").set("Authorization", `Bearer ${support.body.accessToken}`).expect(200);
+    await request(app.getHttpServer()).patch("/api/v1/management/settings/location").set("Authorization", `Bearer ${support.body.accessToken}`).send({ name: "Forbidden support edit" }).expect(403);
+
+    const audit = await request(app.getHttpServer()).get("/api/v1/platform/audit-events?action=platform.support_session_created").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
+    expect(audit.body.events).toEqual(expect.arrayContaining([expect.objectContaining({ action: "platform.support_session_created", entityId: meridian.locations[0].id })]));
+  });
+
   it("creates hosted Stripe onboarding and derives payment status from the connected account", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")
