@@ -4,7 +4,7 @@ import { adminBrandingDefaults, adminUiDefaults, type AdminUiConfig, type Authen
 import { FormEvent, createContext, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
-type Session = { employee: AuthenticatedEmployee; accessToken: string; supportSession?: boolean };
+type Session = { employee: AuthenticatedEmployee; accessToken: string; refreshToken?: string; expiresInSeconds?: number; supportSession?: boolean };
 type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type AdminSessionValue = Session & { signOut: () => void };
@@ -31,6 +31,18 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [error, setError] = useState<string | null>(null);
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
 
+  function storeSession(next: Session) {
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setSession(next);
+  }
+
+  async function refreshSession(refreshToken: string) {
+    const response = await apiFetch<StaffLoginResponse>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken }) });
+    const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
+    storeSession(next);
+    return next;
+  }
+
   useEffect(() => {
     const restore = async () => {
       try {
@@ -39,21 +51,37 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
           window.history.replaceState({}, "", `${window.location.pathname}${window.location.search}`);
           const employee = await apiFetch<AuthenticatedEmployee & { supportSession: true }>("/auth/staff/me", { accessToken: supportToken });
           const next = { employee, accessToken: supportToken, supportSession: true };
-          window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-          setSession(next);
+          storeSession(next);
           return;
         }
         const stored = window.sessionStorage.getItem(STORAGE_KEY);
-        if (stored) setSession(JSON.parse(stored) as Session);
+        if (stored) {
+          const parsed = JSON.parse(stored) as Session;
+          if (!parsed.refreshToken) throw new Error("Stored session cannot be refreshed.");
+          await refreshSession(parsed.refreshToken);
+        }
       } catch {
         window.sessionStorage.removeItem(STORAGE_KEY);
-        setError("The Attend support session is invalid or expired.");
+        setError("Your Attend Admin session expired. Please sign in again.");
       } finally {
         setRestored(true);
       }
     };
     void restore();
   }, []);
+
+  useEffect(() => {
+    if (!session?.refreshToken || session.supportSession) return;
+    const delayMs = Math.max(5_000, ((session.expiresInSeconds ?? 900) - 60) * 1_000);
+    const timer = window.setTimeout(() => {
+      void refreshSession(session.refreshToken!).catch(() => {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        setSession(null);
+        setError("Your Attend Admin session expired. Please sign in again.");
+      });
+    }, delayMs);
+    return () => window.clearTimeout(timer);
+  }, [session?.accessToken, session?.expiresInSeconds, session?.refreshToken, session?.supportSession]);
 
   useEffect(() => {
     const locationId = session?.employee.locationId ?? process.env.NEXT_PUBLIC_LOCATION_ID;
@@ -66,9 +94,8 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     event.preventDefault(); setError(null);
     try {
       const response = await apiFetch<StaffLoginResponse>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
-      const next = { employee: response.employee, accessToken: response.accessToken };
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      setSession(next); setCurrentPassword(password); setPassword("");
+      const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
+      storeSession(next); setCurrentPassword(password); setPassword("");
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
     }
@@ -79,13 +106,15 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
     try {
       const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken: session!.accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
-      const next = { employee: response.employee, accessToken: response.accessToken };
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      setSession(next); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
+      storeSession(next); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
   }
 
-  const value = useMemo(() => session ? { ...session, signOut: () => { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); } } : null, [session]);
+  const value = useMemo(() => session ? { ...session, signOut: () => {
+    if (!session.supportSession) void apiFetch("/auth/staff/logout", { accessToken: session.accessToken, method: "POST" }).catch(() => undefined);
+    window.sessionStorage.removeItem(STORAGE_KEY); setSession(null);
+  } } : null, [session]);
   const branding = value?.employee.adminBranding ?? publicBranding;
   const adminUi = publicBranding?.ui ?? adminUiDefaults;
   const fontFamilies: Record<AdminUiConfig["fontFamily"], string> = { SYSTEM: "Inter, ui-sans-serif, system-ui, sans-serif", SERIF: "Georgia, 'Times New Roman', serif", MODERN: "'Avenir Next', 'Helvetica Neue', Arial, sans-serif", MONO: "'SFMono-Regular', Consolas, monospace" };
