@@ -41,6 +41,9 @@ interface Overview {
   organizations: OrganizationOverview[];
 }
 
+interface RevenueTotals { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }
+interface RevenueReport { generatedAt: string; range: { from: string; to: string }; totals: RevenueTotals; clients: Array<{ id: string; name: string; locations: number } & RevenueTotals> }
+
 async function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
@@ -57,10 +60,16 @@ function statusLabel(status: string) {
   return status.toLowerCase().replaceAll("_", " ");
 }
 
+function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+function revenueRange(days: number) { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`; }
+
 export default function PlatformDashboard() {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [revenueDays, setRevenueDays] = useState(7);
+  const [revenueLoading, setRevenueLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -79,10 +88,18 @@ export default function PlatformDashboard() {
 
   useEffect(() => {
     if (!session) return;
-    request<Overview>("/platform/overview", undefined, session.accessToken)
-      .then(setOverview)
+    Promise.all([request<Overview>("/platform/overview", undefined, session.accessToken), request<RevenueReport>(revenueRange(7), undefined, session.accessToken)])
+      .then(([nextOverview, nextRevenue]) => { setOverview(nextOverview); setRevenue(nextRevenue); })
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load platform health."));
   }, [session]);
+
+  async function loadRevenue(days: number) {
+    if (!session) return;
+    setRevenueDays(days); setRevenueLoading(true); setError(null);
+    try { setRevenue(await request<RevenueReport>(revenueRange(days), undefined, session.accessToken)); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load platform revenue."); }
+    finally { setRevenueLoading(false); }
+  }
 
   const metrics = useMemo(() => {
     const organizations = overview?.organizations ?? [];
@@ -116,6 +133,7 @@ export default function PlatformDashboard() {
     window.sessionStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setOverview(null);
+    setRevenue(null);
     setError(null);
   }
 
@@ -161,6 +179,11 @@ export default function PlatformDashboard() {
         <article><span>Stripe ready</span><strong>{metrics.connectedClients}</strong><small>clients accepting payments</small></article>
         <article className={metrics.attentionClients.length ? "attention" : ""}><span>Needs attention</span><strong>{metrics.attentionClients.length}</strong><small>incomplete payment setup</small></article>
       </section>
+      <section className="dashboard-panel platform-revenue">
+        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="range-toggle"><button className={revenueDays === 1 ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(1)}>Today</button><button className={revenueDays === 7 ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(7)}>Last 7 days</button></div></div>
+        {!revenue && <p className="muted">Loading revenue rollup…</p>}
+        {revenue && <><div className="revenue-breakdown"><article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article><article><span>Service fees</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article><article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article><article><span>Ticket total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article><article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article><article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article><article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article></div><div className="client-revenue-list"><div><strong>Client</strong><span>Ticket collected</span><span>F&amp;B</span><span>Combined net</span></div>{revenue.clients.map((client) => <Link key={client.id} href={`/clients?organizationId=${encodeURIComponent(client.id)}`}><strong>{client.name}</strong><span>{money(client.ticketCollectedCents)}</span><span>{money(client.fnbRevenueCents)}</span><span>{money(client.combinedRevenueCents)}</span></Link>)}</div></>}
+      </section>
       <div className="dashboard-grid">
         <section className="dashboard-panel">
           <div className="panel-heading"><div><p className="eyebrow">PAYMENTS</p><h2>Onboarding attention</h2></div><Link href="/clients">View all clients</Link></div>
@@ -190,7 +213,7 @@ export default function PlatformDashboard() {
           </div>
         </section>
       </div>
-      {overview && <p className="dashboard-updated">Updated {new Date(overview.generatedAt).toLocaleString()}</p>}
+      {overview && <p className="dashboard-updated">Updated {new Date(revenue?.generatedAt ?? overview.generatedAt).toLocaleString()}</p>}
     </main>
   );
 }

@@ -7,10 +7,11 @@ import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
 import type { ConnectAccountState, ConnectOnboardingProvider } from "@cinema/payments";
 import { CONNECT_ONBOARDING_PROVIDER } from "./connect-onboarding.module";
+import { ReportingService } from "../reporting/reporting.service";
 
 @Injectable()
 export class PlatformService {
-  constructor(private readonly audit: AuditService, @Inject(CONNECT_ONBOARDING_PROVIDER) private readonly connect: ConnectOnboardingProvider) {}
+  constructor(private readonly audit: AuditService, @Inject(CONNECT_ONBOARDING_PROVIDER) private readonly connect: ConnectOnboardingProvider, private readonly reporting: ReportingService) {}
 
   async login(input: PlatformLoginRequest) {
     const user = await prisma.platformUser.findUnique({ where: { email: input.email.toLowerCase() } });
@@ -71,6 +72,28 @@ export class PlatformService {
         })),
       }))),
     };
+  }
+
+  async revenue(input: { from?: string; to?: string }) {
+    const from = input.from ? new Date(input.from) : new Date(Date.now() - 7 * 86_400_000);
+    const to = input.to ? new Date(input.to) : new Date();
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to || to.getTime() - from.getTime() > 366 * 86_400_000) {
+      throw AppError.validationFailed("A valid revenue date range of 366 days or less is required.");
+    }
+    const organizations = await prisma.organization.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, locations: { where: { active: true }, select: { id: true } } },
+    });
+    const zero = () => ({ ticketRevenueCents: 0, ticketFeesCents: 0, ticketTaxCents: 0, ticketCollectedCents: 0, fnbRevenueCents: 0, combinedRevenueCents: 0, refundedCents: 0, ticketsSold: 0, fnbOrders: 0 });
+    const clients = await Promise.all(organizations.map(async (organization) => {
+      const totals = zero();
+      const reports = await Promise.all(organization.locations.map((location) => this.reporting.revenue(location.id, { from, to })));
+      for (const report of reports) for (const key of Object.keys(totals) as Array<keyof typeof totals>) totals[key] += report.totals[key];
+      return { id: organization.id, name: organization.name, locations: organization.locations.length, ...totals };
+    }));
+    const totals = zero();
+    for (const client of clients) for (const key of Object.keys(totals) as Array<keyof typeof totals>) totals[key] += client[key];
+    return { generatedAt: new Date().toISOString(), range: { from: from.toISOString(), to: to.toISOString() }, totals, clients };
   }
 
   async auditEvents(input: { limit?: string; offset?: string; organizationId?: string; action?: string; actorId?: string; from?: string; to?: string }) {

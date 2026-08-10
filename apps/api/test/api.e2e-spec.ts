@@ -305,6 +305,17 @@ describe("Attend platform authentication boundary", () => {
     ]));
   });
 
+  it("returns a separated cross-client revenue rollup only to Attend operators", async () => {
+    const from = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const to = new Date(Date.now() + 86_400_000).toISOString();
+    await request(app.getHttpServer()).get(`/api/v1/platform/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(403);
+    const res = await request(app.getHttpServer()).get(`/api/v1/platform/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
+    expect(res.body.totals).toEqual(expect.objectContaining({ ticketRevenueCents: expect.any(Number), ticketFeesCents: expect.any(Number), ticketTaxCents: expect.any(Number), ticketCollectedCents: expect.any(Number), fnbRevenueCents: expect.any(Number), refundedCents: expect.any(Number) }));
+    expect(res.body.totals.ticketRevenueCents + res.body.totals.ticketFeesCents + res.body.totals.ticketTaxCents).toBe(res.body.totals.ticketCollectedCents);
+    expect(res.body.clients).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Meridian Cinema Co.", ticketRevenueCents: expect.any(Number) })]));
+    await request(app.getHttpServer()).get("/api/v1/platform/revenue?from=not-a-date").set("Authorization", `Bearer ${platformAccessToken}`).expect(400);
+  });
+
   it("lets only an Attend operator search the platform audit trail", async () => {
     await request(app.getHttpServer())
       .get("/api/v1/platform/audit-events")
