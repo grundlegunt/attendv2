@@ -342,13 +342,20 @@ describe("Attend platform authentication boundary", () => {
     expect(created.body).toMatchObject({ email, active: true });
     await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Duplicate", email, password: "PlatformSupportPassword123!" }).expect(409);
 
-    const supportLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(200);
+    const resetPassword = "ResetPlatformPassword456!";
+    await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ password: resetPassword }).expect(403);
+    await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}/credentials`).set("Authorization", `Bearer ${platformAccessToken}`).send({ password: "too-short" }).expect(400);
+    await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}/credentials`).set("Authorization", `Bearer ${platformAccessToken}`).send({ password: resetPassword }).expect(200).expect(({ body }) => expect(body).toEqual({ id: created.body.id, passwordReset: true }));
+    await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);
+
+    const supportLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: resetPassword }).expect(200);
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ active: false }).expect(200);
     expect(supportLogin.body.accessToken).toEqual(expect.any(String));
     await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);
 
     const audit = await request(app.getHttpServer()).get("/api/v1/platform/audit-events?action=platform.user_").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
-    expect(audit.body.events).toEqual(expect.arrayContaining([expect.objectContaining({ action: "platform.user_created", entityId: created.body.id }), expect.objectContaining({ action: "platform.user_updated", entityId: created.body.id })]));
+    expect(audit.body.events).toEqual(expect.arrayContaining([expect.objectContaining({ action: "platform.user_created", entityId: created.body.id }), expect.objectContaining({ action: "platform.user_credentials_reset", entityId: created.body.id, afterState: { passwordReset: true } }), expect.objectContaining({ action: "platform.user_updated", entityId: created.body.id })]));
+    expect(JSON.stringify(audit.body.events)).not.toContain(resetPassword);
   });
 
   it("returns a detailed organization view only to an Attend operator", async () => {

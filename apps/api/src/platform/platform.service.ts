@@ -178,6 +178,24 @@ export class PlatformService {
     return { ...user, createdAt: user.createdAt.toISOString(), updatedAt: user.updatedAt.toISOString() };
   }
 
+  async resetPlatformUserCredentials(input: { actorId: string; userId: string; password: string }) {
+    const target = await prisma.platformUser.findUnique({ where: { id: input.userId } });
+    if (!target) throw AppError.notFound("Attend Master operator not found.");
+    const passwordHash = await hashPassword(input.password);
+    await prisma.$transaction(async (tx) => {
+      await tx.platformUser.update({ where: { id: target.id }, data: { passwordHash, refreshTokenVersion: { increment: 1 } } });
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        action: "platform.user_credentials_reset",
+        entityType: "PlatformUser",
+        entityId: target.id,
+        afterState: { passwordReset: true },
+      }, tx);
+    });
+    return { id: target.id, passwordReset: true };
+  }
+
   async createOrganization(input: { actorId: string; name: string; legalName?: string | null; timezone: string; location: { name: string; address?: string | null; timezone: string } }) {
     const organizationId = await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
