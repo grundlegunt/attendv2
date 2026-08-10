@@ -65,6 +65,10 @@ const platformUserUpdateSchema = z.object({
   active: z.boolean().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one team field is required.");
 
+const platformUserCredentialsSchema = z.object({
+  password: z.string().min(12).max(200),
+}).strict();
+
 @Controller("platform")
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
@@ -106,6 +110,12 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   updatePlatformUser(@CurrentActor() actor: RequestActor, @Param("userId") userId: string, @Body(new ZodValidationPipe(platformUserUpdateSchema)) body: unknown) {
     return this.platform.updatePlatformUser({ actorId: actor.sub, userId, ...platformUserUpdateSchema.parse(body) });
+  }
+
+  @Patch("team/:userId/credentials")
+  @UseGuards(PlatformAuthGuard)
+  resetPlatformUserCredentials(@CurrentActor() actor: RequestActor, @Param("userId") userId: string, @Body(new ZodValidationPipe(platformUserCredentialsSchema)) body: unknown) {
+    return this.platform.resetPlatformUserCredentials({ actorId: actor.sub, userId, ...platformUserCredentialsSchema.parse(body) });
   }
 
   @Post("organizations")
