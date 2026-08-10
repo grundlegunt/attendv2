@@ -5,6 +5,8 @@ import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { AppError } from "../common/app-error";
+import { isPlatformOriginAllowed } from "../common/cors-origin";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { PlatformAuthGuard } from "./platform-auth.guard";
 import { PlatformService } from "./platform.service";
@@ -13,9 +15,10 @@ const organizationUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   legalName: z.string().trim().min(1).max(200).nullable().optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
-  onboardingStatus: z.enum(["NOT_STARTED", "IN_PROGRESS", "COMPLETE", "RESTRICTED"]).optional(),
   ticketFeeMinor: z.number().int().min(0).max(100_000).optional(),
 }).strict();
+
+const connectOnboardingSchema = z.object({ origin: z.string().url() }).strict();
 
 const organizationCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -83,6 +86,22 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   updateOrganization(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(organizationUpdateSchema)) body: unknown) {
     return this.platform.updateOrganization({ actorId: actor.sub, organizationId, ...organizationUpdateSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/connect/onboarding-link")
+  @UseGuards(PlatformAuthGuard)
+  connectOnboardingLink(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(connectOnboardingSchema)) body: unknown) {
+    const { origin } = connectOnboardingSchema.parse(body);
+    if (new URL(origin).origin !== origin || !isPlatformOriginAllowed(origin)) {
+      throw AppError.validationFailed("Stripe onboarding must return to an allowed Attend Master origin.");
+    }
+    return this.platform.createConnectOnboardingLink({ actorId: actor.sub, organizationId, origin });
+  }
+
+  @Post("organizations/:organizationId/connect/refresh")
+  @UseGuards(PlatformAuthGuard)
+  refreshConnectStatus(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string) {
+    return this.platform.refreshConnectStatus({ actorId: actor.sub, organizationId });
   }
 
   @Patch("organizations/:organizationId/locations/:locationId")

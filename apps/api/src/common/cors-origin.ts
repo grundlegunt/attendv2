@@ -13,3 +13,7 @@ export function isCorsOriginAllowed(origin: string | undefined, configuredOrigin
   if (configuredOrigins.includes(origin) || FIRST_PARTY_PRODUCTION_ORIGINS.has(origin)) return true;
   return ADMIN_PREVIEW_ORIGIN.test(origin) || CUSTOMER_PREVIEW_ORIGIN.test(origin) || PLATFORM_PREVIEW_ORIGIN.test(origin);
 }
+
+export function isPlatformOriginAllowed(origin: string): boolean {
+  return origin === "http://localhost:3004" || origin === "http://127.0.0.1:3004" || origin === "https://attend-master-attend3.vercel.app" || PLATFORM_PREVIEW_ORIGIN.test(origin);
+}
