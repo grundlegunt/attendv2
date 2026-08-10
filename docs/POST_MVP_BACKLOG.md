@@ -1,6 +1,6 @@
 # Post-MVP Backlog
 
-Status: Reference — tracks real gaps and opportunities surfaced in `COMPETITIVE_LANDSCAPE.md`, `OPEN_QUESTIONS.md`, `PROGRAMMING_AND_SCHEDULING.md`, and `TIMED_ENTRY_EXPANSION_PLAN.md`. None of this is sequenced into `IMPLEMENTATION_PLAN.md`'s Milestones 0–11 on purpose: that list is the MVP roadmap for the core customer (an independent dine-in cinema), and mixing it with open-ended expansion ideas would blur "done" with "someday." Revisit this list once Milestone 11 is complete or a specific business need (a real second customer, a real distributor relationship) makes an item concrete.
+Status: Living reference — tracks real gaps and opportunities surfaced in `COMPETITIVE_LANDSCAPE.md`, `OPEN_QUESTIONS.md`, `PROGRAMMING_AND_SCHEDULING.md`, and `TIMED_ENTRY_EXPANSION_PLAN.md`. None of this is sequenced into `IMPLEMENTATION_PLAN.md`'s Milestones 0–11 on purpose: that list records the MVP foundation for the core customer (an independent dine-in cinema), and mixing it with open-ended expansion ideas would blur "done" with "someday." Promote an item into active work when a concrete business need, customer, or partner makes its requirements real.
 
 ## 1. Ready to build whenever there's room
 
@@ -15,7 +15,6 @@ Low ambiguity, no open business decision blocking them, relevant to the core din
 Real, scoped work exists (or has been assessed), but building now would be guessing at requirements that only a real customer/partner can supply:
 
 - **Distributor box-office reporting, Comscore integration, and film-rental/settlement calculations.** Full pre-implementation assessment already produced (architecture, schema, phasing, Comscore integration unknowns) — see the session record for the complete writeup. `OPEN_QUESTIONS.md` §1.1a's original deferral reasoning still applies until a real distributor relationship and its actual contract terms exist. Revisit when: a theater on the platform has a real booking relationship, and it's confirmed whether Comscore reporting is actually required to book the titles in question.
-- **Whether `customer-web` needs to be a theater's entire public website** (homepage, about, hours, news/blog — like Veezi and Filmbot both build) or just the transactional buy-flow embedded in a site the theater already has. A real decision, not an engineering question.
 - **Multi-location consolidated (corporate) reporting**, without breaking per-location reporting — relevant once a customer actually operates more than one location under one Organization.
 
 ## 3. Adjacent-market expansion (nonprofit / general-admission venues)
@@ -34,7 +33,11 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 - **A richer CRM view** — one person's full history (tickets, donations, memberships, communications) in one place, household/family links, custom fields. Mostly a missing query/screen layer over data that already exists across the schema, not missing data.
 - **Real cross-venue member recognition** (e.g., reciprocal benefits across theaters, like the Art House Convergence network) — noted as a genuinely interesting long-term differentiator if enough independent theaters end up on the platform, but doesn't fit today's per-tenant isolated design and isn't worth building for a first customer.
 
+## Resolved since this backlog was drafted
+
+- **Cinema programming and scheduling workspace** — the scheduling foundation is implemented in the cinema Admin app; `PROGRAMMING_AND_SCHEDULING.md` remains its product reference.
+- **Public-site scope for `customer-web`** — resolved toward a broader theater website, with public navigation and content pages alongside the transactional ticket-buying flow.
+
 ## Also tracked elsewhere, not duplicated here
 
-- **Cinema programming & scheduling workspace** — full plan in `PROGRAMMING_AND_SCHEDULING.md`.
 - **Timed-entry event support** (session-level capacity, recurring sessions, flexible ticket categories for non-cinema venues) — full plan in `TIMED_ENTRY_EXPANSION_PLAN.md`.
