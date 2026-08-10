@@ -771,18 +771,18 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.movies.some((movie: { title: string }) => movie.title === "Integration Feature")).toBe(true);
   });
 
-  it("keeps customer branding read-only for cinema staff", async () => {
+  it("lets authorized cinema managers update location-scoped branding", async () => {
     const updated = await request(app.getHttpServer())
-      .patch("/api/v1/management/settings/location")
+      .patch("/api/v1/management/settings/branding")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe" });
-    expect(updated.status).toBe(400);
-    expect(updated.body.code).toBe("VALIDATION_FAILED");
+      .send({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe", adminAccentColor: "#654321" });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual(expect.objectContaining({ name: "Integration Cinema", customerLogoUrl: "https://example.com/cinema.svg", customerAccentColor: "#123456", adminAccentColor: "#654321" }));
   });
 
-  it("rejects customer branding fields on the cinema-staff settings endpoint", async () => {
+  it("validates cinema-managed branding colors", async () => {
     const response = await request(app.getHttpServer())
-      .patch("/api/v1/management/settings/location")
+      .patch("/api/v1/management/settings/branding")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ accentColor: "hotpink" });
     expect(response.status).toBe(400);

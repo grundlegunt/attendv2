@@ -1,5 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
+import { adminBrandingSchema, customerBrandingSchema } from "@cinema/shared";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
@@ -23,6 +24,7 @@ const locationSchema = z.object({
   autoSettleGraceMinutes: z.number().int().min(0).max(240).optional(),
   autoSettleTipBasisPoints: z.number().int().min(0).max(10_000).optional(),
 }).strict();
+const brandingSchema = customerBrandingSchema.merge(adminBrandingSchema).strict();
 const appliesTo = z.enum(["ALL", "FOOD", "ALCOHOL", "NA_BEVERAGE"]);
 const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000), active: z.boolean().default(true) }).strict();
 const taxUpdateSchema = taxSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one tax-rule change.");
@@ -53,6 +55,9 @@ export class ManagementController {
 
   @Patch("settings/location") @RequirePermissions(Permission.TicketPriceEdit)
   updateLocation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(locationSchema)) body: unknown) { return this.management.updateLocation({ ...locationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("settings/branding") @RequirePermissions(Permission.TicketPriceEdit)
+  updateBranding(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(brandingSchema)) body: unknown) { return this.management.updateBranding({ ...brandingSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Post("settings/tax-rules") @RequirePermissions(Permission.MenuEdit)
   tax(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

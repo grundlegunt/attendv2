@@ -24,7 +24,12 @@ h1 { font-size: clamp(2rem, 4vw, 3.5rem); }
 .brand-logo-summary { display: flex; align-items: center; gap: 18px; margin-top: 20px; color: var(--color-text-secondary); font-weight: 800; }
 .brand-logo-summary img { max-width: 220px; max-height: 64px; object-fit: contain; }
 .brand-support-note { margin: 22px 0 0; padding-top: 18px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); }
-@media (max-width: 760px) { .brand-summary-grid, .brand-swatches { grid-template-columns: 1fr; } .managed-badge { justify-self: start; } }
+.brand-editor h3 { margin: 28px 0 14px; }
+.brand-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.brand-color-input { display: grid; grid-template-columns: 62px 1fr; }
+.brand-color-input input[type="color"] { padding: 5px; }
+.brand-editor button.primary { margin-top: 12px; }
+@media (max-width: 760px) { .brand-summary-grid, .brand-swatches, .brand-editor-fields { grid-template-columns: 1fr; } .managed-badge { justify-self: start; } }
 label { display: grid; gap: 8px; margin-bottom: 16px; color: var(--color-text-secondary); font-weight: 700; }
 input, select, textarea { width: 100%; min-height: 50px; padding: 10px 12px; border: 2px solid var(--color-border); background: var(--color-bg); color: var(--color-text-primary); font: inherit; font-size: 1rem; }
 textarea { resize: vertical; }
