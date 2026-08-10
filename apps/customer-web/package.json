@@ -10,6 +10,7 @@
     "lint": "eslint app --ext .ts,.tsx"
   },
   "dependencies": {
+    "@cinema/config": "workspace:*",
     "@cinema/database": "workspace:*",
     "@cinema/notifications": "workspace:*",
     "@cinema/payments": "workspace:*",

@@ -19,9 +19,10 @@ import { AppError } from "../common/app-error";
 export class AuditController {
   @Get()
   @RequirePermissions(Permission.AuditLogView)
-  async list(@CurrentActor() actor: RequestActor, @Query("limit") limit?: string, @Query("action") action?: string, @Query("entityType") entityType?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
+  async list(@CurrentActor() actor: RequestActor, @Query("limit") limit?: string, @Query("offset") offset?: string, @Query("action") action?: string, @Query("entityType") entityType?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
     if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
     const take = Math.max(1, Math.min(Number(limit) || 50, 200));
+    const skip = Math.max(0, Math.min(Number(offset) || 0, 10_000));
     const start = from ? new Date(from) : undefined;
     const end = to ? new Date(to) : undefined;
     if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime())) || (start && end && start >= end)) throw AppError.validationFailed("A valid audit date range is required.");
@@ -33,8 +34,9 @@ export class AuditController {
         ...(actorId ? { actorId } : {}),
         ...((start || end) ? { occurredAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } } : {}),
       },
-      orderBy: { occurredAt: "desc" },
+      orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
       take,
+      skip,
     });
   }
 }

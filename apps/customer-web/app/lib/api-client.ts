@@ -1,10 +1,6 @@
 import type { ApiErrorBody } from "@cinema/shared";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (process.env.NODE_ENV === "production"
-    ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
-    : "http://localhost:4000/api/v1");
+const API_BASE_URL = "/api/v1";
 
 export class ApiRequestError extends Error {
   constructor(
@@ -24,7 +20,17 @@ export async function apiFetch<T>(
   headers.set("Content-Type", "application/json");
   if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  let scopedPath = path;
+  if (typeof window !== "undefined") {
+    const requestedLocationId = new URLSearchParams(window.location.search).get("locationId");
+    if (requestedLocationId) window.sessionStorage.setItem("attend-customer-location", requestedLocationId);
+    const locationId = requestedLocationId ?? window.sessionStorage.getItem("attend-customer-location") ?? process.env.NEXT_PUBLIC_LOCATION_ID;
+    if (locationId && !new URL(path, window.location.origin).searchParams.has("locationId")) {
+      scopedPath += `${path.includes("?") ? "&" : "?"}locationId=${encodeURIComponent(locationId)}`;
+    }
+  }
+
+  const res = await fetch(`${API_BASE_URL}${scopedPath}`, { ...init, headers, credentials: "include" });
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({ code: "INTERNAL_ERROR", message: res.statusText }))) as ApiErrorBody;

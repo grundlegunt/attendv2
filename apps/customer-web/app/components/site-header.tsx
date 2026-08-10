@@ -2,24 +2,38 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useCustomerBranding } from "./customer-branding";
 
 const links = [
   { href: "/showtimes", label: "Showtimes" },
+  { href: "/coming-soon", label: "Coming Soon" },
   { href: "/film-series", label: "Film Series" },
+  { href: "/dining-bar", label: "Dining & Bar" },
   { href: "/account", label: "Account" },
+  { href: "/about", label: "About" },
   { href: "/directions", label: "Directions" },
   { href: "/private-events", label: "Private Events" },
 ];
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const branding = useCustomerBranding();
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => setLogoFailed(false), [branding.logoUrl]);
+
+  const showLogo = Boolean(branding.logoUrl) && !logoFailed;
 
   return (
     <header className="site-header">
       <div className="site-header__inner">
-        <Link className="site-brand" href="/showtimes" aria-label="Attend showtimes">
-          <span className="eyebrow">ATTEND</span>
-          <strong>Cinema</strong>
+        <Link className="site-brand" href="/showtimes" aria-label={`${branding.name} showtimes`}>
+          {showLogo ? (
+            <img src={branding.logoUrl ?? undefined} alt={branding.name} onError={() => setLogoFailed(true)} />
+          ) : (
+            <strong>{branding.name}</strong>
+          )}
         </Link>
         <nav className="site-nav" aria-label="Customer navigation">
           {links.map((link) => (

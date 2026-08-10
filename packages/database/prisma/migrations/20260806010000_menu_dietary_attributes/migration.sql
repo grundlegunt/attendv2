@@ -1,0 +1,3 @@
+ALTER TABLE "menu_items"
+ADD COLUMN "isVegan" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "isGlutenFree" BOOLEAN NOT NULL DEFAULT false;

@@ -1,5 +1,46 @@
 import { z } from "zod";
 
+const stripeModeSchema = z.enum(["test", "live"]);
+
+function addStripeIssues(env: { STRIPE_MODE: "test" | "live"; STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string; STRIPE_PUBLISHABLE_KEY?: string }, context: z.RefinementCtx) {
+  const secretPrefix = env.STRIPE_MODE === "live" ? "sk_live_" : "sk_test_";
+  const publishablePrefix = env.STRIPE_MODE === "live" ? "pk_live_" : "pk_test_";
+  if (!env.STRIPE_SECRET_KEY?.startsWith(secretPrefix)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["STRIPE_SECRET_KEY"], message: `STRIPE_SECRET_KEY must be a Stripe ${env.STRIPE_MODE}-mode secret key (${secretPrefix}…).` });
+  }
+  if (!env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["STRIPE_WEBHOOK_SECRET"], message: "A Stripe webhook signing secret (whsec_…) is required." });
+  }
+  if (!env.STRIPE_PUBLISHABLE_KEY?.startsWith(publishablePrefix)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["STRIPE_PUBLISHABLE_KEY"], message: `STRIPE_PUBLISHABLE_KEY must be a Stripe ${env.STRIPE_MODE}-mode publishable key (${publishablePrefix}…).` });
+  }
+}
+
+const stripeEnvSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  STRIPE_MODE: stripeModeSchema.default("test"),
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+}).superRefine((env, context) => {
+  if (env.STRIPE_MODE === "live" && env.NODE_ENV !== "production") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["STRIPE_MODE"], message: "Stripe live mode is only allowed when NODE_ENV=production." });
+  }
+  addStripeIssues(env, context);
+});
+
+export function loadStripeEnv(source: NodeJS.ProcessEnv = process.env) {
+  // NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY remains a compatibility alias for
+  // existing customer-web deployments; all validation and runtime access
+  // still flow through this one loader.
+  const normalized = { ...source, STRIPE_PUBLISHABLE_KEY: source.STRIPE_PUBLISHABLE_KEY ?? source.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY };
+  const result = stripeEnvSchema.safeParse(normalized);
+  if (!result.success) {
+    throw new Error(`Invalid Stripe configuration.\n${result.error.issues.map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`).join("\n")}`);
+  }
+  return result.data as typeof result.data & { STRIPE_SECRET_KEY: string; STRIPE_WEBHOOK_SECRET: string; STRIPE_PUBLISHABLE_KEY: string };
+}
+
 /**
  * Environment variable schema for the API service.
  *
@@ -30,7 +71,9 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().email().default("receipts@example.com"),
 
   PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
-  // Stripe — test-mode keys only during Milestone 3 development.
+  // Live mode is an explicit production-only opt-in. Test mode remains valid
+  // in production previews and staging environments.
+  STRIPE_MODE: stripeModeSchema.default("test"),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
@@ -61,8 +104,11 @@ const envSchema = z.object({
   // distinct secret from application/session credentials.
   OBSERVABILITY_TOKEN: z.string().min(32).optional(),
 
-  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003"),
+  CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004"),
 }).superRefine((env, context) => {
+  if (env.STRIPE_MODE === "live" && env.NODE_ENV !== "production") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["STRIPE_MODE"], message: "Stripe live mode is only allowed when NODE_ENV=production." });
+  }
   if (env.NODE_ENV === "production" && !env.OBSERVABILITY_TOKEN) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["OBSERVABILITY_TOKEN"], message: "OBSERVABILITY_TOKEN is required in production." });
   }
@@ -88,27 +134,7 @@ const envSchema = z.object({
     });
   }
   if (env.PAYMENT_PROVIDER === "stripe") {
-    if (!env.STRIPE_SECRET_KEY?.startsWith("sk_test_")) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["STRIPE_SECRET_KEY"],
-        message: "A Stripe test-mode secret key is required for Milestone 3.",
-      });
-    }
-    if (!env.STRIPE_WEBHOOK_SECRET?.startsWith("whsec_")) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["STRIPE_WEBHOOK_SECRET"],
-        message: "A Stripe webhook signing secret is required for Milestone 3.",
-      });
-    }
-    if (!env.STRIPE_PUBLISHABLE_KEY?.startsWith("pk_test_")) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["STRIPE_PUBLISHABLE_KEY"],
-        message: "A Stripe test-mode publishable key is required for Milestone 3.",
-      });
-    }
+    addStripeIssues(env, context);
   }
 });
 

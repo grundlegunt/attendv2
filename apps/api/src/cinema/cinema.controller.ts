@@ -5,6 +5,8 @@ import {
   createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  duplicateShowtimeDayRequestSchema,
+  moveShowtimeGroupRequestSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
@@ -28,9 +30,34 @@ export class CinemaController {
     return this.cinemaService.nowPlaying(locationId);
   }
 
+  @Get("branding")
+  branding(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicBranding(locationId);
+  }
+
+  @Get("admin-branding")
+  adminBranding(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicAdminBranding(locationId);
+  }
+
+  @Get("content")
+  content(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicContent(locationId);
+  }
+
   @Get("film-series")
   filmSeries(@Query("locationId") locationId?: string) {
     return this.cinemaService.publicFilmSeries(locationId);
+  }
+
+  @Get("menu")
+  menu(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicDiningMenu(locationId);
+  }
+
+  @Get("movies/:id")
+  movieDetail(@Param("id") id: string, @Query("locationId") locationId?: string) {
+    return this.cinemaService.publicMovieDetail(id, locationId);
   }
 
   @Get("showtimes/:id/seats")
@@ -139,6 +166,20 @@ export class CinemaController {
     return this.cinemaService.archiveMovie(actor, id);
   }
 
+  @Delete("movies/:id/permanent")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  permanentlyDeleteMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.permanentlyDeleteMovie(actor, id);
+  }
+
+  @Post("movies/:id/restore")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  restoreMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.restoreMovie(actor, id);
+  }
+
   @Post("film-series")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
@@ -184,6 +225,32 @@ export class CinemaController {
     return this.cinemaService.createShowtime(
       actor,
       body as ReturnType<typeof createShowtimeRequestSchema.parse>,
+    );
+  }
+
+  @Post("showtimes/duplicate-day")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  duplicateShowtimeDay(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(duplicateShowtimeDayRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.duplicateShowtimeDay(
+      actor,
+      body as ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>,
+    );
+  }
+
+  @Patch("showtimes/group")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  moveShowtimeGroup(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(moveShowtimeGroupRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.moveShowtimeGroup(
+      actor,
+      body as ReturnType<typeof moveShowtimeGroupRequestSchema.parse>,
     );
   }
 

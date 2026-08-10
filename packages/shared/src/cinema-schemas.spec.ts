@@ -1,8 +1,13 @@
 import {
+  adminUiConfigSchema,
+  adminUiDefaults,
   createFilmSeriesRequestSchema,
+  customerBrandingSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
   dedupePublicShowtimes,
+  duplicateShowtimeDayRequestSchema,
+  moveShowtimeGroupRequestSchema,
   startOfLocalDay,
   showtimeWindowsOverlap,
   updateShowtimeRequestSchema,
@@ -13,6 +18,37 @@ import {
   validateSeatLayout,
 } from "./cinema-schemas";
 
+describe("admin schedule appearance", () => {
+  it("adds default showtime control colors to previously saved configurations", () => {
+    const legacyConfig = {
+      ...adminUiDefaults,
+      colorHistory: [],
+    } as Record<string, unknown>;
+    delete legacyConfig.removeControlColor;
+    delete legacyConfig.duplicateControlColor;
+
+    const parsed = adminUiConfigSchema.parse(legacyConfig);
+
+    expect(parsed.removeControlColor).toBe(adminUiDefaults.removeControlColor);
+    expect(parsed.duplicateControlColor).toBe(adminUiDefaults.duplicateControlColor);
+  });
+});
+
+describe("customer branding settings", () => {
+  it("accepts safe six-digit colors and a hosted logo", () => {
+    expect(customerBrandingSchema.parse({ name: "Meridian Cinema", logoUrl: "https://example.com/logo.svg", accentColor: "#fe2c54" })).toEqual({ name: "Meridian Cinema", logoUrl: "https://example.com/logo.svg", accentColor: "#fe2c54" });
+  });
+
+  it("supports null overrides for resetting to Attend defaults", () => {
+    expect(customerBrandingSchema.parse({ logoUrl: null, accentColor: null, textColor: null })).toEqual({ logoUrl: null, accentColor: null, textColor: null });
+  });
+
+  it("rejects unsafe or ambiguous color strings", () => {
+    expect(() => customerBrandingSchema.parse({ accentColor: "red" })).toThrow();
+    expect(() => customerBrandingSchema.parse({ backgroundColor: "#fff" })).toThrow();
+  });
+});
+
 describe("cinema programming requests", () => {
   const showtime = {
     movieId: "10000000-0000-4000-8000-000000000001",
@@ -22,13 +58,23 @@ describe("cinema programming requests", () => {
   };
 
   it("accepts movie metadata with either an absolute or app-relative poster URL", () => {
-    expect(createMovieRequestSchema.parse({
+    const parsed = createMovieRequestSchema.parse({
       title: "The Matrix",
       runtimeMinutes: 136,
       synopsis: "A programmer discovers the world is not what it seems.",
       rating: "R",
       posterUrl: "https://images.example.com/matrix.jpg",
-    }).posterUrl).toContain("images.example.com");
+      detailPosterUrl: "/posters/matrix-one-sheet.jpg",
+      director: "Lana Wachowski, Lilly Wachowski",
+      starring: "Keanu Reeves, Carrie-Anne Moss",
+      trailerUrl: "https://video.example.com/matrix",
+      releaseYear: 1999,
+      pairingMenuItemIds: ["10000000-0000-4000-8000-000000000005"],
+    });
+    expect(parsed.posterUrl).toContain("images.example.com");
+    expect(parsed.detailPosterUrl).toBe("/posters/matrix-one-sheet.jpg");
+    expect(parsed.releaseYear).toBe(1999);
+    expect(parsed.pairingMenuItemIds).toHaveLength(1);
 
     expect(createMovieRequestSchema.parse({
       title: "The Matrix",
@@ -43,18 +89,39 @@ describe("cinema programming requests", () => {
       ...showtime,
       filmSeriesId,
       presentation: "Q_AND_A",
+      format: "35mm",
     });
 
     expect(parsed.filmSeriesId).toBe(filmSeriesId);
     expect(parsed.presentation).toBe("Q_AND_A");
+    expect(parsed.format).toBe("35mm");
+    expect(parsed.onSale).toBe(true);
+  });
+
+  it("accepts a multi-day schedule copy and rejects the source as a target", () => {
+    expect(duplicateShowtimeDayRequestSchema.parse({
+      sourceDate: "2026-08-06",
+      targetDates: ["2026-08-07", "2026-08-08"],
+    })).toEqual({
+      sourceDate: "2026-08-06",
+      targetDates: ["2026-08-07", "2026-08-08"],
+      saleStatus: "PRESERVE",
+    });
+    expect(() => duplicateShowtimeDayRequestSchema.parse({
+      sourceDate: "2026-08-06",
+      targetDates: ["2026-08-06"],
+    })).toThrow();
   });
 
   it("validates film-series create, edit, and archive payloads", () => {
-    expect(createFilmSeriesRequestSchema.parse({
+    const createdSeries = createFilmSeriesRequestSchema.parse({
       name: "Summer Classics",
       description: "A repertory season.",
       artworkUrl: "/series/summer-classics.jpg",
-    }).name).toBe("Summer Classics");
+      sortOrder: 3,
+    });
+    expect(createdSeries.name).toBe("Summer Classics");
+    expect(createdSeries.sortOrder).toBe(3);
     expect(updateFilmSeriesRequestSchema.parse({ active: false })).toEqual({ active: false });
     expect(() => updateFilmSeriesRequestSchema.parse({})).toThrow();
   });
@@ -63,6 +130,18 @@ describe("cinema programming requests", () => {
     expect(updateShowtimeRequestSchema.parse({ startsAt: showtime.startsAt })).toEqual({
       startsAt: showtime.startsAt,
     });
+  });
+
+  it("validates atomic multi-showtime moves", () => {
+    const moves = [
+      { showtimeId: "10000000-0000-4000-8000-000000000011", startsAt: "2026-08-04T19:00:00.000Z" },
+      { showtimeId: "10000000-0000-4000-8000-000000000012", auditoriumId: "10000000-0000-4000-8000-000000000013", startsAt: "2026-08-04T20:00:00.000Z" },
+    ];
+
+    expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves).toHaveLength(2);
+    expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves[1]?.auditoriumId).toBe("10000000-0000-4000-8000-000000000013");
+    expect(() => moveShowtimeGroupRequestSchema.parse({ moves: moves.slice(0, 1) })).toThrow();
+    expect(() => moveShowtimeGroupRequestSchema.parse({ moves: [moves[0], moves[0]] })).toThrow();
   });
 });
 
@@ -157,6 +236,8 @@ function screening(id: string, startsAt: string, auditoriumId = "room-1"): Publi
     startsAt,
     auditorium: { id: auditoriumId, name: "Theater 1", capacity: 60 },
     priceTier: { name: "Standard", ticketPriceMinor: 1700, feeMinor: 200, currency: "USD" },
+    filmSeries: null,
+    format: null,
   };
 }
 

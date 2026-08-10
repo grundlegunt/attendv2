@@ -27,6 +27,8 @@ model Organization {
   timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
+  ticketFeeMinor           Int                     @default(0)
+  active                   Boolean                 @default(true)
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 
@@ -40,6 +42,29 @@ model Organization {
   @@map("organizations")
 }
 
+// Attend company operators are intentionally separate from cinema employees.
+// They have cross-organization visibility only through the dedicated platform
+// API and can never be assigned a cinema role or location permission.
+model PlatformUser {
+  id                  String   @id @default(uuid())
+  name                String
+  email               String   @unique
+  passwordHash        String
+  role                PlatformUserRole @default(OWNER)
+  active              Boolean  @default(true)
+  refreshTokenVersion Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("platform_users")
+}
+
+enum PlatformUserRole {
+  OWNER
+  OPERATOR
+  VIEWER
+}
+
 model FilmSeries {
   id             String       @id @default(uuid())
   organizationId String
@@ -47,13 +72,14 @@ model FilmSeries {
   name           String
   description    String?
   artworkUrl     String?
+  sortOrder      Int          @default(0)
   active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   showtimes      Showtime[]
 
   @@unique([organizationId, name])
-  @@index([organizationId, active])
+  @@index([organizationId, active, sortOrder])
   @@map("film_series")
 }
 
@@ -62,14 +88,34 @@ model Location {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name                     String
-  address                  String?
-  timezone                 String  @default("America/New_York")
-  currency                 String  @default("USD")
+  name                        String
+  address                     String?
+  customerLogoUrl             String?
+  customerAccentColor         String?
+  customerAccentMutedColor    String?
+  customerBackgroundColor     String?
+  customerBackgroundGlowColor String?
+  customerSurfaceColor        String?
+  customerTextColor           String?
+  customerMutedTextColor      String?
+  adminAccentColor            String?
+  adminAccentMutedColor       String?
+  adminBackgroundColor        String?
+  adminSurfaceColor           String?
+  adminTextColor              String?
+  adminMutedTextColor         String?
+  adminUiConfig               Json?
+  brandingDraft               Json?
+  brandingDraftedAt           DateTime?
+  contentDraft                Json?
+  contentPublished            Json?
+  contentPublishedAt          DateTime?
+  timezone                    String    @default("America/New_York")
+  currency                    String    @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the
   // location's tax treatment has been confirmed; the application never
   // invents a jurisdictional tax rate.
-  ticketTaxRateBasisPoints Int     @default(0)
+  ticketTaxRateBasisPoints    Int       @default(0)
 
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
@@ -150,13 +196,13 @@ model SeatMap {
   auditoriumId String     @unique
   auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
 
-  name      String
-  version   Int      @default(1)
+  name       String
+  version    Int      @default(1)
   // Operational geometry belongs here; sellable positions remain normalized
   // as Seat records below. Previous geometry is retained in SeatMapRevision.
   layoutJson Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   seats     Seat[]
   revisions SeatMapRevision[]
@@ -183,13 +229,13 @@ model Seat {
   seatMapId String
   seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
 
-  label    String
-  rowLabel String
-  number   Int
-  x        Int
-  y        Int
-  type     SeatType @default(STANDARD)
-  layoutVersion Int @default(1)
+  label         String
+  rowLabel      String
+  number        Int
+  x             Int
+  y             Int
+  type          SeatType @default(STANDARD)
+  layoutVersion Int      @default(1)
   levelKey      String?
   sectionKey    String?
 
@@ -211,16 +257,22 @@ model Movie {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  title          String
-  synopsis       String?
-  runtimeMinutes Int
-  rating         String?
-  posterUrl      String?
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  title           String
+  synopsis        String?
+  runtimeMinutes  Int
+  rating          String?
+  posterUrl       String?
+  detailPosterUrl String?
+  director        String?
+  starring        String?
+  trailerUrl      String?
+  releaseYear     Int?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   showtimes Showtime[]
+  pairings  MoviePairing[]
 
   @@index([organizationId, active])
   @@map("movies")
@@ -268,6 +320,7 @@ model Showtime {
   filmSeriesId    String?
   filmSeries      FilmSeries?     @relation(fields: [filmSeriesId], references: [id], onDelete: Restrict)
   presentation    String          @default("STANDARD")
+  format          String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]
@@ -786,8 +839,9 @@ model StaffAuthAccount {
 
   // argon2id hash — never a plaintext password, never reversible.
   // See /docs/SECURITY.md §1.
-  passwordHash String
-  pinHash      String?
+  passwordHash       String
+  pinHash            String?
+  mustChangePassword Boolean @default(false)
 
   mfaEnabled         Boolean @default(false)
   // Encrypted TOTP secret at rest. Required for OWNER / GENERAL_MANAGER /
@@ -859,6 +913,8 @@ model Promotion {
   type                  PromotionType
   amountCents           Int?
   percentageBasisPoints Int?
+  minimumSubtotalCents  Int?
+  maximumRedemptions    Int?
   active                Boolean       @default(true)
   startsAt              DateTime?
   endsAt                DateTime?
@@ -904,9 +960,9 @@ model Role {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // One of the fixed role keys in @cinema/auth's RoleKey enum
-  // (OWNER, GENERAL_MANAGER, CINEMA_MANAGER, RESTAURANT_MANAGER, BOX_OFFICE,
-  // SERVER, BARTENDER, KITCHEN, RUNNER, DOOR, ACCOUNTING, SUPPORT).
+  // Seeded roles use @cinema/auth's fixed RoleKey values; cinema-created
+  // roles receive an opaque CUSTOM_* key and still draw permissions only
+  // from the fixed Permission catalog.
   key  String
   name String
 
@@ -1114,8 +1170,11 @@ model MenuItem {
   kitchenStation   KitchenStation           @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
   name             String
   description      String?
+  imageUrl         String?
   priceCents       Int
   chargeCategory   RestaurantChargeCategory @default(FOOD)
+  isVegan          Boolean                  @default(false)
+  isGlutenFree     Boolean                  @default(false)
   active           Boolean                  @default(true)
   is86d            Boolean                  @default(false)
   sortOrder        Int                      @default(0)
@@ -1124,11 +1183,25 @@ model MenuItem {
 
   modifierGroups ModifierGroup[]
   orderItems     RestaurantOrderItem[]
+  moviePairings  MoviePairing[]
 
   @@unique([menuCategoryId, name])
   @@index([menuCategoryId, active, sortOrder])
   @@index([kitchenStationId, active])
   @@map("menu_items")
+}
+
+model MoviePairing {
+  movieId    String
+  movie      Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@id([movieId, menuItemId])
+  @@index([menuItemId])
+  @@map("movie_pairings")
 }
 
 model TaxRule {
@@ -1326,6 +1399,7 @@ model CustomerAuthAccount {
 enum AuditActorType {
   EMPLOYEE
   CUSTOMER
+  PLATFORM
   SYSTEM
 }
 
@@ -1333,7 +1407,7 @@ model AuditEvent {
   id String @id @default(uuid())
 
   actorType AuditActorType
-  // Employee.id, Customer.id, or null for actorType = SYSTEM.
+  // Employee.id, Customer.id, PlatformUser.id, or null for SYSTEM.
   actorId   String?
 
   action     String // e.g. "employee.login", "ticket.refunded"

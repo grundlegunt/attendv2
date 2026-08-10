@@ -2,10 +2,14 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import { AuditActorType, Prisma, prisma } from "@cinema/database";
 import {
+  adminUiConfigSchema,
+  adminUiDefaults,
   createAuditoriumRequestSchema,
   createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  duplicateShowtimeDayRequestSchema,
+  moveShowtimeGroupRequestSchema,
   showtimePresentationSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
@@ -14,7 +18,10 @@ import {
   updateShowtimeRequestSchema,
   validateAdvancedSeatLayout,
   validateSeatLayout,
+  cinemaContentDefaults,
+  cinemaContentSchema,
 } from "@cinema/shared";
+import type { PublicDiningMenuResponse } from "@cinema/shared";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 
@@ -25,8 +32,46 @@ type FilmSeriesInput = ReturnType<typeof createFilmSeriesRequestSchema.parse>;
 type FilmSeriesUpdateInput = ReturnType<typeof updateFilmSeriesRequestSchema.parse>;
 type MovieInput = ReturnType<typeof createMovieRequestSchema.parse>;
 type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
+type DuplicateShowtimeDayInput = ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>;
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
+type MoveShowtimeGroupInput = ReturnType<typeof moveShowtimeGroupRequestSchema.parse>;
+
+const DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS = 10_000;
+const DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS = 60_000;
+
+function addIsoDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function localDateTime(value: Date, timeZone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const get = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { year: get("year"), month: get("month"), day: get("day"), hour: get("hour"), minute: get("minute"), second: get("second") };
+}
+
+function zonedDate(date: string, hour: number, minute: number, second: number, timeZone: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  const desired = Date.UTC(year!, month! - 1, day!, hour, minute, second);
+  let candidate = new Date(desired);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const actual = localDateTime(candidate, timeZone);
+    const represented = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+    candidate = new Date(candidate.getTime() + desired - represented);
+  }
+  return candidate;
+}
 
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
@@ -58,20 +103,36 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         },
         organization: {
           include: {
-            movies: { where: { active: true }, orderBy: { title: "asc" } },
-            filmSeries: { orderBy: [{ active: "desc" }, { name: "asc" }] },
+            movies: {
+              where: { active: true },
+              include: { pairings: { orderBy: { sortOrder: "asc" } } },
+              orderBy: { title: "asc" },
+            },
+            filmSeries: { orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }] },
             priceTiers: { where: { active: true }, orderBy: { ticketPriceMinor: "asc" } },
           },
+        },
+        menuCategories: {
+          where: { active: true },
+          include: { items: { where: { active: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] } },
+          orderBy: { sortOrder: "asc" },
         },
       },
     });
     if (!location) throw AppError.notFound("Location not found.");
-    const showtimes = await prisma.showtime.findMany({
-      where: { auditorium: { locationId, active: true }, startsAt: { gte: new Date(Date.now() - 86400000) } },
-      include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
-      orderBy: { startsAt: "asc" },
-    });
-    return { location, showtimes };
+    const [showtimes, archivedMovies] = await Promise.all([
+      prisma.showtime.findMany({
+        where: { auditorium: { locationId, active: true }, startsAt: { gte: new Date(Date.now() - 86400000) } },
+        include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+        orderBy: { startsAt: "asc" },
+      }),
+      prisma.movie.findMany({
+        where: { organizationId: location.organizationId, active: false },
+        include: { pairings: { orderBy: { sortOrder: "asc" } } },
+        orderBy: { title: "asc" },
+      }),
+    ]);
+    return { location, showtimes, archivedMovies };
   }
 
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
@@ -246,6 +307,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUnique({ where: { id: locationId } });
       if (!location) throw AppError.notFound("Location not found.");
+      await this.validatePairingMenuItems(tx, locationId, input.pairingMenuItemIds);
       const movie = await tx.movie.create({
         data: {
           organizationId: location.organizationId,
@@ -254,6 +316,14 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           runtimeMinutes: input.runtimeMinutes,
           rating: input.rating ?? null,
           posterUrl: input.posterUrl ?? null,
+          detailPosterUrl: input.detailPosterUrl ?? null,
+          director: input.director ?? null,
+          starring: input.starring ?? null,
+          trailerUrl: input.trailerUrl ?? null,
+          releaseYear: input.releaseYear ?? null,
+          pairings: {
+            create: input.pairingMenuItemIds.map((menuItemId, sortOrder) => ({ menuItemId, sortOrder })),
+          },
         },
       });
       await tx.auditEvent.create({
@@ -264,7 +334,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           entityType: "Movie",
           entityId: movie.id,
           locationId,
-          afterState: { title: movie.title, runtimeMinutes: movie.runtimeMinutes },
+          afterState: {
+            title: movie.title, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating,
+            posterUrl: movie.posterUrl, detailPosterUrl: movie.detailPosterUrl, director: movie.director, starring: movie.starring,
+            trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
+            pairingMenuItemIds: input.pairingMenuItemIds,
+          },
         },
       });
       return movie;
@@ -297,6 +372,44 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async restoreMovie(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const movie = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: false } });
+      if (!movie) throw AppError.notFound("Archived movie not found.");
+      const restored = await tx.movie.update({ where: { id }, data: { active: true } });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "movie.restored",
+        entityType: "Movie", entityId: movie.id, locationId,
+        beforeState: { active: false, title: movie.title }, afterState: { active: true },
+      } });
+      return restored;
+    });
+  }
+
+  async permanentlyDeleteMovie(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const movie = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: false } });
+      if (!movie) throw AppError.notFound("Archived movie not found.");
+      const showtimeCount = await tx.showtime.count({ where: { movieId: id } });
+      if (showtimeCount) {
+        throw AppError.conflict("This film has showtime or sales history and cannot be permanently deleted. Keep it archived to preserve reporting records.");
+      }
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "movie.deleted",
+        entityType: "Movie", entityId: movie.id, locationId,
+        beforeState: { active: false, title: movie.title, runtimeMinutes: movie.runtimeMinutes },
+      } });
+      await tx.movie.delete({ where: { id } });
+      return { deleted: true, id };
+    });
+  }
+
   async updateMovie(actor: RequestActor, id: string, input: MovieUpdateInput) {
     const locationId = this.requireLocation(actor);
     return prisma.$transaction(async (tx) => {
@@ -304,7 +417,20 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (!location) throw AppError.notFound("Location not found.");
       const existing = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: true } });
       if (!existing) throw AppError.notFound("Movie not found.");
-      const movie = await tx.movie.update({ where: { id }, data: input });
+      const { pairingMenuItemIds, ...movieFields } = input;
+      if (pairingMenuItemIds) await this.validatePairingMenuItems(tx, locationId, pairingMenuItemIds);
+      const movie = await tx.movie.update({
+        where: { id },
+        data: {
+          ...movieFields,
+          ...(pairingMenuItemIds ? {
+            pairings: {
+              deleteMany: {},
+              create: pairingMenuItemIds.map((menuItemId, sortOrder) => ({ menuItemId, sortOrder })),
+            },
+          } : {}),
+        },
+      });
       await tx.auditEvent.create({ data: {
         actorType: AuditActorType.EMPLOYEE,
         actorId: actor.sub,
@@ -312,11 +438,35 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         entityType: "Movie",
         entityId: movie.id,
         locationId,
-        beforeState: { title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes, rating: existing.rating, posterUrl: existing.posterUrl },
-        afterState: { title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating, posterUrl: movie.posterUrl },
+        beforeState: {
+          title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes,
+          rating: existing.rating, posterUrl: existing.posterUrl, detailPosterUrl: existing.detailPosterUrl, director: existing.director,
+          starring: existing.starring, trailerUrl: existing.trailerUrl, releaseYear: existing.releaseYear,
+        },
+        afterState: {
+          title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes,
+          rating: movie.rating, posterUrl: movie.posterUrl, detailPosterUrl: movie.detailPosterUrl, director: movie.director,
+          starring: movie.starring, trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
+          ...(pairingMenuItemIds ? { pairingMenuItemIds } : {}),
+        },
       } });
       return movie;
     });
+  }
+
+  private async validatePairingMenuItems(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    menuItemIds: string[],
+  ) {
+    if (!menuItemIds.length) return;
+    if (new Set(menuItemIds).size !== menuItemIds.length) {
+      throw AppError.validationFailed("A menu item can only be paired once.");
+    }
+    const count = await tx.menuItem.count({
+      where: { id: { in: menuItemIds }, active: true, menuCategory: { locationId } },
+    });
+    if (count !== menuItemIds.length) throw AppError.notFound("One or more pairing menu items were not found.");
   }
 
   async createFilmSeries(actor: RequestActor, input: FilmSeriesInput) {
@@ -334,6 +484,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             name: input.name,
             description: input.description ?? null,
             artworkUrl: input.artworkUrl ?? null,
+            sortOrder: input.sortOrder ?? await tx.filmSeries.count({ where: { organizationId: location.organizationId, active: true } }),
           },
         });
         await tx.auditEvent.create({ data: {
@@ -368,8 +519,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         await tx.auditEvent.create({ data: {
           actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, locationId,
           action: "film_series.updated", entityType: "FilmSeries", entityId: filmSeries.id,
-          beforeState: { name: existing.name, description: existing.description, artworkUrl: existing.artworkUrl, active: existing.active },
-          afterState: { name: filmSeries.name, description: filmSeries.description, artworkUrl: filmSeries.artworkUrl, active: filmSeries.active },
+          beforeState: { name: existing.name, description: existing.description, artworkUrl: existing.artworkUrl, sortOrder: existing.sortOrder, active: existing.active },
+          afterState: { name: filmSeries.name, description: filmSeries.description, artworkUrl: filmSeries.artworkUrl, sortOrder: filmSeries.sortOrder, active: filmSeries.active },
         } });
         return filmSeries;
       });
@@ -451,6 +602,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             onSale: input.onSale,
             filmSeriesId: filmSeries?.id ?? null,
             presentation: input.presentation,
+            format: input.format ?? null,
           },
           include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         });
@@ -478,13 +630,122 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               onSale: input.onSale,
               filmSeriesId: filmSeries?.id ?? null,
               presentation: input.presentation,
+              format: input.format ?? null,
             },
           },
         });
         return showtime;
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      },
     );
+  }
+
+  async duplicateShowtimeDay(actor: RequestActor, input: DuplicateShowtimeDayInput) {
+    const locationId = this.requireLocation(actor);
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: {
+        id: true,
+        timezone: true,
+        preShowBufferMinutes: true,
+        cleaningBufferMinutes: true,
+      },
+    });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const sourceStart = zonedDate(input.sourceDate, 0, 0, 0, location.timezone);
+    const sourceEnd = zonedDate(addIsoDays(input.sourceDate, 1), 0, 0, 0, location.timezone);
+    const sourceShowtimes = await prisma.showtime.findMany({
+      where: {
+        auditorium: { locationId, active: true },
+        startsAt: { gte: sourceStart, lt: sourceEnd },
+      },
+      include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+      orderBy: { startsAt: "asc" },
+    });
+    if (!sourceShowtimes.length) throw AppError.validationFailed("The source day has no showtimes to duplicate.");
+
+    return prisma.$transaction(async (tx) => {
+      const auditoriumIds = Array.from(new Set(sourceShowtimes.map((showtime) => showtime.auditoriumId))).sort();
+      for (const auditoriumId of auditoriumIds) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
+      }
+      const seatsByAuditorium = new Map<string, Array<{ id: string }>>();
+      const created = [];
+      for (const targetDate of input.targetDates) {
+        for (const source of sourceShowtimes) {
+          const sourceLocal = localDateTime(source.startsAt, location.timezone);
+          const startsAt = zonedDate(targetDate, sourceLocal.hour, sourceLocal.minute, sourceLocal.second, location.timezone);
+          const featureStartsAt = new Date(startsAt.getTime() + location.preShowBufferMinutes * 60000);
+          const endsAt = new Date(featureStartsAt.getTime() + source.movie.runtimeMinutes * 60000);
+          const cleaningMinutes = Math.max(this.minimumCinemaCleaningMinutes, location.cleaningBufferMinutes);
+          const roomReadyAt = new Date(endsAt.getTime() + cleaningMinutes * 60000);
+          const conflict = await tx.showtime.findFirst({
+            where: {
+              auditoriumId: source.auditoriumId,
+              startsAt: { lt: roomReadyAt },
+              roomReadyAt: { gt: startsAt },
+            },
+            include: { movie: true },
+          });
+          if (conflict) {
+            throw AppError.conflict(
+              `${source.auditorium.name} already has ${conflict.movie.title} overlapping ${startsAt.toISOString()}. No showtimes were copied.`,
+            );
+          }
+          const onSale = input.saleStatus === "ON_SALE"
+            ? true
+            : input.saleStatus === "DRAFT"
+              ? false
+              : source.onSale;
+          const showtime = await tx.showtime.create({
+            data: {
+              movieId: source.movieId,
+              auditoriumId: source.auditoriumId,
+              priceTierId: source.priceTierId,
+              startsAt,
+              featureStartsAt,
+              endsAt,
+              roomReadyAt,
+              onSale,
+              filmSeriesId: source.filmSeriesId,
+              presentation: source.presentation,
+              format: source.format,
+            },
+            include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+          });
+          let seats = seatsByAuditorium.get(source.auditoriumId);
+          if (!seats) {
+            seats = await tx.seat.findMany({
+              where: { seatMap: { auditoriumId: source.auditoriumId }, active: true },
+              select: { id: true },
+            });
+            seatsByAuditorium.set(source.auditoriumId, seats);
+          }
+          await tx.showtimeSeat.createMany({
+            data: seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })),
+            skipDuplicates: true,
+          });
+          created.push(showtime);
+        }
+      }
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE,
+        actorId: actor.sub,
+        action: "showtime.day_duplicated",
+        entityType: "Location",
+        entityId: locationId,
+        locationId,
+        afterState: { sourceDate: input.sourceDate, targetDates: input.targetDates, createdCount: created.length, saleStatus: input.saleStatus },
+      } });
+      return { createdCount: created.length, showtimes: created };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      maxWait: DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS,
+      timeout: DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS,
+    });
   }
 
   async updateShowtime(actor: RequestActor, id: string, input: ShowtimeUpdateInput) {
@@ -564,6 +825,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             onSale: input.onSale ?? existing.onSale,
             filmSeriesId,
             presentation: input.presentation ?? existing.presentation,
+            format: input.format === undefined ? existing.format : input.format,
           },
           include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
         });
@@ -609,6 +871,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               roomReadyAt: roomReadyAt.toISOString(),
               filmSeriesId,
               presentation: input.presentation ?? existing.presentation,
+              format: input.format === undefined ? existing.format : input.format,
             },
           },
         });
@@ -616,6 +879,105 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  async moveShowtimeGroup(actor: RequestActor, input: MoveShowtimeGroupInput) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const ids = input.moves.map((move) => move.showtimeId);
+      const existing = await tx.showtime.findMany({
+        where: { id: { in: ids }, auditorium: { locationId } },
+        include: { movie: true, auditorium: { include: { location: true } } },
+      });
+      if (existing.length !== ids.length) throw AppError.notFound("One or more showtimes were not found.");
+
+      const byId = new Map(existing.map((showtime) => [showtime.id, showtime]));
+      const requestedAuditoriumIds = [...new Set(input.moves.map((move) => move.auditoriumId).filter((id): id is string => Boolean(id)))];
+      const targetAuditoriums = requestedAuditoriumIds.length ? await tx.auditorium.findMany({
+        where: { id: { in: requestedAuditoriumIds }, locationId, active: true },
+        include: { location: true },
+      }) : [];
+      if (targetAuditoriums.length !== requestedAuditoriumIds.length) throw AppError.notFound("One or more target auditoriums were not found.");
+      const targetAuditoriumById = new Map(targetAuditoriums.map((auditorium) => [auditorium.id, auditorium]));
+      const auditoriumIds = [...new Set([
+        ...existing.map((showtime) => showtime.auditoriumId),
+        ...requestedAuditoriumIds,
+      ])].sort();
+      for (const auditoriumId of auditoriumIds) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
+      }
+
+      const proposed = input.moves.map((move) => {
+        const showtime = byId.get(move.showtimeId)!;
+        const auditorium = move.auditoriumId
+          ? targetAuditoriumById.get(move.auditoriumId)!
+          : showtime.auditorium;
+        const startsAt = new Date(move.startsAt);
+        const featureStartsAt = new Date(startsAt.getTime() + auditorium.location.preShowBufferMinutes * 60000);
+        const endsAt = new Date(featureStartsAt.getTime() + showtime.movie.runtimeMinutes * 60000);
+        const roomReadyAt = new Date(endsAt.getTime() + Math.max(this.minimumCinemaCleaningMinutes, auditorium.location.cleaningBufferMinutes) * 60000);
+        return { showtime, auditorium, startsAt, featureStartsAt, endsAt, roomReadyAt };
+      });
+
+      for (let leftIndex = 0; leftIndex < proposed.length; leftIndex += 1) {
+        for (let rightIndex = leftIndex + 1; rightIndex < proposed.length; rightIndex += 1) {
+          const left = proposed[leftIndex]!;
+          const right = proposed[rightIndex]!;
+          if (left.auditorium.id === right.auditorium.id
+            && left.startsAt < right.roomReadyAt && left.roomReadyAt > right.startsAt) {
+            throw AppError.conflict(`The selected move would overlap ${left.showtime.movie.title} and ${right.showtime.movie.title}.`);
+          }
+        }
+      }
+
+      const earliest = new Date(Math.min(...proposed.map((move) => move.startsAt.getTime())));
+      const latest = new Date(Math.max(...proposed.map((move) => move.roomReadyAt.getTime())));
+      const nearby = await tx.showtime.findMany({
+        where: { id: { notIn: ids }, auditoriumId: { in: auditoriumIds }, startsAt: { lt: latest }, roomReadyAt: { gt: earliest } },
+        include: { movie: true },
+      });
+      for (const move of proposed) {
+        const conflict = nearby.find((showtime) => showtime.auditoriumId === move.auditorium.id
+          && move.startsAt < showtime.roomReadyAt && move.roomReadyAt > showtime.startsAt);
+        if (conflict) throw AppError.conflict(`Conflicts with ${conflict.movie.title} at ${conflict.startsAt.toISOString()}.`);
+      }
+
+      const updated = [];
+      for (const move of proposed) {
+        if (move.auditorium.id !== move.showtime.auditoriumId) {
+          const activeHolds = await tx.seatHold.count({
+            where: {
+              showtimeSeat: { showtimeId: move.showtime.id },
+              releasedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          });
+          if (activeHolds) throw AppError.conflict("A showtime with active seat holds cannot be moved to another room.");
+        }
+        updated.push(await tx.showtime.update({
+          where: { id: move.showtime.id },
+          data: { auditoriumId: move.auditorium.id, startsAt: move.startsAt, featureStartsAt: move.featureStartsAt, endsAt: move.endsAt, roomReadyAt: move.roomReadyAt },
+          include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+        }));
+        if (move.auditorium.id !== move.showtime.auditoriumId) {
+          await tx.showtimeSeat.deleteMany({ where: { showtimeId: move.showtime.id } });
+          const seats = await tx.seat.findMany({
+            where: { seatMap: { auditoriumId: move.auditorium.id }, active: true },
+            select: { id: true },
+          });
+          await tx.showtimeSeat.createMany({
+            data: seats.map((seat) => ({ showtimeId: move.showtime.id, seatId: seat.id })),
+          });
+        }
+        await tx.auditEvent.create({ data: {
+          actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "showtime.group_moved",
+          entityType: "Showtime", entityId: move.showtime.id, locationId,
+          beforeState: { auditoriumId: move.showtime.auditoriumId, startsAt: move.showtime.startsAt.toISOString() },
+          afterState: { auditoriumId: move.auditorium.id, startsAt: move.startsAt.toISOString(), roomReadyAt: move.roomReadyAt.toISOString(), groupSize: proposed.length },
+        } });
+      }
+      return { showtimes: updated };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async removeShowtime(actor: RequestActor, id: string) {
@@ -668,10 +1030,56 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async publicBranding(locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    return {
+      locationId: location.id,
+      name: location.name,
+      logoUrl: location.customerLogoUrl,
+      accentColor: location.customerAccentColor,
+      accentMutedColor: location.customerAccentMutedColor,
+      backgroundColor: location.customerBackgroundColor,
+      backgroundGlowColor: location.customerBackgroundGlowColor,
+      surfaceColor: location.customerSurfaceColor,
+      textColor: location.customerTextColor,
+      mutedTextColor: location.customerMutedTextColor,
+    };
+  }
+
+  async publicAdminBranding(locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    return {
+      locationId: location.id,
+      name: location.name,
+      accentColor: location.adminAccentColor,
+      accentMutedColor: location.adminAccentMutedColor,
+      backgroundColor: location.adminBackgroundColor,
+      surfaceColor: location.adminSurfaceColor,
+      textColor: location.adminTextColor,
+      mutedTextColor: location.adminMutedTextColor,
+      ui: adminUiConfigSchema.safeParse(location.adminUiConfig).success ? adminUiConfigSchema.parse(location.adminUiConfig) : adminUiDefaults,
+    };
+  }
+
+  async publicContent(locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const parsed = cinemaContentSchema.safeParse(location.contentPublished);
+    return { locationId: location.id, content: parsed.success ? parsed.data : cinemaContentDefaults, publishedAt: location.contentPublishedAt?.toISOString() ?? null };
+  }
+
   async nowPlaying(locationId?: string) {
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
 
     // Round trip fix: a showtime that already started must remain visible
@@ -709,6 +1117,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           select: {
             id: true,
             startsAt: true,
+            format: true,
+            filmSeries: { select: { id: true, name: true } },
             auditorium: { select: { id: true, name: true, capacity: true } },
             priceTier: {
               select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true },
@@ -748,11 +1158,127 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async publicDiningMenu(locationId?: string): Promise<PublicDiningMenuResponse> {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const [categories, movies] = await Promise.all([
+      prisma.menuCategory.findMany({
+        where: { locationId: location.id, active: true },
+        select: {
+          id: true,
+          name: true,
+          items: {
+            where: { active: true, is86d: false },
+            select: {
+              id: true, name: true, description: true, imageUrl: true,
+              priceCents: true, isVegan: true, isGlutenFree: true,
+            },
+            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+          },
+        },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      }),
+      prisma.movie.findMany({
+        where: {
+          organizationId: location.organizationId,
+          active: true,
+          pairings: { some: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } } },
+        },
+        select: {
+          id: true,
+          title: true,
+          posterUrl: true,
+          pairings: {
+            where: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } },
+            select: {
+              menuItem: {
+                select: {
+                  id: true, name: true, description: true, imageUrl: true,
+                  priceCents: true, isVegan: true, isGlutenFree: true,
+                },
+              },
+            },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
+        orderBy: { title: "asc" },
+      }),
+    ]);
+
+    return {
+      location: { id: location.id, name: location.name, address: location.address },
+      categories,
+      movieSpecials: movies.map((movie) => ({
+        movieId: movie.id,
+        movieTitle: movie.title,
+        posterUrl: movie.posterUrl,
+        items: movie.pairings.map((pairing) => pairing.menuItem),
+      })),
+    };
+  }
+
+  async publicMovieDetail(id: string, locationId?: string) {
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const movie = await prisma.movie.findFirst({
+      where: { id, organizationId: location.organizationId, active: true },
+      include: {
+        showtimes: {
+          where: { onSale: true, startsAt: { gte: new Date() }, auditorium: { locationId: location.id } },
+          select: {
+            id: true,
+            startsAt: true,
+            format: true,
+            filmSeries: { select: { id: true, name: true } },
+            auditorium: { select: { id: true, name: true, capacity: true } },
+            priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
+          },
+          orderBy: { startsAt: "asc" },
+        },
+        pairings: {
+          where: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id } } },
+          include: { menuItem: true },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
+    });
+    if (!movie) throw AppError.notFound("Movie not found.");
+    return {
+      location: { id: location.id, name: location.name, timezone: location.timezone },
+      movie: {
+        id: movie.id,
+        title: movie.title,
+        synopsis: movie.synopsis,
+        runtimeMinutes: movie.runtimeMinutes,
+        rating: movie.rating,
+        posterUrl: movie.posterUrl,
+        detailPosterUrl: movie.detailPosterUrl,
+        director: movie.director,
+        starring: movie.starring,
+        trailerUrl: movie.trailerUrl,
+        releaseYear: movie.releaseYear,
+        showtimes: movie.showtimes.map((showtime) => ({ ...showtime, startsAt: showtime.startsAt.toISOString() })),
+        pairings: movie.pairings.map(({ menuItem }) => ({
+          id: menuItem.id,
+          name: menuItem.name,
+          description: menuItem.description,
+          imageUrl: menuItem.imageUrl,
+          priceCents: menuItem.priceCents,
+        })),
+      },
+    };
+  }
+
   async publicFilmSeries(locationId?: string) {
     const now = new Date();
     const location = locationId
-      ? await prisma.location.findFirst({ where: { id: locationId, active: true } })
-      : await prisma.location.findFirst({ where: { active: true }, orderBy: { createdAt: "asc" } });
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");
 
     const series = await prisma.filmSeries.findMany({
@@ -779,8 +1305,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             id: true,
             startsAt: true,
             presentation: true,
+            format: true,
             movie: {
-              select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true },
+              select: {
+                id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, detailPosterUrl: true,
+                director: true, starring: true, trailerUrl: true, releaseYear: true,
+              },
             },
             auditorium: { select: { id: true, name: true, capacity: true } },
             priceTier: { select: { name: true, ticketPriceMinor: true, feeMinor: true, currency: true } },
@@ -788,6 +1318,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           orderBy: { startsAt: "asc" },
         },
       },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     });
 
     return {
@@ -796,8 +1327,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         .map((entry) => {
           const movies = new Map<string, {
             id: string; title: string; synopsis: string | null; runtimeMinutes: number;
-            rating: string | null; posterUrl: string | null; showtimes: Array<{
+            rating: string | null; posterUrl: string | null; detailPosterUrl: string | null; director: string | null;
+            starring: string | null; trailerUrl: string | null; releaseYear: number | null; showtimes: Array<{
               id: string; startsAt: string; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
+              format: string | null; filmSeries: { id: string; name: string } | null;
               auditorium: { id: string; name: string; capacity: number };
               priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
             }>;
@@ -808,6 +1341,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               id: showtime.id,
               startsAt: showtime.startsAt.toISOString(),
               presentation: showtimePresentationSchema.parse(showtime.presentation),
+              format: showtime.format,
+              filmSeries: { id: entry.id, name: entry.name },
               auditorium: showtime.auditorium,
               priceTier: showtime.priceTier,
             });
@@ -819,10 +1354,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             description: entry.description,
             artworkUrl: entry.artworkUrl,
             movies: Array.from(movies.values()),
-            firstShowtimeAt: entry.showtimes[0]?.startsAt.getTime() ?? Infinity,
+            sortOrder: entry.sortOrder,
           };
         })
-        .sort((a, b) => a.firstShowtimeAt - b.firstShowtimeAt)
+        .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
         .map((entry) => ({
           id: entry.id,
           name: entry.name,

@@ -1,9 +1,13 @@
-import { Body, Controller, Post, Get, HttpCode, HttpStatus, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Get, HttpCode, HttpStatus, Req, Res, UseGuards } from "@nestjs/common";
+import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
   customerRegisterRequestSchema,
   refreshRequestSchema,
   staffLoginRequestSchema,
+  staffPasswordChangeRequestSchema,
+  staffMfaConfirmRequestSchema,
+  staffMfaVerifyRequestSchema,
   AuthTokenResponse,
 } from "@cinema/shared";
 import { loadEnv } from "@cinema/config/env";
@@ -15,6 +19,12 @@ import { RequestActor } from "./types";
 import { TokenPair } from "@cinema/auth";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { AppError } from "../common/app-error";
+import {
+  assertTrustedCustomerOrigin,
+  clearCustomerSessionCookies,
+  requireCustomerRefreshToken,
+  setCustomerSessionCookies,
+} from "./customer-session";
 
 function toTokenResponse(tokens: TokenPair): AuthTokenResponse {
   const env = loadEnv();
@@ -38,9 +48,38 @@ export class AuthController {
   @UseGuards(RequestRateLimitGuard)
   @RateLimit({ scope: "auth", identity: "email" })
   async staffLogin(@Body(new ZodValidationPipe(staffLoginRequestSchema)) body: unknown) {
-    const { tokens, employee } = await this.authService.staffLogin(
+    const result = await this.authService.staffLogin(
       body as ReturnType<typeof staffLoginRequestSchema.parse>,
     );
+    const { tokens, employee } = result;
+    return { ...toTokenResponse(tokens), employee };
+  }
+
+  @Post("staff/mfa/verify")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth" })
+  async verifyStaffMfa(@Body(new ZodValidationPipe(staffMfaVerifyRequestSchema)) body: unknown) {
+    const { tokens, employee } = await this.authService.verifyStaffMfa(staffMfaVerifyRequestSchema.parse(body));
+    return { ...toTokenResponse(tokens), employee };
+  }
+
+  @Post("staff/mfa/setup")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async beginStaffMfaSetup(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    return this.authService.beginStaffMfaSetup(actor.sub);
+  }
+
+  @Post("staff/mfa/confirm")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async confirmStaffMfa(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(staffMfaConfirmRequestSchema)) body: unknown) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    const { tokens, employee } = await this.authService.confirmStaffMfa(actor.sub, staffMfaConfirmRequestSchema.parse(body));
     return { ...toTokenResponse(tokens), employee };
   }
 
@@ -55,13 +94,26 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard)
   async staffLogout(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
     await this.authService.staffLogout(actor.sub);
   }
 
   @Get("staff/me")
   @UseGuards(JwtAuthGuard)
   async staffMe(@CurrentActor() actor: RequestActor) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    if (actor.supportSession) return this.authService.supportStaffMe(actor);
     return this.authService.staffMe(actor.sub);
+  }
+
+  @Post("staff/change-password")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async changeStaffPassword(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(staffPasswordChangeRequestSchema)) body: unknown) {
+    if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
+    const { tokens, employee } = await this.authService.changeStaffPassword(actor.sub, staffPasswordChangeRequestSchema.parse(body));
+    return { ...toTokenResponse(tokens), employee };
   }
 
   // -------------------------------------------------------------------
@@ -72,37 +124,58 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(RequestRateLimitGuard)
   @RateLimit({ scope: "auth", identity: "email" })
-  async customerRegister(@Body(new ZodValidationPipe(customerRegisterRequestSchema)) body: unknown) {
+  async customerRegister(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body(new ZodValidationPipe(customerRegisterRequestSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
     const { tokens, customer } = await this.authService.customerRegister(
       body as ReturnType<typeof customerRegisterRequestSchema.parse>,
     );
-    return { ...toTokenResponse(tokens), customer };
+    setCustomerSessionCookies(response, tokens);
+    return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };
   }
 
   @Post("customers/login")
   @HttpCode(HttpStatus.OK)
   @UseGuards(RequestRateLimitGuard)
   @RateLimit({ scope: "auth", identity: "email" })
-  async customerLogin(@Body(new ZodValidationPipe(customerLoginRequestSchema)) body: unknown) {
+  async customerLogin(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body(new ZodValidationPipe(customerLoginRequestSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
     const { tokens, customer } = await this.authService.customerLogin(
       body as ReturnType<typeof customerLoginRequestSchema.parse>,
     );
-    return { ...toTokenResponse(tokens), customer };
+    setCustomerSessionCookies(response, tokens);
+    return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };
   }
 
   @Post("customers/refresh")
   @HttpCode(HttpStatus.OK)
-  async customerRefresh(@Body(new ZodValidationPipe(refreshRequestSchema)) body: { refreshToken: string }) {
-    const { tokens, customer } = await this.authService.customerRefresh(body.refreshToken);
-    return { ...toTokenResponse(tokens), customer };
+  async customerRefresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    const { tokens, customer } = await this.authService.customerRefresh(requireCustomerRefreshToken(request));
+    setCustomerSessionCookies(response, tokens);
+    return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };
   }
 
   @Post("customers/logout")
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard)
-  async customerLogout(@CurrentActor() actor: RequestActor) {
-    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
-    await this.authService.customerLogout(actor.sub);
+  async customerLogout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    const refreshToken = requireCustomerRefreshToken(request);
+    clearCustomerSessionCookies(response);
+    await this.authService.customerLogout(refreshToken);
   }
 
   @Get("customers/me")

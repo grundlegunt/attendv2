@@ -132,7 +132,10 @@ export class RestaurantService {
     kitchenStationId: string;
     name: string;
     description?: string;
+    imageUrl?: string | null;
     priceCents: number;
+    isVegan: boolean;
+    isGlutenFree: boolean;
     sortOrder: number;
   }) {
     return this.prisma.$transaction(async (tx) => {
@@ -143,7 +146,10 @@ export class RestaurantService {
           kitchenStationId: input.kitchenStationId,
           name: input.name,
           description: input.description,
+          imageUrl: input.imageUrl,
           priceCents: input.priceCents,
+          isVegan: input.isVegan,
+          isGlutenFree: input.isGlutenFree,
           sortOrder: input.sortOrder,
         },
       });
@@ -258,7 +264,10 @@ export class RestaurantService {
     changes: {
       name?: string;
       description?: string | null;
+      imageUrl?: string | null;
       priceCents?: number;
+      isVegan?: boolean;
+      isGlutenFree?: boolean;
       active?: boolean;
       is86d?: boolean;
       sortOrder?: number;

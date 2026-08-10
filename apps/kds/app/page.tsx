@@ -46,6 +46,10 @@ type FulfillmentAction =
   | "CANCEL"
   | "VOID";
 
+type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
+type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
+const STORAGE_KEY = "attend-kds-session";
+
 function ageClass(firedAt: string) {
   const ageMinutes = (Date.now() - new Date(firedAt).getTime()) / 60_000;
   if (ageMinutes >= 15) return "critical";
@@ -69,6 +73,48 @@ export default function KdsPage() {
   const [stationId, setStationId] = useState("");
   const [queue, setQueue] = useState<QueueResponse | null>(null);
   const [now, setNow] = useState(Date.now());
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
+  const [expiresInSeconds, setExpiresInSeconds] = useState(0);
+  const [restored, setRestored] = useState(false);
+
+  function storeSession(next: ActiveStaffSession) {
+    setEmployee(next.employee); setAccessToken(next.accessToken); setRefreshToken(next.refreshToken); setExpiresInSeconds(next.expiresInSeconds);
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }
+
+  async function refreshSession(token: string) {
+    const next = await apiFetch<ActiveStaffSession>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken: token }) });
+    storeSession(next);
+  }
+
+  function signOut() {
+    if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
+    window.sessionStorage.removeItem(STORAGE_KEY);
+    setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setStations([]); setStationId(""); setQueue(null);
+  }
+
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!stored) { setRestored(true); return; }
+    try {
+      const parsed = JSON.parse(stored) as Partial<ActiveStaffSession>;
+      if (!parsed.refreshToken) throw new Error("Stored session cannot be refreshed.");
+      void refreshSession(parsed.refreshToken).catch(() => {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        setError("Your display session expired. Please sign in again.");
+      }).finally(() => setRestored(true));
+    } catch {
+      window.sessionStorage.removeItem(STORAGE_KEY); setRestored(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!refreshToken) return;
+    const timer = window.setTimeout(() => void refreshSession(refreshToken).catch(signOut), Math.max(5_000, (expiresInSeconds - 60) * 1_000));
+    return () => window.clearTimeout(timer);
+  }, [accessToken, expiresInSeconds, refreshToken]);
 
   const refresh = useCallback(async () => {
     if (!accessToken || !stationId) return;
@@ -126,14 +172,12 @@ export default function KdsPage() {
     setError(null);
     setLoading(true);
     try {
-      const response = await apiFetch<
-        AuthTokenResponse & { employee: AuthenticatedEmployee }
-      >("/auth/staff/login", {
+      const response = await apiFetch<StaffLoginResponse>("/auth/staff/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      setEmployee(response.employee);
-      setAccessToken(response.accessToken);
+      if ("mfaRequired" in response) { setMfaChallengeToken(response.challengeToken); setPassword(""); return; }
+      storeSession(response);
     } catch (reason) {
       setError(
         reason instanceof ApiRequestError
@@ -143,6 +187,15 @@ export default function KdsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function verifyMfa(event: FormEvent) {
+    event.preventDefault(); setError(null); setLoading(true);
+    try {
+      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
+      storeSession(response); setMfaChallengeToken(null); setMfaCode("");
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The code could not be verified."); }
+    finally { setLoading(false); }
   }
 
   async function transition(
@@ -159,6 +212,15 @@ export default function KdsPage() {
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "Status did not update.");
     }
+  }
+
+  if (!restored) return <main className="auth-shell"><div className="auth-card"><p>Restoring display session…</p></div></main>;
+
+  if (mfaChallengeToken) {
+    return <main className="auth-shell"><div className="auth-card"><h1>Authenticator code</h1><p className="subtitle">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={verifyMfa}>
+      <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
+      <button className="primary" type="submit" disabled={loading}>{loading ? "Verifying…" : "Verify and sign in"}</button>
+    </form></div></main>;
   }
 
   if (!employee) {
@@ -186,6 +248,8 @@ export default function KdsPage() {
     );
   }
 
+  if (employee.mfaSetupRequired) return <main className="auth-shell"><div className="auth-card"><h1>MFA setup required</h1><p className="subtitle">Sign in to Attend Admin to connect an authenticator app before opening this station.</p></div></main>;
+
   return (
     <main className="kds-shell">
       <header className="kds-header">
@@ -201,7 +265,7 @@ export default function KdsPage() {
             ))}
           </select>
         </label>
-        <p>{employee.name}</p>
+        <div><p>{employee.name}</p><button type="button" onClick={signOut}>Sign out</button></div>
       </header>
       {error && <div className="error-banner">{error}</div>}
       <section className="queue-section">
