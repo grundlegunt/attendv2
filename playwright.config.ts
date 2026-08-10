@@ -13,5 +13,6 @@ export default defineConfig({
     { command: "pnpm --filter @cinema/customer-web dev", url: "http://127.0.0.1:3000", reuseExistingServer: !process.env.CI, timeout: 120_000 },
     { command: "pnpm --filter @cinema/staff-pos dev", url: "http://127.0.0.1:3001", reuseExistingServer: !process.env.CI, timeout: 120_000 },
     { command: "pnpm --filter @cinema/admin dev", url: "http://127.0.0.1:3003", reuseExistingServer: !process.env.CI, timeout: 120_000 },
+    { command: "pnpm --filter @cinema/platform-admin dev", url: "http://127.0.0.1:3004", reuseExistingServer: !process.env.CI, timeout: 120_000 },
   ],
 });
