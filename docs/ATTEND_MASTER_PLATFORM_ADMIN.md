@@ -19,6 +19,7 @@ Verified directly against `apps/api/src/platform/platform.service.ts` and `apps/
 - **Edit location identity and operations** — name, address, timezone, active flag, plus the operational settings (ticket tax rate, pre-show/cleaning buffers, check-drop timing, time-clock toggle) that were previously only reachable from inside that client's own admin app.
 - **Branding** — sets each client's customer-facing and admin-facing color palette and logo, applied live to that client's `customer-web`/`admin` instances.
 - **Content Studio** — a real draft → publish workflow (`contentDraft`/`contentPublished`/`contentPublishedAt` on `Location`) for editing the About, Afterglow, Dining & Bar, and Private Events page copy, without a code deploy.
+- **Create the client's first staff login** — `POST .../cinema-manager` creates the first cinema-admin employee account for a newly onboarded location, so the client can actually get into their own `apps/admin` after Attend Master sets them up. (This closes part of what used to be a real onboarding gap — a client previously had no way to ever log into their own admin app at all.)
 - **Audit trail** — every platform action (login, org created/updated, location updated, content draft/publish) is written as an `actorType: "PLATFORM"` audit event, tenant-isolation-scoped correctly (`updateLocation`/`updateOrganization` both verify the location actually belongs to the given `organizationId` before touching it — matches the existing cross-tenant isolation discipline from `docs/SECURITY.md` §2.2).
 
 This is real, working infrastructure, not a stub — the tenant-isolation and audit discipline already established elsewhere in the codebase carried over correctly.
@@ -43,6 +44,22 @@ Checked against the actual code, not assumed. Ranked by how much each one blocks
 - **No cross-client revenue or usage rollup.** The overview shows operational counts (auditoriums, employees, menu items, showtimes) but nothing about actual ticket or F&B revenue per client. For a company running a multi-tenant SaaS, this is normally the first thing you'd want to see — both for business health monitoring and because it's the natural basis for a take-rate or usage-based billing model.
 - **There is no billing/subscription model in the schema at all** — no concept of what Attend charges a client (flat SaaS fee? percentage of transactions? something else). This doesn't need to be built yet, but it's worth being a deliberate decision rather than something that gets bolted on later once clients are already live.
 - **Branding changes apply immediately, with no draft/preview step** — inconsistent with Content Studio, which correctly has draft → publish. A bad color change goes straight to a live client's site today. Worth giving branding the same safety the content workflow already has.
+- **No support/troubleshooting tool for Attend Master to see what a client sees.** If a client reports a problem in their own admin app, today there's no way for Attend Master to look at it without asking the client for their own credentials, which shouldn't happen. A real version of this (a scoped, time-limited, clearly-banner'd, fully audit-logged "view this client's admin as read-only" mode) is a legitimate feature, but needs a deliberate security design — don't build a silent impersonation path as a side effect of some other task.
+
+## Proposed full layout
+
+Attend Master today is one page (`apps/platform-admin/app/page.tsx`) doing everything — overview, org create, org edit, location edit, content draft/publish, all in one component. That was fine to get real functionality shipped, but it should split the same way `apps/admin` already did (see `docs/ADMIN_APP_STRUCTURE.md`): one route per concern, not one page doing everything. Proposed page list:
+
+- **Dashboard** — the landing page after login. Cross-client KPIs, not per-client detail: total clients, total locations, how many clients are stuck at each Stripe onboarding stage, recently onboarded clients, and (once the revenue rollup below exists) aggregate ticket/F&B revenue across the whole platform for today/this week. This is the "is the business healthy" screen — right now Attend Master has no such view at all, only a flat client list.
+- **Clients** — the existing organization list/detail, promoted to its own route. Add a search/filter (by onboarding status, active/inactive, location count) to the list once there are more than a handful of clients — a flat list doesn't scale.
+- **Onboarding** — turn the current single flat "create organization" form into an actual guided sequence: org info → first location → Stripe Connect → branding → content defaults → create first staff login → review and launch. Not because the current form is wrong, but because a real wizard lets Attend Master show *where* a client is stuck (e.g., "onboarded but never finished Stripe") instead of only an end-state form.
+- **Payments** — a dedicated screen for the Stripe Connect side specifically, separate from general org editing: which clients are connected, which are mid-onboarding, and (once built) the actual "start/resume Stripe Connect onboarding" action. This is where the blocking gap below gets a home once it's built.
+- **Content Studio** — already its own real workflow, keep as-is, just give it a permanent nav entry instead of being embedded inside the client-detail view.
+- **Branding** — same; give it its own screen, and add the draft/preview step called out below.
+- **Team** — manage Attend Master's own users once that exists (see below): invite, deactivate, assign a role.
+- **Audit Log** — once a viewer exists (see below), a dedicated screen to search/filter the platform-level audit trail: by client, by actor, by action, by date range.
+
+None of this needs to happen at once — it's the target shape to grow into, not a rewrite request. The Stripe Connect flow and the page split are the two structural things worth doing first; the rest can follow incrementally.
 
 ## Guardrails
 
