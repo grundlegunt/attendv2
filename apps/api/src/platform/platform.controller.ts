@@ -54,6 +54,17 @@ const cinemaManagerCreateSchema = z.object({
   password: z.string().min(12).max(200),
 }).strict();
 
+const platformUserCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(254),
+  password: z.string().min(12).max(200),
+}).strict();
+
+const platformUserUpdateSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  active: z.boolean().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one team field is required.");
+
 @Controller("platform")
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
@@ -77,6 +88,24 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   auditEvents(@Query("limit") limit?: string, @Query("offset") offset?: string, @Query("organizationId") organizationId?: string, @Query("action") action?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
     return this.platform.auditEvents({ limit, offset, organizationId, action, actorId, from, to });
+  }
+
+  @Get("team")
+  @UseGuards(PlatformAuthGuard)
+  team() {
+    return this.platform.team();
+  }
+
+  @Post("team")
+  @UseGuards(PlatformAuthGuard)
+  createPlatformUser(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(platformUserCreateSchema)) body: unknown) {
+    return this.platform.createPlatformUser({ actorId: actor.sub, ...platformUserCreateSchema.parse(body) });
+  }
+
+  @Patch("team/:userId")
+  @UseGuards(PlatformAuthGuard)
+  updatePlatformUser(@CurrentActor() actor: RequestActor, @Param("userId") userId: string, @Body(new ZodValidationPipe(platformUserUpdateSchema)) body: unknown) {
+    return this.platform.updatePlatformUser({ actorId: actor.sub, userId, ...platformUserUpdateSchema.parse(body) });
   }
 
   @Post("organizations")
