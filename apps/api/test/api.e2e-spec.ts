@@ -1210,7 +1210,7 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`);
     expect(settings.status).toBe(200);
     expect(settings.body.promotions.find((item: { id: string }) => item.id === promotion.body.id)).toEqual(
-      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalDiscountCents: 777 }),
+      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalTicketFaceValueCents: 2000, totalCollectedCents: 2000, totalDiscountCents: 777 }),
     );
   });
 
