@@ -255,14 +255,12 @@ export function SchedulingCalendar({
       || startsAt.getTime() !== new Date(showtime.startsAt).getTime());
   }
 
-  function showtimeAtDropPoint(event: React.DragEvent<HTMLDivElement>) {
-    const blocks = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-showtime-id]"));
-    const block = blocks.find((candidate) => {
-      const bounds = candidate.getBoundingClientRect();
-      return event.clientX >= bounds.left && event.clientX <= bounds.right
-        && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
-    });
-    return showtimes.find((item) => item.id === block?.dataset.showtimeId);
+  function showtimeAtDropTime(auditoriumId: string, targetTime: Date, draggedShowtimeId: string) {
+    const targetTimeMs = targetTime.getTime();
+    return visibleShowtimes.find((item) => item.id !== draggedShowtimeId
+      && item.auditorium.id === auditoriumId
+      && targetTimeMs >= new Date(item.startsAt).getTime()
+      && targetTimeMs < new Date(item.roomReadyAt).getTime());
   }
 
   async function dropOnTimeline(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, start: Date) {
@@ -281,11 +279,11 @@ export function SchedulingCalendar({
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
-    // The drop preview is deliberately rendered over the timeline. Looking at
-    // event.target therefore misses the showtime underneath it. Resolve the
-    // destination from the rendered block bounds instead so dropping anywhere
-    // on a block consistently triggers a room swap.
-    const dropTarget = showtimeAtDropPoint(event);
+    // Resolve swaps from schedule time instead of DOM geometry. Safari's drag
+    // ghost can offset the pointer from the rendered block even when the user
+    // visibly drops on it, while the occupied time range is the actual source
+    // of truth for which showing is being targeted.
+    const dropTarget = showtimeAtDropTime(auditoriumId, targetTime, showtime.id);
     if (dropTarget && dropTarget.id !== showtime.id && dropTarget.auditorium.id !== showtime.auditorium.id) {
       await onMoveMany(swappedRoomMoves(showtime, dropTarget));
       setSelectedShowtimeIds([showtime.id, dropTarget.id]);
