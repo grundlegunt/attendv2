@@ -278,9 +278,6 @@
   border-left: 3px solid var(--color-accent);
   background: rgba(255, 255, 255, 0.025);
 }
-.dining-page {
-  max-width: 1500px;
-}
 .how-it-works {
   display: grid;
   grid-template-columns: minmax(220px, 0.55fr) 1.45fr;
