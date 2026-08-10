@@ -1318,6 +1318,24 @@ button.link {
     min-height: 300px;
   }
 }
+
+body:has(.signage-shell) .site-header { display: none; }
+.signage-shell { min-height: 100vh; box-sizing: border-box; padding: clamp(28px, 4vw, 64px); background: radial-gradient(circle at top right, color-mix(in srgb, var(--color-accent) 20%, transparent), transparent 36%), var(--color-bg); color: var(--color-text); }
+.signage-shell > header { display: flex; justify-content: space-between; align-items: end; gap: 32px; padding-bottom: 24px; border-bottom: 2px solid var(--color-accent); }
+.signage-shell > header span, .signage-shell footer { color: var(--color-accent); font-weight: 900; letter-spacing: .18em; }
+.signage-shell > header h1 { margin: 6px 0 0; font: clamp(2.5rem, 5vw, 5.5rem)/.95 var(--font-family-display); }
+.signage-shell > header > time { color: var(--color-text-secondary); font-size: clamp(1rem, 1.8vw, 1.6rem); }
+.signage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(16px, 2vw, 30px); padding: 32px 0; }
+.signage-grid article { display: grid; grid-template-columns: 92px 1fr; min-height: 138px; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.signage-grid img, .signage-poster { width: 92px; height: 138px; object-fit: cover; }
+.signage-poster { display: grid; place-items: center; background: var(--color-accent); color: var(--color-bg); font-weight: 900; writing-mode: vertical-rl; letter-spacing: .16em; }
+.signage-grid article > div:last-child { padding: 16px; }
+.signage-grid time { color: var(--color-accent); font-size: 1.45rem; font-weight: 900; }
+.signage-grid h2 { margin: 5px 0; font: clamp(1.25rem, 2vw, 2rem)/1 var(--font-family-display); }
+.signage-grid p, .signage-grid small { margin: 0; color: var(--color-text-secondary); }
+.signage-message { display: grid; min-height: 55vh; place-items: center; font: 3rem var(--font-family-display); }
+.signage-shell footer { text-align: right; }
+@media (max-width: 1100px) { .signage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
   .movie-detail__hero {
     grid-template-columns: 1fr;
