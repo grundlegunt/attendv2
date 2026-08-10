@@ -98,7 +98,7 @@ test("Attend operator signs in and navigates to Clients", async ({ page }) => {
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Platform health" })).toBeVisible();
-  await page.getByRole("link", { name: "Clients" }).click();
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Client operations" })).toBeVisible();
   await expect(page.getByText("Application error")).toHaveCount(0);
 });
