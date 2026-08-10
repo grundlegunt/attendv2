@@ -11,6 +11,8 @@ import { BoxOfficePos } from "./box-office-pos";
 import { ShiftControls } from "./shift-controls";
 
 type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
+type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
+const STORAGE_KEY = "attend-staff-pos-session";
 
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
@@ -63,6 +65,46 @@ export default function StaffLoginPage() {
   const [clockPin, setClockPin] = useState("");
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
+  const [refreshToken, setRefreshToken] = useState("");
+  const [expiresInSeconds, setExpiresInSeconds] = useState(0);
+  const [restored, setRestored] = useState(false);
+
+  function storeSession(next: ActiveStaffSession) {
+    setEmployee(next.employee); setAccessToken(next.accessToken); setRefreshToken(next.refreshToken); setExpiresInSeconds(next.expiresInSeconds);
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  }
+
+  async function refreshSession(token: string) {
+    const next = await apiFetch<ActiveStaffSession>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken: token }) });
+    storeSession(next);
+  }
+
+  function signOut() {
+    if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
+    window.sessionStorage.removeItem(STORAGE_KEY);
+    setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
+  }
+
+  useEffect(() => {
+    const stored = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!stored) { setRestored(true); return; }
+    try {
+      const parsed = JSON.parse(stored) as Partial<ActiveStaffSession>;
+      if (!parsed.refreshToken) throw new Error("Stored session cannot be refreshed.");
+      void refreshSession(parsed.refreshToken).catch(() => {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+        setError("Your staff session expired. Please sign in again.");
+      }).finally(() => setRestored(true));
+    } catch {
+      window.sessionStorage.removeItem(STORAGE_KEY); setRestored(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!refreshToken) return;
+    const timer = window.setTimeout(() => void refreshSession(refreshToken).catch(signOut), Math.max(5_000, (expiresInSeconds - 60) * 1_000));
+    return () => window.clearTimeout(timer);
+  }, [accessToken, expiresInSeconds, refreshToken]);
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
@@ -101,8 +143,7 @@ export default function StaffLoginPage() {
         { method: "POST", body: JSON.stringify({ email, password }) },
       );
       if ("mfaRequired" in res) { setMfaChallengeToken(res.challengeToken); setPassword(""); return; }
-      setEmployee(res.employee);
-      setAccessToken(res.accessToken);
+      storeSession(res);
       setCurrentPassword(password);
       setPassword("");
     } catch (err) {
@@ -116,7 +157,7 @@ export default function StaffLoginPage() {
     event.preventDefault(); setError(null); setLoading(true);
     try {
       const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
-      setEmployee(res.employee); setAccessToken(res.accessToken); setMfaChallengeToken(null); setMfaCode("");
+      storeSession(res); setMfaChallengeToken(null); setMfaCode("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The code could not be verified."); }
     finally { setLoading(false); }
   }
@@ -127,7 +168,7 @@ export default function StaffLoginPage() {
     setLoading(true);
     try {
       const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
-      setEmployee(res.employee); setAccessToken(res.accessToken); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+      storeSession(res); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
     finally { setLoading(false); }
   }
@@ -161,6 +202,8 @@ export default function StaffLoginPage() {
     }
   }
 
+  if (!restored) return <main className="auth-shell"><div className="auth-card"><p>Restoring staff session…</p></div></main>;
+
   if (mfaChallengeToken) {
     return <main className="auth-shell"><div className="auth-card"><h1>Authenticator code</h1><p className="subtitle">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={verifyMfa}>
       <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
@@ -193,7 +236,7 @@ export default function StaffLoginPage() {
       <main className="staff-shell">
         <header className="staff-header">
           <div><span className="eyebrow">ATTEND STAFF</span><h1>Live seats</h1></div>
-          <div><p>{employee.name} · {employee.roles.join(", ")}</p>{employee.timeClockEnabled && <ShiftControls employee={employee} pin={clockPin} onClockOut={() => { setClockPin(""); setClockReady(false); }} />}</div>
+          <div><p>{employee.name} · {employee.roles.join(", ")}</p>{employee.timeClockEnabled && <ShiftControls employee={employee} pin={clockPin} onClockOut={() => { setClockPin(""); setClockReady(false); }} />}<button type="button" className="secondary" onClick={signOut}>Sign out</button></div>
         </header>
 
         {error && <div className="error-banner">{error}</div>}

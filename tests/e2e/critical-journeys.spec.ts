@@ -59,11 +59,27 @@ test("staff signs in, clocks in, and reaches live operational tools", async ({ p
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: /Welcome,/ })).toBeVisible();
+  const staffSession = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem("attend-staff-pos-session") ?? "null"));
+  expect(staffSession).toEqual(expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String), expiresInSeconds: expect.any(Number) }));
+  await page.reload();
+  await expect(page.getByRole("heading", { name: /Welcome,/ })).toBeVisible();
   await page.getByLabel("Employee PIN").fill("1234");
   await page.getByRole("button", { name: "Enter POS" }).click();
   await expect(page.getByRole("navigation", { name: "Staff tools" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Scan tickets" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Box office" })).toBeVisible();
+});
+
+test("kitchen display restores its authenticated station session", async ({ page }) => {
+  await page.goto("http://127.0.0.1:3002");
+  await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByLabel("Station")).toBeVisible();
+  const kdsSession = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem("attend-kds-session") ?? "null"));
+  expect(kdsSession).toEqual(expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String), expiresInSeconds: expect.any(Number) }));
+  await page.reload();
+  await expect(page.getByLabel("Station")).toBeVisible();
 });
 
 test("manager signs in and reaches reporting and configuration", async ({ page }) => {
