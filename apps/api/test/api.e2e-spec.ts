@@ -834,6 +834,43 @@ describe("Milestone 1 cinema configuration", () => {
       });
   });
 
+  it("lets cinema managers update an organization ticket price", async () => {
+    const current = await request(app.getHttpServer())
+      .get("/api/v1/management/settings")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(current.status).toBe(200);
+    const tier = current.body.priceTiers[0];
+    expect(tier).toEqual(expect.objectContaining({
+      id: expect.any(String),
+      ticketPriceMinor: expect.any(Number),
+    }));
+
+    const ticketPriceMinor = tier.ticketPriceMinor + 25;
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/price-tiers/${tier.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketPriceMinor });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toEqual(expect.objectContaining({
+      id: tier.id,
+      ticketPriceMinor,
+    }));
+
+    const audit = await request(app.getHttpServer())
+      .get(`/api/v1/audit-events?action=ticket.price_tier_updated&entityId=${tier.id}&limit=1`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    expect(audit.status).toBe(200);
+    expect(audit.body[0]).toEqual(expect.objectContaining({
+      action: "ticket.price_tier_updated",
+      entityId: tier.id,
+    }));
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/price-tiers/${tier.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketPriceMinor: tier.ticketPriceMinor });
+  });
+
   it("lets managers update and deactivate restaurant charge rules", async () => {
     const tax = await request(app.getHttpServer())
       .post("/api/v1/management/settings/tax-rules")
