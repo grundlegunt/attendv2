@@ -1343,6 +1343,13 @@ export class TicketingService {
       // actually won, not the rejection this call itself observed.
       const failureMessage = error.message;
       return this.prisma.$transaction(async (tx) => {
+        // Match refundUnavailableOrder's lock order: ticket order first,
+        // then refund/payment rows. Otherwise concurrent recovery can hold
+        // the order while this transaction holds Refund/Payment, leaving
+        // each side waiting on the other until Postgres aborts one.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${ctx.ticketOrderId} FOR UPDATE`,
+        );
         const updated = await tx.refund.updateMany({
           where: { id: refund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
           data: { status: RefundStatus.FAILED, leaseExpiresAt: null },
@@ -1370,6 +1377,12 @@ export class TicketingService {
     let settled: RefundStatus;
     try {
       settled = await this.prisma.$transaction(async (tx) => {
+        // Keep the row-lock order consistent with refundUnavailableOrder so
+        // a concurrent finalize waits before either transaction owns
+        // Refund or Payment locks instead of forming a deadlock cycle.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${ctx.ticketOrderId} FOR UPDATE`,
+        );
         // Codex review fixes: guarded on "still non-terminal", not merely
         // "not already at this exact status" -- see applyAsyncRefundUpdate's
         // matching comment. A concurrent refund.updated webhook (or another
