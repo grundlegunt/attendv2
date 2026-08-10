@@ -610,6 +610,30 @@ export default function AttendMaster() {
     }
   }
 
+  const locations =
+    overview?.organizations.flatMap((item) => item.locations) ?? [];
+  const filteredOrganizations = useMemo(() => {
+    const normalizedQuery = clientQuery.trim().toLowerCase();
+    return (overview?.organizations ?? []).filter((item) => {
+      const matchesQuery = !normalizedQuery || [
+        item.name,
+        item.legalName ?? "",
+        item.timezone,
+        ...item.locations.flatMap((location) => [location.name, location.address ?? "", location.timezone]),
+      ].some((value) => value.toLowerCase().includes(normalizedQuery));
+      const matchesPayment = paymentFilter === "ALL"
+        || (paymentFilter === "COMPLETE" && item.payments.onboardingStatus === "COMPLETE")
+        || (paymentFilter === "INCOMPLETE" && item.payments.onboardingStatus !== "COMPLETE")
+        || item.payments.onboardingStatus === paymentFilter;
+      const matchesLocation = locationFilter === "ALL"
+        || item.locations.some((location) => location.active === (locationFilter === "ACTIVE"));
+      const matchesLocationCount = locationCountFilter === "ALL"
+        || (locationCountFilter === "ONE" && item.locations.length === 1)
+        || (locationCountFilter === "MULTIPLE" && item.locations.length > 1);
+      return matchesQuery && matchesPayment && matchesLocation && matchesLocationCount;
+    });
+  }, [clientQuery, locationCountFilter, locationFilter, overview, paymentFilter]);
+
   if (!restored)
     return (
       <main className="center">
@@ -647,29 +671,6 @@ export default function AttendMaster() {
       </main>
     );
 
-  const locations =
-    overview?.organizations.flatMap((item) => item.locations) ?? [];
-  const filteredOrganizations = useMemo(() => {
-    const normalizedQuery = clientQuery.trim().toLowerCase();
-    return (overview?.organizations ?? []).filter((item) => {
-      const matchesQuery = !normalizedQuery || [
-        item.name,
-        item.legalName ?? "",
-        item.timezone,
-        ...item.locations.flatMap((location) => [location.name, location.address ?? "", location.timezone]),
-      ].some((value) => value.toLowerCase().includes(normalizedQuery));
-      const matchesPayment = paymentFilter === "ALL"
-        || (paymentFilter === "COMPLETE" && item.payments.onboardingStatus === "COMPLETE")
-        || (paymentFilter === "INCOMPLETE" && item.payments.onboardingStatus !== "COMPLETE")
-        || item.payments.onboardingStatus === paymentFilter;
-      const matchesLocation = locationFilter === "ALL"
-        || item.locations.some((location) => location.active === (locationFilter === "ACTIVE"));
-      const matchesLocationCount = locationCountFilter === "ALL"
-        || (locationCountFilter === "ONE" && item.locations.length === 1)
-        || (locationCountFilter === "MULTIPLE" && item.locations.length > 1);
-      return matchesQuery && matchesPayment && matchesLocation && matchesLocationCount;
-    });
-  }, [clientQuery, locationCountFilter, locationFilter, overview, paymentFilter]);
   return (
     <main className="shell">
       <header>

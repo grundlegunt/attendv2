@@ -91,3 +91,14 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await mobileSidebar.getByRole("button", { name: "Close navigation" }).click();
   await expect(page.getByRole("button", { name: "Menu" })).toHaveAttribute("aria-expanded", "false");
 });
+
+test("Attend operator signs in and navigates to Clients", async ({ page }) => {
+  await page.goto("http://127.0.0.1:3004");
+  await page.getByLabel("Email").fill("platform@attend.test");
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "Platform health" })).toBeVisible();
+  await page.getByRole("link", { name: "Clients", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Client operations" })).toBeVisible();
+  await expect(page.getByText("Application error")).toHaveCount(0);
+});
