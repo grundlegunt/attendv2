@@ -59,6 +59,8 @@ Dashboard panels must split payment/refund errors, seat-hold conflicts, restaura
 
 Before production launch, replace every placeholder with independently generated values in the hosting secret manager. Required secrets include database and Redis credentials, access/refresh JWT keys, QR credential key, observability token, Stripe secret/webhook keys, and Postmark token.
 
+Stripe defaults to `STRIPE_MODE=test`. Enabling real charges is a deliberate release action: set `STRIPE_MODE=live`, `STRIPE_SECRET_KEY=sk_live_…`, and `STRIPE_PUBLISHABLE_KEY=pk_live_…` together in the production API and customer-web environments, with the live endpoint's `STRIPE_WEBHOOK_SECRET`. Boot validation rejects live mode outside `NODE_ENV=production` and rejects mixed test/live key pairs. Verify Connect onboarding, one low-value charge, webhook receipt, and refund in live mode before opening sales.
+
 - Never reuse access, refresh, QR, or observability secrets.
 - Rotate Stripe/Postmark credentials in their provider consoles, deploy the new value, verify, then revoke the old value.
 - Rotating JWT keys invalidates sessions; announce the maintenance effect and verify staff can sign in again.
