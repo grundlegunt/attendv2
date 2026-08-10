@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, Prisma, prisma } from "@cinema/database";
-import { signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
+import { DEFAULT_ROLE_PERMISSIONS, hashPassword, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingDefaults, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
 import { AppError } from "../common/app-error";
@@ -217,6 +217,55 @@ export class PlatformService {
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: updated.id, action: "platform.location_updated", entityType: "Location", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
     });
     return this.organization(input.organizationId);
+  }
+
+  async createCinemaManager(input: { actorId: string; organizationId: string; locationId: string; name: string; email: string; password: string }) {
+    const normalizedEmail = input.email.toLowerCase();
+    const passwordHash = await hashPassword(input.password);
+
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId } });
+      if (!location) throw AppError.notFound("Cinema location not found.");
+      const duplicate = await tx.employee.findUnique({ where: { email: normalizedEmail } });
+      if (duplicate) throw AppError.conflict("An employee with that email already exists.");
+
+      let role = await tx.role.findUnique({
+        where: { organizationId_key: { organizationId: input.organizationId, key: RoleKey.CinemaManager } },
+      });
+      if (!role) {
+        role = await tx.role.create({
+          data: { organizationId: input.organizationId, key: RoleKey.CinemaManager, name: "Cinema Manager" },
+        });
+        const permissionKeys = DEFAULT_ROLE_PERMISSIONS[RoleKey.CinemaManager];
+        const permissions = await tx.permission.findMany({ where: { key: { in: permissionKeys } } });
+        if (permissions.length !== permissionKeys.length) {
+          throw AppError.conflict("The Cinema Manager permission catalog is incomplete. Run the database seed before creating this account.");
+        }
+        await tx.rolePermission.createMany({
+          data: permissions.map((permission) => ({ roleId: role!.id, permissionId: permission.id })),
+        });
+      }
+      const employee = await tx.employee.create({
+        data: {
+          locationId: input.locationId,
+          name: input.name,
+          email: normalizedEmail,
+          authAccount: { create: { passwordHash, mustChangePassword: false } },
+          employeeRoles: { create: { roleId: role.id, locationId: input.locationId } },
+        },
+        select: { id: true, name: true, email: true },
+      });
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        locationId: input.locationId,
+        action: "platform.cinema_manager_created",
+        entityType: "Employee",
+        entityId: employee.id,
+        afterState: { name: employee.name, email: employee.email, role: RoleKey.CinemaManager, mfaRequired: false },
+      }, tx);
+      return { ...employee, role: RoleKey.CinemaManager, mfaRequired: false };
+    });
   }
 
   async updateContentDraft(input: { actorId: string; organizationId: string; locationId: string; content: CinemaContent }) {

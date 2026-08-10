@@ -41,6 +41,12 @@ const locationUpdateSchema = z.object({
   adminUi: adminUiConfigSchema.optional(),
 }).merge(customerBrandingSchema).merge(adminBrandingSchema).strict();
 
+const cinemaManagerCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(254),
+  password: z.string().min(12).max(200),
+}).strict();
+
 @Controller("platform")
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
@@ -82,6 +88,12 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   updateLocation(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(locationUpdateSchema)) body: unknown) {
     return this.platform.updateLocation({ actorId: actor.sub, organizationId, locationId, ...locationUpdateSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/locations/:locationId/cinema-manager")
+  @UseGuards(PlatformAuthGuard)
+  createCinemaManager(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(cinemaManagerCreateSchema)) body: unknown) {
+    return this.platform.createCinemaManager({ actorId: actor.sub, organizationId, locationId, ...cinemaManagerCreateSchema.parse(body) });
   }
 
   @Patch("organizations/:organizationId/locations/:locationId/content/draft")
