@@ -17,7 +17,6 @@
  */
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
-import { authenticator } from "otplib";
 import { startTestDatabase, TestDatabase } from "./test-db";
 
 let testDb: TestDatabase;
@@ -36,14 +35,9 @@ const CUSTOMER_WEB_ORIGIN = "http://localhost:3000";
 const OWNER_MFA_SECRET = "AAAAAAAAAAAAAAAA";
 
 async function loginOwner() {
-  const login = await request(app.getHttpServer())
+  return request(app.getHttpServer())
     .post("/api/v1/auth/staff/login")
     .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
-  expect(login.status).toBe(200);
-  expect(login.body).toMatchObject({ mfaRequired: true, challengeToken: expect.any(String) });
-  return request(app.getHttpServer())
-    .post("/api/v1/auth/staff/mfa/verify")
-    .send({ challengeToken: login.body.challengeToken, code: authenticator.generate(OWNER_MFA_SECRET) });
 }
 
 function setCookieHeaders(response: { headers: Record<string, unknown> }): string[] {
@@ -154,6 +148,8 @@ describe("Staff authentication", () => {
     expect(res.body.refreshToken).toEqual(expect.any(String));
     expect(res.body.employee.roles).toContain("OWNER");
     expect(res.body.employee.permissions).toContain("audit.log.view");
+    expect(res.body.employee).toMatchObject({ mfaEnabled: false, mfaSetupRequired: false });
+    expect(res.body.mfaRequired).toBeUndefined();
 
     ownerAccessToken = res.body.accessToken;
     ownerRefreshToken = res.body.refreshToken;
@@ -1444,6 +1440,11 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   }
 
   async function createCheckout(holderKey: string, holdToken: string) {
+    const { prisma } = await import("@cinema/database");
+    const showtime = await prisma.showtime.findUniqueOrThrow({
+      where: { id: showtimeId },
+      select: { priceTier: { select: { ticketPriceMinor: true, feeMinor: true } } },
+    });
     const config = await request(app.getHttpServer()).get(
       `/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`,
     );
@@ -1459,8 +1460,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
         diningAuthorizationRequested: true,
       });
     expect(result.status).toBe(201);
-    expect(result.body.subtotalCents).toBe(1700);
-    expect(result.body.feesCents).toBe(200);
+    expect(result.body.subtotalCents).toBe(showtime.priceTier.ticketPriceMinor);
+    expect(result.body.feesCents).toBe(showtime.priceTier.feeMinor);
     expect(result.body.taxCents).toBe(0);
     return result.body as {
       orderId: string;
