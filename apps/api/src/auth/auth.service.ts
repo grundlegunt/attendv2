@@ -92,7 +92,7 @@ export class AuthService {
       include: employeeInclude,
     });
 
-    if (!employee || !employee.active || !employee.location.active || !employee.location.organization.active || !employee.authAccount) {
+    if (!employee || !employee.active || !employee.location.organization.active || !employee.authAccount) {
       throw AppError.invalidCredentials();
     }
 
@@ -123,7 +123,7 @@ export class AuthService {
       throw AppError.unauthenticated("The MFA challenge expired. Sign in again.");
     }
     const employee = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
-    if (!employee?.active || !employee.location.active || !employee.location.organization.active || !employee.authAccount?.mfaEnabled || !employee.authAccount.mfaSecretEncrypted) throw AppError.unauthenticated();
+    if (!employee?.active || !employee.location.organization.active || !employee.authAccount?.mfaEnabled || !employee.authAccount.mfaSecretEncrypted) throw AppError.unauthenticated();
     const secret = decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
     if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
     await this.audit.record({ actorType: "EMPLOYEE", actorId: employee.id, action: "employee.mfa_verified", entityType: "Employee", entityId: employee.id, locationId: employee.locationId });
@@ -166,7 +166,7 @@ export class AuthService {
       include: employeeInclude,
     });
 
-    if (!employee || !employee.active || !employee.location.active || !employee.location.organization.active || !employee.authAccount) {
+    if (!employee || !employee.active || !employee.location.organization.active || !employee.authAccount) {
       throw AppError.unauthenticated();
     }
 
