@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@cinema/database";
+import { loadStripeEnv } from "@cinema/config/env";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,12 @@ export async function GET(
     );
   }
   const location = showtime.auditorium.location;
+  let stripe: ReturnType<typeof loadStripeEnv> | null = null;
+  try {
+    stripe = loadStripeEnv();
+  } catch {
+    // Missing or invalid payment configuration is reported as not ready below.
+  }
   return NextResponse.json({
     showtimeId,
     locationId: location.id,
@@ -46,12 +53,10 @@ export async function GET(
     ticketTypes: location.ticketTypes,
     payment: {
       ready: Boolean(
-          process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY &&
-          process.env.STRIPE_SECRET_KEY &&
-          process.env.STRIPE_WEBHOOK_SECRET &&
+          stripe &&
           location.organization.stripeConnectedAccountId,
       ),
-      publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
+      publishableKey: stripe?.STRIPE_PUBLISHABLE_KEY ?? null,
       connectedAccountId: location.organization.stripeConnectedAccountId,
     },
   });

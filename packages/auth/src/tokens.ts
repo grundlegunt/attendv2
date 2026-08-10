@@ -14,13 +14,14 @@ import jwt from "jsonwebtoken";
  * session response).
  */
 
-export type ActorType = "EMPLOYEE" | "CUSTOMER";
+export type ActorType = "EMPLOYEE" | "CUSTOMER" | "PLATFORM";
 
 export interface AccessTokenPayload {
-  sub: string; // Employee.id or Customer.id
+  sub: string; // Employee.id, Customer.id, or PlatformUser.id
   actorType: ActorType;
   locationId?: string; // present for employee tokens
   permissions: string[]; // flattened Permission keys, empty for customers
+  supportSession?: boolean;
 }
 
 export interface RefreshTokenPayload {

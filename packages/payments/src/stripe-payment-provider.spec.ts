@@ -35,19 +35,27 @@ function makeStripeError(
 }
 
 interface FakeStripeClientOverrides {
+  customersCreate?: jest.Mock;
+  paymentIntentsCreate?: jest.Mock;
   refundsCreate?: jest.Mock;
   refundsList?: jest.Mock;
   refundsRetrieve?: jest.Mock;
+  processPaymentIntent?: jest.Mock;
 }
 
 function createFakeStripeClient(overrides: FakeStripeClientOverrides = {}): Stripe {
   return {
+    customers: { create: overrides.customersCreate ?? jest.fn() },
     refunds: {
       create: overrides.refundsCreate ?? jest.fn(),
       list: overrides.refundsList ?? jest.fn(),
       retrieve: overrides.refundsRetrieve ?? jest.fn(),
     },
-    paymentIntents: { create: jest.fn(), retrieve: jest.fn() },
+    paymentIntents: {
+      create: overrides.paymentIntentsCreate ?? jest.fn(),
+      retrieve: jest.fn(),
+    },
+    terminal: { readers: { processPaymentIntent: overrides.processPaymentIntent ?? jest.fn() } },
     webhooks: { constructEvent: jest.fn() },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any as Stripe;
@@ -56,6 +64,71 @@ function createFakeStripeClient(overrides: FakeStripeClientOverrides = {}): Stri
 function makeProvider(client: Stripe): StripePaymentProvider {
   return new StripePaymentProvider("sk_test_fake", "whsec_fake", client);
 }
+
+describe("StripePaymentProvider reusable payment authorization", () => {
+  it("does not process an idempotently replayed Terminal intent that already succeeded", async () => {
+    const intent = { id: "pi_terminal_done", status: "succeeded", amount: 1900, currency: "usd", metadata: { ticketOrderId: "order-1" }, payment_method: null };
+    const paymentIntentsCreate = jest.fn().mockResolvedValue(intent);
+    const processPaymentIntent = jest.fn();
+    const provider = makeProvider(createFakeStripeClient({ paymentIntentsCreate, processPaymentIntent }));
+
+    await expect(provider.collectCardPresentPayment({ readerId: "tmr_1", amountCents: 1900, currency: "USD", metadata: { ticketOrderId: "order-1" }, idempotencyKey: "box-office-card:request-1" })).resolves.toMatchObject({ id: "pi_terminal_done", status: "SUCCEEDED" });
+    expect(processPaymentIntent).not.toHaveBeenCalled();
+  });
+
+  it("creates the provider customer idempotently on the connected account", async () => {
+    const customersCreate = jest.fn().mockResolvedValue({ id: "cus_saved" });
+    const provider = makeProvider(createFakeStripeClient({ customersCreate }));
+
+    await expect(
+      provider.createCustomer({
+        connectedAccountId: "acct_cinema",
+        email: "guest@example.test",
+        name: "Guest",
+        metadata: { customerId: "customer-1" },
+        idempotencyKey: "payment-customer:org-1:customer-1",
+      }),
+    ).resolves.toEqual({ id: "cus_saved" });
+    expect(customersCreate).toHaveBeenCalledWith(
+      {
+        email: "guest@example.test",
+        name: "Guest",
+        metadata: { customerId: "customer-1" },
+      },
+      {
+        idempotencyKey: "payment-customer:org-1:customer-1",
+        stripeAccount: "acct_cinema",
+      },
+    );
+  });
+
+  it("only asks Stripe to save the method when the customer explicitly opted in", async () => {
+    const paymentIntentsCreate = jest.fn().mockResolvedValue({
+      id: "pi_saved",
+      status: "requires_payment_method",
+      client_secret: "secret",
+      payment_method: null,
+    });
+    const provider = makeProvider(createFakeStripeClient({ paymentIntentsCreate }));
+
+    await provider.createPaymentIntent({
+      amountCents: 1900,
+      currency: "USD",
+      providerCustomerId: "cus_saved",
+      savePaymentMethodForFuture: true,
+      idempotencyKey: "checkout-1",
+      metadata: { orderId: "order-1" },
+    });
+
+    expect(paymentIntentsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: "cus_saved",
+        setup_future_usage: "off_session",
+      }),
+      expect.objectContaining({ idempotencyKey: "checkout-1" }),
+    );
+  });
+});
 
 describe("StripePaymentProvider refund error classification", () => {
   it("refund() reconciles against Stripe's existing refund when Stripe reports charge_already_refunded, instead of treating it as a failure", async () => {

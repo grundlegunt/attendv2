@@ -1,0 +1,218 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { BrandingSummary, type BrandingDraft, type BrandingSettings } from "./branding-editor";
+
+type RevenueReport = {
+  totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
+  movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
+  showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
+};
+type LaborRow = { shiftId: string; employeeName: string; roles: string[]; clockInAt: string; clockOutAt: string | null; breakStartAt: string | null; breakEndAt: string | null; breakMinutes: number; workedMinutes: number };
+type LaborReport = { totalMinutes: number; rows: LaborRow[] };
+type AuditEvent = {
+  id: string; occurredAt: string; action: string; entityType: string; entityId: string;
+  actorType: string; actorId: string | null; beforeState: unknown; afterState: unknown;
+};
+type PromotionType = "FIXED_AMOUNT" | "PERCENTAGE" | "COMP";
+type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
+type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Array<{ id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalDiscountCents: number }> };
+
+const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+const dateInput = (date: Date) => date.toISOString().slice(0, 10);
+const dateTimeInput = (value: string | null) => { if (!value) return ""; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
+
+type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
+
+export function ManagementDashboard({ accessToken, permissions, section }: { accessToken: string; permissions: string[]; section: ManagementSection }) {
+  const [from, setFrom] = useState(dateInput(new Date(Date.now() - 30 * 86_400_000)));
+  const [to, setTo] = useState(dateInput(new Date(Date.now() + 86_400_000)));
+  const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [labor, setLabor] = useState<LaborReport | null>(null);
+  const [shiftDraft, setShiftDraft] = useState<{ shiftId: string; employeeName: string; clockInAt: string; clockOutAt: string; breakStartAt: string; breakEndAt: string; notes: string } | null>(null);
+  const [audit, setAudit] = useState<AuditEvent[]>([]);
+  const [auditHasMore, setAuditHasMore] = useState(false);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
+  const [auditAction, setAuditAction] = useState("");
+  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditActorId, setAuditActorId] = useState("");
+  const [promotion, setPromotion] = useState({ code: "", name: "", type: "FIXED_AMOUNT" as PromotionType, value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
+  const [error, setError] = useState<string | null>(null);
+  const canFinancial = permissions.includes("reports.view.financial");
+  const canReports = permissions.includes("reports.view");
+  const canEditEmployees = permissions.includes("employee.edit");
+  const canAudit = permissions.includes("audit.log.view");
+  const canSettings = permissions.includes("ticket.price.edit");
+
+  async function refresh(appendAudit = false) {
+    setError(null);
+    const range = `from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`;
+    const auditQuery = new URLSearchParams({ limit: "50", offset: appendAudit ? String(audit.length) : "0", from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T00:00:00`).toISOString() });
+    if (auditAction.trim()) auditQuery.set("action", auditAction.trim());
+    if (auditEntityType.trim()) auditQuery.set("entityType", auditEntityType.trim());
+    if (auditActorId.trim()) auditQuery.set("actorId", auditActorId.trim());
+    try {
+      const [nextRevenue, nextLabor, nextAudit, nextSettings] = await Promise.all([
+        section === "reports" && canFinancial ? apiFetch<RevenueReport>(`/reports/revenue?${range}`, { accessToken }) : null,
+        section === "labor" && canReports ? apiFetch<LaborReport>(`/reports/labor?${range}`, { accessToken }) : null,
+        section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?${auditQuery.toString()}`, { accessToken }) : [],
+        (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
+      ]);
+      setRevenue(nextRevenue); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
+      if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
+  }
+
+  useEffect(() => { void refresh(); }, [accessToken, section]);
+
+  async function saveLocation(event: FormEvent) {
+    event.preventDefault();
+    if (!locationDraft) return;
+    setError(null);
+    try {
+      await apiFetch("/management/settings/location", { accessToken, method: "PATCH", body: JSON.stringify({ ...locationDraft, address: locationDraft.address?.trim() || null, currency: undefined }) });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Location settings could not be saved."); }
+  }
+
+  async function saveBranding(draft: BrandingDraft) {
+    setError(null);
+    try {
+      await apiFetch("/management/settings/branding", { accessToken, method: "PATCH", body: JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null }) });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved."); throw reason; }
+  }
+
+  async function createPromotion(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    if (promotion.startsAt && promotion.endsAt && new Date(promotion.startsAt) >= new Date(promotion.endsAt)) { setError("Promotion end time must be after its start time."); return; }
+    const body = {
+      code: promotion.code, name: promotion.name, type: promotion.type, active: true,
+      ...(promotion.type === "FIXED_AMOUNT" ? { amountCents: Math.round(promotion.value * 100) } : {}),
+      ...(promotion.type === "PERCENTAGE" ? { percentageBasisPoints: Math.round(promotion.value * 100) } : {}),
+      ...(promotion.minimumSubtotal > 0 ? { minimumSubtotalCents: Math.round(promotion.minimumSubtotal * 100) } : {}),
+      ...(promotion.maximumRedemptions > 0 ? { maximumRedemptions: promotion.maximumRedemptions } : {}),
+      ...(promotion.startsAt ? { startsAt: new Date(promotion.startsAt).toISOString() } : {}),
+      ...(promotion.endsAt ? { endsAt: new Date(promotion.endsAt).toISOString() } : {}),
+    };
+    try {
+      await apiFetch("/management/settings/promotions", { accessToken, method: "POST", body: JSON.stringify(body) });
+      setPromotion({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
+  }
+  async function togglePromotion(item: Settings["promotions"][number]) {
+    setError(null);
+    try {
+      await apiFetch(`/management/settings/promotions/${item.id}`, { accessToken, method: "PATCH", body: JSON.stringify({ active: !item.active }) });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
+  }
+
+  async function exportHours() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
+      (process.env.NODE_ENV === "production"
+        ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
+        : "http://localhost:4000/api/v1");
+    const response = await fetch(`${apiUrl}/reports/labor.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) { setError("The hours export could not be created."); return; }
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-hours.csv"; anchor.click(); URL.revokeObjectURL(url);
+  }
+
+  function editShift(row: LaborRow) {
+    setShiftDraft({ shiftId: row.shiftId, employeeName: row.employeeName, clockInAt: dateTimeInput(row.clockInAt), clockOutAt: dateTimeInput(row.clockOutAt), breakStartAt: dateTimeInput(row.breakStartAt), breakEndAt: dateTimeInput(row.breakEndAt), notes: "" });
+  }
+
+  async function saveShift(event: FormEvent) {
+    event.preventDefault();
+    if (!shiftDraft) return;
+    setError(null);
+    if (shiftDraft.clockOutAt && new Date(shiftDraft.clockOutAt) <= new Date(shiftDraft.clockInAt)) { setError("Clock-out must be after clock-in."); return; }
+    if (shiftDraft.breakEndAt && (!shiftDraft.breakStartAt || new Date(shiftDraft.breakEndAt) <= new Date(shiftDraft.breakStartAt))) { setError("Break end must be after break start."); return; }
+    try {
+      await apiFetch(`/shifts/${shiftDraft.shiftId}`, { accessToken, method: "PATCH", body: JSON.stringify({ clockInAt: new Date(shiftDraft.clockInAt).toISOString(), clockOutAt: shiftDraft.clockOutAt ? new Date(shiftDraft.clockOutAt).toISOString() : null, breakStartAt: shiftDraft.breakStartAt ? new Date(shiftDraft.breakStartAt).toISOString() : null, breakEndAt: shiftDraft.breakEndAt ? new Date(shiftDraft.breakEndAt).toISOString() : null, notes: shiftDraft.notes }) });
+      setShiftDraft(null);
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The shift could not be adjusted."); }
+  }
+
+  async function exportRevenue() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
+      (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
+    const response = await fetch(`${apiUrl}/reports/revenue.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) { setError("The revenue export could not be created."); return; }
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-revenue.csv"; anchor.click(); URL.revokeObjectURL(url);
+  }
+
+  return <section className="management-stack">
+    <div className="panel management-heading">
+      <div><p className="kicker">MANAGEMENT</p><h2>{section === "reports" ? "Reports & finance" : section === "labor" ? "Labor" : section === "branding" ? "Branding" : section === "location" ? "Location" : section === "promotions" ? "Promotions" : "Audit log"}</h2></div>
+      {(section === "reports" || section === "labor") && <div className="report-range"><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><button className="primary" onClick={() => void refresh()}>Refresh</button></div>}
+      {error && <div className="error-banner">{error}</div>}
+    </div>
+
+    {revenue && <section className="panel"><p className="kicker">FINANCE</p><h2>Revenue overview</h2>
+      <div className="stats"><div><strong>{money(revenue.totals.grossRevenueCents)}</strong><span>Gross revenue</span></div><div><strong>{money(revenue.totals.refundedCents)}</strong><span>Refunds</span></div><div><strong>{money(revenue.totals.combinedRevenueCents)}</strong><span>Net revenue</span></div><div><strong>{revenue.totals.ticketsSold}</strong><span>Tickets sold</span></div><div><strong>{money(revenue.totals.ticketRevenueCents)}</strong><span>Ticket face value</span></div><div><strong>{money(revenue.totals.ticketFeesCents)}</strong><span>Ticket fees</span></div><div><strong>{money(revenue.totals.ticketTaxCents)}</strong><span>Ticket tax</span></div><div><strong>{money(revenue.totals.ticketCollectedCents)}</strong><span>Ticket total collected</span></div><div><strong>{money(revenue.totals.averageFnbSpendPerOrderCents)}</strong><span>Average F&amp;B per order</span></div><div><strong>{money(revenue.totals.averageFnbSpendPerSeatCents)}</strong><span>Average F&amp;B per occupied seat</span></div></div>
+      <button className="primary report-export" onClick={() => void exportRevenue()}>Export revenue CSV</button>
+      <h3>By movie</h3><div className="management-table"><div className="table-row table-head"><span>Movie</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.movies.map((row) => <div className="table-row" key={row.movieId}><strong>{row.title}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
+      <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
+    </section>}
+
+    {labor && <section className="panel labor-report"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span className="labor-hours">{(row.workedMinutes / 60).toFixed(2)}{canEditEmployees && <button type="button" className="secondary" onClick={() => editShift(row)}>Adjust</button>}</span></div>)}</div>
+      {shiftDraft && <form className="shift-adjustment" onSubmit={(event) => void saveShift(event)}><div className="management-heading"><div><p className="kicker">MANAGER CORRECTION</p><h3>{shiftDraft.employeeName}</h3></div><button type="button" className="secondary" onClick={() => setShiftDraft(null)}>Cancel</button></div><div className="shift-adjustment-grid"><label>Clock in<input type="datetime-local" required value={shiftDraft.clockInAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockInAt: event.target.value })} /></label><label>Clock out<input type="datetime-local" value={shiftDraft.clockOutAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockOutAt: event.target.value })} /></label><label>Break start<input type="datetime-local" value={shiftDraft.breakStartAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakStartAt: event.target.value })} /></label><label>Break end<input type="datetime-local" value={shiftDraft.breakEndAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakEndAt: event.target.value })} /></label></div><label>Correction note<textarea required maxLength={500} value={shiftDraft.notes} onChange={(event) => setShiftDraft({ ...shiftDraft, notes: event.target.value })} placeholder="Why this shift was changed" /></label><button className="primary">Save correction</button></form>}
+    </section>}
+
+    {settings && section === "branding" && <BrandingSummary settings={settings} onSave={saveBranding} />}
+    {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>
+      <div className="location-settings-grid">
+        <label>Cinema name<input required maxLength={120} value={locationDraft.name} onChange={(event) => setLocationDraft({ ...locationDraft, name: event.target.value })} /></label>
+        <label>Address<input maxLength={500} value={locationDraft.address ?? ""} onChange={(event) => setLocationDraft({ ...locationDraft, address: event.target.value })} /></label>
+        <label>Timezone<input required maxLength={100} value={locationDraft.timezone} onChange={(event) => setLocationDraft({ ...locationDraft, timezone: event.target.value })} placeholder="America/Chicago" /></label>
+        <label>Currency<input disabled value={locationDraft.currency} /><small>Currency is fixed during onboarding.</small></label>
+        <label>Ticket tax (%)<input type="number" min="0" max="100" step="0.01" required value={locationDraft.ticketTaxRateBasisPoints / 100} onChange={(event) => setLocationDraft({ ...locationDraft, ticketTaxRateBasisPoints: Math.round(Number(event.target.value) * 100) })} /></label>
+        <label>Pre-show buffer (minutes)<input type="number" min="0" max="240" required value={locationDraft.preShowBufferMinutes} onChange={(event) => setLocationDraft({ ...locationDraft, preShowBufferMinutes: Number(event.target.value) })} /></label>
+        <label>Cleaning buffer (minutes)<input type="number" min="15" max="240" required value={locationDraft.cleaningBufferMinutes} onChange={(event) => setLocationDraft({ ...locationDraft, cleaningBufferMinutes: Number(event.target.value) })} /><small>Attend enforces at least 15 minutes.</small></label>
+        <label>Drop checks before film ends (minutes)<input type="number" min="0" max="240" required value={locationDraft.checkDropMinutesBeforeEnd} onChange={(event) => setLocationDraft({ ...locationDraft, checkDropMinutesBeforeEnd: Number(event.target.value) })} /></label>
+        <label>Auto-settlement grace (minutes)<input type="number" min="0" max="240" required value={locationDraft.autoSettleGraceMinutes} onChange={(event) => setLocationDraft({ ...locationDraft, autoSettleGraceMinutes: Number(event.target.value) })} /></label>
+        <label>Auto-settlement tip (%)<input type="number" min="0" max="100" step="0.01" required value={locationDraft.autoSettleTipBasisPoints / 100} onChange={(event) => setLocationDraft({ ...locationDraft, autoSettleTipBasisPoints: Math.round(Number(event.target.value) * 100) })} /></label>
+      </div>
+      <label className="checkbox"><input type="checkbox" checked={locationDraft.timeClockEnabled} onChange={(event) => setLocationDraft({ ...locationDraft, timeClockEnabled: event.target.checked })} /> Require staff clock-in at this location</label>
+      <button className="primary">Save operating settings</button>
+    </form>}
+    {settings && section === "promotions" && <section className="panel promotions-manager"><p className="kicker">PROMOTIONS</p><h2>Discount codes</h2><p>Create a fixed discount, percentage discount, or complimentary-ticket code. Date windows are optional.</p>
+      <form className="promotion-form" onSubmit={(event) => void createPromotion(event)}>
+        <label>Code<input required maxLength={50} value={promotion.code} onChange={(event) => setPromotion({ ...promotion, code: event.target.value.toUpperCase() })} placeholder="SUMMER20" /></label>
+        <label>Name<input required maxLength={100} value={promotion.name} onChange={(event) => setPromotion({ ...promotion, name: event.target.value })} placeholder="Summer member offer" /></label>
+        <label>Discount type<select value={promotion.type} onChange={(event) => setPromotion({ ...promotion, type: event.target.value as PromotionType, value: 0 })}><option value="FIXED_AMOUNT">Fixed amount</option><option value="PERCENTAGE">Percentage</option><option value="COMP">Complimentary</option></select></label>
+        {promotion.type !== "COMP" && <label>{promotion.type === "FIXED_AMOUNT" ? "Amount ($)" : "Percentage (%)"}<input type="number" min="0.01" max={promotion.type === "PERCENTAGE" ? 100 : undefined} step="0.01" required value={promotion.value || ""} onChange={(event) => setPromotion({ ...promotion, value: Number(event.target.value) })} /></label>}
+        <label>Minimum ticket subtotal ($)<input type="number" min="0" step="0.01" value={promotion.minimumSubtotal || ""} onChange={(event) => setPromotion({ ...promotion, minimumSubtotal: Number(event.target.value) })} placeholder="No minimum" /></label>
+        <label>Maximum redemptions<input type="number" min="1" step="1" value={promotion.maximumRedemptions || ""} onChange={(event) => setPromotion({ ...promotion, maximumRedemptions: Number(event.target.value) })} placeholder="Unlimited" /></label>
+        <label>Starts (optional)<input type="datetime-local" value={promotion.startsAt} onChange={(event) => setPromotion({ ...promotion, startsAt: event.target.value })} /></label>
+        <label>Ends (optional)<input type="datetime-local" value={promotion.endsAt} onChange={(event) => setPromotion({ ...promotion, endsAt: event.target.value })} /></label>
+        <button className="primary">Create promotion</button>
+      </form>
+      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></article>)}</div>
+    </section>}
+
+    {section === "audit" && canAudit && <section className="panel"><p className="kicker">AUDIT</p><h2>Activity log</h2>
+      <form className="audit-filters" onSubmit={(event) => { event.preventDefault(); void refresh(); }}>
+        <label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label>
+        <label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label>
+        <label>Action<input value={auditAction} onChange={(event) => setAuditAction(event.target.value)} placeholder="refund, settings, employee…" /></label>
+        <label>Entity type<input value={auditEntityType} onChange={(event) => setAuditEntityType(event.target.value)} placeholder="Employee, Promotion…" /></label>
+        <label>Actor ID<input value={auditActorId} onChange={(event) => setAuditActorId(event.target.value)} placeholder="Employee ID" /></label>
+        <button className="primary">Apply filters</button>
+      </form>
+      <div className="audit-list">{audit.map((event) => <details key={event.id} className="audit-event">
+        <summary><span><strong>{event.action}</strong><small>{event.entityType} · {event.entityId}</small></span><span><time>{new Date(event.occurredAt).toLocaleString()}</time><small>{event.actorType}{event.actorId ? ` · ${event.actorId}` : ""}</small></span></summary>
+        <div className="audit-change-grid"><section><h3>Before</h3><pre>{event.beforeState == null ? "No prior state recorded" : JSON.stringify(event.beforeState, null, 2)}</pre></section><section><h3>After</h3><pre>{event.afterState == null ? "No resulting state recorded" : JSON.stringify(event.afterState, null, 2)}</pre></section></div>
+      </details>)}{audit.length === 0 && <p className="dashboard-empty">No activity matches these filters.</p>}</div>
+      {auditHasMore && <button type="button" className="secondary audit-load-more" onClick={() => void refresh(true)}>Load older activity</button>}
+    </section>}
+  </section>;
+}

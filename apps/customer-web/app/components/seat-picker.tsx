@@ -48,7 +48,8 @@ export function SeatPicker({
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [holderKey, setHolderKey] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pendingSeatIds, setPendingSeatIds] = useState<Record<string, true>>({});
+  const [optimisticSeatStates, setOptimisticSeatStates] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [checkoutOpen, setCheckoutOpen] = useState(false);
 
@@ -88,6 +89,10 @@ export function SeatPicker({
     () => availability?.seats.filter((seat) => seat.heldByMe) ?? [],
     [availability],
   );
+  const displayedSeats = useMemo(
+    () => availability?.seats.filter((seat) => optimisticSeatStates[seat.id] ?? seat.heldByMe) ?? [],
+    [availability, optimisticSeatStates],
+  );
   const expiresAt = mySeats.reduce(
     (earliest, seat) => Math.min(earliest, seat.expiresAt ? Date.parse(seat.expiresAt) : Infinity),
     Infinity,
@@ -97,8 +102,10 @@ export function SeatPicker({
     : 0;
 
   async function toggleSeat(seat: AvailabilitySeat) {
-    if (!holderKey || pending) return;
-    setPending(seat.id ?? seat.label);
+    if (!holderKey || pendingSeatIds[seat.id]) return;
+    const selected = !seat.heldByMe;
+    setOptimisticSeatStates((states) => ({ ...states, [seat.id]: selected }));
+    setPendingSeatIds((seatIds) => ({ ...seatIds, [seat.id]: true }));
     setError(null);
     try {
       if (seat.heldByMe && seat.holdToken) {
@@ -121,7 +128,16 @@ export function SeatPicker({
       );
       await refresh();
     } finally {
-      setPending(null);
+      setOptimisticSeatStates((states) => {
+        const next = { ...states };
+        delete next[seat.id];
+        return next;
+      });
+      setPendingSeatIds((seatIds) => {
+        const next = { ...seatIds };
+        delete next[seat.id];
+        return next;
+      });
     }
   }
 
@@ -143,7 +159,7 @@ export function SeatPicker({
 
   const mapSeats = availability?.seats.map((seat) => ({
     ...seat,
-    state: seat.heldByMe
+    state: (optimisticSeatStates[seat.id] ?? seat.heldByMe)
       ? ("selected" as const)
       : seat.state === "AVAILABLE"
         ? ("available" as const)
@@ -208,11 +224,11 @@ export function SeatPicker({
       <footer className="seat-picker__summary">
         <div>
           <span className="eyebrow">YOUR SEATS</span>
-          <strong>{mySeats.length ? mySeats.map((seat) => seat.label).join(", ") : "None selected"}</strong>
+          <strong>{displayedSeats.length ? displayedSeats.map((seat) => seat.label).join(", ") : "None selected"}</strong>
         </div>
         <button
           className="primary"
-          disabled={!mySeats.length || Boolean(pending)}
+          disabled={!mySeats.length || Object.keys(pendingSeatIds).length > 0}
           onClick={() => setCheckoutOpen(true)}
         >
           Continue to tickets

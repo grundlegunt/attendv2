@@ -25,15 +25,52 @@ export type ProviderRefundStatus = "SUCCEEDED" | "PENDING" | "FAILED";
 
 export interface CreatePaymentIntentArgs {
   connectedAccountId?: string;
+  providerCustomerId?: string;
+  savePaymentMethodForFuture?: boolean;
   amountCents: number;
   currency: string;
   metadata: Record<string, string>;
   idempotencyKey: string;
 }
 
+export interface CreateProviderCustomerArgs {
+  connectedAccountId?: string;
+  email: string;
+  name?: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}
+
+export interface ProviderPaymentMethod {
+  id: string;
+  brand: string;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+}
+
 export interface RetrievePaymentIntentArgs {
   connectedAccountId?: string;
   paymentIntentId: string;
+}
+
+export interface ChargeSavedPaymentMethodArgs {
+  connectedAccountId?: string;
+  providerCustomerId: string;
+  providerPaymentMethodId: string;
+  amountCents: number;
+  currency: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}
+
+export interface CollectCardPresentPaymentArgs {
+  connectedAccountId?: string;
+  readerId: string;
+  amountCents: number;
+  currency: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
 }
 
 export interface ProviderPaymentIntentResult {
@@ -48,6 +85,7 @@ export interface ProviderPaymentIntentResult {
   metadata: Record<string, string>;
   failureCode?: string;
   failureMessage?: string;
+  paymentMethod?: ProviderPaymentMethod;
 }
 
 export interface RefundArgs {
@@ -131,7 +169,14 @@ export class ProviderDefinitiveError extends Error {}
 
 export interface PaymentProvider {
   readonly name: string;
+  createCustomer(args: CreateProviderCustomerArgs): Promise<{ id: string }>;
   createPaymentIntent(args: CreatePaymentIntentArgs): Promise<ProviderPaymentIntentResult>;
+  chargeSavedPaymentMethod(
+    args: ChargeSavedPaymentMethodArgs,
+  ): Promise<ProviderPaymentIntentResult>;
+  collectCardPresentPayment(
+    args: CollectCardPresentPaymentArgs,
+  ): Promise<ProviderPaymentIntentResult>;
   retrievePaymentIntent(args: RetrievePaymentIntentArgs): Promise<ProviderPaymentIntentResult>;
   refund(args: RefundArgs): Promise<RefundResult>;
   /**

@@ -1,0 +1,2759 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  adminUiDefaults,
+  type AdminUiConfig,
+  type CinemaContent,
+} from "@cinema/shared";
+import Link from "next/link";
+import { AdminUiEditor } from "../admin-ui-editor";
+import { platformRequest, readPlatformSession } from "../platform-session";
+
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production"
+    ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
+    : "http://localhost:4000/api/v1");
+const CINEMA_ADMIN_URL =
+  process.env.NEXT_PUBLIC_CINEMA_ADMIN_URL ?? "http://localhost:3003";
+const CUSTOMER_WEB_URL =
+  process.env.NEXT_PUBLIC_CUSTOMER_WEB_URL ?? "http://localhost:3000";
+const STORAGE_KEY = "attend-platform-session";
+const RECOMMENDED_ADMIN_PALETTE = {
+  adminAccentColor: "#ffb800",
+  adminAccentMutedColor: "#8a6500",
+  adminBackgroundColor: "#000000",
+  adminSurfaceColor: "#1b1b1b",
+  adminTextColor: "#ffffff",
+  adminMutedTextColor: "#cccccc",
+} as const;
+
+interface PlatformUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "OWNER" | "OPERATOR" | "VIEWER";
+}
+interface Session {
+  accessToken: string;
+  user: PlatformUser;
+}
+interface LocationOverview {
+  id: string;
+  name: string;
+  address: string | null;
+  timezone: string;
+  active: boolean;
+  configuration: {
+    branding: boolean;
+    auditoriums: number;
+    employees: number;
+    menuItems: number;
+    upcomingShowtimes: number;
+  };
+}
+interface OrganizationOverview {
+  id: string;
+  name: string;
+  legalName: string | null;
+  timezone: string;
+  active: boolean;
+  payments: { connected: boolean; onboardingStatus: string };
+  locations: LocationOverview[];
+}
+interface Overview {
+  generatedAt: string;
+  organizations: OrganizationOverview[];
+}
+type BrandPalette = {
+  accentColor: string | null;
+  accentMutedColor: string | null;
+  backgroundColor: string | null;
+  backgroundGlowColor: string | null;
+  surfaceColor: string | null;
+  textColor: string | null;
+  mutedTextColor: string | null;
+};
+interface OrganizationDetail {
+  id: string;
+  name: string;
+  legalName: string | null;
+  timezone: string;
+  active: boolean;
+  ticketFeeMinor: number;
+  createdAt: string;
+  payments: { connected: boolean; onboardingStatus: string };
+  locations: Array<{
+    id: string;
+    name: string;
+    address: string | null;
+    timezone: string;
+    currency: string;
+    active: boolean;
+    branding: BrandPalette & { logoUrl: string | null };
+    adminBranding: BrandPalette & { ui: AdminUiConfig };
+    brandingDraft: {
+      values: {
+        logoUrl?: string | null;
+        accentColor?: string | null;
+        accentMutedColor?: string | null;
+        backgroundColor?: string | null;
+        backgroundGlowColor?: string | null;
+        surfaceColor?: string | null;
+        textColor?: string | null;
+        mutedTextColor?: string | null;
+        adminAccentColor?: string | null;
+        adminAccentMutedColor?: string | null;
+        adminBackgroundColor?: string | null;
+        adminSurfaceColor?: string | null;
+        adminTextColor?: string | null;
+        adminMutedTextColor?: string | null;
+        adminUi: AdminUiConfig;
+      };
+      draftedAt: string | null;
+    } | null;
+    content: {
+      draft: CinemaContent;
+      published: CinemaContent;
+      publishedAt: string | null;
+    };
+    operations: {
+      ticketTaxRateBasisPoints: number;
+      preShowBufferMinutes: number;
+      cleaningBufferMinutes: number;
+      checkDropMinutesBeforeEnd: number;
+      autoSettleGraceMinutes: number;
+      timeClockEnabled: boolean;
+    };
+    configuration: {
+      auditoriums: number;
+      employees: number;
+      menuItems: number;
+      upcomingShowtimes: number;
+      activeMovies: number;
+      activeFilmSeries: number;
+    };
+  }>;
+}
+type OrganizationDraft = {
+  name: string;
+  legalName: string;
+  timezone: string;
+  ticketFee: string;
+};
+type OrganizationCreateDraft = {
+  name: string;
+  legalName: string;
+  timezone: string;
+  locationName: string;
+  address: string;
+  locationTimezone: string;
+};
+type CinemaManagerDraft = {
+  locationId: string;
+  name: string;
+  email: string;
+  password: string;
+};
+type LocationDetail = OrganizationDetail["locations"][number];
+type LocationDraft = {
+  name: string;
+  address: string;
+  timezone: string;
+  active: boolean;
+  logoUrl: string;
+  accentColor: string;
+  accentMutedColor: string;
+  backgroundColor: string;
+  backgroundGlowColor: string;
+  surfaceColor: string;
+  textColor: string;
+  mutedTextColor: string;
+  adminAccentColor: string;
+  adminAccentMutedColor: string;
+  adminBackgroundColor: string;
+  adminSurfaceColor: string;
+  adminTextColor: string;
+  adminMutedTextColor: string;
+  adminUi: AdminUiConfig;
+  ticketTaxRateBasisPoints: number;
+  preShowBufferMinutes: number;
+  cleaningBufferMinutes: number;
+  checkDropMinutesBeforeEnd: number;
+  autoSettleGraceMinutes: number;
+  timeClockEnabled: boolean;
+};
+
+function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
+
+export default function AttendMaster() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [restored, setRestored] = useState(false);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<
+    string | null
+  >(null);
+  const [organization, setOrganization] = useState<OrganizationDetail | null>(
+    null,
+  );
+  const [organizationLoading, setOrganizationLoading] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [organizationDraft, setOrganizationDraft] =
+    useState<OrganizationDraft | null>(null);
+  const [organizationCreateDraft, setOrganizationCreateDraft] =
+    useState<OrganizationCreateDraft | null>(null);
+  const [locationDraft, setLocationDraft] = useState<{
+    id: string;
+    values: LocationDraft;
+  } | null>(null);
+  const [contentDraft, setContentDraft] = useState<{
+    id: string;
+    values: CinemaContent;
+  } | null>(null);
+  const [cinemaManagerDraft, setCinemaManagerDraft] =
+    useState<CinemaManagerDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [clientQuery, setClientQuery] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState("ALL");
+  const [locationFilter, setLocationFilter] = useState("ALL");
+  const [locationCountFilter, setLocationCountFilter] = useState("ALL");
+
+  useEffect(() => {
+    setSession(readPlatformSession(STORAGE_KEY));
+    setRestored(true);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    request<Overview>("/platform/overview", undefined, session.accessToken)
+      .then(setOverview)
+      .catch((reason: unknown) =>
+        setError(
+          reason instanceof Error ? reason.message : "Could not load clients.",
+        ),
+      );
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") === "1") {
+      window.history.replaceState({}, "", window.location.pathname);
+      setSelectedOrganizationId(null);
+      beginOrganizationCreate();
+      return;
+    }
+    const organizationId = params.get("organizationId");
+    const connectAction = params.get("connect");
+    if (!organizationId) return;
+    setSelectedOrganizationId(organizationId);
+    if (!connectAction) return;
+    window.history.replaceState({}, "", `${window.location.pathname}?organizationId=${encodeURIComponent(organizationId)}`);
+    if (connectAction === "refresh") void startConnectOnboarding(organizationId);
+    if (connectAction === "return") void refreshConnectStatus(organizationId);
+  }, [session]);
+
+  useEffect(() => {
+    if (!session || !selectedOrganizationId) {
+      setOrganization(null);
+      return;
+    }
+    setOrganizationLoading(true);
+    setError(null);
+    request<OrganizationDetail>(
+      `/platform/organizations/${selectedOrganizationId}`,
+      undefined,
+      session.accessToken,
+    )
+      .then((nextOrganization) => {
+        setOrganization(nextOrganization);
+        const params = new URLSearchParams(window.location.search);
+        const section = params.get("section");
+        if (section !== "content" && section !== "branding") return;
+        const locationId = params.get("locationId");
+        const location = nextOrganization.locations.find((item) => item.id === locationId) ?? nextOrganization.locations[0];
+        if (location && section === "content") setContentDraft({ id: location.id, values: structuredClone(location.content.draft) });
+        if (location && section === "branding") beginLocationEdit(location);
+      })
+      .catch((reason: unknown) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not load this cinema.",
+        ),
+      )
+      .finally(() => setOrganizationLoading(false));
+  }, [selectedOrganizationId, session]);
+
+  async function login(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      const result = await request<Session>("/platform/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+      });
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
+      setSession(result);
+      setPassword("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Sign in failed.");
+    }
+  }
+
+  function signOut() {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+    setSession(null);
+    setOverview(null);
+    setSelectedOrganizationId(null);
+    setOrganization(null);
+    setError(null);
+  }
+
+  function beginOrganizationEdit(detail: OrganizationDetail) {
+    setOrganizationDraft({
+      name: detail.name,
+      legalName: detail.legalName ?? "",
+      timezone: detail.timezone,
+      ticketFee: (detail.ticketFeeMinor / 100).toFixed(2),
+    });
+  }
+
+  function beginOrganizationCreate() {
+    setOrganizationCreateDraft({
+      name: "",
+      legalName: "",
+      timezone: "America/Chicago",
+      locationName: "",
+      address: "",
+      locationTimezone: "America/Chicago",
+    });
+  }
+
+  async function createOrganization(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organizationCreateDraft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const values = organizationCreateDraft;
+      const created = await request<OrganizationDetail>(
+        "/platform/organizations",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: values.name,
+            legalName: values.legalName || null,
+            timezone: values.timezone,
+            location: {
+              name: values.locationName,
+              address: values.address || null,
+              timezone: values.locationTimezone,
+            },
+          }),
+        },
+        session.accessToken,
+      );
+      const refreshed = await request<Overview>(
+        "/platform/overview",
+        undefined,
+        session.accessToken,
+      );
+      setOverview(refreshed);
+      setOrganizationCreateDraft(null);
+      setSelectedOrganizationId(created.id);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not add organization.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function beginLocationEdit(location: LocationDetail) {
+    const draft = location.brandingDraft?.values;
+    setLocationDraft({
+      id: location.id,
+      values: {
+        name: location.name,
+        address: location.address ?? "",
+        timezone: location.timezone,
+        active: location.active,
+        logoUrl: draft?.logoUrl ?? location.branding.logoUrl ?? "",
+        accentColor: draft?.accentColor ?? location.branding.accentColor ?? "",
+        accentMutedColor: draft?.accentMutedColor ?? location.branding.accentMutedColor ?? "",
+        backgroundColor: draft?.backgroundColor ?? location.branding.backgroundColor ?? "",
+        backgroundGlowColor: draft?.backgroundGlowColor ?? location.branding.backgroundGlowColor ?? "",
+        surfaceColor: draft?.surfaceColor ?? location.branding.surfaceColor ?? "",
+        textColor: draft?.textColor ?? location.branding.textColor ?? "",
+        mutedTextColor: draft?.mutedTextColor ?? location.branding.mutedTextColor ?? "",
+        adminAccentColor: draft?.adminAccentColor ?? location.adminBranding.accentColor ?? "",
+        adminAccentMutedColor: draft?.adminAccentMutedColor ?? location.adminBranding.accentMutedColor ?? "",
+        adminBackgroundColor: draft?.adminBackgroundColor ?? location.adminBranding.backgroundColor ?? "",
+        adminSurfaceColor: draft?.adminSurfaceColor ?? location.adminBranding.surfaceColor ?? "",
+        adminTextColor: draft?.adminTextColor ?? location.adminBranding.textColor ?? "",
+        adminMutedTextColor: draft?.adminMutedTextColor ?? location.adminBranding.mutedTextColor ?? "",
+        adminUi: draft?.adminUi ?? location.adminBranding.ui ?? adminUiDefaults,
+        ...location.operations,
+      },
+    });
+  }
+
+  async function saveOrganization(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !organizationDraft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { ticketFee, ...draft } = organizationDraft;
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...draft,
+            legalName: draft.legalName || null,
+            ticketFeeMinor: Math.round(Number(ticketFee) * 100),
+          }),
+        },
+        session.accessToken,
+      );
+      setOrganization(updated);
+      setOrganizationDraft(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not save organization.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setOrganizationActive(active: boolean) {
+    if (!session || !organization) return;
+    const action = active ? "reactivate" : "suspend";
+    if (!window.confirm(active
+      ? `Reactivate ${organization.name}? Cinema staff and customers will regain access to active locations.`
+      : `Suspend ${organization.name}? Cinema staff sessions will be revoked and customer access will stop across every location.`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}`,
+        { method: "PATCH", body: JSON.stringify({ active }) },
+        session.accessToken,
+      );
+      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : `Could not ${action} organization.`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function startConnectOnboarding(organizationId = organization?.id) {
+    if (!session || !organizationId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await request<{ url: string }>(`/platform/organizations/${organizationId}/connect/onboarding-link`, {
+        method: "POST",
+        body: JSON.stringify({ origin: window.location.origin, returnPath: "/clients" }),
+      }, session.accessToken);
+      window.location.assign(result.url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not start Stripe onboarding.");
+      setSaving(false);
+    }
+  }
+
+  async function refreshConnectStatus(organizationId = organization?.id) {
+    if (!session || !organizationId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(`/platform/organizations/${organizationId}/connect/refresh`, { method: "POST" }, session.accessToken);
+      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not refresh Stripe onboarding status.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveLocation(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !locationDraft) return;
+    const values = locationDraft.values;
+    const nullable = (value: string) => value || null;
+    setSaving(true);
+    setError(null);
+    try {
+      const locationPayload = {
+        name: values.name,
+        address: nullable(values.address),
+        timezone: values.timezone,
+        active: values.active,
+        ticketTaxRateBasisPoints: values.ticketTaxRateBasisPoints,
+        preShowBufferMinutes: values.preShowBufferMinutes,
+        cleaningBufferMinutes: values.cleaningBufferMinutes,
+        checkDropMinutesBeforeEnd: values.checkDropMinutesBeforeEnd,
+        autoSettleGraceMinutes: values.autoSettleGraceMinutes,
+        timeClockEnabled: values.timeClockEnabled,
+      };
+      const brandingPayload = {
+        logoUrl: nullable(values.logoUrl),
+        accentColor: nullable(values.accentColor),
+        accentMutedColor: nullable(values.accentMutedColor),
+        backgroundColor: nullable(values.backgroundColor),
+        backgroundGlowColor: nullable(values.backgroundGlowColor),
+        surfaceColor: nullable(values.surfaceColor),
+        textColor: nullable(values.textColor),
+        mutedTextColor: nullable(values.mutedTextColor),
+        adminAccentColor: nullable(values.adminAccentColor),
+        adminAccentMutedColor: nullable(values.adminAccentMutedColor),
+        adminBackgroundColor: nullable(values.adminBackgroundColor),
+        adminSurfaceColor: nullable(values.adminSurfaceColor),
+        adminTextColor: nullable(values.adminTextColor),
+        adminMutedTextColor: nullable(values.adminMutedTextColor),
+        adminUi: values.adminUi,
+      };
+      await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${locationDraft.id}`,
+        { method: "PATCH", body: JSON.stringify(locationPayload) },
+        session.accessToken,
+      );
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${locationDraft.id}/branding/draft`,
+        { method: "PATCH", body: JSON.stringify(brandingPayload) },
+        session.accessToken,
+      );
+      setOrganization(updated);
+      setLocationDraft(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not save location.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publishBranding(location: LocationDetail) {
+    if (!session || !organization) return;
+    if (!window.confirm(`Publish the branding draft for ${location.name}? This immediately updates the live customer and cinema-admin experiences.`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${location.id}/branding/publish`,
+        { method: "POST" },
+        session.accessToken,
+      );
+      setOrganization(updated);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not publish branding.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function openSupportSession(location: LocationDetail) {
+    if (!session || !organization) return;
+    if (!window.confirm(`Open ${location.name} in a 15-minute read-only support session? The session is visibly bannered and audited.`)) return;
+    const supportWindow = window.open("about:blank", "_blank");
+    if (!supportWindow) {
+      setError("Your browser blocked the support tab. Allow pop-ups for Attend Master and try again.");
+      return;
+    }
+    supportWindow.opener = null;
+    setSaving(true);
+    setError(null);
+    try {
+      const support = await request<{ accessToken: string }>(
+        `/platform/organizations/${organization.id}/locations/${location.id}/support-session`,
+        { method: "POST" },
+        session.accessToken,
+      );
+      supportWindow.location.href = `${CINEMA_ADMIN_URL}/#support=${encodeURIComponent(support.accessToken)}`;
+    } catch (reason) {
+      supportWindow.close();
+      setError(reason instanceof Error ? reason.message : "Could not open read-only support.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveContentDraft(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !contentDraft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${contentDraft.id}/content/draft`,
+        { method: "PATCH", body: JSON.stringify(contentDraft.values) },
+        session.accessToken,
+      );
+      setOrganization(updated);
+      setContentDraft(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not save content draft.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publishContent(location: LocationDetail) {
+    if (!session || !organization) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${location.id}/content/publish`,
+        { method: "POST" },
+        session.accessToken,
+      );
+      setOrganization(updated);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not publish content.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createCinemaManager(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !cinemaManagerDraft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request(
+        `/platform/organizations/${organization.id}/locations/${cinemaManagerDraft.locationId}/cinema-manager`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: cinemaManagerDraft.name,
+            email: cinemaManagerDraft.email,
+            password: cinemaManagerDraft.password,
+          }),
+        },
+        session.accessToken,
+      );
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}`,
+        undefined,
+        session.accessToken,
+      );
+      const refreshed = await request<Overview>(
+        "/platform/overview",
+        undefined,
+        session.accessToken,
+      );
+      setOrganization(updated);
+      setOverview(refreshed);
+      setCinemaManagerDraft(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not create the cinema manager.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const locations =
+    overview?.organizations.flatMap((item) => item.locations) ?? [];
+  const filteredOrganizations = useMemo(() => {
+    const normalizedQuery = clientQuery.trim().toLowerCase();
+    return (overview?.organizations ?? []).filter((item) => {
+      const matchesQuery = !normalizedQuery || [
+        item.name,
+        item.legalName ?? "",
+        item.timezone,
+        ...item.locations.flatMap((location) => [location.name, location.address ?? "", location.timezone]),
+      ].some((value) => value.toLowerCase().includes(normalizedQuery));
+      const matchesPayment = paymentFilter === "ALL"
+        || (paymentFilter === "COMPLETE" && item.payments.onboardingStatus === "COMPLETE")
+        || (paymentFilter === "INCOMPLETE" && item.payments.onboardingStatus !== "COMPLETE")
+        || item.payments.onboardingStatus === paymentFilter;
+      const matchesLocation = locationFilter === "ALL"
+        || item.locations.some((location) => location.active === (locationFilter === "ACTIVE"));
+      const matchesLocationCount = locationCountFilter === "ALL"
+        || (locationCountFilter === "ONE" && item.locations.length === 1)
+        || (locationCountFilter === "MULTIPLE" && item.locations.length > 1);
+      return matchesQuery && matchesPayment && matchesLocation && matchesLocationCount;
+    });
+  }, [clientQuery, locationCountFilter, locationFilter, overview, paymentFilter]);
+
+  if (!restored)
+    return (
+      <main className="center">
+        <p>Loading Attend Master…</p>
+      </main>
+    );
+  if (!session)
+    return (
+      <main className="center">
+        <form className="login-card" onSubmit={login}>
+          <p className="eyebrow">ATTEND MASTER</p>
+          <h1>Company sign in</h1>
+          <p className="muted">Separate from every cinema’s staff account.</p>
+          {error && <div className="error">{error}</div>}
+          <label>
+            Email
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </label>
+          <label>
+            Password
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          <button type="submit">Sign in</button>
+        </form>
+      </main>
+    );
+
+  return (
+    <main className="shell">
+      <header>
+        <div>
+          <p className="eyebrow">ATTEND MASTER</p>
+          <h1>
+            {selectedOrganizationId ? "Cinema profile" : "Client operations"}
+          </h1>
+          <p className="muted">
+            Company visibility across cinema clients. Cinema staff retain
+            control of their own operations.
+          </p>
+        </div>
+        <div className="identity">
+          {!selectedOrganizationId && (
+            <button className="quiet" onClick={beginOrganizationCreate}>
+              + Add organization
+            </button>
+          )}
+          <span>{session.user.name}</span>
+          <button className="quiet" onClick={signOut}>
+            Sign out
+          </button>
+        </div>
+      </header>
+      <nav className="platform-nav" aria-label="Attend Master">
+        <Link href="/">Dashboard</Link>
+        <Link className="active" href="/clients">Clients</Link>
+        <Link href="/onboarding">Onboarding</Link>
+        <Link href="/payments">Payments</Link>
+        <Link href="/content">Content</Link>
+        <Link href="/branding">Branding</Link>
+        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
+        <Link href="/audit">Audit Log</Link>
+      </nav>
+      {error && <div className="error">{error}</div>}
+      {!selectedOrganizationId && organizationCreateDraft && (
+        <form
+          className="editor create-organization"
+          onSubmit={createOrganization}
+        >
+          <div className="editor-heading">
+            <div>
+              <p className="eyebrow">NEW CLIENT</p>
+              <h2>Add organization</h2>
+              <p className="muted">
+                Create the cinema company or chain and its first operating
+                location. More locations can be added later.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="quiet"
+              onClick={() => setOrganizationCreateDraft(null)}
+            >
+              Cancel
+            </button>
+          </div>
+          <div className="form-grid">
+            <label>
+              Organization name
+              <input
+                required
+                value={organizationCreateDraft.name}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    name: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Legal name
+              <input
+                value={organizationCreateDraft.legalName}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    legalName: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Organization timezone
+              <input
+                required
+                value={organizationCreateDraft.timezone}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    timezone: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              First cinema name
+              <input
+                required
+                value={organizationCreateDraft.locationName}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    locationName: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              First cinema address
+              <input
+                value={organizationCreateDraft.address}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    address: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
+              Cinema timezone
+              <input
+                required
+                value={organizationCreateDraft.locationTimezone}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    locationTimezone: event.target.value,
+                  })
+                }
+              />
+            </label>
+          </div>
+          <button disabled={saving}>
+            {saving ? "Creating…" : "Create organization and first cinema"}
+          </button>
+        </form>
+      )}
+      {selectedOrganizationId && (
+        <section className="detail-shell">
+          <button
+            className="back"
+            onClick={() => setSelectedOrganizationId(null)}
+          >
+            ← All cinema clients
+          </button>
+          {organizationLoading && (
+            <p className="muted">Loading cinema profile…</p>
+          )}
+          {organization && (
+            <>
+              <div className="detail-heading">
+                <div>
+                  <p className="eyebrow">ORGANIZATION</p>
+                  <h2>{organization.name}</h2>
+                  <span className={organization.active ? "status good" : "status warning"}>
+                    {organization.active ? "Active client" : "Suspended client"}
+                  </span>
+                  <p className="muted">
+                    {organization.legalName ?? "Legal name not configured"} ·
+                    Client since{" "}
+                    {new Date(organization.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="org-actions">
+                  <span
+                    className={
+                      organization.payments.onboardingStatus === "COMPLETE"
+                        ? "status good"
+                        : "status warning"
+                    }
+                  >
+                    {organization.payments.connected
+                      ? `Payments ${organization.payments.onboardingStatus.toLowerCase()}`
+                      : `Payments ${organization.payments.onboardingStatus.toLowerCase().replaceAll("_", " ")}`}
+                  </span>
+                  {organization.payments.onboardingStatus !== "COMPLETE" && <button className="edit-button" disabled={saving} onClick={() => void startConnectOnboarding()}>
+                    {organization.payments.connected ? "Continue Stripe onboarding" : "Connect Stripe"}
+                  </button>}
+                  {organization.payments.connected && <button className="quiet" disabled={saving} onClick={() => void refreshConnectStatus()}>
+                    Refresh payment status
+                  </button>}
+                  <button
+                    className="edit-button"
+                    onClick={() => beginOrganizationEdit(organization)}
+                  >
+                    Edit organization
+                  </button>
+                  {session.user.role !== "VIEWER" && <button
+                    className={organization.active ? "quiet" : "edit-button"}
+                    disabled={saving}
+                    onClick={() => void setOrganizationActive(!organization.active)}
+                  >
+                    {organization.active ? "Suspend client" : "Reactivate client"}
+                  </button>}
+                </div>
+              </div>
+              {organizationDraft && (
+                <form className="editor" onSubmit={saveOrganization}>
+                  <div className="editor-heading">
+                    <div>
+                      <p className="eyebrow">COMPANY SETTINGS</p>
+                      <h3>Edit organization</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="quiet"
+                      onClick={() => setOrganizationDraft(null)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="form-grid">
+                    <label>
+                      Name
+                      <input
+                        required
+                        value={organizationDraft.name}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            name: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Legal name
+                      <input
+                        value={organizationDraft.legalName}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            legalName: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Timezone
+                      <input
+                        required
+                        value={organizationDraft.timezone}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            timezone: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Attend ticket fee per ticket
+                      <input
+                        required
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={organizationDraft.ticketFee}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            ticketFee: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                  </div>
+                  <p className="form-note">
+                    The ticket fee is controlled by Attend and applies to every
+                    ticket group for this client. Payment status is read from Stripe.
+                  </p>
+                  <button disabled={saving}>
+                    {saving ? "Saving…" : "Save organization"}
+                  </button>
+                </form>
+              )}
+              {organization.locations.map((location) => (
+                <article className="location-detail" key={location.id}>
+                  <div className="location-detail-heading">
+                    <div>
+                      <div className="location-title">
+                        <h3>{location.name}</h3>
+                        <span
+                          className={location.active ? "dot active" : "dot"}
+                        >
+                          {location.active ? "Active" : "Inactive"}
+                        </span>
+                        {location.brandingDraft && <span className="status warning">Branding draft</span>}
+                      </div>
+                      <p className="muted">
+                        {location.address ?? "Address not configured"} ·{" "}
+                        {location.timezone}
+                      </p>
+                    </div>
+                    <div className="actions horizontal">
+                      <button
+                        className="edit-button"
+                        onClick={() => beginLocationEdit(location)}
+                      >
+                        {location.brandingDraft ? "Review cinema draft" : "Edit cinema"}
+                      </button>
+                      {location.brandingDraft && <button
+                        className="edit-button"
+                        disabled={saving}
+                        onClick={() => void publishBranding(location)}
+                      >
+                        Publish branding
+                      </button>}
+                      <button
+                        className="edit-button"
+                        onClick={() =>
+                          setContentDraft({
+                            id: location.id,
+                            values: structuredClone(location.content.draft),
+                          })
+                        }
+                      >
+                        Content Studio
+                      </button>
+                      <button
+                        className="edit-button"
+                        disabled={saving}
+                        onClick={() => void publishContent(location)}
+                      >
+                        Publish draft
+                      </button>
+                      <button
+                        className="edit-button"
+                        onClick={() =>
+                          setCinemaManagerDraft({
+                            locationId: location.id,
+                            name: "",
+                            email: "",
+                            password: "",
+                          })
+                        }
+                      >
+                        Add cinema manager
+                      </button>
+                      <a
+                        href={CINEMA_ADMIN_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open cinema admin ↗
+                      </a>
+                      {session.user.role !== "VIEWER" && <button
+                        className="quiet"
+                        disabled={saving || !organization.active || !location.active}
+                        onClick={() => void openSupportSession(location)}
+                      >
+                        Open read-only support ↗
+                      </button>}
+                      <a
+                        href={`${CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(location.id)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open customer site ↗
+                      </a>
+                    </div>
+                  </div>
+                  <div className="readiness-grid branding-readiness">
+                    <section>
+                      <p className="eyebrow">READINESS</p>
+                      <div className="metric-grid">
+                        <span>
+                          <b>{location.configuration.auditoriums}</b>{" "}
+                          Auditoriums
+                        </span>
+                        <span>
+                          <b>{location.configuration.activeMovies}</b> Active
+                          movies
+                        </span>
+                        <span>
+                          <b>{location.configuration.activeFilmSeries}</b> Film
+                          series
+                        </span>
+                        <span>
+                          <b>{location.configuration.upcomingShowtimes}</b>{" "}
+                          Upcoming shows
+                        </span>
+                        <span>
+                          <b>{location.configuration.menuItems}</b> Menu items
+                        </span>
+                        <span>
+                          <b>{location.configuration.employees}</b> Active staff
+                        </span>
+                      </div>
+                    </section>
+                    <section>
+                      <p className="eyebrow">CUSTOMER BRAND</p>
+                      <div
+                        className="brand-preview"
+                        style={{
+                          background: `radial-gradient(circle at top right, ${location.branding.backgroundGlowColor ?? "#3a0f1b"}, ${location.branding.backgroundColor ?? "#090a0c"} 45%)`,
+                          color: location.branding.textColor ?? "#f5f2ea",
+                          borderColor:
+                            location.branding.accentColor ?? "#7c9cff",
+                        }}
+                      >
+                        <span
+                          className="brand-mark"
+                          style={{
+                            background:
+                              location.branding.accentColor ?? "#7c9cff",
+                          }}
+                        />
+                        {location.branding.logoUrl ? (
+                          <span>Custom logo configured</span>
+                        ) : (
+                          <span>Text identity · {location.name}</span>
+                        )}
+                      </div>
+                      <div className="swatches">
+                        {[
+                          ["Accent", location.branding.accentColor],
+                          ["Background", location.branding.backgroundColor],
+                          [
+                            "Background glow",
+                            location.branding.backgroundGlowColor,
+                          ],
+                          ["Surface", location.branding.surfaceColor],
+                          ["Text", location.branding.textColor],
+                        ].map(([label, color]) => (
+                          <span key={label}>
+                            <i style={{ background: color ?? "transparent" }} />
+                            {label}
+                            <code>{color ?? "Default"}</code>
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                    <section>
+                      <p className="eyebrow">ADMIN INTERFACE</p>
+                      <div
+                        className="brand-preview admin-preview"
+                        style={{
+                          background:
+                            location.adminBranding.backgroundColor ?? "#000000",
+                          color: location.adminBranding.textColor ?? "#ffffff",
+                          borderColor:
+                            location.adminBranding.accentMutedColor ??
+                            "#8a6500",
+                        }}
+                      >
+                        <span
+                          className="brand-mark"
+                          style={{
+                            background:
+                              location.adminBranding.accentColor ?? "#ffb800",
+                          }}
+                        />
+                        <span>Attend Admin · {location.name}</span>
+                      </div>
+                      <div className="swatches">
+                        {[
+                          ["Accent", location.adminBranding.accentColor],
+                          [
+                            "Background",
+                            location.adminBranding.backgroundColor,
+                          ],
+                          ["Surface", location.adminBranding.surfaceColor],
+                          ["Text", location.adminBranding.textColor],
+                        ].map(([label, color]) => (
+                          <span key={label}>
+                            <i style={{ background: color ?? "transparent" }} />
+                            {label}
+                            <code>{color ?? "Default"}</code>
+                          </span>
+                        ))}
+                      </div>
+                    </section>
+                    <section>
+                      <p className="eyebrow">OPERATING SETTINGS</p>
+                      <dl>
+                        <div>
+                          <dt>Ticket tax</dt>
+                          <dd>
+                            {(
+                              location.operations.ticketTaxRateBasisPoints / 100
+                            ).toFixed(2)}
+                            %
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Pre-show buffer</dt>
+                          <dd>
+                            {location.operations.preShowBufferMinutes} min
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Cleaning buffer</dt>
+                          <dd>
+                            {location.operations.cleaningBufferMinutes} min
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Check drop</dt>
+                          <dd>
+                            {location.operations.checkDropMinutesBeforeEnd} min
+                            before end
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Auto-settle grace</dt>
+                          <dd>
+                            {location.operations.autoSettleGraceMinutes} min
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>Time clock</dt>
+                          <dd>
+                            {location.operations.timeClockEnabled
+                              ? "Enabled"
+                              : "Disabled"}
+                          </dd>
+                        </div>
+                      </dl>
+                    </section>
+                  </div>
+                  {cinemaManagerDraft?.locationId === location.id && (
+                    <form
+                      className="editor location-editor"
+                      onSubmit={createCinemaManager}
+                    >
+                      <div className="editor-heading">
+                        <div>
+                          <p className="eyebrow">CINEMA ACCESS</p>
+                          <h3>Create {location.name} manager login</h3>
+                          <p className="muted">
+                            This account is isolated to this cinema. Cinema
+                            Manager access does not require two-step
+                            verification.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() => setCinemaManagerDraft(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="form-grid">
+                        <label>
+                          Name
+                          <input
+                            required
+                            value={cinemaManagerDraft.name}
+                            onChange={(event) =>
+                              setCinemaManagerDraft({
+                                ...cinemaManagerDraft,
+                                name: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Email
+                          <input
+                            type="email"
+                            required
+                            value={cinemaManagerDraft.email}
+                            onChange={(event) =>
+                              setCinemaManagerDraft({
+                                ...cinemaManagerDraft,
+                                email: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Initial password
+                          <input
+                            type="password"
+                            minLength={12}
+                            required
+                            value={cinemaManagerDraft.password}
+                            onChange={(event) =>
+                              setCinemaManagerDraft({
+                                ...cinemaManagerDraft,
+                                password: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <p className="form-note">
+                        Use at least 12 characters. The password is sent once
+                        over the secure API and is stored only as a one-way
+                        hash.
+                      </p>
+                      <button disabled={saving}>
+                        {saving ? "Creating…" : "Create cinema manager"}
+                      </button>
+                    </form>
+                  )}
+                  {locationDraft?.id === location.id && (
+                    <form
+                      className="editor location-editor"
+                      onSubmit={saveLocation}
+                    >
+                      <div className="editor-heading">
+                        <div>
+                          <p className="eyebrow">PLATFORM CONFIGURATION</p>
+                          <h3>Edit {location.name}</h3>
+                          <p className="muted">
+                            Preview both cinema surfaces here. Operating settings
+                            save immediately; branding stays private as a draft
+                            until you publish it.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() => setLocationDraft(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <div className="form-grid">
+                        <label>
+                          Cinema name
+                          <input
+                            required
+                            value={locationDraft.values.name}
+                            onChange={(event) =>
+                              setLocationDraft({
+                                ...locationDraft,
+                                values: {
+                                  ...locationDraft.values,
+                                  name: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Address
+                          <input
+                            value={locationDraft.values.address}
+                            onChange={(event) =>
+                              setLocationDraft({
+                                ...locationDraft,
+                                values: {
+                                  ...locationDraft.values,
+                                  address: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Timezone
+                          <input
+                            required
+                            value={locationDraft.values.timezone}
+                            onChange={(event) =>
+                              setLocationDraft({
+                                ...locationDraft,
+                                values: {
+                                  ...locationDraft.values,
+                                  timezone: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={locationDraft.values.active}
+                            onChange={(event) =>
+                              setLocationDraft({
+                                ...locationDraft,
+                                values: {
+                                  ...locationDraft.values,
+                                  active: event.target.checked,
+                                },
+                              })
+                            }
+                          />{" "}
+                          Active cinema
+                        </label>
+                      </div>
+                      <h4>Customer website</h4>
+                      <div className="form-grid brand-fields">
+                        <label>
+                          Logo URL
+                          <input
+                            value={locationDraft.values.logoUrl}
+                            onChange={(event) =>
+                              setLocationDraft({
+                                ...locationDraft,
+                                values: {
+                                  ...locationDraft.values,
+                                  logoUrl: event.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        {(
+                          [
+                            "accentColor",
+                            "accentMutedColor",
+                            "backgroundColor",
+                            "backgroundGlowColor",
+                            "surfaceColor",
+                            "textColor",
+                            "mutedTextColor",
+                          ] as const
+                        ).map((key) => (
+                          <label key={key}>
+                            {key.replace(/([A-Z])/g, " $1")}
+                            <div className="color-input">
+                              <input
+                                type="color"
+                                value={locationDraft.values[key] || "#000000"}
+                                onChange={(event) =>
+                                  setLocationDraft({
+                                    ...locationDraft,
+                                    values: {
+                                      ...locationDraft.values,
+                                      [key]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                              <input
+                                placeholder="#fe2c54"
+                                value={locationDraft.values[key]}
+                                onChange={(event) =>
+                                  setLocationDraft({
+                                    ...locationDraft,
+                                    values: {
+                                      ...locationDraft.values,
+                                      [key]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <div
+                        className="live-brand-preview"
+                        style={{
+                          background: `radial-gradient(circle at top right, ${locationDraft.values.backgroundGlowColor || "#3a0f1b"}, ${locationDraft.values.backgroundColor || "#0b0b0d"} 45%)`,
+                          color: locationDraft.values.textColor || "#f5f3ee",
+                          borderColor:
+                            locationDraft.values.accentMutedColor || "#a91d39",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color:
+                              locationDraft.values.accentColor || "#fe2c54",
+                          }}
+                        >
+                          NOW PLAYING
+                        </span>
+                        <strong>{locationDraft.values.name}</strong>
+                        <small
+                          style={{
+                            color:
+                              locationDraft.values.mutedTextColor || "#a8a49c",
+                          }}
+                        >
+                          Customer website preview
+                        </small>
+                      </div>
+                      <div className="editor-heading">
+                        <h4>Cinema admin interface</h4>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() =>
+                            setLocationDraft({
+                              ...locationDraft,
+                              values: {
+                                ...locationDraft.values,
+                                ...RECOMMENDED_ADMIN_PALETTE,
+                              },
+                            })
+                          }
+                        >
+                          Use recommended palette
+                        </button>
+                      </div>
+                      <div className="form-grid brand-fields">
+                        {(
+                          [
+                            "adminAccentColor",
+                            "adminAccentMutedColor",
+                            "adminBackgroundColor",
+                            "adminSurfaceColor",
+                            "adminTextColor",
+                            "adminMutedTextColor",
+                          ] as const
+                        ).map((key) => (
+                          <label key={key}>
+                            {key
+                              .replace(/^admin/, "")
+                              .replace(/([A-Z])/g, " $1")
+                              .trim()}
+                            <div className="color-input">
+                              <input
+                                type="color"
+                                value={locationDraft.values[key] || "#000000"}
+                                onChange={(event) =>
+                                  setLocationDraft({
+                                    ...locationDraft,
+                                    values: {
+                                      ...locationDraft.values,
+                                      [key]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                              <input
+                                placeholder="#ffb800"
+                                value={locationDraft.values[key]}
+                                onChange={(event) =>
+                                  setLocationDraft({
+                                    ...locationDraft,
+                                    values: {
+                                      ...locationDraft.values,
+                                      [key]: event.target.value,
+                                    },
+                                  })
+                                }
+                              />
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <div
+                        className="live-brand-preview admin-live-preview"
+                        style={{
+                          background:
+                            locationDraft.values.adminBackgroundColor ||
+                            "#000000",
+                          color:
+                            locationDraft.values.adminTextColor || "#ffffff",
+                          borderColor:
+                            locationDraft.values.adminAccentMutedColor ||
+                            "#8a6500",
+                        }}
+                      >
+                        <span
+                          style={{
+                            color:
+                              locationDraft.values.adminAccentColor ||
+                              "#ffb800",
+                          }}
+                        >
+                          ATTEND ADMIN
+                        </span>
+                        <strong>{locationDraft.values.name}</strong>
+                        <small
+                          style={{
+                            color:
+                              locationDraft.values.adminMutedTextColor ||
+                              "#cccccc",
+                          }}
+                        >
+                          Cinema staff interface preview
+                        </small>
+                      </div>
+                      <AdminUiEditor
+                        value={locationDraft.values.adminUi}
+                        onChange={(adminUi) =>
+                          setLocationDraft({
+                            ...locationDraft,
+                            values: { ...locationDraft.values, adminUi },
+                          })
+                        }
+                        onRestore={(palette) =>
+                          setLocationDraft({
+                            ...locationDraft,
+                            values: {
+                              ...locationDraft.values,
+                              adminAccentColor: palette.accentColor,
+                              adminAccentMutedColor: palette.accentMutedColor,
+                              adminBackgroundColor: palette.backgroundColor,
+                              adminSurfaceColor: palette.surfaceColor,
+                              adminTextColor: palette.textColor,
+                              adminMutedTextColor: palette.mutedTextColor,
+                              adminUi: {
+                                ...locationDraft.values.adminUi,
+                                onSaleColor: palette.onSaleColor,
+                                draftColor: palette.draftColor,
+                                pastColor: palette.pastColor,
+                              },
+                            },
+                          })
+                        }
+                      />
+                      <h4>Operating settings</h4>
+                      <div className="form-grid">
+                        {(
+                          [
+                            "ticketTaxRateBasisPoints",
+                            "preShowBufferMinutes",
+                            "cleaningBufferMinutes",
+                            "checkDropMinutesBeforeEnd",
+                            "autoSettleGraceMinutes",
+                          ] as const
+                        ).map((key) => (
+                          <label key={key}>
+                            {key.replace(/([A-Z])/g, " $1")}
+                            <input
+                              type="number"
+                              min="0"
+                              value={locationDraft.values[key]}
+                              onChange={(event) =>
+                                setLocationDraft({
+                                  ...locationDraft,
+                                  values: {
+                                    ...locationDraft.values,
+                                    [key]: Number(event.target.value),
+                                  },
+                                })
+                              }
+                            />
+                          </label>
+                        ))}
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={locationDraft.values.timeClockEnabled}
+                            onChange={(event) =>
+                              setLocationDraft({
+                                ...locationDraft,
+                                values: {
+                                  ...locationDraft.values,
+                                  timeClockEnabled: event.target.checked,
+                                },
+                              })
+                            }
+                          />{" "}
+                          Time clock enabled
+                        </label>
+                      </div>
+                      <button disabled={saving}>
+                        {saving
+                          ? "Saving…"
+                          : "Save settings and branding draft"}
+                      </button>
+                    </form>
+                  )}
+                  {contentDraft?.id === location.id && (
+                    <form
+                      className="editor location-editor"
+                      onSubmit={saveContentDraft}
+                    >
+                      <div className="editor-heading">
+                        <div>
+                          <p className="eyebrow">CONTENT STUDIO</p>
+                          <h3>Edit customer website draft</h3>
+                          <p className="muted">
+                            Changes stay private until you publish. Page
+                            structure and accessibility remain protected.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="quiet"
+                          onClick={() => setContentDraft(null)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      <h4>Typography</h4>
+                      <div className="form-grid">
+                        <label>
+                          Heading style
+                          <select
+                            value={contentDraft.values.typography.headingFont}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  typography: {
+                                    ...contentDraft.values.typography,
+                                    headingFont: event.target
+                                      .value as CinemaContent["typography"]["headingFont"],
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            <option value="EDITORIAL">Editorial serif</option>
+                            <option value="CLASSIC">Classic serif</option>
+                            <option value="MODERN">Modern sans</option>
+                          </select>
+                        </label>
+                        <label>
+                          Body style
+                          <select
+                            value={contentDraft.values.typography.bodyFont}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  typography: {
+                                    ...contentDraft.values.typography,
+                                    bodyFont: event.target
+                                      .value as CinemaContent["typography"]["bodyFont"],
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            <option value="SANS">Clean sans</option>
+                            <option value="HUMANIST">Humanist sans</option>
+                            <option value="SERIF">Serif</option>
+                          </select>
+                        </label>
+                        <label>
+                          Heading size
+                          <select
+                            value={contentDraft.values.typography.headingSize}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  typography: {
+                                    ...contentDraft.values.typography,
+                                    headingSize: event.target.value as CinemaContent["typography"]["headingSize"],
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            <option value="COMPACT">Compact</option>
+                            <option value="STANDARD">Standard</option>
+                            <option value="LARGE">Large</option>
+                          </select>
+                        </label>
+                        <label>
+                          Body size
+                          <select
+                            value={contentDraft.values.typography.bodySize}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  typography: {
+                                    ...contentDraft.values.typography,
+                                    bodySize: event.target.value as CinemaContent["typography"]["bodySize"],
+                                  },
+                                },
+                              })
+                            }
+                          >
+                            <option value="COMPACT">Compact</option>
+                            <option value="STANDARD">Standard</option>
+                            <option value="LARGE">Large</option>
+                          </select>
+                        </label>
+                      </div>
+                      <p className="form-note">
+                        Font families and sizes apply consistently across every
+                        customer page, including Showtimes and Coming Soon.
+                      </p>
+                      <h4>Showtimes page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Eyebrow
+                          <input
+                            value={contentDraft.values.showtimes.eyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  showtimes: {
+                                    ...contentDraft.values.showtimes,
+                                    eyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.showtimes.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  showtimes: {
+                                    ...contentDraft.values.showtimes,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.showtimes.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  showtimes: {
+                                    ...contentDraft.values.showtimes,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          No showtimes message
+                          <input
+                            value={contentDraft.values.showtimes.empty}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  showtimes: {
+                                    ...contentDraft.values.showtimes,
+                                    empty: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          No showtimes on date
+                          <input
+                            value={contentDraft.values.showtimes.emptyDate}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  showtimes: {
+                                    ...contentDraft.values.showtimes,
+                                    emptyDate: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>Coming Soon page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Eyebrow
+                          <input
+                            value={contentDraft.values.comingSoon.eyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  comingSoon: {
+                                    ...contentDraft.values.comingSoon,
+                                    eyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.comingSoon.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  comingSoon: {
+                                    ...contentDraft.values.comingSoon,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.comingSoon.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  comingSoon: {
+                                    ...contentDraft.values.comingSoon,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Empty message
+                          <input
+                            value={contentDraft.values.comingSoon.empty}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  comingSoon: {
+                                    ...contentDraft.values.comingSoon,
+                                    empty: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>Film Series page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Eyebrow
+                          <input
+                            value={contentDraft.values.filmSeries.eyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  filmSeries: {
+                                    ...contentDraft.values.filmSeries,
+                                    eyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.filmSeries.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  filmSeries: {
+                                    ...contentDraft.values.filmSeries,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.filmSeries.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  filmSeries: {
+                                    ...contentDraft.values.filmSeries,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Empty message
+                          <input
+                            value={contentDraft.values.filmSeries.empty}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  filmSeries: {
+                                    ...contentDraft.values.filmSeries,
+                                    empty: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <p className="form-note">
+                        Use <code>{"{cinema}"}</code> in the introduction to
+                        insert the cinema name.
+                      </p>
+                      <h4>Directions page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Eyebrow
+                          <input
+                            value={contentDraft.values.directions.eyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  directions: {
+                                    ...contentDraft.values.directions,
+                                    eyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.directions.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  directions: {
+                                    ...contentDraft.values.directions,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.directions.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  directions: {
+                                    ...contentDraft.values.directions,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Directions button
+                          <input
+                            value={
+                              contentDraft.values.directions.directionsLabel
+                            }
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  directions: {
+                                    ...contentDraft.values.directions,
+                                    directionsLabel: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Missing address message
+                          <input
+                            value={
+                              contentDraft.values.directions.addressMissing
+                            }
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  directions: {
+                                    ...contentDraft.values.directions,
+                                    addressMissing: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>Account page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Eyebrow
+                          <input
+                            value={contentDraft.values.account.eyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  account: {
+                                    ...contentDraft.values.account,
+                                    eyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.account.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  account: {
+                                    ...contentDraft.values.account,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.account.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  account: {
+                                    ...contentDraft.values.account,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Signed-in label
+                          <input
+                            value={contentDraft.values.account.signedInEyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  account: {
+                                    ...contentDraft.values.account,
+                                    signedInEyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          During-visit label
+                          <input
+                            value={contentDraft.values.account.visitEyebrow}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  account: {
+                                    ...contentDraft.values.account,
+                                    visitEyebrow: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>About page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.about.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  about: {
+                                    ...contentDraft.values.about,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.about.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  about: {
+                                    ...contentDraft.values.about,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Experience heading
+                          <input
+                            value={contentDraft.values.about.experienceTitle}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  about: {
+                                    ...contentDraft.values.about,
+                                    experienceTitle: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Experience copy
+                          <textarea
+                            value={contentDraft.values.about.body.join("\n\n")}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  about: {
+                                    ...contentDraft.values.about,
+                                    body: event.target.value
+                                      .split(/\n\s*\n/)
+                                      .filter(Boolean),
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>Afterglow page</h4>
+                      <div className="form-grid">
+                        <label>
+                          Hero image URL
+                          <input
+                            value={contentDraft.values.afterglow.imageUrl}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  afterglow: {
+                                    ...contentDraft.values.afterglow,
+                                    imageUrl: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Image description
+                          <input
+                            value={contentDraft.values.afterglow.imageAlt}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  afterglow: {
+                                    ...contentDraft.values.afterglow,
+                                    imageAlt: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Heading
+                          <input
+                            value={contentDraft.values.afterglow.sectionTitle}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  afterglow: {
+                                    ...contentDraft.values.afterglow,
+                                    sectionTitle: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Copy
+                          <textarea
+                            value={contentDraft.values.afterglow.body.join(
+                              "\n\n",
+                            )}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  afterglow: {
+                                    ...contentDraft.values.afterglow,
+                                    body: event.target.value
+                                      .split(/\n\s*\n/)
+                                      .filter(Boolean),
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>Dining &amp; Bar</h4>
+                      <div className="form-grid">
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.dining.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  dining: {
+                                    ...contentDraft.values.dining,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.dining.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  dining: {
+                                    ...contentDraft.values.dining,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <h4>Private Events</h4>
+                      <div className="form-grid">
+                        <label>
+                          Page title
+                          <input
+                            value={contentDraft.values.privateEvents.title}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  privateEvents: {
+                                    ...contentDraft.values.privateEvents,
+                                    title: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Introduction
+                          <input
+                            value={contentDraft.values.privateEvents.intro}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  privateEvents: {
+                                    ...contentDraft.values.privateEvents,
+                                    intro: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Closing heading
+                          <input
+                            value={
+                              contentDraft.values.privateEvents.closingTitle
+                            }
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  privateEvents: {
+                                    ...contentDraft.values.privateEvents,
+                                    closingTitle: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Closing copy
+                          <textarea
+                            value={
+                              contentDraft.values.privateEvents.closingBody
+                            }
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  privateEvents: {
+                                    ...contentDraft.values.privateEvents,
+                                    closingBody: event.target.value,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <div
+                        className="live-brand-preview"
+                        style={{
+                          fontFamily:
+                            contentDraft.values.typography.headingFont ===
+                            "MODERN"
+                              ? "Arial, sans-serif"
+                              : "Georgia, serif",
+                        }}
+                      >
+                        <span>LIVE DRAFT PREVIEW</span>
+                        <strong>{contentDraft.values.about.title}</strong>
+                        <small>{contentDraft.values.about.intro}</small>
+                      </div>
+                      <button disabled={saving}>
+                        {saving ? "Saving…" : "Save private draft"}
+                      </button>
+                      <p className="form-note">
+                        Last published:{" "}
+                        {location.content.publishedAt
+                          ? new Date(
+                              location.content.publishedAt,
+                            ).toLocaleString()
+                          : "Using built-in defaults"}
+                        . Use “Publish draft” after reviewing.
+                      </p>
+                    </form>
+                  )}
+                  <footer className="detail-note">
+                    Attend Master changes are audited. Cinema staff retain their
+                    existing permissions and admin access.
+                  </footer>
+                </article>
+              ))}
+            </>
+          )}
+        </section>
+      )}
+      {!selectedOrganizationId && (
+        <>
+          <section className="summary">
+            <div>
+              <strong>{overview?.organizations.length ?? "—"}</strong>
+              <span>Organizations</span>
+            </div>
+            <div>
+              <strong>{locations.length || "—"}</strong>
+              <span>Locations</span>
+            </div>
+            <div>
+              <strong>
+                {locations.filter((location) => location.active).length || "—"}
+              </strong>
+              <span>Active locations</span>
+            </div>
+            <div>
+              <strong>
+                {locations.reduce(
+                  (sum, location) =>
+                    sum + location.configuration.upcomingShowtimes,
+                  0,
+                ) || "—"}
+              </strong>
+              <span>Upcoming showtimes</span>
+            </div>
+          </section>
+          <section className="client-filters" aria-label="Filter cinema clients">
+            <label>
+              Search
+              <input
+                type="search"
+                placeholder="Client, cinema, address, or timezone"
+                value={clientQuery}
+                onChange={(event) => setClientQuery(event.target.value)}
+              />
+            </label>
+            <label>
+              Stripe onboarding
+              <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
+                <option value="ALL">All statuses</option>
+                <option value="COMPLETE">Complete</option>
+                <option value="IN_PROGRESS">In progress</option>
+                <option value="NOT_STARTED">Not started</option>
+                <option value="INCOMPLETE">Any incomplete</option>
+              </select>
+            </label>
+            <label>
+              Location status
+              <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)}>
+                <option value="ALL">Active or inactive</option>
+                <option value="ACTIVE">Has an active location</option>
+                <option value="INACTIVE">Has an inactive location</option>
+              </select>
+            </label>
+            <label>
+              Location count
+              <select value={locationCountFilter} onChange={(event) => setLocationCountFilter(event.target.value)}>
+                <option value="ALL">Any number</option>
+                <option value="ONE">One location</option>
+                <option value="MULTIPLE">Multiple locations</option>
+              </select>
+            </label>
+            <div className="filter-result">
+              <strong>{filteredOrganizations.length}</strong>
+              <span>of {overview?.organizations.length ?? 0} clients</span>
+            </div>
+          </section>
+          <section className="organizations">
+            {!overview && !error && (
+              <p className="muted">Loading cinema clients…</p>
+            )}
+            {overview && filteredOrganizations.length === 0 && (
+              <div className="client-empty-state">
+                <h2>No clients match</h2>
+                <p className="muted">Try a broader search or clear one of the filters.</p>
+                <button className="quiet" onClick={() => {
+                  setClientQuery("");
+                  setPaymentFilter("ALL");
+                  setLocationFilter("ALL");
+                  setLocationCountFilter("ALL");
+                }}>Clear filters</button>
+              </div>
+            )}
+            {filteredOrganizations.map((organizationItem) => (
+              <article className="organization" key={organizationItem.id}>
+                <div className="org-heading">
+                  <div>
+                    <p className="eyebrow">ORGANIZATION</p>
+                    <h2>{organizationItem.name}</h2>
+                    <p className="muted">
+                      {organizationItem.legalName ?? organizationItem.timezone}
+                    </p>
+                  </div>
+                  <div className="org-actions">
+                    <span
+                      className={
+                        organizationItem.payments.connected
+                          ? "status good"
+                          : "status warning"
+                      }
+                    >
+                      {organizationItem.payments.connected
+                        ? `Payments ${organizationItem.payments.onboardingStatus.toLowerCase()}`
+                        : "Payments not connected"}
+                    </span>
+                    <button
+                      className="open-client"
+                      onClick={() =>
+                        setSelectedOrganizationId(organizationItem.id)
+                      }
+                    >
+                      Open cinema →
+                    </button>
+                  </div>
+                </div>
+                <div className="location-list">
+                  {organizationItem.locations.map((location) => (
+                    <div className="location" key={location.id}>
+                      <div>
+                        <div className="location-title">
+                          <h3>{location.name}</h3>
+                          <span
+                            className={location.active ? "dot active" : "dot"}
+                          >
+                            {location.active ? "Active" : "Inactive"}
+                          </span>
+                        </div>
+                        <p className="muted">
+                          {location.address ?? location.timezone}
+                        </p>
+                        <code>{location.id}</code>
+                      </div>
+                      <div className="signals">
+                        <span>
+                          <b>{location.configuration.auditoriums}</b>{" "}
+                          auditoriums
+                        </span>
+                        <span>
+                          <b>{location.configuration.employees}</b> staff
+                        </span>
+                        <span>
+                          <b>{location.configuration.menuItems}</b> menu items
+                        </span>
+                        <span>
+                          <b>{location.configuration.upcomingShowtimes}</b>{" "}
+                          upcoming
+                        </span>
+                        <span
+                          className={
+                            location.configuration.branding
+                              ? "configured"
+                              : "needs-attention"
+                          }
+                        >
+                          {location.configuration.branding
+                            ? "Brand configured"
+                            : "Default brand"}
+                        </span>
+                      </div>
+                      <div className="actions">
+                        <a
+                          href={CINEMA_ADMIN_URL}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Cinema admin ↗
+                        </a>
+                        <a
+                          href={`${CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(location.id)}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Customer site ↗
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </section>
+        </>
+      )}
+    </main>
+  );
+}

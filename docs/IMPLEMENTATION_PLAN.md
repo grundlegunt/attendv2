@@ -66,7 +66,7 @@ Each milestone must produce something testable and end with a demo-able state. N
 ## Milestone 7 — Kitchen/bar routing and displays
 
 - **DB:** `FulfillmentTicket`.
-- **API:** order-send now generates per-station `FulfillmentTicket`s (kitchen/bar/concessions split), station-scoped real-time rooms, prep-status update endpoints (`START`/`READY`).
+- **API:** order-send now generates per-station `FulfillmentTicket`s (kitchen/bar/concessions split), station-scoped live notifications, prep-status update endpoints (`START`/`READY`). For the initial single-API-instance release, notifications are in-process and both operational clients independently re-fetch authoritative PostgreSQL state every two seconds. This deliberately preserves correctness and near-real-time service-floor updates across disconnects or mismatched instances. Redis-backed cross-instance fan-out remains a pre-production-scaling task, before deploying multiple load-balanced API instances.
 - **UI:** `kds` app — kitchen mode and bar mode (station filter), several-feet-legible layout, age-based visual urgency.
 - **Tests:** routing test (burger → kitchen ticket only, cocktail → bar ticket only, from one order); status-transition tests (`NEW → ACCEPTED → PREPARING → READY`); refire test.
 - **Completion criteria:** sending a mixed order from `staff-pos` produces the correct items on the correct display in real time, and marking ready/delivered is reflected back on the server's seat detail view live — this is the point where the spec's "KITCHEN/BAR mark items ready" step becomes real.

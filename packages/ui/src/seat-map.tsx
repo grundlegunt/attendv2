@@ -13,10 +13,12 @@ export function SeatMap({
   seats,
   label = "Auditorium seat map",
   onSeatClick,
+  allowUnavailableSelection = false,
 }: {
   seats: SeatMapSeat[];
   label?: string;
   onSeatClick?: (seat: SeatMapSeat) => void;
+  allowUnavailableSelection?: boolean;
 }) {
   const columns = Math.max(1, ...seats.map((seat) => seat.x + 1));
   const rows = Math.max(1, ...seats.map((seat) => seat.y + 1));
@@ -42,7 +44,10 @@ export function SeatMap({
             title={`${seat.label}${seat.type !== "STANDARD" ? ` · ${seat.type}` : ""}`}
             aria-label={`${seat.label}, ${seat.type.toLowerCase()}`}
             aria-pressed={seat.state === "selected"}
-            disabled={!onSeatClick || seat.state === "unavailable"}
+            disabled={
+              !onSeatClick ||
+              (seat.state === "unavailable" && !allowUnavailableSelection)
+            }
             onClick={onSeatClick ? () => onSeatClick(seat) : undefined}
           >
             <span>{seat.type === "ADA" ? "♿" : seat.type === "COMPANION" ? "C" : seat.label}</span>

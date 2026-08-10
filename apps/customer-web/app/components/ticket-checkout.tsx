@@ -19,12 +19,26 @@ interface CheckoutConfig {
 }
 
 interface StripeElement {
-  mount(selector: string): void;
+  mount(target: string | HTMLElement): void;
+  unmount(): void;
   destroy(): void;
+  on(event: "ready", handler: () => void): void;
+  on(
+    event: "loaderror",
+    handler: (event: { error?: { message?: string } }) => void,
+  ): void;
+}
+
+interface StripeExpressCheckoutElement {
+  mount(target: string | HTMLElement): void;
+  unmount(): void;
+  destroy(): void;
+  on(event: "confirm", handler: () => void): void;
 }
 
 interface StripeElements {
   create(type: "payment", options?: Record<string, unknown>): StripeElement;
+  create(type: "expressCheckout", options?: Record<string, unknown>): StripeExpressCheckoutElement;
 }
 
 interface StripeClient {
@@ -97,11 +111,18 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [paymentElementReady, setPaymentElementReady] = useState(false);
+  const [mountableElements, setMountableElements] = useState<{
+    payment: StripeElement;
+    express: StripeExpressCheckoutElement;
+  } | null>(null);
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
-  const paymentElementRef = useRef<StripeElement | null>(null);
+  const paymentContainerRef = useRef<HTMLDivElement | null>(null);
+  const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     apiFetch<CheckoutConfig>(
@@ -117,14 +138,56 @@ export function TicketCheckout({
       );
   }, [showtimeId]);
 
-  useEffect(
-    () => () => paymentElementRef.current?.destroy(),
-    [],
-  );
+  useEffect(() => {
+    if (!mountableElements || confirmation) return;
+    const paymentContainer = paymentContainerRef.current;
+    const expressContainer = expressCheckoutContainerRef.current;
+    if (!paymentContainer || !expressContainer) return;
+
+    mountableElements.express.mount(expressContainer);
+    mountableElements.payment.mount(paymentContainer);
+    return () => {
+      mountableElements.express.unmount();
+      mountableElements.payment.unmount();
+    };
+  }, [confirmation, mountableElements]);
+
+  async function confirmAndFinalize(
+    stripe: StripeClient,
+    elements: StripeElements,
+    orderId: string,
+  ) {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+        confirmParams: { receipt_email: email },
+      });
+      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
+      setConfirmation(
+        await apiFetch<TicketConfirmationResponse>(
+          `/ticketing/orders/${orderId}/finalize`,
+          { method: "POST", body: "{}" },
+        ),
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : requestError instanceof Error
+            ? requestError.message
+            : "Payment could not be completed.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
-    if (!config) return;
+    if (!config || diningAuthorization === null) return;
     setPending(true);
     setError(null);
     try {
@@ -145,11 +208,7 @@ export function TicketCheckout({
             ticketTypeId: config.ticketTypes[0]?.id,
             email,
             name: name || undefined,
-            // Card-on-file dining authorization is Milestone 5 scope --
-            // see the informational note in the form below. Nothing in
-            // this checkout flow can act on `true` yet, so it is never
-            // sent as anything other than false.
-            diningAuthorizationRequested: false,
+            diningAuthorizationRequested: diningAuthorization,
           }),
         },
       );
@@ -174,10 +233,28 @@ export function TicketCheckout({
       const paymentElement = elements.create("payment", {
         layout: "tabs",
       });
+      paymentElement.on("ready", () => setPaymentElementReady(true));
+      paymentElement.on("loaderror", (event) => {
+        setPaymentElementReady(false);
+        setError(
+          event.error?.message ??
+            "The secure payment form could not load. Please refresh and try again.",
+        );
+      });
+      const expressCheckoutElement = elements.create("expressCheckout", {
+        paymentMethods: { applePay: "always" },
+        buttonType: { applePay: "check-out" },
+      });
+      expressCheckoutElement.on("confirm", () => {
+        void confirmAndFinalize(stripe, elements, created.orderId);
+      });
       stripeRef.current = stripe;
       elementsRef.current = elements;
-      paymentElementRef.current = paymentElement;
-      window.setTimeout(() => paymentElement.mount("#attend-payment-element"), 0);
+      setPaymentElementReady(false);
+      setMountableElements({
+        payment: paymentElement,
+        express: expressCheckoutElement,
+      });
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -193,33 +270,13 @@ export function TicketCheckout({
 
   async function pay(event: FormEvent) {
     event.preventDefault();
-    if (!checkout || !stripeRef.current || !elementsRef.current) return;
-    setPending(true);
-    setError(null);
-    try {
-      const result = await stripeRef.current.confirmPayment({
-        elements: elementsRef.current,
-        redirect: "if_required",
-        confirmParams: { receipt_email: email },
-      });
-      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
-      setConfirmation(
-        await apiFetch<TicketConfirmationResponse>(
-          `/ticketing/orders/${checkout.orderId}/finalize`,
-          { method: "POST", body: "{}" },
-        ),
-      );
-    } catch (requestError) {
-      setError(
-        requestError instanceof ApiRequestError
-          ? requestError.body.message
-          : requestError instanceof Error
-            ? requestError.message
-            : "Payment could not be completed.",
-      );
-    } finally {
-      setPending(false);
-    }
+    if (
+      !checkout ||
+      !stripeRef.current ||
+      !elementsRef.current ||
+      !paymentElementReady
+    ) return;
+    await confirmAndFinalize(stripeRef.current, elementsRef.current, checkout.orderId);
   }
 
   if (confirmation) {
@@ -233,6 +290,9 @@ export function TicketCheckout({
             ? ` A receipt with your QR tickets was sent to ${email}.`
             : " Save these tickets for admission."}
         </p>
+        {confirmation.diningAuthorization === "AUTHORIZED" && (
+          <p>Your saved card is authorized for food and drinks during this visit.</p>
+        )}
         {confirmation.tickets.map((ticket) => (
           <div className="confirmation-card digital-ticket" key={ticket.id}>
             <div>
@@ -286,11 +346,28 @@ export function TicketCheckout({
           <div className="checkout-panel authorization-note">
             <h3>Food + drink during the movie</h3>
             <p>
-              Card-on-file ordering for food and drinks isn't available yet. Your
-              server will collect payment for anything you order tonight
-              separately, in person. This card is only charged for your ticket
-              order above.
+              Would you like to save this card for food and drinks during this
+              visit? If you authorize it, your final dining total can be charged
+              after service. You can still choose another payment method later.
             </p>
+            <label>
+              <input
+                type="radio"
+                name="dining-authorization"
+                checked={diningAuthorization === true}
+                onChange={() => setDiningAuthorization(true)}
+              />
+              Yes, save and authorize this card
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="dining-authorization"
+                checked={diningAuthorization === false}
+                onChange={() => setDiningAuthorization(false)}
+              />
+              No, I’ll pay separately
+            </label>
           </div>
           {config && !config.payment.ready && (
             <div className="configuration-note">
@@ -300,7 +377,12 @@ export function TicketCheckout({
           )}
           <button
             className="primary"
-            disabled={pending || !config?.ticketTypes.length || !config.payment.ready}
+            disabled={
+              pending ||
+              diningAuthorization === null ||
+              !config?.ticketTypes.length ||
+              !config.payment.ready
+            }
           >
             {pending ? "Preparing secure checkout…" : "Continue to payment"}
           </button>
@@ -315,12 +397,18 @@ export function TicketCheckout({
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
           <div className="checkout-panel">
-            <h3>Card or Apple Pay</h3>
-            <div id="attend-payment-element" />
+            <h3>Payment</h3>
+            {!paymentElementReady && !error && (
+              <p role="status">Loading secure payment form…</p>
+            )}
+            <div id="attend-express-checkout-element" ref={expressCheckoutContainerRef} />
+            <div id="attend-payment-element" ref={paymentContainerRef} />
           </div>
-          <button className="primary" disabled={pending}>
+          <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
               ? "Completing purchase…"
+              : !paymentElementReady
+                ? "Loading secure payment…"
               : `Pay ${money(checkout.totalCents, checkout.currency)}`}
           </button>
         </form>

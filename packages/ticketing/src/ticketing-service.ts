@@ -40,6 +40,7 @@ interface LockedHold {
 // held -- see Refund.leaseExpiresAt (schema.prisma) and
 // reconcilePendingRefunds below.
 const REFUND_LEASE_MS = 60_000;
+const DINING_CONSENT_TERMS_VERSION = "dining-auto-settlement-2026-07-29";
 
 function paymentAttemptStatus(status: ProviderPaymentStatus): PaymentAttemptStatus {
   switch (status) {
@@ -179,16 +180,27 @@ export class TicketingService {
       (subtotalCents * location.ticketTaxRateBasisPoints) / 10_000,
     );
     const totalCents = subtotalCents + feesCents + taxCents;
+    const normalizedEmail = input.email.toLowerCase();
+    const customer = await this.prisma.customer.upsert({
+      where: { email: normalizedEmail },
+      create: {
+        email: normalizedEmail,
+        name: input.name?.trim() || null,
+        isGuest: true,
+      },
+      update: input.name?.trim() ? { name: input.name.trim() } : {},
+    });
 
     let order;
     try {
       order = await this.prisma.ticketOrder.create({
         data: {
           locationId: location.id,
+          customerId: customer.id,
           ticketTypeId: ticketType.id,
           holdTokens,
           holderKey: input.holderKey,
-          guestEmail: input.email.toLowerCase(),
+          guestEmail: normalizedEmail,
           guestName: input.name?.trim() || null,
           diningAuthorizationRequested: input.diningAuthorizationRequested,
           status: TicketOrderStatus.AWAITING_PAYMENT,
@@ -239,6 +251,10 @@ export class TicketingService {
   private async completeCheckout(order: {
     id: string;
     locationId: string;
+    customerId: string | null;
+    guestEmail: string | null;
+    guestName: string | null;
+    diningAuthorizationRequested: boolean | null;
     orderNumber: string;
     status: TicketOrderStatus;
     subtotalCents: number;
@@ -259,6 +275,16 @@ export class TicketingService {
       include: { organization: true },
     });
     const connectedAccountId = location.organization.stripeConnectedAccountId ?? undefined;
+    const paymentCustomer =
+      order.diningAuthorizationRequested && order.customerId && order.guestEmail
+        ? await this.ensurePaymentCustomer({
+            organizationId: location.organizationId,
+            customerId: order.customerId,
+            connectedAccountId,
+            email: order.guestEmail,
+            name: order.guestName ?? undefined,
+          })
+        : null;
 
     if (order.payment?.providerPaymentId) {
       // A real PaymentIntent already exists for this order -- replay it
@@ -282,6 +308,8 @@ export class TicketingService {
     const idempotencyKey = order.payment.idempotencyKey;
     const intent = await this.paymentProvider.createPaymentIntent({
       connectedAccountId,
+      providerCustomerId: paymentCustomer?.providerCustomerId,
+      savePaymentMethodForFuture: Boolean(order.diningAuthorizationRequested),
       amountCents: order.totalCents,
       currency: order.currency,
       metadata: {
@@ -327,6 +355,52 @@ export class TicketingService {
       }
       throw error;
     }
+  }
+
+  private async ensurePaymentCustomer(input: {
+    organizationId: string;
+    customerId: string;
+    connectedAccountId?: string;
+    email: string;
+    name?: string;
+  }) {
+    const existing = await this.prisma.paymentCustomer.findUnique({
+      where: {
+        organizationId_customerId_provider: {
+          organizationId: input.organizationId,
+          customerId: input.customerId,
+          provider: this.paymentProvider.name,
+        },
+      },
+    });
+    if (existing) return existing;
+
+    const providerCustomer = await this.paymentProvider.createCustomer({
+      connectedAccountId: input.connectedAccountId,
+      email: input.email,
+      name: input.name,
+      metadata: {
+        organizationId: input.organizationId,
+        customerId: input.customerId,
+      },
+      idempotencyKey: `payment-customer:${input.organizationId}:${input.customerId}`,
+    });
+    return this.prisma.paymentCustomer.upsert({
+      where: {
+        organizationId_customerId_provider: {
+          organizationId: input.organizationId,
+          customerId: input.customerId,
+          provider: this.paymentProvider.name,
+        },
+      },
+      create: {
+        organizationId: input.organizationId,
+        customerId: input.customerId,
+        provider: this.paymentProvider.name,
+        providerCustomerId: providerCustomer.id,
+      },
+      update: {},
+    });
   }
 
   async finalizeOrder(orderId: string) {
@@ -570,8 +644,12 @@ export class TicketingService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted },
       );
+      const diningAuthorization = await this.persistDiningAuthorization(
+        finalized,
+        providerResult.paymentMethod,
+      );
       const receiptDelivery = await this.deliverReceipt(finalized);
-      return this.presentConfirmation(finalized, receiptDelivery);
+      return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization);
     } catch (error) {
       if (
         error instanceof TicketingError &&
@@ -659,6 +737,10 @@ export class TicketingService {
             providerPaymentId: event.paymentIntentId,
           },
         });
+      }
+      if (payment?.restaurantTabId) {
+        await this.applyRestaurantPaymentWebhook(payment, event);
+        return this.recordProcessedWebhookEvent(event.id);
       }
       if (!payment?.ticketOrderId) throw TicketingError.notFound("Payment was not found.");
       if (event.type === "payment_intent.succeeded") {
@@ -752,6 +834,117 @@ export class TicketingService {
       }
       throw error;
     }
+  }
+
+  private async applyRestaurantPaymentWebhook(
+    payment: {
+      id: string;
+      restaurantTabId: string | null;
+      status: PaymentStatus;
+    },
+    event: VerifiedProviderEvent,
+  ) {
+    if (!payment.restaurantTabId) return;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${payment.restaurantTabId} FOR UPDATE`,
+      );
+      const tab = await tx.restaurantTab.findUnique({
+        where: { id: payment.restaurantTabId! },
+        include: { payments: true, receipt: true },
+      });
+      if (!tab || tab.status === "CLOSED") return;
+      const nextPaymentStatus =
+        event.type === "payment_intent.succeeded"
+          ? PaymentStatus.SUCCEEDED
+          : event.type === "payment_intent.payment_failed"
+            ? PaymentStatus.FAILED
+            : PaymentStatus.REQUIRES_ACTION;
+      if (
+        !new Set<PaymentStatus>([
+          PaymentStatus.SUCCEEDED,
+          PaymentStatus.REFUNDED,
+          PaymentStatus.PARTIALLY_REFUNDED,
+        ]).has(payment.status)
+      ) {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: nextPaymentStatus },
+        });
+      }
+      const resolvedPayment = await tx.payment.findUniqueOrThrow({
+        where: { id: payment.id },
+      });
+      const succeededPayments = await tx.payment.findMany({
+        where: {
+          restaurantTabId: tab.id,
+          status: PaymentStatus.SUCCEEDED,
+        },
+      });
+      const paidCents = succeededPayments.reduce(
+        (sum, candidate) => sum + candidate.amountCents,
+        0,
+      );
+      if (
+        resolvedPayment.status === PaymentStatus.SUCCEEDED &&
+        paidCents >= (tab.totalCents ?? 0)
+      ) {
+        const closedAt = new Date();
+        await tx.restaurantTab.update({
+          where: { id: tab.id },
+          data: { status: "CLOSED", closedAt },
+        });
+        if (!tab.receipt) {
+          await tx.restaurantReceipt.create({
+            data: {
+              restaurantTabId: tab.id,
+              receiptNumber: `R-${closedAt.getUTCFullYear()}-${randomUUID().slice(0, 8).toUpperCase()}`,
+              subtotalCents: tab.subtotalCents ?? 0,
+              taxCents: tab.taxCents ?? 0,
+              serviceChargeCents: tab.serviceChargeCents ?? 0,
+              tipCents: tab.selectedTipCents ?? 0,
+              totalCents: tab.totalCents ?? 0,
+              tenderSummary: succeededPayments.map((candidate) => ({
+                amountCents: candidate.amountCents,
+                paymentMethodReferenceId: candidate.paymentMethodReferenceId,
+              })),
+            },
+          });
+        }
+        await tx.auditEvent.create({
+          data: {
+            actorType: "SYSTEM",
+            action: "restaurant_tab.closed_from_payment_webhook",
+            entityType: "RestaurantTab",
+            entityId: tab.id,
+            locationId: tab.locationId,
+            afterState: { status: "CLOSED", paidCents },
+          },
+        });
+      } else if (
+        new Set<PaymentStatus>([
+          PaymentStatus.FAILED,
+          PaymentStatus.REQUIRES_ACTION,
+          PaymentStatus.REQUIRES_PAYMENT_METHOD,
+          PaymentStatus.CANCELED,
+        ]).has(resolvedPayment.status)
+      ) {
+        await tx.restaurantTab.update({
+          where: { id: tab.id },
+          data: { status: "PAYMENT_FAILED" },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: "SYSTEM",
+            action: "restaurant_tab.payment_failed",
+            entityType: "RestaurantTab",
+            entityId: tab.id,
+            locationId: tab.locationId,
+            afterState: { paymentId: payment.id, providerEventId: event.id },
+          },
+        });
+      }
+    });
   }
 
   verifyAndProcessWebhook(rawBody: Buffer, signatureHeader: string) {
@@ -1150,6 +1343,13 @@ export class TicketingService {
       // actually won, not the rejection this call itself observed.
       const failureMessage = error.message;
       return this.prisma.$transaction(async (tx) => {
+        // Match refundUnavailableOrder's lock order: ticket order first,
+        // then refund/payment rows. Otherwise concurrent recovery can hold
+        // the order while this transaction holds Refund/Payment, leaving
+        // each side waiting on the other until Postgres aborts one.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${ctx.ticketOrderId} FOR UPDATE`,
+        );
         const updated = await tx.refund.updateMany({
           where: { id: refund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
           data: { status: RefundStatus.FAILED, leaseExpiresAt: null },
@@ -1177,6 +1377,12 @@ export class TicketingService {
     let settled: RefundStatus;
     try {
       settled = await this.prisma.$transaction(async (tx) => {
+        // Keep the row-lock order consistent with refundUnavailableOrder so
+        // a concurrent finalize waits before either transaction owns
+        // Refund or Payment locks instead of forming a deadlock cycle.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${ctx.ticketOrderId} FOR UPDATE`,
+        );
         // Codex review fixes: guarded on "still non-terminal", not merely
         // "not already at this exact status" -- see applyAsyncRefundUpdate's
         // matching comment. A concurrent refund.updated webhook (or another
@@ -1385,6 +1591,93 @@ export class TicketingService {
     }
   }
 
+  private async persistDiningAuthorization(
+    order: {
+      id: string;
+      customerId: string | null;
+      diningAuthorizationRequested: boolean | null;
+      locationId: string;
+    },
+    paymentMethod: {
+      id: string;
+      brand: string;
+      last4: string;
+      expMonth: number;
+      expYear: number;
+    } | undefined,
+  ): Promise<"AUTHORIZED" | "DECLINED" | "UNAVAILABLE"> {
+    if (!order.customerId) return "UNAVAILABLE";
+    const requested = order.diningAuthorizationRequested === true;
+    const paymentCustomer = requested
+      ? await this.prisma.paymentCustomer.findFirst({
+          where: {
+            customerId: order.customerId,
+            organization: { locations: { some: { id: order.locationId } } },
+            provider: this.paymentProvider.name,
+          },
+        })
+      : null;
+
+    return this.prisma.$transaction(async (tx) => {
+      let paymentMethodReferenceId: string | null = null;
+      if (requested && paymentCustomer && paymentMethod) {
+        await tx.paymentMethodReference.updateMany({
+          where: { paymentCustomerId: paymentCustomer.id, isDefault: true },
+          data: { isDefault: false },
+        });
+        const reference = await tx.paymentMethodReference.upsert({
+          where: {
+            paymentCustomerId_provider_providerPaymentMethodId: {
+              paymentCustomerId: paymentCustomer.id,
+              provider: this.paymentProvider.name,
+              providerPaymentMethodId: paymentMethod.id,
+            },
+          },
+          create: {
+            paymentCustomerId: paymentCustomer.id,
+            provider: this.paymentProvider.name,
+            providerPaymentMethodId: paymentMethod.id,
+            brand: paymentMethod.brand,
+            last4: paymentMethod.last4,
+            expMonth: paymentMethod.expMonth,
+            expYear: paymentMethod.expYear,
+            isDefault: true,
+          },
+          update: {
+            brand: paymentMethod.brand,
+            last4: paymentMethod.last4,
+            expMonth: paymentMethod.expMonth,
+            expYear: paymentMethod.expYear,
+            active: true,
+            isDefault: true,
+          },
+        });
+        paymentMethodReferenceId = reference.id;
+      }
+
+      const granted = requested && paymentMethodReferenceId !== null;
+      await tx.customerConsent.upsert({
+        where: {
+          ticketOrderId_type: {
+            ticketOrderId: order.id,
+            type: "DINING_AUTO_SETTLEMENT",
+          },
+        },
+        create: {
+          customerId: order.customerId!,
+          type: "DINING_AUTO_SETTLEMENT",
+          granted,
+          termsVersion: DINING_CONSENT_TERMS_VERSION,
+          grantedAt: new Date(),
+          ticketOrderId: order.id,
+          paymentMethodReferenceId,
+        },
+        update: {},
+      });
+      return granted ? "AUTHORIZED" : requested ? "UNAVAILABLE" : "DECLINED";
+    });
+  }
+
   private presentConfirmation(order: {
     id: string;
     orderNumber: string;
@@ -1403,7 +1696,10 @@ export class TicketingService {
         };
       };
     }>;
-  }, receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED") {
+  },
+  receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED",
+  diningAuthorization: "AUTHORIZED" | "DECLINED" | "UNAVAILABLE",
+  ) {
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -1411,6 +1707,7 @@ export class TicketingService {
       totalCents: order.totalCents,
       currency: order.currency,
       receiptDelivery,
+      diningAuthorization,
       tickets: order.tickets.map((ticket) => ({
         id: ticket.id,
         issuanceToken: ticket.qrToken,

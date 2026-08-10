@@ -5,11 +5,13 @@ import {
   StripePaymentProvider,
   TestPaymentProvider,
 } from "@cinema/payments";
+import { PaymentMethodDomainRegistrationService } from "./payment-method-domain-registration.service";
 
 export const PAYMENT_PROVIDER = Symbol("PAYMENT_PROVIDER");
 
 @Module({
   providers: [
+    PaymentMethodDomainRegistrationService,
     {
       provide: PAYMENT_PROVIDER,
       useFactory: (): PaymentProvider => {

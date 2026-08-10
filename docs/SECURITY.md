@@ -5,8 +5,8 @@ Related: PAYMENT_FLOW.md, DATA_MODEL.md, ARCHITECTURE.md
 
 ## 1. Authentication
 
-- **Customers**: email/password (argon2id hashing, no home-grown crypto) or OAuth (Google, Apple) via a vetted library (Auth.js/NextAuth on `customer-web`, backed by our own `CustomerAuthAccount` table so account data lives in our DB, not solely with the IdP). Sessions are short-lived JWT access tokens + rotating refresh tokens, HttpOnly/Secure/SameSite cookies. Guest checkout requires no account — a guest `Customer` record is created from checkout contact info, and the live-tab/receipt links use a signed, time-limited token instead of a login.
-- **Staff**: separate credential system (`StaffAuthAccount`), same hashing standard, because staff accounts carry operational/financial permissions and should not share an identity system or session model with customer accounts. TOTP-based MFA (`otplib` or equivalent, standard RFC 6238) is **required** for `OWNER`, `GENERAL_MANAGER`, and `ACCOUNTING` roles, and available optionally for others. This satisfies "require MFA for sensitive administrative accounts" without inventing custom cryptography — TOTP is a well-understood standard.
+- **Customers**: email/password (argon2id hashing, no home-grown crypto) or OAuth (Google, Apple) via a vetted library (Auth.js/NextAuth on `customer-web`, backed by our own `CustomerAuthAccount` table so account data lives in our DB, not solely with the IdP). Sessions are short-lived JWT access tokens + rotating refresh tokens, HttpOnly/Secure/SameSite cookies. The customer web app sends customer API traffic through its fixed-upstream, same-origin `/api/v1` proxy so browsers store and return those cookies for the customer site rather than treating them as third-party Railway cookies. The proxy does not expose tokens to JavaScript, accept arbitrary upstreams, or carry staff bearer credentials. Guest checkout requires no account — a guest `Customer` record is created from checkout contact info, and the live-tab/receipt links use a signed, time-limited token instead of a login.
+- **Staff**: separate credential system (`StaffAuthAccount`), same hashing standard, because staff accounts carry operational/financial permissions and should not share an identity system or session model with customer accounts. Authenticator-based MFA is temporarily disabled for staff logins; password authentication, short-lived access tokens, refresh-token invalidation, server-side permissions, and audit logging remain enforced. The existing TOTP data fields and utilities are retained so MFA can be re-enabled later without a schema migration.
 - No password or token is ever logged, including in error logs.
 
 ## 2. Authorization — enforced server-side, always
@@ -71,6 +71,8 @@ All credentials (Stripe secret key, webhook signing secret, DB connection string
 ## 8. Rate limiting
 
 Global per-IP rate limiting at the API gateway layer, with tighter, purpose-specific limits on: login/auth endpoints (brute-force protection), checkout/payment endpoints (card-testing abuse protection, PAYMENT_FLOW.md §9), and ticket-scan endpoints (prevents scan-spamming as a denial-of-service against the door). Implemented via Redis-backed counters (works correctly across multiple API instances).
+
+Anonymous customer checkout is application-limited by source IP only; holder keys and request IDs are client-generated and therefore are not trusted as stable abuse-prevention identities. Authenticated box-office checkout additionally limits by employee identity. See PAYMENT_FLOW.md §9 for the explicit rationale and monitoring boundary.
 
 The ticket-scan endpoint enforces a fixed-window limit of 60 attempts per minute for each authenticated employee and source IP. The production path uses Redis so limits are shared by every API instance; tests use an isolated in-memory counter.
 

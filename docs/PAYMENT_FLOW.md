@@ -50,7 +50,7 @@ Confirmed (2026-07-25): in-person card collection — a card that isn't already 
 
 We never receive, transmit, or store raw PAN or CVV. Card entry happens in Stripe Elements/Payment Element, a Stripe-hosted iframe — card data goes directly from the customer's browser to Stripe. Our backend only ever sees a `PaymentMethod` id (a token) and Stripe-provided display metadata (brand, last4, exp). This is what keeps our PCI scope at SAQ A rather than something requiring us to handle cardholder data directly (see SECURITY.md §2 for the explicit PCI scope statement and its limits).
 
-Saved payment methods: at checkout, if the customer opts in ("keep this payment method for food and drinks"), we create a Stripe `Customer` (if one doesn't exist for this `Customer` record) and a `SetupIntent` with `usage: off_session`, so the resulting `PaymentMethod` is explicitly authorized for later off-session charges — this is a Stripe/card-network requirement, not an internal preference, and it's also literally what "authorize this for later" needs to mean technically.
+Saved payment methods: at checkout, if the customer opts in ("keep this payment method for food and drinks"), we create a Stripe `Customer` (if one doesn't exist for this `Customer` record) and create the ticket `PaymentIntent` with `setup_future_usage: off_session`. Stripe then attaches the successfully confirmed payment method to that customer for later use. This uses the same Payment Element confirmation as the ticket purchase rather than asking the customer to confirm a second SetupIntent; the explicit Yes/No dining choice remains separate from—and is never implied by—the ticket purchase.
 
 ## 3. Ticket checkout payment flow
 
@@ -58,7 +58,7 @@ Saved payment methods: at checkout, if the customer opts in ("keep this payment 
 2. Customer confirms payment via Stripe Payment Element (handles 3DS/SCA `REQUIRES_ACTION` automatically in the client SDK).
 3. Frontend receives confirmation, calls our API's "finalize order" endpoint, which independently verifies the `PaymentIntent` status server-side via Stripe's API (never trusts the client's word alone) before running the purchase transaction from SEAT_RESERVATION_DESIGN.md §3.2.
 4. In parallel (belt-and-suspenders, not a race), Stripe's webhook (`payment_intent.succeeded`) also arrives and hits the same finalize path — see §5 for why this is safe.
-5. Optional dining authorization: if the customer opted in, the `SetupIntent` confirmation runs alongside checkout, and a `CustomerConsent(type=DINING_AUTO_SETTLEMENT)` row is written with `termsVersion` and `grantedAt` — only ever recorded on an explicit, separate opt-in action, never implied by completing ticket checkout. The checkout UI must show both explicit options (`YES`/`NO`) with neither pre-selected as a default that requires deselection.
+5. Optional dining authorization: if the customer opted in, the successfully confirmed ticket PaymentIntent's reusable payment method is persisted as a display-safe `PaymentMethodReference`, and a `CustomerConsent(type=DINING_AUTO_SETTLEMENT)` row is written with `termsVersion` and `grantedAt`. Both a Yes and a No choice are recorded; authorization is only granted when the provider actually returns a reusable method. The checkout UI shows both explicit options (`YES`/`NO`) with neither pre-selected.
 6. **Ticket checkout never includes a tip prompt.** Tipping is not a norm for box-office/online ticket purchase and is not collected here under any circumstance — it only ever appears in the restaurant tab flow (§4), where it's tied to service actually rendered by a server/bartender.
 
 ### Milestone 3 implementation evidence
@@ -146,7 +146,7 @@ Refunds are always scoped explicitly (`TICKET`, `RESTAURANT`, or `BOTH`) — nev
 
 ## 9. Rate limiting and abuse protection on payment endpoints
 
-Checkout and payment-confirmation endpoints are rate-limited per session/IP (Redis-backed) independent of the general API rate limit, since these endpoints are the most attractive target for card-testing abuse. Failed-payment velocity per customer/session is tracked and can trigger a temporary checkout cooldown, configurable, without blocking legitimate retries within a reasonable window.
+Checkout and payment-confirmation endpoints are rate-limited independently of the general API limit because they are the most attractive target for card-testing abuse. Anonymous customer checkout is Redis-backed per source IP; client-generated holder and idempotency values are deliberately not treated as security identities because an attacker can rotate them freely. Authenticated box-office checkout adds a stable employee-identity bucket alongside its IP bucket. The gateway remains the outer per-IP enforcement layer, and payment-failure monitoring provides the operational signal for further blocking or investigation.
 
 ## 9.1 Connectivity is a hard requirement, not a soft assumption
 

@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   ProviderDefinitiveError,
   type CreatePaymentIntentArgs,
+  type CreateProviderCustomerArgs,
+  type ChargeSavedPaymentMethodArgs,
+  type CollectCardPresentPaymentArgs,
   type PaymentProvider,
   type ProviderPaymentIntentResult,
   type ProviderPaymentStatus,
@@ -30,8 +33,15 @@ export class TestPaymentProvider implements PaymentProvider {
 
   private intents = new Map<
     string,
-    { status: ProviderPaymentStatus; amountCents: number; currency: string; metadata: Record<string, string> }
+    {
+      status: ProviderPaymentStatus;
+      amountCents: number;
+      currency: string;
+      metadata: Record<string, string>;
+      savePaymentMethodForFuture: boolean;
+    }
   >();
+  private customersByIdempotencyKey = new Map<string, string>();
   // Real Stripe returns the SAME PaymentIntent for repeated
   // createPaymentIntent calls sharing an idempotencyKey -- and, like real
   // Stripe, replaying an idempotency key with DIFFERENT request parameters
@@ -51,13 +61,28 @@ export class TestPaymentProvider implements PaymentProvider {
 
   refundCalls: RefundArgs[] = [];
   createPaymentIntentCalls: CreatePaymentIntentArgs[] = [];
+  chargeSavedPaymentMethodCalls: ChargeSavedPaymentMethodArgs[] = [];
+  collectCardPresentPaymentCalls: CollectCardPresentPaymentArgs[] = [];
   private refundFailureMode: "none" | "definitive" | "ambiguous" = "none";
   private refundFailureMessage: string | undefined;
   private nextRefundStatus: "SUCCEEDED" | "PENDING" | "FAILED" = "SUCCEEDED";
 
+  async createCustomer(args: CreateProviderCustomerArgs) {
+    const existing = this.customersByIdempotencyKey.get(args.idempotencyKey);
+    if (existing) return { id: existing };
+    const id = `cus_fake_${randomUUID()}`;
+    this.customersByIdempotencyKey.set(args.idempotencyKey, id);
+    return { id };
+  }
+
   async createPaymentIntent(args: CreatePaymentIntentArgs): Promise<ProviderPaymentIntentResult> {
     this.createPaymentIntentCalls.push(args);
-    const fingerprint = JSON.stringify({ amountCents: args.amountCents, currency: args.currency });
+    const fingerprint = JSON.stringify({
+      amountCents: args.amountCents,
+      currency: args.currency,
+      providerCustomerId: args.providerCustomerId,
+      savePaymentMethodForFuture: Boolean(args.savePaymentMethodForFuture),
+    });
     const cached = this.intentsByIdempotencyKey.get(args.idempotencyKey);
     if (cached) {
       if (cached.requestFingerprint !== fingerprint) {
@@ -74,6 +99,7 @@ export class TestPaymentProvider implements PaymentProvider {
       amountCents: args.amountCents,
       currency: args.currency,
       metadata: args.metadata,
+      savePaymentMethodForFuture: Boolean(args.savePaymentMethodForFuture),
     });
     this.intentsByIdempotencyKey.set(args.idempotencyKey, { id, requestFingerprint: fingerprint });
     return {
@@ -86,10 +112,65 @@ export class TestPaymentProvider implements PaymentProvider {
     };
   }
 
+  async chargeSavedPaymentMethod(
+    args: ChargeSavedPaymentMethodArgs,
+  ): Promise<ProviderPaymentIntentResult> {
+    this.chargeSavedPaymentMethodCalls.push(args);
+    const status: ProviderPaymentStatus = args.providerPaymentMethodId.includes("declined")
+      ? "FAILED"
+      : "SUCCEEDED";
+    return {
+      id: `pi_fake_saved_${createHash("sha256").update(args.idempotencyKey).digest("hex").slice(0, 20)}`,
+      status,
+      amountCents: args.amountCents,
+      currency: args.currency,
+      metadata: args.metadata,
+      ...(status === "FAILED"
+        ? { failureCode: "card_declined", failureMessage: "The saved card was declined." }
+        : {}),
+    };
+  }
+
+  async collectCardPresentPayment(
+    args: CollectCardPresentPaymentArgs,
+  ): Promise<ProviderPaymentIntentResult> {
+    this.collectCardPresentPaymentCalls.push(args);
+    if (args.readerId.includes("delayed")) {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+    const status: ProviderPaymentStatus = args.readerId.includes("declined")
+      ? "FAILED"
+      : "SUCCEEDED";
+    return {
+      id: `pi_fake_terminal_${createHash("sha256").update(args.idempotencyKey).digest("hex").slice(0, 20)}`,
+      status,
+      amountCents: args.amountCents,
+      currency: args.currency,
+      metadata: args.metadata,
+      ...(status === "FAILED"
+        ? { failureCode: "card_declined", failureMessage: "The presented card was declined." }
+        : {}),
+    };
+  }
+
   async retrievePaymentIntent(args: RetrievePaymentIntentArgs): Promise<ProviderPaymentIntentResult> {
     const intent = this.intents.get(args.paymentIntentId);
     if (!intent) throw new Error(`Unknown fake PaymentIntent: ${args.paymentIntentId}`);
-    return { id: args.paymentIntentId, clientSecret: `${args.paymentIntentId}_secret_fake`, ...intent };
+    return {
+      id: args.paymentIntentId,
+      clientSecret: `${args.paymentIntentId}_secret_fake`,
+      ...intent,
+      paymentMethod:
+        intent.status === "SUCCEEDED" && intent.savePaymentMethodForFuture
+          ? {
+              id: `pm_fake_${args.paymentIntentId}`,
+              brand: "visa",
+              last4: "4242",
+              expMonth: 12,
+              expYear: 2035,
+            }
+          : undefined,
+    };
   }
 
   async refund(args: RefundArgs): Promise<RefundResult> {

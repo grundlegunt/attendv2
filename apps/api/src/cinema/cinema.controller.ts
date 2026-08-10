@@ -2,8 +2,15 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } f
 import { Permission } from "@cinema/auth";
 import {
   createAuditoriumRequestSchema,
+  createFilmSeriesRequestSchema,
   createMovieRequestSchema,
   createShowtimeRequestSchema,
+  duplicateShowtimeDayRequestSchema,
+  moveShowtimeGroupRequestSchema,
+  updateMovieRequestSchema,
+  duplicateAuditoriumRequestSchema,
+  updateAuditoriumLayoutRequestSchema,
+  updateFilmSeriesRequestSchema,
   updateShowtimeRequestSchema,
 } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -21,6 +28,36 @@ export class CinemaController {
   @Get("now-playing")
   nowPlaying(@Query("locationId") locationId?: string) {
     return this.cinemaService.nowPlaying(locationId);
+  }
+
+  @Get("branding")
+  branding(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicBranding(locationId);
+  }
+
+  @Get("admin-branding")
+  adminBranding(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicAdminBranding(locationId);
+  }
+
+  @Get("content")
+  content(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicContent(locationId);
+  }
+
+  @Get("film-series")
+  filmSeries(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicFilmSeries(locationId);
+  }
+
+  @Get("menu")
+  menu(@Query("locationId") locationId?: string) {
+    return this.cinemaService.publicDiningMenu(locationId);
+  }
+
+  @Get("movies/:id")
+  movieDetail(@Param("id") id: string, @Query("locationId") locationId?: string) {
+    return this.cinemaService.publicMovieDetail(id, locationId);
   }
 
   @Get("showtimes/:id/seats")
@@ -64,6 +101,43 @@ export class CinemaController {
     );
   }
 
+  @Patch("auditoriums/:id/layout")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage)
+  updateAuditoriumLayout(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateAuditoriumLayoutRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.updateAuditoriumLayout(
+      actor,
+      id,
+      body as ReturnType<typeof updateAuditoriumLayoutRequestSchema.parse>,
+    );
+  }
+
+  @Post("auditoriums/:id/duplicate")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage)
+  duplicateAuditorium(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(duplicateAuditoriumRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.duplicateAuditorium(
+      actor,
+      id,
+      body as ReturnType<typeof duplicateAuditoriumRequestSchema.parse>,
+    );
+  }
+
+  @Delete("auditoriums/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage)
+  deactivateAuditorium(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.deactivateAuditorium(actor, id);
+  }
+
   @Post("movies")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
@@ -72,6 +146,73 @@ export class CinemaController {
     @Body(new ZodValidationPipe(createMovieRequestSchema)) body: unknown,
   ) {
     return this.cinemaService.createMovie(actor, body as ReturnType<typeof createMovieRequestSchema.parse>);
+  }
+
+  @Patch("movies/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  updateMovie(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateMovieRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.updateMovie(actor, id, body as ReturnType<typeof updateMovieRequestSchema.parse>);
+  }
+
+  @Delete("movies/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  archiveMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.archiveMovie(actor, id);
+  }
+
+  @Delete("movies/:id/permanent")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  permanentlyDeleteMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.permanentlyDeleteMovie(actor, id);
+  }
+
+  @Post("movies/:id/restore")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  restoreMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.restoreMovie(actor, id);
+  }
+
+  @Post("film-series")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  createFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(createFilmSeriesRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.createFilmSeries(
+      actor,
+      body as ReturnType<typeof createFilmSeriesRequestSchema.parse>,
+    );
+  }
+
+  @Patch("film-series/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  updateFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(updateFilmSeriesRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.updateFilmSeries(
+      actor,
+      id,
+      body as ReturnType<typeof updateFilmSeriesRequestSchema.parse>,
+    );
+  }
+
+  @Delete("film-series/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  archiveFilmSeries(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.archiveFilmSeries(actor, id);
   }
 
   @Post("showtimes")
@@ -84,6 +225,32 @@ export class CinemaController {
     return this.cinemaService.createShowtime(
       actor,
       body as ReturnType<typeof createShowtimeRequestSchema.parse>,
+    );
+  }
+
+  @Post("showtimes/duplicate-day")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  duplicateShowtimeDay(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(duplicateShowtimeDayRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.duplicateShowtimeDay(
+      actor,
+      body as ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>,
+    );
+  }
+
+  @Patch("showtimes/group")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  moveShowtimeGroup(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(moveShowtimeGroupRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.moveShowtimeGroup(
+      actor,
+      body as ReturnType<typeof moveShowtimeGroupRequestSchema.parse>,
     );
   }
 
@@ -100,5 +267,12 @@ export class CinemaController {
       id,
       body as ReturnType<typeof updateShowtimeRequestSchema.parse>,
     );
+  }
+
+  @Delete("showtimes/:id")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  removeShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.removeShowtime(actor, id);
   }
 }

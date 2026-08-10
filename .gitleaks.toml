@@ -1,0 +1,17 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known non-production QR credential used only by isolated CI databases"
+condition = "AND"
+paths = ['''^\.github/workflows/ci\.yml$''']
+regexes = ['''^ci-test-qr-secret-at-least-32-characters-long$''']
+
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Synthetic rotating holder IDs used by the anonymous checkout rate-limit regression test"
+condition = "AND"
+paths = ['''^apps/api/src/common/request-rate-limit\.guard\.spec\.ts$''']
+regexes = ['''^rotating-holder-[123]$''']
