@@ -105,6 +105,8 @@ model Location {
   adminTextColor              String?
   adminMutedTextColor         String?
   adminUiConfig               Json?
+  brandingDraft               Json?
+  brandingDraftedAt           DateTime?
   contentDraft                Json?
   contentPublished            Json?
   contentPublishedAt          DateTime?

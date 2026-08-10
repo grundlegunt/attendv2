@@ -515,12 +515,27 @@ describe("Attend platform authentication boundary", () => {
     const location = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}/locations/${locationId}`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ accentColor: "#fe2c54", adminAccentColor: "#4c7dff", adminBackgroundColor: "#10131a", preShowBufferMinutes: 35, timeClockEnabled: false })
+      .send({ preShowBufferMinutes: 35, timeClockEnabled: false })
       .expect(200);
     expect(location.body.locations[0]).toEqual(expect.objectContaining({
+      operations: expect.objectContaining({ preShowBufferMinutes: 35, timeClockEnabled: false }),
+    }));
+
+    const draft = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${organizationId}/locations/${locationId}/branding/draft`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ accentColor: "#fe2c54", adminAccentColor: "#4c7dff", adminBackgroundColor: "#10131a", adminUi: location.body.locations[0].adminBranding.ui })
+      .expect(200);
+    expect(draft.body.locations[0].brandingDraft.values).toEqual(expect.objectContaining({ accentColor: "#fe2c54", adminAccentColor: "#4c7dff", adminBackgroundColor: "#10131a" }));
+
+    const published = await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${organizationId}/locations/${locationId}/branding/publish`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(201);
+    expect(published.body.locations[0]).toEqual(expect.objectContaining({
       branding: expect.objectContaining({ accentColor: "#fe2c54" }),
       adminBranding: expect.objectContaining({ accentColor: "#4c7dff", backgroundColor: "#10131a" }),
-      operations: expect.objectContaining({ preShowBufferMinutes: 35, timeClockEnabled: false }),
+      brandingDraft: null,
     }));
 
     const publicAdminBranding = await request(app.getHttpServer())

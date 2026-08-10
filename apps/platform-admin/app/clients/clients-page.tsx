@@ -93,6 +93,26 @@ interface OrganizationDetail {
     active: boolean;
     branding: BrandPalette & { logoUrl: string | null };
     adminBranding: BrandPalette & { ui: AdminUiConfig };
+    brandingDraft: {
+      values: {
+        logoUrl?: string | null;
+        accentColor?: string | null;
+        accentMutedColor?: string | null;
+        backgroundColor?: string | null;
+        backgroundGlowColor?: string | null;
+        surfaceColor?: string | null;
+        textColor?: string | null;
+        mutedTextColor?: string | null;
+        adminAccentColor?: string | null;
+        adminAccentMutedColor?: string | null;
+        adminBackgroundColor?: string | null;
+        adminSurfaceColor?: string | null;
+        adminTextColor?: string | null;
+        adminMutedTextColor?: string | null;
+        adminUi: AdminUiConfig;
+      };
+      draftedAt: string | null;
+    } | null;
     content: {
       draft: CinemaContent;
       published: CinemaContent;
@@ -375,6 +395,7 @@ export default function AttendMaster() {
   }
 
   function beginLocationEdit(location: LocationDetail) {
+    const draft = location.brandingDraft?.values;
     setLocationDraft({
       id: location.id,
       values: {
@@ -382,21 +403,21 @@ export default function AttendMaster() {
         address: location.address ?? "",
         timezone: location.timezone,
         active: location.active,
-        logoUrl: location.branding.logoUrl ?? "",
-        accentColor: location.branding.accentColor ?? "",
-        accentMutedColor: location.branding.accentMutedColor ?? "",
-        backgroundColor: location.branding.backgroundColor ?? "",
-        backgroundGlowColor: location.branding.backgroundGlowColor ?? "",
-        surfaceColor: location.branding.surfaceColor ?? "",
-        textColor: location.branding.textColor ?? "",
-        mutedTextColor: location.branding.mutedTextColor ?? "",
-        adminAccentColor: location.adminBranding.accentColor ?? "",
-        adminAccentMutedColor: location.adminBranding.accentMutedColor ?? "",
-        adminBackgroundColor: location.adminBranding.backgroundColor ?? "",
-        adminSurfaceColor: location.adminBranding.surfaceColor ?? "",
-        adminTextColor: location.adminBranding.textColor ?? "",
-        adminMutedTextColor: location.adminBranding.mutedTextColor ?? "",
-        adminUi: location.adminBranding.ui ?? adminUiDefaults,
+        logoUrl: draft?.logoUrl ?? location.branding.logoUrl ?? "",
+        accentColor: draft?.accentColor ?? location.branding.accentColor ?? "",
+        accentMutedColor: draft?.accentMutedColor ?? location.branding.accentMutedColor ?? "",
+        backgroundColor: draft?.backgroundColor ?? location.branding.backgroundColor ?? "",
+        backgroundGlowColor: draft?.backgroundGlowColor ?? location.branding.backgroundGlowColor ?? "",
+        surfaceColor: draft?.surfaceColor ?? location.branding.surfaceColor ?? "",
+        textColor: draft?.textColor ?? location.branding.textColor ?? "",
+        mutedTextColor: draft?.mutedTextColor ?? location.branding.mutedTextColor ?? "",
+        adminAccentColor: draft?.adminAccentColor ?? location.adminBranding.accentColor ?? "",
+        adminAccentMutedColor: draft?.adminAccentMutedColor ?? location.adminBranding.accentMutedColor ?? "",
+        adminBackgroundColor: draft?.adminBackgroundColor ?? location.adminBranding.backgroundColor ?? "",
+        adminSurfaceColor: draft?.adminSurfaceColor ?? location.adminBranding.surfaceColor ?? "",
+        adminTextColor: draft?.adminTextColor ?? location.adminBranding.textColor ?? "",
+        adminMutedTextColor: draft?.adminMutedTextColor ?? location.adminBranding.mutedTextColor ?? "",
+        adminUi: draft?.adminUi ?? location.adminBranding.ui ?? adminUiDefaults,
         ...location.operations,
       },
     });
@@ -498,9 +519,19 @@ export default function AttendMaster() {
     setSaving(true);
     setError(null);
     try {
-      const payload = {
-        ...values,
+      const locationPayload = {
+        name: values.name,
         address: nullable(values.address),
+        timezone: values.timezone,
+        active: values.active,
+        ticketTaxRateBasisPoints: values.ticketTaxRateBasisPoints,
+        preShowBufferMinutes: values.preShowBufferMinutes,
+        cleaningBufferMinutes: values.cleaningBufferMinutes,
+        checkDropMinutesBeforeEnd: values.checkDropMinutesBeforeEnd,
+        autoSettleGraceMinutes: values.autoSettleGraceMinutes,
+        timeClockEnabled: values.timeClockEnabled,
+      };
+      const brandingPayload = {
         logoUrl: nullable(values.logoUrl),
         accentColor: nullable(values.accentColor),
         accentMutedColor: nullable(values.accentMutedColor),
@@ -517,34 +548,41 @@ export default function AttendMaster() {
         adminMutedTextColor: nullable(values.adminMutedTextColor),
         adminUi: values.adminUi,
       };
-      let updated: OrganizationDetail;
-      try {
-        updated = await request<OrganizationDetail>(
-          `/platform/organizations/${organization.id}/locations/${locationDraft.id}`,
-          { method: "PATCH", body: JSON.stringify(payload) },
-          session.accessToken,
-        );
-      } catch (reason) {
-        if (
-          !(reason instanceof Error) ||
-          reason.message !== "Request validation failed."
-        )
-          throw reason;
-        const legacyPayload = Object.fromEntries(
-          Object.entries(payload).filter(([key]) => key !== "adminUi"),
-        );
-        updated = await request<OrganizationDetail>(
-          `/platform/organizations/${organization.id}/locations/${locationDraft.id}`,
-          { method: "PATCH", body: JSON.stringify(legacyPayload) },
-          session.accessToken,
-        );
-      }
+      await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${locationDraft.id}`,
+        { method: "PATCH", body: JSON.stringify(locationPayload) },
+        session.accessToken,
+      );
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${locationDraft.id}/branding/draft`,
+        { method: "PATCH", body: JSON.stringify(brandingPayload) },
+        session.accessToken,
+      );
       setOrganization(updated);
       setLocationDraft(null);
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not save location.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function publishBranding(location: LocationDetail) {
+    if (!session || !organization) return;
+    if (!window.confirm(`Publish the branding draft for ${location.name}? This immediately updates the live customer and cinema-admin experiences.`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organization.id}/locations/${location.id}/branding/publish`,
+        { method: "POST" },
+        session.accessToken,
+      );
+      setOrganization(updated);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not publish branding.");
     } finally {
       setSaving(false);
     }
@@ -988,6 +1026,7 @@ export default function AttendMaster() {
                         >
                           {location.active ? "Active" : "Inactive"}
                         </span>
+                        {location.brandingDraft && <span className="status warning">Branding draft</span>}
                       </div>
                       <p className="muted">
                         {location.address ?? "Address not configured"} ·{" "}
@@ -999,8 +1038,15 @@ export default function AttendMaster() {
                         className="edit-button"
                         onClick={() => beginLocationEdit(location)}
                       >
-                        Edit cinema
+                        {location.brandingDraft ? "Review cinema draft" : "Edit cinema"}
                       </button>
+                      {location.brandingDraft && <button
+                        className="edit-button"
+                        disabled={saving}
+                        onClick={() => void publishBranding(location)}
+                      >
+                        Publish branding
+                      </button>}
                       <button
                         className="edit-button"
                         onClick={() =>
@@ -1294,9 +1340,9 @@ export default function AttendMaster() {
                           <p className="eyebrow">PLATFORM CONFIGURATION</p>
                           <h3>Edit {location.name}</h3>
                           <p className="muted">
-                            Preview both cinema surfaces here. Saving publishes
-                            these settings immediately and records the change in
-                            the platform audit log.
+                            Preview both cinema surfaces here. Operating settings
+                            save immediately; branding stays private as a draft
+                            until you publish it.
                           </p>
                         </div>
                         <button
@@ -1635,8 +1681,8 @@ export default function AttendMaster() {
                       </div>
                       <button disabled={saving}>
                         {saving
-                          ? "Publishing…"
-                          : "Save and publish cinema settings"}
+                          ? "Saving…"
+                          : "Save settings and branding draft"}
                       </button>
                     </form>
                   )}

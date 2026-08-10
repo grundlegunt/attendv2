@@ -32,6 +32,7 @@ interface BrandLocation {
   active: boolean;
   branding: Palette;
   adminBranding: Palette;
+  brandingDraft: { draftedAt: string | null } | null;
 }
 interface OrganizationBranding {
   id: string;
@@ -230,8 +231,8 @@ export default function BrandingDashboard() {
           />
         </label>
         <div>
-          <strong>{rows.filter((row) => !row.configured).length}</strong>
-          <span>locations need branding</span>
+          <strong>{rows.filter((row) => row.location.brandingDraft).length}</strong>
+          <span>unpublished branding drafts</span>
         </div>
       </div>
       <section className="branding-list">
@@ -245,7 +246,7 @@ export default function BrandingDashboard() {
               <p className="eyebrow">{organization.name}</p>
               <h2>{location.name}</h2>
               <span className={configured ? "status good" : "status warning"}>
-                {configured ? "Brand configured" : "Setup needed"}
+                {location.brandingDraft ? "Unpublished draft" : configured ? "Published" : "Setup needed"}
               </span>
             </div>
             <div className="brand-preview">
@@ -276,7 +277,7 @@ export default function BrandingDashboard() {
               className="link-button"
               href={`/clients?organizationId=${encodeURIComponent(organization.id)}&locationId=${encodeURIComponent(location.id)}&section=branding`}
             >
-              Edit branding
+              {location.brandingDraft ? "Review draft" : "Edit branding"}
             </Link>
           </article>
         ))}
