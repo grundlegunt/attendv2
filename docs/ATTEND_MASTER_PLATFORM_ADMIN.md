@@ -13,6 +13,7 @@ Attend now has three distinct applications, each for a different audience. This 
 Verified directly against `apps/api/src/platform/platform.service.ts` and `apps/platform-admin/app/page.tsx`:
 
 - **Separate login** — `PlatformUser` is its own model (name, email, password hash, active flag), entirely distinct from `Employee`.
+- **Continuing sessions** — Attend Master uses its issued refresh token to recover expired access tokens automatically while the browser tab remains open. Refresh still re-checks the operator's active status, role, and token version, so deactivation, role changes, and credential resets invalidate the old session.
 - **Cross-client overview** — lists every organization and its locations, with operational counts (auditoriums, employees, menu items, upcoming showtimes) and a payments status badge per organization.
 - **Client onboarding** — creates a new `Organization` (theater company/chain) together with its first `Location` in one step. More locations can be added to an existing client afterward.
 - **Edit organization identity** — name, legal name, timezone, and the Stripe Connect onboarding status label.
@@ -28,17 +29,7 @@ This is real, working infrastructure, not a stub — the tenant-isolation and au
 
 ## What's missing
 
-Checked against the actual code, not assumed. Ranked by how much each one blocks the platform actually functioning as a business:
-
-### Blocking — the core onboarding promise isn't actually deliverable yet
-
-**There is no real Stripe Connect onboarding flow.** Grepped the whole codebase: `Organization.stripeConnectedAccountId` is read everywhere payments happen (box office, refunds, restaurant settlement) but is never *written* anywhere outside a migration. There's no endpoint that creates a Stripe Connect account for a new client or generates the account-onboarding link Stripe requires. `updateOrganization` will refuse to mark onboarding `COMPLETE` unless `stripeConnectedAccountId` is already set — which is the right guard, but nothing in the product can ever set that field in the first place. Today, a newly onboarded client can never actually start accepting real payments through Attend Master; the "payments connected" status can only be artificially true if someone sets it by hand in the database. This is the single most important gap — it blocks the entire "onboard a new client" value proposition, not just a nice-to-have.
-
-### High priority
-
-- **No platform-user management.** `PlatformUser` has no create/list/manage endpoints at all — only `/auth/login` exists. Whoever is already a row in that table can use Attend Master; there's no way to invite a co-worker, and no roles (every platform user has identical, full access to every client — no read-only or scoped access exists). If Attend ever has more than one person running the company side, this needs to exist.
-- **No password reset for platform users**, same gap already flagged for cinema `Employee` accounts in `docs/ADMIN_APP_STRUCTURE.md` — worth fixing in both places together rather than twice.
-- **No audit log viewer inside Attend Master.** The audit trail is being written correctly (see above) but there's no route or screen to read it back. Right now that data is only inspectable via direct database access.
+The original blocking platform gaps are now closed: Stripe Connect onboarding, team roles and credential resets, the audit viewer, cross-client revenue, suspension, branding publication, and read-only support are implemented. The remaining decisions are primarily commercial rather than missing onboarding infrastructure.
 
 ### Worth deciding on, not urgent
 
