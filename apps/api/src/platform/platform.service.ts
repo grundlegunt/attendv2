@@ -185,7 +185,7 @@ export class PlatformService {
     return this.organization(input.organizationId);
   }
 
-  async createConnectOnboardingLink(input: { actorId: string; organizationId: string; origin: string }) {
+  async createConnectOnboardingLink(input: { actorId: string; organizationId: string; origin: string; returnPath: "/clients" | "/payments" }) {
     const organization = await prisma.organization.findUnique({ where: { id: input.organizationId } });
     if (!organization) throw AppError.notFound("Cinema organization not found.");
 
@@ -202,8 +202,8 @@ export class PlatformService {
     const organizationQuery = `organizationId=${encodeURIComponent(organization.id)}`;
     const link = await this.connect.createAccountLink({
       accountId,
-      refreshUrl: `${input.origin}/?${organizationQuery}&connect=refresh`,
-      returnUrl: `${input.origin}/?${organizationQuery}&connect=return`,
+      refreshUrl: `${input.origin}${input.returnPath}?${organizationQuery}&connect=refresh`,
+      returnUrl: `${input.origin}${input.returnPath}?${organizationQuery}&connect=return`,
     });
     return { url: link.url };
   }
