@@ -8,7 +8,7 @@ import {
 } from "@cinema/shared";
 import Link from "next/link";
 import { AdminUiEditor } from "../admin-ui-editor";
-import { readPlatformSession } from "../platform-session";
+import { platformRequest, readPlatformSession } from "../platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -185,25 +185,7 @@ type LocationDraft = {
   timeClockEnabled: boolean;
 };
 
-async function request<T>(
-  path: string,
-  init?: RequestInit,
-  accessToken?: string,
-): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-  if (!response.ok) {
-    const body = await response
-      .json()
-      .catch(() => ({ message: response.statusText }));
-    throw new Error(
-      typeof body.message === "string" ? body.message : "Request failed.",
-    );
-  }
-  return response.json() as Promise<T>;
-}
+function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
 
 export default function AttendMaster() {
   const [session, setSession] = useState<Session | null>(null);

@@ -79,6 +79,8 @@ const platformUserCredentialsSchema = z.object({
   password: z.string().min(12).max(200),
 }).strict();
 
+const platformRefreshSchema = z.object({ refreshToken: z.string().min(1) }).strict();
+
 @Controller("platform")
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
@@ -89,6 +91,15 @@ export class PlatformController {
   @RateLimit({ scope: "auth", identity: "email" })
   async login(@Body(new ZodValidationPipe(platformLoginRequestSchema)) body: unknown) {
     const { tokens, user } = await this.platform.login(platformLoginRequestSchema.parse(body));
+    return { ...tokens, expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, user };
+  }
+
+  @Post("auth/refresh")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth" })
+  async refresh(@Body(new ZodValidationPipe(platformRefreshSchema)) body: unknown) {
+    const { tokens, user } = await this.platform.refreshSession(platformRefreshSchema.parse(body).refreshToken);
     return { ...tokens, expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, user };
   }
 

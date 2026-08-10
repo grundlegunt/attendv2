@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { readPlatformSession } from "../platform-session";
+import { platformRequest, readPlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
@@ -10,13 +10,7 @@ type PlatformRole = "OWNER" | "OPERATOR" | "VIEWER";
 interface Session { accessToken: string; user: { id: string; name: string; email: string; role: PlatformRole } }
 interface TeamUser { id: string; name: string; email: string; role: PlatformRole; active: boolean; createdAt: string; updatedAt: string }
 
-async function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
-  const headers = new Headers(init?.headers); headers.set("Content-Type", "application/json");
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-  if (!response.ok) { const body = await response.json().catch(() => ({ message: response.statusText })); throw new Error(typeof body.message === "string" ? body.message : "Request failed."); }
-  return response.json() as Promise<T>;
-}
+function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
 
 export default function PlatformTeam() {
   const [session, setSession] = useState<Session | null>(null);

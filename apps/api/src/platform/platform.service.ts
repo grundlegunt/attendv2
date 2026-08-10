@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, PlatformUserRole, Prisma, prisma } from "@cinema/database";
-import { DEFAULT_ROLE_PERMISSIONS, hashPassword, Permission, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
+import { DEFAULT_ROLE_PERMISSIONS, hashPassword, InvalidTokenError, Permission, RoleKey, signTokenPair, TokenPair, verifyPassword, verifyRefreshToken } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, customerBrandingSchema, PlatformLoginRequest } from "@cinema/shared";
 import { z } from "zod";
@@ -36,6 +36,25 @@ export class PlatformService {
       entityId: user.id,
     });
     return { tokens, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  }
+
+  async refreshSession(refreshToken: string) {
+    let payload;
+    try {
+      payload = verifyRefreshToken(refreshToken, loadEnv().JWT_REFRESH_SECRET);
+    } catch (error) {
+      if (error instanceof InvalidTokenError) throw AppError.unauthenticated("The Attend Master session expired. Please sign in again.");
+      throw error;
+    }
+    if (payload.actorType !== "PLATFORM") throw AppError.unauthenticated();
+    const user = await prisma.platformUser.findUnique({ where: { id: payload.sub } });
+    if (!user?.active || user.refreshTokenVersion !== payload.tokenVersion) {
+      throw AppError.unauthenticated("The Attend Master session is no longer valid. Please sign in again.");
+    }
+    return {
+      tokens: this.issueTokens(user.id, user.refreshTokenVersion, user.role),
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    };
   }
 
   async overview() {

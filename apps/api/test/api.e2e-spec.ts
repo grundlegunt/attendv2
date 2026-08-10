@@ -24,6 +24,7 @@ let app: INestApplication;
 let ownerAccessToken: string;
 let ownerRefreshToken: string;
 let platformAccessToken: string;
+let platformRefreshToken: string;
 let milestone4Credential: string;
 let milestone4TicketId: string;
 let milestone8TabId: string;
@@ -235,6 +236,7 @@ describe("Staff authentication", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toEqual(expect.any(String));
+    expect(res.body.refreshToken).toEqual(expect.any(String));
   });
 
   it("invalidates outstanding refresh tokens on logout", async () => {
@@ -269,6 +271,26 @@ describe("Attend platform authentication boundary", () => {
       name: "Attend Operator",
     }));
     platformAccessToken = res.body.accessToken;
+    platformRefreshToken = res.body.refreshToken;
+  });
+
+  it("refreshes an active Attend Master session and rejects other actor tokens", async () => {
+    const refreshed = await request(app.getHttpServer())
+      .post("/api/v1/platform/auth/refresh")
+      .send({ refreshToken: platformRefreshToken })
+      .expect(200);
+    expect(refreshed.body).toEqual(expect.objectContaining({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String),
+      user: expect.objectContaining({ email: "platform@attend.test", role: "OWNER" }),
+    }));
+    platformAccessToken = refreshed.body.accessToken;
+    platformRefreshToken = refreshed.body.refreshToken;
+
+    await request(app.getHttpServer())
+      .post("/api/v1/platform/auth/refresh")
+      .send({ refreshToken: ownerRefreshToken })
+      .expect(401);
   });
 
   it("rejects a cinema employee token from the Attend Master API", async () => {

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { readPlatformSession } from "./platform-session";
+import { platformRequest, readPlatformSession } from "./platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -45,17 +45,7 @@ interface Overview {
 interface RevenueTotals { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }
 interface RevenueReport { generatedAt: string; range: { from: string; to: string }; totals: RevenueTotals; clients: Array<{ id: string; name: string; locations: number } & RevenueTotals> }
 
-async function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> {
-  const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(typeof body.message === "string" ? body.message : "Request failed.");
-  }
-  return response.json() as Promise<T>;
-}
+function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
 
 function statusLabel(status: string) {
   return status.toLowerCase().replaceAll("_", " ");
