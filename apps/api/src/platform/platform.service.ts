@@ -109,6 +109,7 @@ export class PlatformService {
       name: organization.name,
       legalName: organization.legalName,
       timezone: organization.timezone,
+      ticketFeeMinor: organization.ticketFeeMinor,
       createdAt: organization.createdAt.toISOString(),
       payments: {
         connected: Boolean(organization.stripeConnectedAccountId),
@@ -168,7 +169,7 @@ export class PlatformService {
     };
   }
 
-  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; onboardingStatus?: ConnectOnboardingStatus }) {
+  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; onboardingStatus?: ConnectOnboardingStatus; ticketFeeMinor?: number }) {
     await prisma.$transaction(async (tx) => {
       const before = await tx.organization.findUnique({ where: { id: input.organizationId } });
       if (!before) throw AppError.notFound("Cinema organization not found.");
@@ -176,9 +177,10 @@ export class PlatformService {
         throw AppError.validationFailed("Payments cannot be marked complete until a Stripe connected account exists.");
       }
       const updated = await tx.organization.update({ where: { id: input.organizationId }, data: {
-        name: input.name, legalName: input.legalName, timezone: input.timezone, connectOnboardingStatus: input.onboardingStatus,
+        name: input.name, legalName: input.legalName, timezone: input.timezone, connectOnboardingStatus: input.onboardingStatus, ticketFeeMinor: input.ticketFeeMinor,
       } });
-      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, onboardingStatus: organization.connectOnboardingStatus });
+      if (input.ticketFeeMinor !== undefined) await tx.priceTier.updateMany({ where: { organizationId: input.organizationId }, data: { feeMinor: input.ticketFeeMinor } });
+      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, onboardingStatus: organization.connectOnboardingStatus, ticketFeeMinor: organization.ticketFeeMinor });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.organization_updated", entityType: "Organization", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
     });
     return this.organization(input.organizationId);
