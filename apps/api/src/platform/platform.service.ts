@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { ConnectOnboardingStatus, Prisma, prisma } from "@cinema/database";
+import { ConnectOnboardingStatus, PlatformUserRole, Prisma, prisma } from "@cinema/database";
 import { DEFAULT_ROLE_PERMISSIONS, hashPassword, RoleKey, signTokenPair, TokenPair, verifyPassword } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingDefaults, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, PlatformLoginRequest } from "@cinema/shared";
@@ -8,6 +8,7 @@ import { AuditService } from "../audit/audit.service";
 import type { ConnectAccountState, ConnectOnboardingProvider } from "@cinema/payments";
 import { CONNECT_ONBOARDING_PROVIDER } from "./connect-onboarding.module";
 import { ReportingService } from "../reporting/reporting.service";
+import { permissionsForPlatformRole } from "./platform-permissions";
 
 @Injectable()
 export class PlatformService {
@@ -19,7 +20,7 @@ export class PlatformService {
       throw AppError.invalidCredentials();
     }
 
-    const tokens = this.issueTokens(user.id, user.refreshTokenVersion);
+    const tokens = this.issueTokens(user.id, user.refreshTokenVersion, user.role);
     await this.audit.record({
       actorType: "PLATFORM",
       actorId: user.id,
@@ -27,7 +28,7 @@ export class PlatformService {
       entityType: "PlatformUser",
       entityId: user.id,
     });
-    return { tokens, user: { id: user.id, name: user.name, email: user.email } };
+    return { tokens, user: { id: user.id, name: user.name, email: user.email, role: user.role } };
   }
 
   async overview() {
@@ -158,20 +159,20 @@ export class PlatformService {
   async team() {
     const users = await prisma.platformUser.findMany({
       orderBy: [{ active: "desc" }, { name: "asc" }],
-      select: { id: true, name: true, email: true, active: true, createdAt: true, updatedAt: true },
+      select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true },
     });
     return { users: users.map((user) => ({ ...user, createdAt: user.createdAt.toISOString(), updatedAt: user.updatedAt.toISOString() })) };
   }
 
-  async createPlatformUser(input: { actorId: string; name: string; email: string; password: string }) {
+  async createPlatformUser(input: { actorId: string; name: string; email: string; password: string; role: PlatformUserRole }) {
     const email = input.email.toLowerCase();
     const duplicate = await prisma.platformUser.findUnique({ where: { email } });
     if (duplicate) throw AppError.conflict("An Attend Master operator with that email already exists.");
     const passwordHash = await hashPassword(input.password);
     try {
       const user = await prisma.$transaction(async (tx) => {
-        const created = await tx.platformUser.create({ data: { name: input.name, email, passwordHash }, select: { id: true, name: true, email: true, active: true, createdAt: true, updatedAt: true } });
-        await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.user_created", entityType: "PlatformUser", entityId: created.id, afterState: { name: created.name, email: created.email, active: created.active } }, tx);
+        const created = await tx.platformUser.create({ data: { name: input.name, email, passwordHash, role: input.role }, select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true } });
+        await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.user_created", entityType: "PlatformUser", entityId: created.id, afterState: { name: created.name, email: created.email, role: created.role, active: created.active } }, tx);
         return created;
       });
       return { ...user, createdAt: user.createdAt.toISOString(), updatedAt: user.updatedAt.toISOString() };
@@ -181,21 +182,24 @@ export class PlatformService {
     }
   }
 
-  async updatePlatformUser(input: { actorId: string; userId: string; name?: string; active?: boolean }) {
+  async updatePlatformUser(input: { actorId: string; userId: string; name?: string; active?: boolean; role?: PlatformUserRole }) {
     if (input.userId === input.actorId && input.active === false) throw AppError.conflict("You cannot deactivate your own Attend Master account.");
+    if (input.userId === input.actorId && input.role && input.role !== PlatformUserRole.OWNER) throw AppError.conflict("You cannot remove your own Owner role.");
     const user = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('platform-team-access'))`;
       const before = await tx.platformUser.findUnique({ where: { id: input.userId } });
       if (!before) throw AppError.notFound("Attend Master operator not found.");
-      if (input.active === false && before.active && await tx.platformUser.count({ where: { active: true } }) <= 1) {
-        throw AppError.conflict("The last active Attend Master operator cannot be deactivated.");
+      const removesActiveOwner = before.active && before.role === PlatformUserRole.OWNER && (input.active === false || (input.role && input.role !== PlatformUserRole.OWNER));
+      if (removesActiveOwner && await tx.platformUser.count({ where: { active: true, role: PlatformUserRole.OWNER } }) <= 1) {
+        throw AppError.conflict("The last active Attend Master Owner cannot be deactivated or reassigned.");
       }
+      const roleChanged = input.role !== undefined && input.role !== before.role;
       const updated = await tx.platformUser.update({
         where: { id: input.userId },
-        data: { name: input.name, active: input.active, ...(input.active === false ? { refreshTokenVersion: { increment: 1 } } : {}) },
-        select: { id: true, name: true, email: true, active: true, createdAt: true, updatedAt: true },
+        data: { name: input.name, active: input.active, role: input.role, ...((input.active === false || roleChanged) ? { refreshTokenVersion: { increment: 1 } } : {}) },
+        select: { id: true, name: true, email: true, role: true, active: true, createdAt: true, updatedAt: true },
       });
-      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.user_updated", entityType: "PlatformUser", entityId: updated.id, beforeState: { name: before.name, email: before.email, active: before.active }, afterState: { name: updated.name, email: updated.email, active: updated.active } }, tx);
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.user_updated", entityType: "PlatformUser", entityId: updated.id, beforeState: { name: before.name, email: before.email, role: before.role, active: before.active }, afterState: { name: updated.name, email: updated.email, role: updated.role, active: updated.active } }, tx);
       return updated;
     });
     return { ...user, createdAt: user.createdAt.toISOString(), updatedAt: user.updatedAt.toISOString() };
@@ -479,10 +483,10 @@ export class PlatformService {
     return this.organization(input.organizationId);
   }
 
-  private issueTokens(userId: string, tokenVersion: number): TokenPair {
+  private issueTokens(userId: string, tokenVersion: number, role: PlatformUserRole): TokenPair {
     const env = loadEnv();
     return signTokenPair(
-      { sub: userId, actorType: "PLATFORM", permissions: [] },
+      { sub: userId, actorType: "PLATFORM", permissions: permissionsForPlatformRole(role) },
       { sub: userId, actorType: "PLATFORM", tokenVersion },
       {
         accessSecret: env.JWT_ACCESS_SECRET,

@@ -343,14 +343,15 @@ describe("Attend platform authentication boundary", () => {
   it("lets Attend operators add and revoke company team access safely", async () => {
     await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${ownerAccessToken}`).expect(403);
     const initial = await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
-    expect(initial.body.users).toEqual(expect.arrayContaining([expect.objectContaining({ email: "platform@attend.test", active: true })]));
+    expect(initial.body.users).toEqual(expect.arrayContaining([expect.objectContaining({ email: "platform@attend.test", role: "OWNER", active: true })]));
     const current = initial.body.users.find((user: { email: string }) => user.email === "platform@attend.test");
 
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${current.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ active: false }).expect(409);
+    await request(app.getHttpServer()).patch(`/api/v1/platform/team/${current.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ role: "OPERATOR" }).expect(409);
 
     const email = `platform-support@${SEED_SUFFIX}`;
     const created = await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Platform Support", email, password: "PlatformSupportPassword123!" }).expect(201);
-    expect(created.body).toMatchObject({ email, active: true });
+    expect(created.body).toMatchObject({ email, role: "OPERATOR", active: true });
     await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Duplicate", email, password: "PlatformSupportPassword123!" }).expect(409);
 
     const resetPassword = "ResetPlatformPassword456!";
@@ -360,6 +361,19 @@ describe("Attend platform authentication boundary", () => {
     await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);
 
     const supportLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: resetPassword }).expect(200);
+    expect(supportLogin.body.user.role).toBe("OPERATOR");
+    await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${supportLogin.body.accessToken}`).expect(403);
+    const operatorOverview = await request(app.getHttpServer()).get("/api/v1/platform/overview").set("Authorization", `Bearer ${supportLogin.body.accessToken}`).expect(200);
+    const operatorOrganization = operatorOverview.body.organizations[0];
+    await request(app.getHttpServer()).patch(`/api/v1/platform/organizations/${operatorOrganization.id}`).set("Authorization", `Bearer ${supportLogin.body.accessToken}`).send({ name: operatorOrganization.name }).expect(200);
+
+    const viewerEmail = `platform-viewer@${SEED_SUFFIX}`;
+    await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Platform Viewer", email: viewerEmail, password: "PlatformViewerPassword123!", role: "VIEWER" }).expect(201);
+    const viewerLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email: viewerEmail, password: "PlatformViewerPassword123!" }).expect(200);
+    expect(viewerLogin.body.user.role).toBe("VIEWER");
+    await request(app.getHttpServer()).get("/api/v1/platform/overview").set("Authorization", `Bearer ${viewerLogin.body.accessToken}`).expect(200);
+    await request(app.getHttpServer()).patch(`/api/v1/platform/organizations/${operatorOrganization.id}`).set("Authorization", `Bearer ${viewerLogin.body.accessToken}`).send({ name: operatorOrganization.name }).expect(403);
+    await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${viewerLogin.body.accessToken}`).expect(403);
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ active: false }).expect(200);
     expect(supportLogin.body.accessToken).toEqual(expect.any(String));
     await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);

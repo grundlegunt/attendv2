@@ -6,7 +6,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
 
-interface Session { accessToken: string; user: { id: string; name: string; email: string } }
+interface Session { accessToken: string; user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" } }
 interface Organization { id: string; name: string }
 interface Overview { organizations: Organization[] }
 interface Actor { id: string; name: string; email: string }
@@ -126,7 +126,7 @@ export default function PlatformAuditLog() {
   return (
     <main className="shell">
       <header><div><p className="eyebrow">ATTEND MASTER</p><h1>Audit Log</h1><p className="muted">Review company-side changes across every cinema client.</p></div><div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>
-      <nav className="platform-nav" aria-label="Attend Master"><Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link><Link href="/team">Team</Link><Link className="active" href="/audit">Audit Log</Link></nav>
+      <nav className="platform-nav" aria-label="Attend Master"><Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link className="active" href="/audit">Audit Log</Link></nav>
       {error && <div className="error">{error}</div>}
       <form className="audit-filters" onSubmit={applyFilters}>
         <label>Client<select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}><option value="">All clients</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>

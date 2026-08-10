@@ -10,6 +10,8 @@ import { isPlatformOriginAllowed } from "../common/cors-origin";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { PlatformAuthGuard } from "./platform-auth.guard";
 import { PlatformService } from "./platform.service";
+import { PlatformPermissionGuard } from "./platform-permission.guard";
+import { PLATFORM_TEAM_PERMISSION, PLATFORM_WRITE_PERMISSION, RequirePlatformPermission } from "./platform-permissions";
 
 const organizationUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
@@ -58,11 +60,13 @@ const platformUserCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(254),
   password: z.string().min(12).max(200),
+  role: z.enum(["OWNER", "OPERATOR", "VIEWER"]).default("OPERATOR"),
 }).strict();
 
 const platformUserUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   active: z.boolean().optional(),
+  role: z.enum(["OWNER", "OPERATOR", "VIEWER"]).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one team field is required.");
 
 const platformUserCredentialsSchema = z.object({
@@ -101,31 +105,36 @@ export class PlatformController {
   }
 
   @Get("team")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_TEAM_PERMISSION)
   team() {
     return this.platform.team();
   }
 
   @Post("team")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_TEAM_PERMISSION)
   createPlatformUser(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(platformUserCreateSchema)) body: unknown) {
     return this.platform.createPlatformUser({ actorId: actor.sub, ...platformUserCreateSchema.parse(body) });
   }
 
   @Patch("team/:userId")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_TEAM_PERMISSION)
   updatePlatformUser(@CurrentActor() actor: RequestActor, @Param("userId") userId: string, @Body(new ZodValidationPipe(platformUserUpdateSchema)) body: unknown) {
     return this.platform.updatePlatformUser({ actorId: actor.sub, userId, ...platformUserUpdateSchema.parse(body) });
   }
 
   @Patch("team/:userId/credentials")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_TEAM_PERMISSION)
   resetPlatformUserCredentials(@CurrentActor() actor: RequestActor, @Param("userId") userId: string, @Body(new ZodValidationPipe(platformUserCredentialsSchema)) body: unknown) {
     return this.platform.resetPlatformUserCredentials({ actorId: actor.sub, userId, ...platformUserCredentialsSchema.parse(body) });
   }
 
   @Post("organizations")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   createOrganization(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(organizationCreateSchema)) body: unknown) {
     return this.platform.createOrganization({ actorId: actor.sub, ...organizationCreateSchema.parse(body) });
   }
@@ -137,13 +146,15 @@ export class PlatformController {
   }
 
   @Patch("organizations/:organizationId")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   updateOrganization(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(organizationUpdateSchema)) body: unknown) {
     return this.platform.updateOrganization({ actorId: actor.sub, organizationId, ...organizationUpdateSchema.parse(body) });
   }
 
   @Post("organizations/:organizationId/connect/onboarding-link")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   connectOnboardingLink(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(connectOnboardingSchema)) body: unknown) {
     const { origin, returnPath } = connectOnboardingSchema.parse(body);
     if (new URL(origin).origin !== origin || !isPlatformOriginAllowed(origin)) {
@@ -153,31 +164,36 @@ export class PlatformController {
   }
 
   @Post("organizations/:organizationId/connect/refresh")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   refreshConnectStatus(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string) {
     return this.platform.refreshConnectStatus({ actorId: actor.sub, organizationId });
   }
 
   @Patch("organizations/:organizationId/locations/:locationId")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   updateLocation(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(locationUpdateSchema)) body: unknown) {
     return this.platform.updateLocation({ actorId: actor.sub, organizationId, locationId, ...locationUpdateSchema.parse(body) });
   }
 
   @Post("organizations/:organizationId/locations/:locationId/cinema-manager")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   createCinemaManager(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(cinemaManagerCreateSchema)) body: unknown) {
     return this.platform.createCinemaManager({ actorId: actor.sub, organizationId, locationId, ...cinemaManagerCreateSchema.parse(body) });
   }
 
   @Patch("organizations/:organizationId/locations/:locationId/content/draft")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   updateContentDraft(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(cinemaContentSchema)) body: unknown) {
     return this.platform.updateContentDraft({ actorId: actor.sub, organizationId, locationId, content: cinemaContentSchema.parse(body) });
   }
 
   @Post("organizations/:organizationId/locations/:locationId/content/publish")
-  @UseGuards(PlatformAuthGuard)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   publishContent(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string) {
     return this.platform.publishContent({ actorId: actor.sub, organizationId, locationId });
   }
