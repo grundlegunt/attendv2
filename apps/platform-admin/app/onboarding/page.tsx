@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { readPlatformSession } from "../platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -84,14 +85,7 @@ export default function PlatformOnboarding() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const stored = window.sessionStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setSession(JSON.parse(stored) as Session);
-      } catch {
-        window.sessionStorage.removeItem(STORAGE_KEY);
-      }
-    }
+    setSession(readPlatformSession(STORAGE_KEY));
     setRestored(true);
   }, []);
 
