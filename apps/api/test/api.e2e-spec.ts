@@ -305,6 +305,30 @@ describe("Attend platform authentication boundary", () => {
     ]));
   });
 
+  it("lets only an Attend operator search the platform audit trail", async () => {
+    await request(app.getHttpServer())
+      .get("/api/v1/platform/audit-events")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(403);
+
+    const res = await request(app.getHttpServer())
+      .get("/api/v1/platform/audit-events?action=platform.login&limit=10")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200);
+
+    expect(res.body.total).toBeGreaterThan(0);
+    expect(res.body.events).toEqual(expect.arrayContaining([expect.objectContaining({
+      action: "platform.login",
+      actor: expect.objectContaining({ email: "platform@attend.test" }),
+    })]));
+    expect(res.body.events.every((event: { action: string }) => event.action.includes("platform.login"))).toBe(true);
+
+    await request(app.getHttpServer())
+      .get("/api/v1/platform/audit-events?from=not-a-date")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(400);
+  });
+
   it("returns a detailed organization view only to an Attend operator", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")

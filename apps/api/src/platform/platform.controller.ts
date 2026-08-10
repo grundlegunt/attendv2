@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
 import { z } from "zod";
@@ -71,6 +71,12 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   overview() {
     return this.platform.overview();
+  }
+
+  @Get("audit-events")
+  @UseGuards(PlatformAuthGuard)
+  auditEvents(@Query("limit") limit?: string, @Query("offset") offset?: string, @Query("organizationId") organizationId?: string, @Query("action") action?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
+    return this.platform.auditEvents({ limit, offset, organizationId, action, actorId, from, to });
   }
 
   @Post("organizations")
