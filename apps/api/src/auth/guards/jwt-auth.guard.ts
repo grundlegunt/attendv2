@@ -34,11 +34,12 @@ export class JwtAuthGuard implements CanActivate {
       const actor = verifyAccessToken(token, env.JWT_ACCESS_SECRET);
       if (cookieToken && actor.actorType !== "CUSTOMER") throw AppError.unauthenticated();
       if (actor.actorType === "EMPLOYEE") {
-        const employee = await prisma.employee.findUnique({
-          where: { id: actor.sub },
-          select: { location: { select: { organization: { select: { active: true } } } } },
+        if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
+        const location = await prisma.location.findUnique({
+          where: { id: actor.locationId },
+          select: { organization: { select: { active: true } } },
         });
-        if (!employee?.location.organization.active) {
+        if (!location?.organization.active) {
           throw AppError.unauthenticated("This cinema account is currently inactive.");
         }
       }
