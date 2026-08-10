@@ -19,12 +19,26 @@ interface CheckoutConfig {
 }
 
 interface StripeElement {
-  mount(selector: string): void;
+  mount(target: string | HTMLElement): void;
+  unmount(): void;
   destroy(): void;
+  on(event: "ready", handler: () => void): void;
+  on(
+    event: "loaderror",
+    handler: (event: { error?: { message?: string } }) => void,
+  ): void;
+}
+
+interface StripeExpressCheckoutElement {
+  mount(target: string | HTMLElement): void;
+  unmount(): void;
+  destroy(): void;
+  on(event: "confirm", handler: () => void): void;
 }
 
 interface StripeElements {
   create(type: "payment", options?: Record<string, unknown>): StripeElement;
+  create(type: "expressCheckout", options?: Record<string, unknown>): StripeExpressCheckoutElement;
 }
 
 interface StripeClient {
@@ -100,9 +114,15 @@ export function TicketCheckout({
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [paymentElementReady, setPaymentElementReady] = useState(false);
+  const [mountableElements, setMountableElements] = useState<{
+    payment: StripeElement;
+    express: StripeExpressCheckoutElement;
+  } | null>(null);
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
-  const paymentElementRef = useRef<StripeElement | null>(null);
+  const paymentContainerRef = useRef<HTMLDivElement | null>(null);
+  const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     apiFetch<CheckoutConfig>(
@@ -118,10 +138,52 @@ export function TicketCheckout({
       );
   }, [showtimeId]);
 
-  useEffect(
-    () => () => paymentElementRef.current?.destroy(),
-    [],
-  );
+  useEffect(() => {
+    if (!mountableElements || confirmation) return;
+    const paymentContainer = paymentContainerRef.current;
+    const expressContainer = expressCheckoutContainerRef.current;
+    if (!paymentContainer || !expressContainer) return;
+
+    mountableElements.express.mount(expressContainer);
+    mountableElements.payment.mount(paymentContainer);
+    return () => {
+      mountableElements.express.unmount();
+      mountableElements.payment.unmount();
+    };
+  }, [confirmation, mountableElements]);
+
+  async function confirmAndFinalize(
+    stripe: StripeClient,
+    elements: StripeElements,
+    orderId: string,
+  ) {
+    setPending(true);
+    setError(null);
+    try {
+      const result = await stripe.confirmPayment({
+        elements,
+        redirect: "if_required",
+        confirmParams: { receipt_email: email },
+      });
+      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
+      setConfirmation(
+        await apiFetch<TicketConfirmationResponse>(
+          `/ticketing/orders/${orderId}/finalize`,
+          { method: "POST", body: "{}" },
+        ),
+      );
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : requestError instanceof Error
+            ? requestError.message
+            : "Payment could not be completed.",
+      );
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
@@ -171,10 +233,28 @@ export function TicketCheckout({
       const paymentElement = elements.create("payment", {
         layout: "tabs",
       });
+      paymentElement.on("ready", () => setPaymentElementReady(true));
+      paymentElement.on("loaderror", (event) => {
+        setPaymentElementReady(false);
+        setError(
+          event.error?.message ??
+            "The secure payment form could not load. Please refresh and try again.",
+        );
+      });
+      const expressCheckoutElement = elements.create("expressCheckout", {
+        paymentMethods: { applePay: "always" },
+        buttonType: { applePay: "check-out" },
+      });
+      expressCheckoutElement.on("confirm", () => {
+        void confirmAndFinalize(stripe, elements, created.orderId);
+      });
       stripeRef.current = stripe;
       elementsRef.current = elements;
-      paymentElementRef.current = paymentElement;
-      window.setTimeout(() => paymentElement.mount("#attend-payment-element"), 0);
+      setPaymentElementReady(false);
+      setMountableElements({
+        payment: paymentElement,
+        express: expressCheckoutElement,
+      });
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -190,33 +270,13 @@ export function TicketCheckout({
 
   async function pay(event: FormEvent) {
     event.preventDefault();
-    if (!checkout || !stripeRef.current || !elementsRef.current) return;
-    setPending(true);
-    setError(null);
-    try {
-      const result = await stripeRef.current.confirmPayment({
-        elements: elementsRef.current,
-        redirect: "if_required",
-        confirmParams: { receipt_email: email },
-      });
-      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
-      setConfirmation(
-        await apiFetch<TicketConfirmationResponse>(
-          `/ticketing/orders/${checkout.orderId}/finalize`,
-          { method: "POST", body: "{}" },
-        ),
-      );
-    } catch (requestError) {
-      setError(
-        requestError instanceof ApiRequestError
-          ? requestError.body.message
-          : requestError instanceof Error
-            ? requestError.message
-            : "Payment could not be completed.",
-      );
-    } finally {
-      setPending(false);
-    }
+    if (
+      !checkout ||
+      !stripeRef.current ||
+      !elementsRef.current ||
+      !paymentElementReady
+    ) return;
+    await confirmAndFinalize(stripeRef.current, elementsRef.current, checkout.orderId);
   }
 
   if (confirmation) {
@@ -337,12 +397,18 @@ export function TicketCheckout({
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
           <div className="checkout-panel">
-            <h3>Card or Apple Pay</h3>
-            <div id="attend-payment-element" />
+            <h3>Payment</h3>
+            {!paymentElementReady && !error && (
+              <p role="status">Loading secure payment form…</p>
+            )}
+            <div id="attend-express-checkout-element" ref={expressCheckoutContainerRef} />
+            <div id="attend-payment-element" ref={paymentContainerRef} />
           </div>
-          <button className="primary" disabled={pending}>
+          <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
               ? "Completing purchase…"
+              : !paymentElementReady
+                ? "Loading secure payment…"
               : `Pay ${money(checkout.totalCents, checkout.currency)}`}
           </button>
         </form>

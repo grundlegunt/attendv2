@@ -1,5 +1,8 @@
 name: CI
 
+permissions:
+  contents: read
+
 on:
   pull_request:
   push:
@@ -14,6 +17,32 @@ env:
   JWT_REFRESH_SECRET: ci-test-refresh-secret-at-least-32-characters-long
 
 jobs:
+  secret-scan:
+    name: Committed-secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  vulnerability-scan:
+    name: Dependency vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Reject high or critical production vulnerabilities
+        run: pnpm audit --prod --audit-level high
+
   lint-typecheck-unit:
     name: Lint, typecheck, unit tests
     runs-on: ubuntu-latest
@@ -39,6 +68,56 @@ jobs:
       - name: Unit tests
         run: pnpm turbo run test
 
+  production-api-bundle:
+    name: Production API bundle and boot
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: production
+      QR_CREDENTIAL_SECRET: ci-test-qr-secret-at-least-32-characters-long
+      OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
+      PAYMENT_PROVIDER: stripe
+      STRIPE_SECRET_KEY: sk_test_ci_placeholder
+      STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+      STRIPE_PUBLISHABLE_KEY: pk_test_ci_placeholder
+      EMAIL_PROVIDER: postmark
+      POSTMARK_SERVER_TOKEN: ci-placeholder
+      EMAIL_FROM: ci@example.com
+      REFUND_RECONCILIATION_INTERVAL_MS: 0
+      RESTAURANT_SETTLEMENT_INTERVAL_MS: 0
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build production API bundle
+        run: pnpm --filter @cinema/api build
+
+      - name: Boot compiled API and verify liveness
+        run: |
+          pnpm --filter @cinema/api start > /tmp/attend-production-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/api/v1/health/live; then
+              exit 0
+            fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then
+              cat /tmp/attend-production-api.log
+              exit 1
+            fi
+            sleep 1
+          done
+          cat /tmp/attend-production-api.log
+          exit 1
+
   integration:
     name: Integration tests (real Postgres)
     runs-on: ubuntu-latest
@@ -53,6 +132,15 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U cinema -d cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -110,3 +198,115 @@ jobs:
 
       - name: Apply committed migrations
         run: pnpm --filter @cinema/database exec prisma migrate deploy
+
+  critical-browser-journeys:
+    name: Critical browser journeys
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cinema
+          POSTGRES_PASSWORD: cinema_test_password
+          POSTGRES_DB: cinema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema -d cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      QR_CREDENTIAL_SECRET: ci-test-qr-secret-at-least-32-characters-long
+      PAYMENT_PROVIDER: test
+      EMAIL_PROVIDER: test
+      OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000/api/v1
+      CORS_ORIGINS: http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004
+      SEED_OWNER_MFA_SECRET: AAAAAAAAAAAAAAAA
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cinema/database exec prisma migrate deploy
+      - run: pnpm --filter @cinema/database seed
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  opening-night-load:
+    name: Opening-night correctness load
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cinema
+          POSTGRES_PASSWORD: cinema_test_password
+          POSTGRES_DB: cinema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema -d cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      QR_CREDENTIAL_SECRET: ci-test-qr-secret-at-least-32-characters-long
+      PAYMENT_PROVIDER: test
+      EMAIL_PROVIDER: test
+      OBSERVABILITY_TOKEN: ci-test-observability-token-at-least-32-characters
+      CHECKOUT_RATE_LIMIT_ATTEMPTS: 1000
+      RESTAURANT_SETTLEMENT_INTERVAL_MS: 0
+      SEED_OWNER_MFA_SECRET: AAAAAAAAAAAAAAAA
+      LOAD_STAFF_MFA_SECRET: AAAAAAAAAAAAAAAA
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @cinema/database exec prisma migrate deploy
+      - run: pnpm --filter @cinema/database seed
+      - name: Start API
+        run: |
+          pnpm --filter @cinema/api start:test > /tmp/attend-api.log 2>&1 &
+          for attempt in {1..60}; do
+            curl --fail --silent http://127.0.0.1:4000/api/v1/health/ready && exit 0
+            sleep 2
+          done
+          cat /tmp/attend-api.log
+          exit 1
+      - name: Resolve isolated load fixture
+        run: node tests/load/fixture.cjs >> "$GITHUB_ENV"
+      - name: Sell out three rooms and burst restaurant orders
+        run: pnpm test:load

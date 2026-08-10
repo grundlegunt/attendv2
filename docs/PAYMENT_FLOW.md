@@ -146,7 +146,7 @@ Refunds are always scoped explicitly (`TICKET`, `RESTAURANT`, or `BOTH`) — nev
 
 ## 9. Rate limiting and abuse protection on payment endpoints
 
-Checkout and payment-confirmation endpoints are rate-limited per session/IP (Redis-backed) independent of the general API rate limit, since these endpoints are the most attractive target for card-testing abuse. Failed-payment velocity per customer/session is tracked and can trigger a temporary checkout cooldown, configurable, without blocking legitimate retries within a reasonable window.
+Checkout and payment-confirmation endpoints are rate-limited independently of the general API limit because they are the most attractive target for card-testing abuse. Anonymous customer checkout is Redis-backed per source IP; client-generated holder and idempotency values are deliberately not treated as security identities because an attacker can rotate them freely. Authenticated box-office checkout adds a stable employee-identity bucket alongside its IP bucket. The gateway remains the outer per-IP enforcement layer, and payment-failure monitoring provides the operational signal for further blocking or investigation.
 
 ## 9.1 Connectivity is a hard requirement, not a soft assumption
 

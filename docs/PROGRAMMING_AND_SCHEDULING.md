@@ -89,3 +89,15 @@ Do not interrupt the current ticketing/payment milestone. Once the core ticketin
 Preserve the existing scheduling foundation: movie runtime, calculated end time, preshow buffer, cleaning buffer, auditorium conflict detection, and published showtimes.
 
 Before implementation, inspect the existing scheduling and customer-facing showtime logic and produce an implementation plan describing which existing pieces will be extended. Do not create a parallel scheduling system or duplicate source of truth.
+
+## Production Rollout
+
+The production module should grow in vertical slices while keeping `Showtime` as the authoritative schedule:
+
+1. **Visual scheduler** — Day view places auditoriums in rows against a horizontal timeline; Week view provides a compact seven-day overview. Every block covers advertised start through pre-show, runtime, and cleaning. Clicking open time creates a draft, clicking a block edits it, and future blocks can be dragged between rooms, times, and days. Every move is persisted through the existing Showtime API, which remains responsible for conflict enforcement.
+2. **Programming workflow** — add repeat patterns, copy day/week, schedule templates, presentation labels, draft review, and publish-week controls. Any showing with sold tickets receives a stricter change/cancellation workflow.
+3. **Flexible auditorium designer** — replace rectangular row-count setup with per-row seat counts, aisle/gap placement, paired and individual seats, wheelchair/companion/not-a-seat positions, and screen orientation. Continue storing layouts through the existing structured SeatMap/Seat model.
+4. **Multi-location cinema groups** — operators with permission at multiple locations may switch among only those locations. Each location retains its own rooms, layouts, schedules, prices, and staff scope.
+5. **Attend platform operations** — cross-client organization/location switching requires a dedicated platform-admin authorization boundary and tenant-safe API. A client-facing location selector must never be repurposed to expose unrelated organizations.
+
+The visual direction should retain the useful patterns from the approved prototypes at `attend-cinema-platform.vercel.app/schedule` and `/theaters`, but prototype-only controls must not appear as functional until their API, permission, audit, and persistence paths are real.

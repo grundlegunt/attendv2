@@ -40,7 +40,10 @@ export const createMenuItemRequestSchema = z.object({
   kitchenStationId: z.string().uuid(),
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(500).optional(),
+  imageUrl: z.string().trim().url("Image URL must be a valid URL.").nullable().optional(),
   priceCents: z.number().int().min(0),
+  isVegan: z.boolean().default(false),
+  isGlutenFree: z.boolean().default(false),
   sortOrder: z.number().int().min(0).default(0),
 });
 
@@ -66,13 +69,45 @@ export const updateMenuItemRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(500).nullable().optional(),
+    imageUrl: z.string().trim().url("Image URL must be a valid URL.").nullable().optional(),
     priceCents: z.number().int().min(0).optional(),
+    isVegan: z.boolean().optional(),
+    isGlutenFree: z.boolean().optional(),
     active: z.boolean().optional(),
     is86d: z.boolean().optional(),
     sortOrder: z.number().int().min(0).optional(),
     kitchenStationId: z.string().uuid().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one change is required.");
+
+export interface PublicMenuItem {
+  id: string;
+  name: string;
+  description: string | null;
+  imageUrl: string | null;
+  priceCents: number;
+  isVegan: boolean;
+  isGlutenFree: boolean;
+}
+
+export interface PublicMenuCategory {
+  id: string;
+  name: string;
+  items: PublicMenuItem[];
+}
+
+export interface PublicMovieSpecial {
+  movieId: string;
+  movieTitle: string;
+  posterUrl: string | null;
+  items: PublicMenuItem[];
+}
+
+export interface PublicDiningMenuResponse {
+  location: { id: string; name: string; address: string | null };
+  categories: PublicMenuCategory[];
+  movieSpecials: PublicMovieSpecial[];
+}
 
 export const splitRestaurantTabRequestSchema = z.object({
   showtimeSeatId: z.string().uuid(),
@@ -84,6 +119,50 @@ export const transferRestaurantOrderRequestSchema = z.object({
 
 export const combineRestaurantTabsRequestSchema = z.object({
   sourceTabId: z.string().uuid(),
+});
+
+export const fulfillmentTicketTransitionRequestSchema = z.object({
+  action: z.enum(["ACCEPT", "START", "READY", "DELIVER", "CANCEL", "VOID", "REFIRE"]),
+});
+
+export const restaurantTipRequestSchema = z.object({
+  tipCents: z.number().int().min(0).max(1_000_000),
+});
+
+export const restaurantSettlementTenderSchema = z
+  .object({
+    type: z.enum(["SAVED_METHOD", "CARD_PRESENT"]),
+    amountCents: z.number().int().positive().max(10_000_000),
+    paymentMethodReferenceId: z.string().uuid().optional(),
+    readerId: z.string().min(1).max(200).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.type === "SAVED_METHOD" && !value.paymentMethodReferenceId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paymentMethodReferenceId"],
+        message: "A saved payment method is required.",
+      });
+    }
+    if (value.type === "CARD_PRESENT" && !value.readerId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["readerId"],
+        message: "A Terminal reader is required.",
+      });
+    }
+  });
+
+export const finalizeRestaurantTabRequestSchema = z.object({
+  requestId: z.string().uuid(),
+  tipCents: z.number().int().min(0).max(1_000_000),
+  tenders: z.array(restaurantSettlementTenderSchema).min(1).max(10),
+});
+
+export const customerPayRestaurantTabRequestSchema = z.object({
+  requestId: z.string().uuid(),
+  tipCents: z.number().int().min(0).max(1_000_000),
+  paymentMethodReferenceId: z.string().uuid(),
 });
 
 export type OpenWalkInTabRequest = z.infer<typeof openWalkInTabRequestSchema>;

@@ -3,6 +3,8 @@ import {
   ProviderDefinitiveError,
   type CreatePaymentIntentArgs,
   type CreateProviderCustomerArgs,
+  type ChargeSavedPaymentMethodArgs,
+  type CollectCardPresentPaymentArgs,
   type PaymentProvider,
   type ProviderPaymentIntentResult,
   type ProviderPaymentStatus,
@@ -59,6 +61,8 @@ export class TestPaymentProvider implements PaymentProvider {
 
   refundCalls: RefundArgs[] = [];
   createPaymentIntentCalls: CreatePaymentIntentArgs[] = [];
+  chargeSavedPaymentMethodCalls: ChargeSavedPaymentMethodArgs[] = [];
+  collectCardPresentPaymentCalls: CollectCardPresentPaymentArgs[] = [];
   private refundFailureMode: "none" | "definitive" | "ambiguous" = "none";
   private refundFailureMessage: string | undefined;
   private nextRefundStatus: "SUCCEEDED" | "PENDING" | "FAILED" = "SUCCEEDED";
@@ -105,6 +109,47 @@ export class TestPaymentProvider implements PaymentProvider {
       amountCents: args.amountCents,
       currency: args.currency,
       metadata: args.metadata,
+    };
+  }
+
+  async chargeSavedPaymentMethod(
+    args: ChargeSavedPaymentMethodArgs,
+  ): Promise<ProviderPaymentIntentResult> {
+    this.chargeSavedPaymentMethodCalls.push(args);
+    const status: ProviderPaymentStatus = args.providerPaymentMethodId.includes("declined")
+      ? "FAILED"
+      : "SUCCEEDED";
+    return {
+      id: `pi_fake_saved_${createHash("sha256").update(args.idempotencyKey).digest("hex").slice(0, 20)}`,
+      status,
+      amountCents: args.amountCents,
+      currency: args.currency,
+      metadata: args.metadata,
+      ...(status === "FAILED"
+        ? { failureCode: "card_declined", failureMessage: "The saved card was declined." }
+        : {}),
+    };
+  }
+
+  async collectCardPresentPayment(
+    args: CollectCardPresentPaymentArgs,
+  ): Promise<ProviderPaymentIntentResult> {
+    this.collectCardPresentPaymentCalls.push(args);
+    if (args.readerId.includes("delayed")) {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
+    const status: ProviderPaymentStatus = args.readerId.includes("declined")
+      ? "FAILED"
+      : "SUCCEEDED";
+    return {
+      id: `pi_fake_terminal_${createHash("sha256").update(args.idempotencyKey).digest("hex").slice(0, 20)}`,
+      status,
+      amountCents: args.amountCents,
+      currency: args.currency,
+      metadata: args.metadata,
+      ...(status === "FAILED"
+        ? { failureCode: "card_declined", failureMessage: "The presented card was declined." }
+        : {}),
     };
   }
 

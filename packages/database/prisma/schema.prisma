@@ -27,16 +27,60 @@ model Organization {
   timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
+  ticketFeeMinor           Int                     @default(0)
+  active                   Boolean                 @default(true)
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 
   locations        Location[]
   roles            Role[]
   movies           Movie[]
+  filmSeries       FilmSeries[]
   priceTiers       PriceTier[]
   paymentCustomers PaymentCustomer[]
 
   @@map("organizations")
+}
+
+// Attend company operators are intentionally separate from cinema employees.
+// They have cross-organization visibility only through the dedicated platform
+// API and can never be assigned a cinema role or location permission.
+model PlatformUser {
+  id                  String   @id @default(uuid())
+  name                String
+  email               String   @unique
+  passwordHash        String
+  role                PlatformUserRole @default(OWNER)
+  active              Boolean  @default(true)
+  refreshTokenVersion Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("platform_users")
+}
+
+enum PlatformUserRole {
+  OWNER
+  OPERATOR
+  VIEWER
+}
+
+model FilmSeries {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  name           String
+  description    String?
+  artworkUrl     String?
+  sortOrder      Int          @default(0)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  showtimes      Showtime[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active, sortOrder])
+  @@map("film_series")
 }
 
 model Location {
@@ -44,34 +88,64 @@ model Location {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  name                     String
-  address                  String?
-  timezone                 String  @default("America/New_York")
-  currency                 String  @default("USD")
+  name                        String
+  address                     String?
+  customerLogoUrl             String?
+  customerAccentColor         String?
+  customerAccentMutedColor    String?
+  customerBackgroundColor     String?
+  customerBackgroundGlowColor String?
+  customerSurfaceColor        String?
+  customerTextColor           String?
+  customerMutedTextColor      String?
+  adminAccentColor            String?
+  adminAccentMutedColor       String?
+  adminBackgroundColor        String?
+  adminSurfaceColor           String?
+  adminTextColor              String?
+  adminMutedTextColor         String?
+  adminUiConfig               Json?
+  brandingDraft               Json?
+  brandingDraftedAt           DateTime?
+  contentDraft                Json?
+  contentPublished            Json?
+  contentPublishedAt          DateTime?
+  timezone                    String    @default("America/New_York")
+  currency                    String    @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the
   // location's tax treatment has been confirmed; the application never
   // invents a jurisdictional tax rate.
-  ticketTaxRateBasisPoints Int     @default(0)
+  ticketTaxRateBasisPoints    Int       @default(0)
 
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a
   // Location-level setting.
-  cleaningBufferMinutes Int @default(15)
-  preShowBufferMinutes  Int @default(30)
+  cleaningBufferMinutes     Int     @default(15)
+  preShowBufferMinutes      Int     @default(30)
+  checkDropMinutesBeforeEnd Int     @default(30)
+  autoSettleGraceMinutes    Int     @default(5)
+  autoSettleTipBasisPoints  Int     @default(0)
+  timeClockEnabled          Boolean @default(true)
 
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  employees       Employee[]
-  employeeRoles   EmployeeRole[]
-  auditEvents     AuditEvent[]
-  auditoriums     Auditorium[]
-  ticketTypes     TicketType[]
-  ticketOrders    TicketOrder[]
-  restaurantTabs  RestaurantTab[]
-  kitchenStations KitchenStation[]
-  menuCategories  MenuCategory[]
+  employees          Employee[]
+  employeeRoles      EmployeeRole[]
+  auditEvents        AuditEvent[]
+  auditoriums        Auditorium[]
+  ticketTypes        TicketType[]
+  ticketOrders       TicketOrder[]
+  restaurantTabs     RestaurantTab[]
+  kitchenStations    KitchenStation[]
+  menuCategories     MenuCategory[]
+  taxRules           TaxRule[]
+  serviceChargeRules ServiceChargeRule[]
+  cashDrawers        CashDrawer[]
+  cashTransactions   CashTransaction[]
+  promotions         Promotion[]
+  shifts             Shift[]
 
   @@map("locations")
 }
@@ -122,14 +196,32 @@ model SeatMap {
   auditoriumId String     @unique
   auditorium   Auditorium @relation(fields: [auditoriumId], references: [id], onDelete: Cascade)
 
-  name      String
-  version   Int      @default(1)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name       String
+  version    Int      @default(1)
+  // Operational geometry belongs here; sellable positions remain normalized
+  // as Seat records below. Previous geometry is retained in SeatMapRevision.
+  layoutJson Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  seats Seat[]
+  seats     Seat[]
+  revisions SeatMapRevision[]
 
   @@map("seat_maps")
+}
+
+model SeatMapRevision {
+  id        String  @id @default(uuid())
+  seatMapId String
+  seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
+
+  version    Int
+  layoutJson Json?
+  createdAt  DateTime @default(now())
+
+  @@unique([seatMapId, version])
+  @@index([seatMapId, createdAt])
+  @@map("seat_map_revisions")
 }
 
 model Seat {
@@ -137,12 +229,15 @@ model Seat {
   seatMapId String
   seatMap   SeatMap @relation(fields: [seatMapId], references: [id], onDelete: Cascade)
 
-  label    String
-  rowLabel String
-  number   Int
-  x        Int
-  y        Int
-  type     SeatType @default(STANDARD)
+  label         String
+  rowLabel      String
+  number        Int
+  x             Int
+  y             Int
+  type          SeatType @default(STANDARD)
+  layoutVersion Int      @default(1)
+  levelKey      String?
+  sectionKey    String?
 
   tableGroupId  String?
   tablePosition TablePosition?
@@ -151,9 +246,9 @@ model Seat {
   updatedAt     DateTime       @updatedAt
   showtimeSeats ShowtimeSeat[]
 
-  @@unique([seatMapId, label])
-  @@unique([seatMapId, x, y])
-  @@index([seatMapId, rowLabel, number])
+  @@unique([seatMapId, layoutVersion, label])
+  @@unique([seatMapId, layoutVersion, levelKey, x, y])
+  @@index([seatMapId, layoutVersion, rowLabel, number])
   @@map("seats")
 }
 
@@ -162,16 +257,22 @@ model Movie {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  title          String
-  synopsis       String?
-  runtimeMinutes Int
-  rating         String?
-  posterUrl      String?
-  active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  title           String
+  synopsis        String?
+  runtimeMinutes  Int
+  rating          String?
+  posterUrl       String?
+  detailPosterUrl String?
+  director        String?
+  starring        String?
+  trailerUrl      String?
+  releaseYear     Int?
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   showtimes Showtime[]
+  pairings  MoviePairing[]
 
   @@index([organizationId, active])
   @@map("movies")
@@ -216,6 +317,10 @@ model Showtime {
   endsAt          DateTime
   roomReadyAt     DateTime
   onSale          Boolean         @default(false)
+  filmSeriesId    String?
+  filmSeries      FilmSeries?     @relation(fields: [filmSeriesId], references: [id], onDelete: Restrict)
+  presentation    String          @default("STANDARD")
+  format          String?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]
@@ -298,6 +403,30 @@ enum TicketScanResult {
   REFUNDED
   CANCELED
   INVALID
+}
+
+enum CashDrawerStatus {
+  OPEN
+  CLOSED
+}
+
+enum CashTransactionType {
+  SALE
+  REFUND
+  PAID_IN
+  PAID_OUT
+}
+
+enum PromotionType {
+  FIXED_AMOUNT
+  PERCENTAGE
+  COMP
+}
+
+enum ShiftClockMethod {
+  PIN
+  BADGE
+  MANAGER_OVERRIDE
 }
 
 enum PaymentPurpose {
@@ -389,6 +518,30 @@ enum RestaurantOrderItemStatus {
   COMPED
 }
 
+enum RestaurantChargeCategory {
+  FOOD
+  ALCOHOL
+  NA_BEVERAGE
+}
+
+enum RestaurantChargeAppliesTo {
+  ALL
+  FOOD
+  ALCOHOL
+  NA_BEVERAGE
+}
+
+enum FulfillmentTicketStatus {
+  NEW
+  ACCEPTED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELED
+  VOIDED
+  REFIRE
+}
+
 model TicketType {
   id         String   @id @default(uuid())
   locationId String
@@ -438,16 +591,21 @@ model TicketOrder {
   feesCents     Int
   taxCents      Int
   totalCents    Int
+  discountCents Int    @default(0)
   currency      String @default("USD")
+
+  promotionId String?
+  promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
 
   placedByEmployeeId String?
   placedByEmployee   Employee? @relation(fields: [placedByEmployeeId], references: [id], onDelete: Restrict)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  tickets  Ticket[]
-  payment  Payment?
-  consents CustomerConsent[]
+  tickets          Ticket[]
+  payment          Payment?
+  consents         CustomerConsent[]
+  cashTransactions CashTransaction[]
 
   @@index([locationId, createdAt])
   @@index([customerId, createdAt])
@@ -658,11 +816,17 @@ model Employee {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  authAccount        StaffAuthAccount?
-  employeeRoles      EmployeeRole[]
-  placedTicketOrders TicketOrder[]
-  ticketScans        TicketScan[]
-  restaurantOrders   RestaurantOrder[]
+  authAccount             StaffAuthAccount?
+  employeeRoles           EmployeeRole[]
+  placedTicketOrders      TicketOrder[]
+  ticketScans             TicketScan[]
+  restaurantOrders        RestaurantOrder[]
+  droppedRestaurantChecks RestaurantTab[]   @relation("DroppedRestaurantChecks")
+  openedCashDrawers       CashDrawer[]      @relation("OpenedCashDrawers")
+  closedCashDrawers       CashDrawer[]      @relation("ClosedCashDrawers")
+  cashTransactions        CashTransaction[]
+  shifts                  Shift[]           @relation("EmployeeShifts")
+  adjustedShifts          Shift[]           @relation("AdjustedShifts")
 
   @@map("employees")
 }
@@ -675,7 +839,9 @@ model StaffAuthAccount {
 
   // argon2id hash — never a plaintext password, never reversible.
   // See /docs/SECURITY.md §1.
-  passwordHash String
+  passwordHash       String
+  pinHash            String?
+  mustChangePassword Boolean @default(false)
 
   mfaEnabled         Boolean @default(false)
   // Encrypted TOTP secret at rest. Required for OWNER / GENERAL_MANAGER /
@@ -691,6 +857,100 @@ model StaffAuthAccount {
   @@map("staff_auth_accounts")
 }
 
+model CashDrawer {
+  id                   String            @id @default(uuid())
+  locationId           String
+  location             Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  registerId           String
+  status               CashDrawerStatus  @default(OPEN)
+  openingBalanceCents  Int
+  closingBalanceCents  Int?
+  expectedBalanceCents Int?
+  openedByEmployeeId   String
+  openedByEmployee     Employee          @relation("OpenedCashDrawers", fields: [openedByEmployeeId], references: [id], onDelete: Restrict)
+  closedByEmployeeId   String?
+  closedByEmployee     Employee?         @relation("ClosedCashDrawers", fields: [closedByEmployeeId], references: [id], onDelete: Restrict)
+  openedAt             DateTime          @default(now())
+  closedAt             DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  transactions         CashTransaction[]
+
+  @@index([locationId, registerId, status])
+  @@map("cash_drawers")
+}
+
+model CashTransaction {
+  id                String              @id @default(uuid())
+  locationId        String
+  location          Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  cashDrawerId      String
+  cashDrawer        CashDrawer          @relation(fields: [cashDrawerId], references: [id], onDelete: Restrict)
+  ticketOrderId     String?
+  ticketOrder       TicketOrder?        @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  employeeId        String
+  employee          Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  type              CashTransactionType
+  amountCents       Int
+  cashReceivedCents Int?
+  changeGivenCents  Int?
+  reason            String?
+  idempotencyKey    String              @unique
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@index([cashDrawerId, createdAt])
+  @@index([ticketOrderId])
+  @@map("cash_transactions")
+}
+
+model Promotion {
+  id                    String        @id @default(uuid())
+  locationId            String
+  location              Location      @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  code                  String
+  name                  String
+  type                  PromotionType
+  amountCents           Int?
+  percentageBasisPoints Int?
+  minimumSubtotalCents  Int?
+  maximumRedemptions    Int?
+  active                Boolean       @default(true)
+  startsAt              DateTime?
+  endsAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  ticketOrders          TicketOrder[]
+
+  @@unique([locationId, code])
+  @@index([locationId, active])
+  @@map("promotions")
+}
+
+model Shift {
+  id                   String           @id @default(uuid())
+  employeeId           String
+  employee             Employee         @relation("EmployeeShifts", fields: [employeeId], references: [id], onDelete: Restrict)
+  locationId           String
+  location             Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  scheduledStartAt     DateTime?
+  scheduledEndAt       DateTime?
+  clockInAt            DateTime
+  clockOutAt           DateTime?
+  clockInMethod        ShiftClockMethod @default(PIN)
+  breakStartAt         DateTime?
+  breakEndAt           DateTime?
+  adjustedByEmployeeId String?
+  adjustedByEmployee   Employee?        @relation("AdjustedShifts", fields: [adjustedByEmployeeId], references: [id], onDelete: Restrict)
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  @@index([employeeId, clockInAt])
+  @@index([locationId, clockInAt])
+  @@map("shifts")
+}
+
 // Roles are organization-defined (an org could rename/reorganize roles over
 // time) but the *permissions* a role can be granted are a fixed, code-defined
 // catalog (see @cinema/auth) — never user-editable. This is a deliberate
@@ -700,9 +960,9 @@ model Role {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
-  // One of the fixed role keys in @cinema/auth's RoleKey enum
-  // (OWNER, GENERAL_MANAGER, CINEMA_MANAGER, RESTAURANT_MANAGER, BOX_OFFICE,
-  // SERVER, BARTENDER, KITCHEN, RUNNER, DOOR, ACCOUNTING, SUPPORT).
+  // Seeded roles use @cinema/auth's fixed RoleKey values; cinema-created
+  // roles receive an opaque CUSTOM_* key and still draw permissions only
+  // from the fixed Permission catalog.
   key  String
   name String
 
@@ -823,6 +1083,13 @@ model RestaurantTab {
   activePaymentMethodSetAt DateTime?
   autoSettleAt             DateTime?
   checkDroppedAt           DateTime?
+  checkDroppedByEmployeeId String?
+  checkDroppedByEmployee   Employee?                 @relation("DroppedRestaurantChecks", fields: [checkDroppedByEmployeeId], references: [id], onDelete: Restrict)
+  selectedTipCents         Int?
+  subtotalCents            Int?
+  taxCents                 Int?
+  serviceChargeCents       Int?
+  totalCents               Int?
   openedAt                 DateTime                  @default(now())
   closedAt                 DateTime?
   createdAt                DateTime                  @default(now())
@@ -830,6 +1097,7 @@ model RestaurantTab {
 
   seats           RestaurantTabSeat[]
   payments        Payment[]
+  receipt         RestaurantReceipt?
   orders          RestaurantOrder[]
   mergedTabs      RestaurantTab[]     @relation("MergedRestaurantTabs")
   mergedIntoTabId String?
@@ -868,8 +1136,9 @@ model KitchenStation {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  menuItems  MenuItem[]
-  orderItems RestaurantOrderItem[]
+  menuItems          MenuItem[]
+  orderItems         RestaurantOrderItem[]
+  fulfillmentTickets FulfillmentTicket[]
 
   @@unique([locationId, name])
   @@index([locationId, active])
@@ -894,27 +1163,79 @@ model MenuCategory {
 }
 
 model MenuItem {
-  id               String         @id @default(uuid())
+  id               String                   @id @default(uuid())
   menuCategoryId   String
-  menuCategory     MenuCategory   @relation(fields: [menuCategoryId], references: [id], onDelete: Restrict)
+  menuCategory     MenuCategory             @relation(fields: [menuCategoryId], references: [id], onDelete: Restrict)
   kitchenStationId String
-  kitchenStation   KitchenStation @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  kitchenStation   KitchenStation           @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
   name             String
   description      String?
+  imageUrl         String?
   priceCents       Int
-  active           Boolean        @default(true)
-  is86d            Boolean        @default(false)
-  sortOrder        Int            @default(0)
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  chargeCategory   RestaurantChargeCategory @default(FOOD)
+  isVegan          Boolean                  @default(false)
+  isGlutenFree     Boolean                  @default(false)
+  active           Boolean                  @default(true)
+  is86d            Boolean                  @default(false)
+  sortOrder        Int                      @default(0)
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
 
   modifierGroups ModifierGroup[]
   orderItems     RestaurantOrderItem[]
+  moviePairings  MoviePairing[]
 
   @@unique([menuCategoryId, name])
   @@index([menuCategoryId, active, sortOrder])
   @@index([kitchenStationId, active])
   @@map("menu_items")
+}
+
+model MoviePairing {
+  movieId    String
+  movie      Movie    @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  menuItemId String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@id([movieId, menuItemId])
+  @@index([menuItemId])
+  @@map("movie_pairings")
+}
+
+model TaxRule {
+  id           String                    @id @default(uuid())
+  locationId   String
+  location     Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name         String
+  appliesTo    RestaurantChargeAppliesTo
+  ratePermille Int
+  active       Boolean                   @default(true)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([locationId, name])
+  @@index([locationId, active])
+  @@map("tax_rules")
+}
+
+model ServiceChargeRule {
+  id           String                    @id @default(uuid())
+  locationId   String
+  location     Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name         String
+  appliesTo    RestaurantChargeAppliesTo
+  ratePermille Int?
+  flatCents    Int?
+  autoApply    Boolean                   @default(true)
+  active       Boolean                   @default(true)
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  @@unique([locationId, name])
+  @@index([locationId, active, autoApply])
+  @@map("service_charge_rules")
 }
 
 model ModifierGroup {
@@ -966,7 +1287,8 @@ model RestaurantOrder {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
-  items RestaurantOrderItem[]
+  items              RestaurantOrderItem[]
+  fulfillmentTickets FulfillmentTicket[]
 
   @@index([restaurantTabId, status])
   @@index([showtimeSeatId, status])
@@ -991,10 +1313,61 @@ model RestaurantOrderItem {
   status                 RestaurantOrderItemStatus @default(DRAFT)
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
+  fulfillmentTickets     FulfillmentTicket[]
 
   @@index([restaurantOrderId, status])
   @@index([kitchenStationId, status])
   @@map("restaurant_order_items")
+}
+
+model FulfillmentTicket {
+  id                String                  @id @default(uuid())
+  restaurantOrderId String
+  restaurantOrder   RestaurantOrder         @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
+  kitchenStationId  String
+  kitchenStation    KitchenStation          @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  tabLabel          String?
+  auditoriumName    String?
+  seatLabels        String[]
+  showtimeId        String?
+  showtimeStartsAt  DateTime?
+  serverName        String
+  status            FulfillmentTicketStatus @default(NEW)
+  firedAt           DateTime                @default(now())
+  acceptedAt        DateTime?
+  startedAt         DateTime?
+  readyAt           DateTime?
+  deliveredAt       DateTime?
+  refireCount       Int                     @default(0)
+  refiredFromId     String?
+  refiredFrom       FulfillmentTicket?      @relation("FulfillmentRefires", fields: [refiredFromId], references: [id], onDelete: Restrict)
+  refires           FulfillmentTicket[]     @relation("FulfillmentRefires")
+  items             RestaurantOrderItem[]
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([kitchenStationId, status, firedAt])
+  @@index([restaurantOrderId, status])
+  @@index([refiredFromId])
+  @@map("fulfillment_tickets")
+}
+
+model RestaurantReceipt {
+  id                 String        @id @default(uuid())
+  restaurantTabId    String        @unique
+  restaurantTab      RestaurantTab @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
+  receiptNumber      String        @unique
+  subtotalCents      Int
+  taxCents           Int
+  serviceChargeCents Int
+  tipCents           Int
+  totalCents         Int
+  tenderSummary      Json
+  issuedAt           DateTime      @default(now())
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  @@map("restaurant_receipts")
 }
 
 model CustomerAuthAccount {
@@ -1026,6 +1399,7 @@ model CustomerAuthAccount {
 enum AuditActorType {
   EMPLOYEE
   CUSTOMER
+  PLATFORM
   SYSTEM
 }
 
@@ -1033,7 +1407,7 @@ model AuditEvent {
   id String @id @default(uuid())
 
   actorType AuditActorType
-  // Employee.id, Customer.id, or null for actorType = SYSTEM.
+  // Employee.id, Customer.id, PlatformUser.id, or null for SYSTEM.
   actorId   String?
 
   action     String // e.g. "employee.login", "ticket.refunded"

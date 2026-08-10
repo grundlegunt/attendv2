@@ -54,6 +54,25 @@ export interface RetrievePaymentIntentArgs {
   paymentIntentId: string;
 }
 
+export interface ChargeSavedPaymentMethodArgs {
+  connectedAccountId?: string;
+  providerCustomerId: string;
+  providerPaymentMethodId: string;
+  amountCents: number;
+  currency: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}
+
+export interface CollectCardPresentPaymentArgs {
+  connectedAccountId?: string;
+  readerId: string;
+  amountCents: number;
+  currency: string;
+  metadata: Record<string, string>;
+  idempotencyKey: string;
+}
+
 export interface ProviderPaymentIntentResult {
   id: string;
   status: ProviderPaymentStatus;
@@ -152,6 +171,12 @@ export interface PaymentProvider {
   readonly name: string;
   createCustomer(args: CreateProviderCustomerArgs): Promise<{ id: string }>;
   createPaymentIntent(args: CreatePaymentIntentArgs): Promise<ProviderPaymentIntentResult>;
+  chargeSavedPaymentMethod(
+    args: ChargeSavedPaymentMethodArgs,
+  ): Promise<ProviderPaymentIntentResult>;
+  collectCardPresentPayment(
+    args: CollectCardPresentPaymentArgs,
+  ): Promise<ProviderPaymentIntentResult>;
   retrievePaymentIntent(args: RetrievePaymentIntentArgs): Promise<ProviderPaymentIntentResult>;
   refund(args: RefundArgs): Promise<RefundResult>;
   /**

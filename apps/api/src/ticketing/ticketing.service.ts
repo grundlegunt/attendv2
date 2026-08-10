@@ -58,6 +58,7 @@ export class TicketingService {
       })
       .then((showtime) => {
         if (!showtime) throw AppError.notFound("Showtime is not available.");
+        const env = loadEnv();
         return {
           showtimeId: showtime.id,
           locationId: showtime.auditorium.location.id,
@@ -65,14 +66,14 @@ export class TicketingService {
           ticketTypes: showtime.auditorium.location.ticketTypes,
           payment: {
             ready: Boolean(
-              process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY &&
-                process.env.STRIPE_SECRET_KEY &&
-                process.env.STRIPE_WEBHOOK_SECRET &&
+              env.PAYMENT_PROVIDER === "stripe" &&
+                env.STRIPE_PUBLISHABLE_KEY &&
+                env.STRIPE_SECRET_KEY &&
+                env.STRIPE_WEBHOOK_SECRET &&
                 showtime.auditorium.location.organization
                   .stripeConnectedAccountId,
             ),
-            publishableKey:
-              process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
+            publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null,
             connectedAccountId:
               showtime.auditorium.location.organization
                 .stripeConnectedAccountId,

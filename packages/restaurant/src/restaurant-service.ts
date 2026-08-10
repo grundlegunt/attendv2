@@ -1,4 +1,5 @@
 import {
+  FulfillmentTicketStatus,
   KitchenStation,
   MenuCategory,
   Prisma,
@@ -19,6 +20,10 @@ const summaryInclude = Prisma.validator<Prisma.RestaurantTabInclude>()({
   orders: {
     include: {
       items: { include: { menuItem: true, kitchenStation: true } },
+      fulfillmentTickets: {
+        include: { kitchenStation: true },
+        orderBy: { firedAt: "asc" },
+      },
     },
     orderBy: { createdAt: "asc" },
   },
@@ -127,7 +132,10 @@ export class RestaurantService {
     kitchenStationId: string;
     name: string;
     description?: string;
+    imageUrl?: string | null;
     priceCents: number;
+    isVegan: boolean;
+    isGlutenFree: boolean;
     sortOrder: number;
   }) {
     return this.prisma.$transaction(async (tx) => {
@@ -138,7 +146,10 @@ export class RestaurantService {
           kitchenStationId: input.kitchenStationId,
           name: input.name,
           description: input.description,
+          imageUrl: input.imageUrl,
           priceCents: input.priceCents,
+          isVegan: input.isVegan,
+          isGlutenFree: input.isGlutenFree,
           sortOrder: input.sortOrder,
         },
       });
@@ -253,7 +264,10 @@ export class RestaurantService {
     changes: {
       name?: string;
       description?: string | null;
+      imageUrl?: string | null;
       priceCents?: number;
+      isVegan?: boolean;
+      isGlutenFree?: boolean;
       active?: boolean;
       is86d?: boolean;
       sortOrder?: number;
@@ -332,7 +346,7 @@ export class RestaurantService {
       where: {
         id: input.tabId,
         locationId: input.locationId,
-        status: { in: ["PREAUTHORIZED", "OPEN"] },
+        status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"] },
       },
       include: { seats: true },
     });
@@ -461,7 +475,16 @@ export class RestaurantService {
           status: "DRAFT",
           restaurantTab: { locationId: input.locationId },
         },
-        include: { items: { include: { menuItem: true } }, restaurantTab: true },
+        include: {
+          items: { include: { menuItem: true } },
+          serverEmployee: true,
+          restaurantTab: {
+            include: {
+              showtime: { include: { auditorium: true } },
+              seats: { include: { showtimeSeat: { include: { seat: true } } } },
+            },
+          },
+        },
       });
       if (!order) throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
       if (!order.items.length) throw new RestaurantError("An empty order cannot be sent.", "INVALID");
@@ -522,6 +545,34 @@ export class RestaurantService {
           }),
         ),
       );
+      const itemsByStation = new Map<string, string[]>();
+      for (const item of sendableItems) {
+        const stationId = currentMenuItemById.get(item.menuItemId)!.kitchenStationId;
+        itemsByStation.set(stationId, [...(itemsByStation.get(stationId) ?? []), item.id]);
+      }
+      const fulfillmentTickets = await Promise.all(
+        [...itemsByStation.entries()].map(([kitchenStationId, itemIds]) =>
+          tx.fulfillmentTicket.create({
+            data: {
+              restaurantOrderId: order.id,
+              kitchenStationId,
+              tabLabel: order.restaurantTab.label,
+              auditoriumName: order.restaurantTab.showtime?.auditorium.name,
+              seatLabels: order.restaurantTab.seats
+                .filter(
+                  (seat) =>
+                    !order.showtimeSeatId ||
+                    seat.showtimeSeatId === order.showtimeSeatId,
+                )
+                .map((seat) => seat.showtimeSeat.seat.label),
+              showtimeId: order.restaurantTab.showtimeId,
+              showtimeStartsAt: order.restaurantTab.showtime?.startsAt,
+              serverName: order.serverEmployee.name,
+              items: { connect: itemIds.map((id) => ({ id })) },
+            },
+          }),
+        ),
+      );
       const sent = await tx.restaurantOrder.update({
         where: { id: order.id },
         data: { status: "SENT", placedAt: sentAt },
@@ -557,6 +608,7 @@ export class RestaurantService {
       });
       return {
         ...sent,
+        fulfillmentTickets,
         rejectedDraft: rejectedOrderId
           ? {
               orderId: rejectedOrderId,
@@ -571,6 +623,118 @@ export class RestaurantService {
             }
           : null,
       };
+    });
+  }
+
+  async getFulfillmentStations(input: { locationId: string }) {
+    return this.prisma.kitchenStation.findMany({
+      where: { locationId: input.locationId, active: true },
+      orderBy: { name: "asc" },
+    });
+  }
+
+  async getFulfillmentQueue(input: {
+    locationId: string;
+    kitchenStationId: string;
+  }) {
+    const station = await this.prisma.kitchenStation.findFirst({
+      where: {
+        id: input.kitchenStationId,
+        locationId: input.locationId,
+        active: true,
+      },
+    });
+    if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+    const tickets = await this.prisma.fulfillmentTicket.findMany({
+      where: {
+        kitchenStationId: station.id,
+        status: { in: ["NEW", "ACCEPTED", "PREPARING", "READY"] },
+      },
+      include: {
+        items: { include: { menuItem: true } },
+      },
+      orderBy: { firedAt: "asc" },
+    });
+    return { station, tickets };
+  }
+
+  async transitionFulfillmentTicket(input: {
+    ticketId: string;
+    locationId: string;
+    actorId: string;
+    action: "ACCEPT" | "START" | "READY" | "DELIVER" | "CANCEL" | "VOID" | "REFIRE";
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT ft."id" FROM "fulfillment_tickets" ft
+          JOIN "kitchen_stations" ks ON ks."id" = ft."kitchenStationId"
+          WHERE ft."id" = ${input.ticketId} AND ks."locationId" = ${input.locationId}
+          FOR UPDATE`,
+      );
+      const ticket = await tx.fulfillmentTicket.findFirst({
+        where: {
+          id: input.ticketId,
+          kitchenStation: { locationId: input.locationId },
+        },
+        include: { items: true },
+      });
+      if (!ticket) throw new RestaurantError("Fulfillment ticket was not found.", "NOT_FOUND");
+
+      const transition = this.fulfillmentTransition(ticket.status, input.action);
+      const now = new Date();
+      if (input.action === "REFIRE") {
+        const original = await tx.fulfillmentTicket.update({
+          where: { id: ticket.id },
+          data: { status: "REFIRE", refireCount: { increment: 1 } },
+        });
+        const refire = await tx.fulfillmentTicket.create({
+          data: {
+            restaurantOrderId: ticket.restaurantOrderId,
+            kitchenStationId: ticket.kitchenStationId,
+            tabLabel: ticket.tabLabel,
+            auditoriumName: ticket.auditoriumName,
+            seatLabels: ticket.seatLabels,
+            showtimeId: ticket.showtimeId,
+            showtimeStartsAt: ticket.showtimeStartsAt,
+            serverName: ticket.serverName,
+            refiredFromId: ticket.id,
+            refireCount: original.refireCount,
+            items: { connect: ticket.items.map((item) => ({ id: item.id })) },
+          },
+          include: { items: { include: { menuItem: true } } },
+        });
+        await this.updateRestaurantOrderRollup(tx, ticket.restaurantOrderId);
+        await this.auditFulfillmentTransition(
+          tx,
+          input,
+          ticket.status,
+          "REFIRE",
+          ticket.id,
+          refire.id,
+        );
+        return refire;
+      }
+
+      const updated = await tx.fulfillmentTicket.update({
+        where: { id: ticket.id },
+        data: {
+          status: transition,
+          ...(transition === "ACCEPTED" ? { acceptedAt: now } : {}),
+          ...(transition === "PREPARING" ? { startedAt: now } : {}),
+          ...(transition === "READY" ? { readyAt: now } : {}),
+          ...(transition === "DELIVERED" ? { deliveredAt: now } : {}),
+        },
+        include: { items: { include: { menuItem: true } } },
+      });
+      await this.updateRestaurantOrderRollup(tx, ticket.restaurantOrderId);
+      await this.auditFulfillmentTransition(
+        tx,
+        input,
+        ticket.status,
+        transition,
+        ticket.id,
+      );
+      return updated;
     });
   }
 
@@ -733,9 +897,10 @@ export class RestaurantService {
           status: "PAID",
         },
         include: {
+          location: true,
           tickets: {
             where: { status: { notIn: ["REFUNDED", "CANCELED"] } },
-            include: { showtimeSeat: true },
+            include: { showtimeSeat: { include: { showtime: true } } },
             orderBy: { showtimeSeatId: "asc" },
           },
           consents: {
@@ -803,6 +968,12 @@ export class RestaurantService {
             autoSettleAuthorized: Boolean(paymentMethod),
             activePaymentMethodId: paymentMethod?.id,
             activePaymentMethodSetAt: paymentMethod ? new Date() : null,
+            autoSettleAt: paymentMethod
+              ? new Date(
+                  tickets[0]!.showtimeSeat.showtime.endsAt.getTime() +
+                    order.location.autoSettleGraceMinutes * 60_000,
+                )
+              : null,
           },
         });
         for (const ticket of tickets) {
@@ -900,6 +1071,15 @@ export class RestaurantService {
           station: item.kitchenStation.name,
           status: item.status,
         })),
+        fulfillment: order.fulfillmentTickets.map((ticket) => ({
+          id: ticket.id,
+          station: ticket.kitchenStation.name,
+          status: ticket.status,
+          firedAt: ticket.firedAt.toISOString(),
+          readyAt: ticket.readyAt?.toISOString() ?? null,
+          deliveredAt: ticket.deliveredAt?.toISOString() ?? null,
+          refireCount: ticket.refireCount,
+        })),
       })),
     };
   }
@@ -937,6 +1117,92 @@ export class RestaurantService {
         entityId,
         locationId: input.locationId,
         afterState,
+      },
+    });
+  }
+
+  private fulfillmentTransition(
+    current: FulfillmentTicketStatus,
+    action: "ACCEPT" | "START" | "READY" | "DELIVER" | "CANCEL" | "VOID" | "REFIRE",
+  ): FulfillmentTicketStatus {
+    const transitions: Partial<
+      Record<
+        FulfillmentTicketStatus,
+        Partial<Record<typeof action, FulfillmentTicketStatus>>
+      >
+    > = {
+      NEW: { ACCEPT: "ACCEPTED", CANCEL: "CANCELED" },
+      ACCEPTED: { START: "PREPARING", CANCEL: "CANCELED" },
+      PREPARING: { READY: "READY", CANCEL: "CANCELED" },
+      READY: { DELIVER: "DELIVERED", VOID: "VOIDED" },
+      DELIVERED: { REFIRE: "REFIRE" },
+    };
+    const next = transitions[current]?.[action];
+    if (!next) {
+      throw new RestaurantError(
+        `Cannot ${action.toLowerCase()} a ${current.toLowerCase()} fulfillment ticket.`,
+        "CONFLICT",
+      );
+    }
+    return next;
+  }
+
+  private async updateRestaurantOrderRollup(
+    tx: Prisma.TransactionClient,
+    restaurantOrderId: string,
+  ) {
+    const tickets = await tx.fulfillmentTicket.findMany({
+      where: { restaurantOrderId },
+      include: { _count: { select: { refires: true } } },
+    });
+    const currentCycles = tickets.filter((ticket) => ticket._count.refires === 0);
+    const statuses = currentCycles.map((ticket) => ticket.status);
+    const delivered = statuses.filter((status) => status === "DELIVERED").length;
+    const allCanceledOrVoided = statuses.every(
+      (candidate) => candidate === "CANCELED" || candidate === "VOIDED",
+    );
+    const hasProgressHistory = tickets.some((ticket) => ticket.status !== "NEW");
+    const status =
+      allCanceledOrVoided
+        ? "CANCELED"
+        : delivered === statuses.length
+        ? "DELIVERED"
+        : delivered > 0
+          ? "PARTIALLY_DELIVERED"
+          : statuses.every((candidate) => candidate === "NEW") && !hasProgressHistory
+            ? "SENT"
+            : "IN_PROGRESS";
+    await tx.restaurantOrder.update({
+      where: { id: restaurantOrderId },
+      data: { status },
+    });
+  }
+
+  private auditFulfillmentTransition(
+    tx: Prisma.TransactionClient,
+    input: { locationId: string; actorId: string; action: string },
+    beforeStatus: FulfillmentTicketStatus,
+    afterStatus: FulfillmentTicketStatus,
+    entityId: string,
+    refireTicketId?: string,
+  ) {
+    return tx.auditEvent.create({
+      data: {
+        actorType: "EMPLOYEE",
+        actorId: input.actorId,
+        action:
+          input.action === "REFIRE"
+            ? "fulfillment_ticket.refired"
+            : "fulfillment_ticket.status_changed",
+        entityType: "FulfillmentTicket",
+        entityId,
+        locationId: input.locationId,
+        beforeState: { status: beforeStatus },
+        afterState: {
+          status: afterStatus,
+          action: input.action,
+          refireTicketId: refireTicketId ?? null,
+        },
       },
     });
   }

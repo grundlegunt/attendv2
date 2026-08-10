@@ -9,6 +9,8 @@ One deployable API service (NestJS) with hard internal module boundaries, backed
 
 ## 2. Why NestJS for the API, not a Next.js backend
 
+`customer-web` has one deliberately thin exception at `/api/v1`: a fixed-upstream same-origin proxy for browser customer traffic. It owns no domain logic or authorization and only relays an allowlisted set of customer-facing routes to NestJS. This boundary ensures HttpOnly customer session cookies remain first-party when the frontend and API are deployed on different provider domains; staff and administrative clients continue to call NestJS directly with bearer tokens.
+
 The spec allows either. NestJS is chosen because:
 
 - The domain has many long-lived server-side concerns that don't map well to Next.js route handlers: a real-time gateway (WebSocket rooms per showtime/auditorium/tab), scheduled jobs (settlement sweep, hold expiry reconciliation), a payment webhook processor with strict ordering/idempotency needs, and fine-grained RBAC guards applied uniformly across ~40+ endpoints.
@@ -103,7 +105,7 @@ flowchart TB
 
 ## 6. Real-time design
 
-Single WebSocket gateway, Redis-backed adapter so it scales across multiple API instances (Redis pub/sub fans events out to all instances, each instance pushes to its own connected sockets). Clients subscribe to rooms scoped to what they're looking at:
+The production scaling target is a single WebSocket gateway with a Redis-backed adapter so it scales across multiple API instances (Redis pub/sub fans events out to all instances, each instance pushes to its own connected sockets). Milestone 7 intentionally ships an in-process, station-scoped SSE notification channel for the initial single-instance release; KDS and staff POS independently re-fetch authoritative PostgreSQL state every two seconds, so missed notifications or instance mismatch only add bounded latency and never create stale authoritative state. Redis-backed cross-instance fan-out must be completed before deploying multiple load-balanced API instances. Clients subscribe to rooms scoped to what they're looking at:
 
 - `showtime:{id}` — seat map viewers (customer seat selection page, box office) receive `SEAT_HELD`, `SEAT_RELEASED`, `SEAT_SOLD`.
 - `auditorium:{id}:{showtimeId}` — server POS auditorium view receives seat/tab status changes for that screening.
@@ -115,7 +117,7 @@ Every event carries the authoritative post-change state (not just a delta) so a 
 
 ## 7. Deployment shape
 
-Docker-compatible from day one. Local dev: `docker-compose.yml` running Postgres, Redis, and the API; frontends run via `pnpm dev` per app or containerized. Production target (detailed in Milestone 11): containerized API behind a load balancer, managed Postgres, managed Redis, frontends deployed as their own services (e.g., Vercel or containers behind the same LB) — exact hosting choice deferred, see OPEN_QUESTIONS.md. No production secrets in source control; environment variables validated at boot (fail fast if a required secret is missing) using a schema in `/packages/config`.
+Docker-compatible from day one. Local dev: `docker-compose.yml` running Postgres, Redis, and the API; frontends run via `pnpm dev` per app or containerized. The Milestone 11 MVP topology is finalized in `OPERATIONS.md`: Vercel frontends, one active containerized API in the same region as managed Postgres and managed Redis, provider-managed Stripe/Postmark, and platform-managed secret storage. No production secrets live in source control; environment variables are validated at boot using `/packages/config`.
 
 ## 8. Observability (introduced incrementally, hardened in Milestone 11)
 

@@ -40,6 +40,7 @@ interface FakeStripeClientOverrides {
   refundsCreate?: jest.Mock;
   refundsList?: jest.Mock;
   refundsRetrieve?: jest.Mock;
+  processPaymentIntent?: jest.Mock;
 }
 
 function createFakeStripeClient(overrides: FakeStripeClientOverrides = {}): Stripe {
@@ -54,6 +55,7 @@ function createFakeStripeClient(overrides: FakeStripeClientOverrides = {}): Stri
       create: overrides.paymentIntentsCreate ?? jest.fn(),
       retrieve: jest.fn(),
     },
+    terminal: { readers: { processPaymentIntent: overrides.processPaymentIntent ?? jest.fn() } },
     webhooks: { constructEvent: jest.fn() },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any as Stripe;
@@ -64,6 +66,16 @@ function makeProvider(client: Stripe): StripePaymentProvider {
 }
 
 describe("StripePaymentProvider reusable payment authorization", () => {
+  it("does not process an idempotently replayed Terminal intent that already succeeded", async () => {
+    const intent = { id: "pi_terminal_done", status: "succeeded", amount: 1900, currency: "usd", metadata: { ticketOrderId: "order-1" }, payment_method: null };
+    const paymentIntentsCreate = jest.fn().mockResolvedValue(intent);
+    const processPaymentIntent = jest.fn();
+    const provider = makeProvider(createFakeStripeClient({ paymentIntentsCreate, processPaymentIntent }));
+
+    await expect(provider.collectCardPresentPayment({ readerId: "tmr_1", amountCents: 1900, currency: "USD", metadata: { ticketOrderId: "order-1" }, idempotencyKey: "box-office-card:request-1" })).resolves.toMatchObject({ id: "pi_terminal_done", status: "SUCCEEDED" });
+    expect(processPaymentIntent).not.toHaveBeenCalled();
+  });
+
   it("creates the provider customer idempotently on the connected account", async () => {
     const customersCreate = jest.fn().mockResolvedValue({ id: "cus_saved" });
     const provider = makeProvider(createFakeStripeClient({ customersCreate }));

@@ -50,6 +50,8 @@ cp apps/customer-web/.env.local.example apps/customer-web/.env.local
 cp apps/staff-pos/.env.local.example apps/staff-pos/.env.local
 cp apps/kds/.env.local.example apps/kds/.env.local
 cp apps/admin/.env.local.example apps/admin/.env.local
+# Attend Master uses NEXT_PUBLIC_API_URL, NEXT_PUBLIC_CINEMA_ADMIN_URL, and
+# NEXT_PUBLIC_CUSTOMER_WEB_URL when deployed; localhost defaults work in dev.
 ```
 
 ## Running it
@@ -60,6 +62,7 @@ pnpm --filter @cinema/customer-web dev   # :3000
 pnpm --filter @cinema/staff-pos dev      # :3001
 pnpm --filter @cinema/kds dev            # :3002
 pnpm --filter @cinema/admin dev          # :3003
+pnpm --filter @cinema/platform-admin dev # :3004 (Attend company operators)
 ```
 
 Or all at once from the root: `pnpm dev` (Turborepo runs every app's `dev` script in parallel).
@@ -71,9 +74,15 @@ Or all at once from the root: `pnpm dev` (Turborepo runs every app's `dev` scrip
 | Owner | owner@ridgelinecinema.test | `DevPassword123!` |
 | Server | server@ridgelinecinema.test | `DevPassword123!` |
 | Customer | customer@ridgelinecinema.test | `DevPassword123!` |
+| Attend platform operator | platform@attend.test | `DevPassword123!` |
 
 Log into `admin` or `staff-pos` with the Owner/Server accounts, `customer-web`
 with the Customer account.
+
+Production platform users are provisioned explicitly, never through the cinema
+admin. Set `PLATFORM_USER_EMAIL`, `PLATFORM_USER_NAME`, and a 12+ character
+`PLATFORM_USER_PASSWORD`, then run `pnpm platform-user:create` in the API
+environment. The command never prints the password or its hash.
 
 ## Testing
 

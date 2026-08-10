@@ -12,6 +12,26 @@ export const staffLoginRequestSchema = z.object({
 });
 export type StaffLoginRequest = z.infer<typeof staffLoginRequestSchema>;
 
+export const staffMfaVerifyRequestSchema = z.object({
+  challengeToken: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+}).strict();
+export type StaffMfaVerifyRequest = z.infer<typeof staffMfaVerifyRequestSchema>;
+
+export const staffMfaConfirmRequestSchema = z.object({
+  code: z.string().regex(/^\d{6}$/, "Enter the 6-digit code from your authenticator app."),
+}).strict();
+export type StaffMfaConfirmRequest = z.infer<typeof staffMfaConfirmRequestSchema>;
+
+export const staffPasswordChangeRequestSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(12).max(200),
+}).strict();
+export type StaffPasswordChangeRequest = z.infer<typeof staffPasswordChangeRequestSchema>;
+
+export const platformLoginRequestSchema = staffLoginRequestSchema;
+export type PlatformLoginRequest = z.infer<typeof platformLoginRequestSchema>;
+
 export const customerRegisterRequestSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
@@ -36,6 +56,11 @@ export interface AuthTokenResponse {
   expiresInSeconds: number;
 }
 
+export interface CustomerSessionResponse {
+  customer: AuthenticatedCustomer;
+  expiresInSeconds: number;
+}
+
 export interface AuthenticatedEmployee {
   id: string;
   name: string;
@@ -43,6 +68,18 @@ export interface AuthenticatedEmployee {
   locationId: string;
   roles: string[];
   permissions: string[];
+  timeClockEnabled: boolean;
+  mustChangePassword: boolean;
+  mfaEnabled: boolean;
+  mfaSetupRequired: boolean;
+  adminBranding: {
+    accentColor: string | null;
+    accentMutedColor: string | null;
+    backgroundColor: string | null;
+    surfaceColor: string | null;
+    textColor: string | null;
+    mutedTextColor: string | null;
+  };
 }
 
 export interface AuthenticatedCustomer {
@@ -50,4 +87,38 @@ export interface AuthenticatedCustomer {
   email: string | null;
   name: string | null;
   isGuest: boolean;
+}
+
+export interface AuthenticatedPlatformUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+export interface CustomerTicketSummary {
+  id: string;
+  status: string;
+  qrToken: string;
+  priceCentsPaid: number;
+  seatLabel: string;
+  movieTitle: string;
+  moviePosterUrl: string | null;
+  auditoriumName: string;
+  startsAt: string;
+}
+
+export interface CustomerTicketOrderSummary {
+  id: string;
+  orderNumber: string;
+  status: string;
+  totalCents: number;
+  currency: string;
+  createdAt: string;
+  locationName: string;
+  tickets: CustomerTicketSummary[];
+}
+
+export interface CustomerAccountResponse {
+  customer: AuthenticatedCustomer;
+  orders: CustomerTicketOrderSummary[];
 }
