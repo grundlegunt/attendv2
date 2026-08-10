@@ -46,9 +46,9 @@ Attend is multi-tenant SaaS: `Organization` is the tenant boundary, each theater
 
 ## Where it stands today, and where it's headed
 
-Milestones 0–4 are built: auth and RBAC, movies/showtimes/seat maps, concurrency-safe seat holds, real Stripe checkout with recovery/idempotency handling for edge cases (failed webhooks, double-clicks, mid-flight failures), and signed QR ticket issuance with staff scanning. Milestone 5 (seat-linked dining tabs) is in progress now.
+The complete Milestone 0–11 MVP foundation is implemented: tenant-scoped authentication and RBAC, cinema programming and reserved-seat ticketing, Stripe checkout and signed QR admission, seat-linked dining with server POS and kitchen/bar displays, restaurant settlement, box-office and workforce tools, management reporting and audits, and the initial security, observability, deployment, and critical-journey test coverage.
 
-Ahead, per IMPLEMENTATION_PLAN.md: the rest of the restaurant/POS build-out (Milestones 5–8), box-office POS and staff tooling (Milestone 9), management/reporting/audit tools (Milestone 10), and security/observability hardening (Milestone 11).
+Current work is focused on hardening those production workflows and expanding the operator experience—especially platform administration, cinema configuration and branding, scheduling, reporting accuracy, session reliability, and the remaining real-world payment and operational integrations. `IMPLEMENTATION_PLAN.md` remains the scope reference; the implementation itself is the authoritative status.
 
 Beyond the current milestone roadmap, active research/expansion threads include:
 
