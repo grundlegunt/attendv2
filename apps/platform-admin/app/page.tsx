@@ -115,7 +115,6 @@ type OrganizationDraft = {
   name: string;
   legalName: string;
   timezone: string;
-  onboardingStatus: string;
   ticketFee: string;
 };
 type OrganizationCreateDraft = {
@@ -235,6 +234,18 @@ export default function AttendMaster() {
   }, [session]);
 
   useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    const organizationId = params.get("organizationId");
+    const connectAction = params.get("connect");
+    if (!organizationId || !connectAction) return;
+    window.history.replaceState({}, "", window.location.pathname);
+    setSelectedOrganizationId(organizationId);
+    if (connectAction === "refresh") void startConnectOnboarding(organizationId);
+    if (connectAction === "return") void refreshConnectStatus(organizationId);
+  }, [session]);
+
+  useEffect(() => {
     if (!session || !selectedOrganizationId) {
       setOrganization(null);
       return;
@@ -287,7 +298,6 @@ export default function AttendMaster() {
       name: detail.name,
       legalName: detail.legalName ?? "",
       timezone: detail.timezone,
-      onboardingStatus: detail.payments.onboardingStatus,
       ticketFee: (detail.ticketFeeMinor / 100).toFixed(2),
     });
   }
@@ -401,6 +411,38 @@ export default function AttendMaster() {
           ? reason.message
           : "Could not save organization.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function startConnectOnboarding(organizationId = organization?.id) {
+    if (!session || !organizationId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await request<{ url: string }>(`/platform/organizations/${organizationId}/connect/onboarding-link`, {
+        method: "POST",
+        body: JSON.stringify({ origin: window.location.origin }),
+      }, session.accessToken);
+      window.location.assign(result.url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not start Stripe onboarding.");
+      setSaving(false);
+    }
+  }
+
+  async function refreshConnectStatus(organizationId = organization?.id) {
+    if (!session || !organizationId) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await request<OrganizationDetail>(`/platform/organizations/${organizationId}/connect/refresh`, { method: "POST" }, session.accessToken);
+      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not refresh Stripe onboarding status.");
     } finally {
       setSaving(false);
     }
@@ -748,7 +790,7 @@ export default function AttendMaster() {
                 <div className="org-actions">
                   <span
                     className={
-                      organization.payments.connected
+                      organization.payments.onboardingStatus === "COMPLETE"
                         ? "status good"
                         : "status warning"
                     }
@@ -757,6 +799,12 @@ export default function AttendMaster() {
                       ? `Payments ${organization.payments.onboardingStatus.toLowerCase()}`
                       : `Payments ${organization.payments.onboardingStatus.toLowerCase().replaceAll("_", " ")}`}
                   </span>
+                  {organization.payments.onboardingStatus !== "COMPLETE" && <button className="edit-button" disabled={saving} onClick={() => void startConnectOnboarding()}>
+                    {organization.payments.connected ? "Continue Stripe onboarding" : "Connect Stripe"}
+                  </button>}
+                  {organization.payments.connected && <button className="quiet" disabled={saving} onClick={() => void refreshConnectStatus()}>
+                    Refresh payment status
+                  </button>}
                   <button
                     className="edit-button"
                     onClick={() => beginOrganizationEdit(organization)}
@@ -835,28 +883,10 @@ export default function AttendMaster() {
                         }
                       />
                     </label>
-                    <label>
-                      Payment onboarding
-                      <select
-                        value={organizationDraft.onboardingStatus}
-                        onChange={(event) =>
-                          setOrganizationDraft({
-                            ...organizationDraft,
-                            onboardingStatus: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="NOT_STARTED">Not started</option>
-                        <option value="IN_PROGRESS">In progress</option>
-                        <option value="RESTRICTED">Restricted</option>
-                        <option value="COMPLETE">Complete</option>
-                      </select>
-                    </label>
                   </div>
                   <p className="form-note">
                     The ticket fee is controlled by Attend and applies to every
-                    ticket group for this client. Complete requires a Stripe
-                    connected account.
+                    ticket group for this client. Payment status is read from Stripe.
                   </p>
                   <button disabled={saving}>
                     {saving ? "Saving…" : "Save organization"}

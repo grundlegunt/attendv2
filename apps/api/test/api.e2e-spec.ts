@@ -428,11 +428,10 @@ describe("Attend platform authentication boundary", () => {
     const organization = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ legalName: "Meridian Cinema Co. LLC", onboardingStatus: "IN_PROGRESS" })
+      .send({ legalName: "Meridian Cinema Co. LLC" })
       .expect(200);
     expect(organization.body).toEqual(expect.objectContaining({
       legalName: "Meridian Cinema Co. LLC",
-      payments: expect.objectContaining({ onboardingStatus: "IN_PROGRESS" }),
     }));
 
     const location = await request(app.getHttpServer())
@@ -471,14 +470,9 @@ describe("Attend platform authentication boundary", () => {
       .set("Authorization", `Bearer ${platformAccessToken}`)
       .send({ preShowBufferMinutes: 30, timeClockEnabled: true })
       .expect(200);
-    await request(app.getHttpServer())
-      .patch(`/api/v1/platform/organizations/${organizationId}`)
-      .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ onboardingStatus: "NOT_STARTED" })
-      .expect(200);
   });
 
-  it("does not let an Attend operator mark payments complete without a connected Stripe account", async () => {
+  it("creates hosted Stripe onboarding and derives payment status from the connected account", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")
       .set("Authorization", `Bearer ${platformAccessToken}`)
@@ -489,12 +483,41 @@ describe("Attend platform authentication boundary", () => {
     expect(meridian).toBeDefined();
     const organizationId = meridian.id as string;
 
-    const result = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ onboardingStatus: "COMPLETE" });
-    expect(result.status).toBe(400);
-    expect(result.body.code).toBe("VALIDATION_FAILED");
+      .send({ onboardingStatus: "COMPLETE" })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${organizationId}/connect/onboarding-link`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ origin: "http://localhost:3004" })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${organizationId}/connect/onboarding-link`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ origin: "https://attacker.example" })
+      .expect(400);
+
+    const link = await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${organizationId}/connect/onboarding-link`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ origin: "http://localhost:3004" })
+      .expect(201);
+    expect(link.body.url).toContain(`organizationId=${organizationId}`);
+    expect(link.body.url).toContain("connect=return");
+
+    const refreshed = await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${organizationId}/connect/refresh`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(201);
+    expect(refreshed.body.payments).toEqual({ connected: true, onboardingStatus: "COMPLETE" });
+
+    const { prisma } = await import("@cinema/database");
+    const audit = await prisma.auditEvent.findFirst({ where: { actorType: "PLATFORM", action: "platform.connect_status_refreshed", entityId: organizationId }, orderBy: { createdAt: "desc" } });
+    expect(audit?.afterState).toEqual(expect.objectContaining({ onboardingStatus: "COMPLETE", chargesEnabled: true, payoutsEnabled: true }));
   });
 
   it("rejects an Attend operator token from cinema staff routes", async () => {
