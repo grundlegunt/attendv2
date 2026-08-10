@@ -183,6 +183,9 @@ importers:
 
   apps/customer-web:
     dependencies:
+      '@cinema/config':
+        specifier: workspace:*
+        version: link:../../packages/config
       '@cinema/database':
         specifier: workspace:*
         version: link:../../packages/database

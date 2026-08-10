@@ -2,6 +2,7 @@ import { prisma } from "@cinema/database";
 import { StripePaymentProvider } from "@cinema/payments";
 import { PostmarkEmailProvider } from "@cinema/notifications";
 import { TicketingError, TicketingService } from "@cinema/ticketing";
+import { loadStripeEnv } from "@cinema/config/env";
 
 export class CheckoutRouteError extends Error {
   constructor(
@@ -14,14 +15,14 @@ export class CheckoutRouteError extends Error {
 }
 
 export function getTicketingService() {
-  const secretKey = process.env.STRIPE_SECRET_KEY;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  let stripe: ReturnType<typeof loadStripeEnv>;
+  try { stripe = loadStripeEnv(); } catch {
+    throw new CheckoutRouteError(503, "PAYMENT_CONFIGURATION_REQUIRED", "Stripe payments have not been configured for this environment.");
+  }
   const qrCredentialSecret = process.env.QR_CREDENTIAL_SECRET;
   const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
   const emailFrom = process.env.EMAIL_FROM;
   if (
-    !secretKey ||
-    !webhookSecret ||
     !qrCredentialSecret ||
     qrCredentialSecret.length < 32 ||
     !postmarkToken ||
@@ -30,12 +31,12 @@ export function getTicketingService() {
     throw new CheckoutRouteError(
       503,
       "PAYMENT_CONFIGURATION_REQUIRED",
-      "Stripe test payments have not been connected to this preview yet.",
+      "Payments have not been connected to this environment yet.",
     );
   }
   return new TicketingService(
     prisma,
-    new StripePaymentProvider(secretKey, webhookSecret),
+    new StripePaymentProvider(stripe.STRIPE_SECRET_KEY, stripe.STRIPE_WEBHOOK_SECRET),
     qrCredentialSecret,
     new PostmarkEmailProvider(postmarkToken, emailFrom),
   );
