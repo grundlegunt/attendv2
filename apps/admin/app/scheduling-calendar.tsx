@@ -255,6 +255,16 @@ export function SchedulingCalendar({
       || startsAt.getTime() !== new Date(showtime.startsAt).getTime());
   }
 
+  function showtimeAtDropPoint(event: React.DragEvent<HTMLDivElement>) {
+    const blocks = Array.from(event.currentTarget.querySelectorAll<HTMLElement>("[data-showtime-id]"));
+    const block = blocks.find((candidate) => {
+      const bounds = candidate.getBoundingClientRect();
+      return event.clientX >= bounds.left && event.clientX <= bounds.right
+        && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+    });
+    return showtimes.find((item) => item.id === block?.dataset.showtimeId);
+  }
+
   async function dropOnTimeline(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, start: Date) {
     event.preventDefault();
     const key = event.dataTransfer.getData("text/plain") || draggingKey;
@@ -271,8 +281,11 @@ export function SchedulingCalendar({
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
-    const dropTargetId = (event.target as HTMLElement).closest<HTMLElement>("[data-showtime-id]")?.dataset.showtimeId;
-    const dropTarget = showtimes.find((item) => item.id === dropTargetId);
+    // The drop preview is deliberately rendered over the timeline. Looking at
+    // event.target therefore misses the showtime underneath it. Resolve the
+    // destination from the rendered block bounds instead so dropping anywhere
+    // on a block consistently triggers a room swap.
+    const dropTarget = showtimeAtDropPoint(event);
     if (dropTarget && dropTarget.id !== showtime.id && dropTarget.auditorium.id !== showtime.auditorium.id) {
       await onMoveMany(swappedRoomMoves(showtime, dropTarget));
       setSelectedShowtimeIds([showtime.id, dropTarget.id]);
