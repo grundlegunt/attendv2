@@ -20,7 +20,17 @@ export async function apiFetch<T>(
   headers.set("Content-Type", "application/json");
   if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers, credentials: "include" });
+  let scopedPath = path;
+  if (typeof window !== "undefined") {
+    const requestedLocationId = new URLSearchParams(window.location.search).get("locationId");
+    if (requestedLocationId) window.sessionStorage.setItem("attend-customer-location", requestedLocationId);
+    const locationId = requestedLocationId ?? window.sessionStorage.getItem("attend-customer-location") ?? process.env.NEXT_PUBLIC_LOCATION_ID;
+    if (locationId && !new URL(path, window.location.origin).searchParams.has("locationId")) {
+      scopedPath += `${path.includes("?") ? "&" : "?"}locationId=${encodeURIComponent(locationId)}`;
+    }
+  }
+
+  const res = await fetch(`${API_BASE_URL}${scopedPath}`, { ...init, headers, credentials: "include" });
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({ code: "INTERNAL_ERROR", message: res.statusText }))) as ApiErrorBody;

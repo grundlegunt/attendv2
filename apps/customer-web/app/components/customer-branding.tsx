@@ -26,10 +26,8 @@ export function CustomerBrandingProvider({ children }: { children: ReactNode }) 
   const [branding, setBranding] = useState<PublicBranding | null>(null);
   const [content, setContent] = useState<CinemaContent>(cinemaContentDefaults);
   useEffect(() => {
-    const locationId = process.env.NEXT_PUBLIC_LOCATION_ID;
-    const query = locationId ? `?locationId=${encodeURIComponent(locationId)}` : "";
-    apiFetch<PublicBranding>(`/cinema/branding${query}`).then(setBranding).catch(() => undefined);
-    apiFetch<{ content: CinemaContent }>(`/cinema/content${query}`).then((response) => setContent(response.content)).catch(() => undefined);
+    apiFetch<PublicBranding>("/cinema/branding").then(setBranding).catch(() => undefined);
+    apiFetch<{ content: CinemaContent }>("/cinema/content").then((response) => setContent(response.content)).catch(() => undefined);
   }, []);
   useEffect(() => {
     if (!branding) return;

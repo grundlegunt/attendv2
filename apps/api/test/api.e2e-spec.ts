@@ -384,6 +384,39 @@ describe("Attend platform authentication boundary", () => {
     }));
   });
 
+  it("lets an Attend operator provision a non-MFA cinema manager for an isolated location", async () => {
+    const overview = await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200);
+    const bluebird = overview.body.organizations.find((organization: { name: string }) => organization.name === "Bluebird Cinema Co.");
+    expect(bluebird).toBeDefined();
+    const email = `bluebird-manager@${SEED_SUFFIX}`;
+    const password = "CinemaSandboxPassword123!";
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${bluebird.id}/locations/${bluebird.locations[0].id}/cinema-manager`)
+      .send({ name: "Bluebird Manager", email, password })
+      .expect(401);
+
+    const created = await request(app.getHttpServer())
+      .post(`/api/v1/platform/organizations/${bluebird.id}/locations/${bluebird.locations[0].id}/cinema-manager`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ name: "Bluebird Manager", email, password })
+      .expect(201);
+    expect(created.body).toMatchObject({ email, role: "CINEMA_MANAGER", mfaRequired: false });
+
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email, password })
+      .expect(200);
+    expect(login.body).toEqual(expect.objectContaining({
+      accessToken: expect.any(String),
+      employee: expect.objectContaining({ locationId: bluebird.locations[0].id, roles: ["CINEMA_MANAGER"] }),
+    }));
+    expect(login.body.mfaRequired).not.toBe(true);
+  });
+
   it("lets only an Attend operator update organization and location configuration", async () => {
     const overview = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")
