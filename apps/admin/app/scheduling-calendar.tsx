@@ -131,6 +131,7 @@ export function SchedulingCalendar({
   const [selectedShowtimeIds, setSelectedShowtimeIds] = useState<string[]>([]);
   const [shiftMinutes, setShiftMinutes] = useState(60);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
+  const [dropTargetShowtimeId, setDropTargetShowtimeId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [selectedMovieId, setSelectedMovieId] = useState<string | null>(initialSelectedMovieId);
   const [filmQuery, setFilmQuery] = useState("");
@@ -263,12 +264,21 @@ export function SchedulingCalendar({
       && targetTimeMs < new Date(item.roomReadyAt).getTime());
   }
 
-  async function dropOnTimeline(event: React.DragEvent<HTMLDivElement>, auditoriumId: string, start: Date) {
+  async function dropOnTimeline(
+    event: React.DragEvent<HTMLDivElement>,
+    auditoriumId: string,
+    start: Date,
+    explicitDropTarget?: CalendarShowtime,
+  ) {
     event.preventDefault();
+    event.stopPropagation();
     const key = event.dataTransfer.getData("text/plain") || draggingKey;
-    const targetTime = dropPreview?.auditoriumId === auditoriumId ? dropPreview.startsAt : timeAtPointer(event, start);
+    const targetTime = explicitDropTarget
+      ? new Date(explicitDropTarget.startsAt)
+      : dropPreview?.auditoriumId === auditoriumId ? dropPreview.startsAt : timeAtPointer(event, start);
     setDraggingKey(null);
     setDropPreview(null);
+    setDropTargetShowtimeId(null);
     if (key?.startsWith("movie:")) {
       const movieId = key.slice("movie:".length);
       const movie = movies.find((item) => item.id === movieId);
@@ -283,7 +293,7 @@ export function SchedulingCalendar({
     // ghost can offset the pointer from the rendered block even when the user
     // visibly drops on it, while the occupied time range is the actual source
     // of truth for which showing is being targeted.
-    const dropTarget = showtimeAtDropTime(auditoriumId, targetTime, showtime.id);
+    const dropTarget = explicitDropTarget ?? showtimeAtDropTime(auditoriumId, targetTime, showtime.id);
     if (dropTarget && dropTarget.id !== showtime.id && dropTarget.auditorium.id !== showtime.auditorium.id) {
       await onMoveMany(swappedRoomMoves(showtime, dropTarget));
       setSelectedShowtimeIds([showtime.id, dropTarget.id]);
@@ -390,9 +400,14 @@ export function SchedulingCalendar({
   const draggedMovie = draggingKey?.startsWith("movie:")
     ? movies.find((movie) => movie.id === draggingKey.slice("movie:".length))
     : draggedShowtime?.movie;
+  const explicitDropTarget = draggedShowtime && dropTargetShowtimeId
+    ? visibleShowtimes.find((showtime) => showtime.id === dropTargetShowtimeId)
+    : undefined;
   const resolvedDropPreview = dropPreview && draggedMovie ? {
     auditoriumId: dropPreview.auditoriumId,
-    startsAt: draggedSelection.length > 1 ? roundToFive(dropPreview.startsAt) : availableStart(
+    startsAt: explicitDropTarget
+      ? new Date(explicitDropTarget.startsAt)
+      : draggedSelection.length > 1 ? roundToFive(dropPreview.startsAt) : availableStart(
       dropPreview.auditoriumId,
       dropPreview.startsAt,
       preShowBufferMinutes + draggedMovie.runtimeMinutes + cleaningBufferMinutes,
@@ -485,6 +500,7 @@ export function SchedulingCalendar({
               onDoubleClick={(event) => createAtPointer(event, auditorium.id)}
               onDragOver={(event) => {
                 event.preventDefault();
+                setDropTargetShowtimeId(null);
                 const startsAt = timeAtPointer(event, dayStart);
                 if (dropPreview?.auditoriumId !== auditorium.id || dropPreview.startsAt.getTime() !== startsAt.getTime()) {
                   setDropPreview({ auditoriumId: auditorium.id, startsAt });
@@ -521,8 +537,23 @@ export function SchedulingCalendar({
                     event.dataTransfer.setData("text/plain", key);
                     if (!selectedShowtimeIds.includes(showtime.id)) setSelectedShowtimeIds([showtime.id]);
                     setDraggingKey(key);
+                    setDropTargetShowtimeId(null);
                   }}
-                  onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
+                  onDragOver={(event) => {
+                    if (!draggingKey?.startsWith("showtime:") || draggingKey === `showtime:${showtime.id}`) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setDropTargetShowtimeId(showtime.id);
+                    const startsAt = new Date(showtime.startsAt);
+                    if (dropPreview?.auditoriumId !== showtime.auditorium.id || dropPreview.startsAt.getTime() !== startsAt.getTime()) {
+                      setDropPreview({ auditoriumId: showtime.auditorium.id, startsAt });
+                    }
+                  }}
+                  onDrop={(event) => {
+                    if (!draggingKey?.startsWith("showtime:") || draggingKey === `showtime:${showtime.id}`) return;
+                    void dropOnTimeline(event, showtime.auditorium.id, dayStart, showtime);
+                  }}
+                  onDragEnd={() => { setDraggingKey(null); setDropPreview(null); setDropTargetShowtimeId(null); }}
                 >
                   <button type="button" className="showtime-block" onClick={(event) => {
                     event.stopPropagation();
