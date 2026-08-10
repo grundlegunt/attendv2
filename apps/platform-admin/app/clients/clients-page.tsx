@@ -272,10 +272,12 @@ export default function AttendMaster() {
       .then((nextOrganization) => {
         setOrganization(nextOrganization);
         const params = new URLSearchParams(window.location.search);
-        if (params.get("section") !== "content") return;
+        const section = params.get("section");
+        if (section !== "content" && section !== "branding") return;
         const locationId = params.get("locationId");
         const location = nextOrganization.locations.find((item) => item.id === locationId) ?? nextOrganization.locations[0];
-        if (location) setContentDraft({ id: location.id, values: structuredClone(location.content.draft) });
+        if (location && section === "content") setContentDraft({ id: location.id, values: structuredClone(location.content.draft) });
+        if (location && section === "branding") beginLocationEdit(location);
       })
       .catch((reason: unknown) =>
         setError(
@@ -704,6 +706,7 @@ export default function AttendMaster() {
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
         <Link href="/content">Content</Link>
+        <Link href="/branding">Branding</Link>
         <Link href="/team">Team</Link>
         <Link href="/audit">Audit Log</Link>
       </nav>
