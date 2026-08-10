@@ -1,10 +1,20 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@cinema/database";
+import { Prisma, prisma } from "@cinema/database";
 
 export interface ReportRange { from: Date; to: Date }
 
 @Injectable()
 export class ReportingService {
+  async customerRecency(locationId: string, inactiveSince: Date, limit: number) {
+    const completedOrder: Prisma.TicketOrderWhereInput = { locationId, status: { in: ["PAID", "EXCHANGED"] } };
+    const where: Prisma.CustomerWhereInput = { ticketOrders: { some: completedOrder, none: { ...completedOrder, createdAt: { gt: inactiveSince } } } };
+    const [total, customers] = await Promise.all([
+      prisma.customer.count({ where }),
+      prisma.customer.findMany({ where, select: { id: true, name: true, email: true, ticketOrders: { where: completedOrder, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true, orderNumber: true, totalCents: true } } }, orderBy: { name: "asc" }, take: limit }),
+    ]);
+    return { inactiveSince, total, preview: customers.map(({ ticketOrders, ...customer }) => ({ ...customer, name: customer.name ?? "Guest", email: customer.email ?? "No email", lastPurchaseAt: ticketOrders[0]!.createdAt, lastOrderNumber: ticketOrders[0]!.orderNumber, lastOrderTotalCents: ticketOrders[0]!.totalCents })) };
+  }
+
   async revenue(locationId: string, range: ReportRange) {
     const [ticketOrders, tabs] = await Promise.all([
       prisma.ticketOrder.findMany({

@@ -18,6 +18,7 @@ type AuditEvent = {
 type PromotionType = "FIXED_AMOUNT" | "PERCENTAGE" | "COMP";
 type PromotionDraft = { code: string; name: string; type: PromotionType; value: number; minimumSubtotal: number; maximumRedemptions: number; startsAt: string; endsAt: string };
 type Promotion = { id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalTicketFaceValueCents: number; totalCollectedCents: number; totalDiscountCents: number };
+type CustomerRecencySegment = { inactiveSince: string; total: number; preview: Array<{ id: string; name: string; email: string; lastPurchaseAt: string; lastOrderNumber: string; lastOrderTotalCents: number }> };
 type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
 type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
 
@@ -45,6 +46,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditActorId, setAuditActorId] = useState("");
   const [promotion, setPromotion] = useState<PromotionDraft>(emptyPromotion);
   const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
+  const [inactiveSince, setInactiveSince] = useState(dateInput(new Date(Date.now() - 365 * 86_400_000)));
+  const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
   const canReports = permissions.includes("reports.view");
@@ -119,6 +122,11 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       await apiFetch(`/management/settings/promotions/${item.id}`, { accessToken, method: "PATCH", body: JSON.stringify({ active: !item.active }) });
       await refresh();
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
+  }
+  async function previewCustomerSegment(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    try { setCustomerSegment(await apiFetch<CustomerRecencySegment>(`/reports/customer-recency?inactiveSince=${encodeURIComponent(new Date(`${inactiveSince}T23:59:59`).toISOString())}&limit=25`, { accessToken })); }
+    catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The customer segment could not be previewed."); }
   }
 
   async function exportHours() {
@@ -205,6 +213,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Ends (optional)<input type="datetime-local" value={promotion.endsAt} onChange={(event) => setPromotion({ ...promotion, endsAt: event.target.value })} /></label>
         <button className="primary">Create promotion</button>
       </form>
+      {canReports && <section className="segment-preview"><p className="kicker">CUSTOMER SEGMENT</p><h3>Win-back audience preview</h3><p>Find registered customers whose most recent completed ticket purchase was on or before a chosen date. This preview does not send or enroll anyone in marketing.</p><form className="report-range" onSubmit={(event) => void previewCustomerSegment(event)}><label>Last purchased on or before<input type="date" required value={inactiveSince} onChange={(event) => setInactiveSince(event.target.value)} /></label><button className="secondary">Preview customers</button></form>{customerSegment && <><p><strong>{customerSegment.total}</strong> matching customers</p><div className="management-table"><div className="table-row table-head"><span>Customer</span><span>Last purchase</span><span>Order</span><span>Total</span></div>{customerSegment.preview.map((customer) => <div className="table-row" key={customer.id}><strong>{customer.name}<small>{customer.email}</small></strong><span>{new Date(customer.lastPurchaseAt).toLocaleDateString()}</span><span>{customer.lastOrderNumber}</span><span>{money(customer.lastOrderTotalCents)}</span></div>)}</div>{customerSegment.total > customerSegment.preview.length && <small>Showing the first {customerSegment.preview.length} customers.</small>}</>}</section>}
       <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalTicketFaceValueCents)} face value · {money(item.totalCollectedCents)} collected · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><div className="promotion-actions"><button type="button" className="secondary" onClick={() => setPromotionEdit({ id: item.id, draft: promotionDraft(item) })}>Edit</button><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></div></article>)}</div>
       {promotionEdit && <form className="promotion-form" onSubmit={(event) => void savePromotion(event)}>
         <div className="management-heading"><div><p className="kicker">EDIT PROMOTION</p><h3>{promotionEdit.draft.code}</h3></div><button type="button" className="secondary" onClick={() => setPromotionEdit(null)}>Cancel</button></div>

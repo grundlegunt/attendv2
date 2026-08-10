@@ -43,6 +43,15 @@ export class ReportingController {
     response.send(this.reporting.laborCsv(report.rows));
   }
 
+  @Get("customer-recency")
+  customerRecency(@CurrentActor() actor: RequestActor, @Query("inactiveSince") inactiveSince?: string, @Query("limit") limit?: string) {
+    const cutoff = inactiveSince ? new Date(inactiveSince) : new Date(NaN);
+    const previewLimit = limit == null ? 25 : Number(limit);
+    if (Number.isNaN(cutoff.getTime())) throw AppError.validationFailed("A valid inactiveSince date is required.");
+    if (!Number.isInteger(previewLimit) || previewLimit < 1 || previewLimit > 100) throw AppError.validationFailed("Preview limit must be between 1 and 100.");
+    return this.reporting.customerRecency(this.location(actor), cutoff, previewLimit);
+  }
+
   private location(actor: RequestActor) {
     if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
     return actor.locationId;
