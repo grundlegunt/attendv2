@@ -151,6 +151,7 @@ export default function PlatformDashboard() {
         <Link href="/clients">Clients</Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
+        <Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
       <section className="dashboard-summary" aria-label="Platform metrics">

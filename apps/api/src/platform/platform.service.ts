@@ -73,6 +73,65 @@ export class PlatformService {
     };
   }
 
+  async auditEvents(input: { limit?: string; offset?: string; organizationId?: string; action?: string; actorId?: string; from?: string; to?: string }) {
+    const take = Math.max(1, Math.min(Number(input.limit) || 100, 200));
+    const skip = Math.max(0, Math.min(Number(input.offset) || 0, 10_000));
+    const start = input.from ? new Date(input.from) : undefined;
+    const end = input.to ? new Date(input.to) : undefined;
+    if ((start && Number.isNaN(start.getTime())) || (end && Number.isNaN(end.getTime())) || (start && end && start >= end)) {
+      throw AppError.validationFailed("A valid audit date range is required.");
+    }
+    const where: Prisma.AuditEventWhereInput = {
+      actorType: "PLATFORM",
+      ...(input.action ? { action: { contains: input.action, mode: "insensitive" } } : {}),
+      ...(input.actorId ? { actorId: input.actorId } : {}),
+      ...((start || end) ? { occurredAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } } : {}),
+      ...(input.organizationId ? { OR: [
+        { location: { organizationId: input.organizationId } },
+        { entityType: "Organization", entityId: input.organizationId },
+      ] } : {}),
+    };
+    const [events, total] = await prisma.$transaction([
+      prisma.auditEvent.findMany({
+        where,
+        orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
+        take,
+        skip,
+        include: { location: { select: { name: true, organization: { select: { id: true, name: true } } } } },
+      }),
+      prisma.auditEvent.count({ where }),
+    ]);
+    const organizationEventIds = [...new Set(events.filter((event) => event.entityType === "Organization").map((event) => event.entityId))];
+    const [actors, organizations] = await Promise.all([
+      prisma.platformUser.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, email: true } }),
+      prisma.organization.findMany({ where: { id: { in: organizationEventIds } }, select: { id: true, name: true } }),
+    ]);
+    const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+    const organizationById = new Map(organizations.map((organization) => [organization.id, organization]));
+    return {
+      total,
+      limit: take,
+      offset: skip,
+      actors,
+      events: events.map((event) => {
+        const actor = event.actorId ? actorById.get(event.actorId) : undefined;
+        const organization = event.location?.organization ?? (event.entityType === "Organization" ? organizationById.get(event.entityId) : undefined);
+        return {
+          id: event.id,
+          occurredAt: event.occurredAt.toISOString(),
+          action: event.action,
+          entityType: event.entityType,
+          entityId: event.entityId,
+          actor: actor ? { id: actor.id, name: actor.name, email: actor.email } : null,
+          organization: organization ? { id: organization.id, name: organization.name } : null,
+          location: event.location ? { name: event.location.name } : null,
+          beforeState: event.beforeState,
+          afterState: event.afterState,
+        };
+      }),
+    };
+  }
+
   async createOrganization(input: { actorId: string; name: string; legalName?: string | null; timezone: string; location: { name: string; address?: string | null; timezone: string } }) {
     const organizationId = await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
