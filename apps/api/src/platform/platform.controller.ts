@@ -88,6 +88,12 @@ export class PlatformController {
     return this.platform.overview();
   }
 
+  @Get("revenue")
+  @UseGuards(PlatformAuthGuard)
+  revenue(@Query("from") from?: string, @Query("to") to?: string) {
+    return this.platform.revenue({ from, to });
+  }
+
   @Get("audit-events")
   @UseGuards(PlatformAuthGuard)
   auditEvents(@Query("limit") limit?: string, @Query("offset") offset?: string, @Query("organizationId") organizationId?: string, @Query("action") action?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
