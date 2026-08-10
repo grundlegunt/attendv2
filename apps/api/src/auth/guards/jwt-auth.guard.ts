@@ -36,9 +36,9 @@ export class JwtAuthGuard implements CanActivate {
       if (actor.actorType === "EMPLOYEE") {
         const employee = await prisma.employee.findUnique({
           where: { id: actor.sub },
-          select: { active: true, location: { select: { organization: { select: { active: true } } } } },
+          select: { location: { select: { organization: { select: { active: true } } } } },
         });
-        if (!employee?.active || !employee.location.organization.active) {
+        if (!employee?.location.organization.active) {
           throw AppError.unauthenticated("This cinema account is currently inactive.");
         }
       }
