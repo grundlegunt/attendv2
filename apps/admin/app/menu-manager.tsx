@@ -4,7 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 interface Menu {
-  stations: Array<{ id: string; name: string; displayType: string }>;
+  stations: Array<{ id: string; name: string; displayType: string; active: boolean }>;
   categories: Array<{
     id: string;
     name: string;
@@ -59,6 +59,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingCategorySortOrder, setEditingCategorySortOrder] = useState(0);
   const [stationName, setStationName] = useState("");
   const [stationDisplayType, setStationDisplayType] = useState("KITCHEN");
+  const [editingStationId, setEditingStationId] = useState("");
+  const [editingStationName, setEditingStationName] = useState("");
+  const [editingStationDisplayType, setEditingStationDisplayType] = useState("");
   const [modifierItemId, setModifierItemId] = useState("");
   const [modifierGroupName, setModifierGroupName] = useState("");
   const [modifierSelectionType, setModifierSelectionType] = useState<
@@ -217,6 +220,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       refresh();
     } catch (error) {
       showError(error, "Station could not be created.");
+    }
+  }
+
+  async function updateStation(
+    station: Menu["stations"][number],
+    changes: { name?: string; displayType?: string; active?: boolean },
+  ) {
+    try {
+      await apiFetch(`/restaurant-menu/stations/${station.id}`, {
+        method: "PATCH",
+        accessToken,
+        body: JSON.stringify(changes),
+      });
+      setEditingStationId("");
+      setMessage("Kitchen station updated.");
+      refresh();
+    } catch (error) {
+      showError(error, "Station could not be updated.");
     }
   }
 
@@ -433,13 +454,39 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             />
           </label>
           <button className="primary">Add station</button>
-          <ul>
+          <div className="category-admin-list">
             {menu?.stations.map((station) => (
-              <li key={station.id}>
-                {station.name} · {station.displayType}
-              </li>
+              <article key={station.id}>
+                {editingStationId === station.id ? (
+                  <>
+                    <label>
+                      Station name
+                      <input required value={editingStationName} onChange={(event) => setEditingStationName(event.target.value)} />
+                    </label>
+                    <label>
+                      Display type
+                      <input required value={editingStationDisplayType} onChange={(event) => setEditingStationDisplayType(event.target.value)} />
+                    </label>
+                    <div className="rule-actions">
+                      <button className="secondary" type="button" onClick={() => void updateStation(station, { name: editingStationName, displayType: editingStationDisplayType })}>Save</button>
+                      <button className="secondary" type="button" onClick={() => setEditingStationId("")}>Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>{station.name}</strong>
+                      <span>{station.displayType} · {station.active ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="rule-actions">
+                      <button className="secondary" type="button" onClick={() => { setEditingStationId(station.id); setEditingStationName(station.name); setEditingStationDisplayType(station.displayType); }}>Edit</button>
+                      <button className="secondary" type="button" onClick={() => void updateStation(station, { active: !station.active })}>{station.active ? "Retire" : "Restore"}</button>
+                    </div>
+                  </>
+                )}
+              </article>
             ))}
-          </ul>
+          </div>
         </form>
       </section>
       <section className="panel schedule">

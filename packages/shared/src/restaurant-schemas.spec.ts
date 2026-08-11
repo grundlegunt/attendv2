@@ -1,5 +1,6 @@
 import {
   createMenuItemRequestSchema,
+  updateKitchenStationRequestSchema,
   updateMenuCategoryRequestSchema,
   updateMenuItemRequestSchema,
 } from "./restaurant-schemas";
@@ -34,6 +35,24 @@ describe("menu category updates", () => {
 
   it("rejects an empty update", () => {
     expect(() => updateMenuCategoryRequestSchema.parse({})).toThrow(
+      "At least one change is required.",
+    );
+  });
+});
+
+describe("kitchen station updates", () => {
+  it("accepts station maintenance changes", () => {
+    expect(
+      updateKitchenStationRequestSchema.parse({
+        name: "Main line",
+        displayType: "KITCHEN",
+        active: false,
+      }),
+    ).toEqual({ name: "Main line", displayType: "KITCHEN", active: false });
+  });
+
+  it("rejects an empty update", () => {
+    expect(() => updateKitchenStationRequestSchema.parse({})).toThrow(
       "At least one change is required.",
     );
   });

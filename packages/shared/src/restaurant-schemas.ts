@@ -30,6 +30,14 @@ export const createKitchenStationRequestSchema = z.object({
   displayType: z.string().trim().min(1).max(40),
 });
 
+export const updateKitchenStationRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    displayType: z.string().trim().min(1).max(40).optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one change is required.");
+
 export const createMenuCategoryRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
   sortOrder: z.number().int().min(0).default(0),
