@@ -1265,6 +1265,8 @@ describe("Milestone 1 cinema configuration", () => {
   it("issues a customer gift card exactly once after verified payment", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const config = await request(app.getHttpServer()).get(`/api/v1/gift-card-purchases/config?locationId=${owner.locationId}`).expect(200);
+    expect(config.body).toMatchObject({ locationId: owner.locationId, currency: "USD", payment: { ready: false } });
     const idempotencyKey = `gift-card-purchase-${crypto.randomUUID()}`;
     const purchase = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases")
       .set("Idempotency-Key", idempotencyKey).send({

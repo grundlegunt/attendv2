@@ -19,6 +19,13 @@ function localAttemptStatus(status: string) {
 export class GiftCardPurchaseService {
   constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider) {}
 
+  async config(locationId?: string) {
+    const location = locationId ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } }, include: { organization: true } }) : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" }, include: { organization: true } });
+    if (!location) throw AppError.notFound("Location was not found.");
+    const env = loadEnv();
+    return { locationId: location.id, currency: location.currency, payment: { ready: Boolean(env.PAYMENT_PROVIDER === "stripe" && env.STRIPE_PUBLISHABLE_KEY && env.STRIPE_SECRET_KEY && location.organization.stripeConnectedAccountId), publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, connectedAccountId: location.organization.stripeConnectedAccountId } };
+  }
+
   async create(input: { idempotencyKey: string; locationId: string; amountCents: number; buyerEmail: string; recipientName?: string; recipientEmail: string; message?: string }) {
     if (input.idempotencyKey.length < 16) throw AppError.validationFailed("A valid purchase idempotency key is required.");
     const existing = await prisma.giftCardPurchase.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { payment: true, location: { include: { organization: true } } } });
