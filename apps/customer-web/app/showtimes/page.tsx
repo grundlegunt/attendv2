@@ -7,6 +7,8 @@ import { SeatPicker } from "../components/seat-picker";
 import { localDateKey, MovieTile } from "../components/movie-tile";
 import { ShowtimeCalendar } from "../components/showtime-calendar";
 import { useCinemaContent } from "../components/customer-branding";
+import { MovieSpecials } from "../components/movie-specials";
+import { usePublicDiningMenu } from "../components/public-dining-menu";
 
 interface NowPlayingResponse {
   location: {
@@ -20,6 +22,7 @@ interface NowPlayingResponse {
 
 export default function ShowtimesPage() {
   const { showtimes: copy } = useCinemaContent();
+  const { menu } = usePublicDiningMenu();
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [programError, setProgramError] = useState<string | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(
@@ -178,15 +181,18 @@ export default function ShowtimesPage() {
             )}
 
           <section className="movie-grid">
-            {moviesForActiveDate.map(({ movie, showtimes }) => (
-              <MovieTile
-                key={movie.id}
-                movie={movie}
-                showtimes={showtimes}
-                timeZone={program!.location.timezone}
-                onSelectShowtime={setSelectedShowtimeId}
-              />
-            ))}
+            {moviesForActiveDate.map(({ movie, showtimes }) => {
+              const specials = menu?.movieSpecials.filter((special) => special.movieId === movie.id) ?? [];
+              return <div className="movie-grid__listing" key={movie.id}>
+                <MovieTile
+                  movie={movie}
+                  showtimes={showtimes}
+                  timeZone={program!.location.timezone}
+                  onSelectShowtime={setSelectedShowtimeId}
+                />
+                <MovieSpecials specials={specials} compact />
+              </div>;
+            })}
           </section>
         </>
       )}

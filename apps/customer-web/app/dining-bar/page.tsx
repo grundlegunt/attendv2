@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import type { PublicDiningMenuResponse, PublicMenuItem } from "@cinema/shared";
-import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { useMemo, useState } from "react";
+import type { PublicMenuItem } from "@cinema/shared";
 import { useCinemaContent } from "../components/customer-branding";
+import { MovieSpecials } from "../components/movie-specials";
+import { usePublicDiningMenu } from "../components/public-dining-menu";
 
 type MenuFilter = "FULL" | "VEGAN" | "GLUTEN_FREE";
 
@@ -27,15 +28,8 @@ function MenuItemCard({ item }: { item: PublicMenuItem }) {
 
 export default function DiningBarPage() {
   const { dining } = useCinemaContent();
-  const [menu, setMenu] = useState<PublicDiningMenuResponse | null>(null);
+  const { menu, error } = usePublicDiningMenu();
   const [filter, setFilter] = useState<MenuFilter>("FULL");
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    apiFetch<PublicDiningMenuResponse>("/cinema/menu")
-      .then(setMenu)
-      .catch((reason) => setError(reason instanceof ApiRequestError ? reason.body.message : "The menu is unavailable."));
-  }, []);
 
   const categories = useMemo(() => menu?.categories
     .map((category) => ({ ...category, items: category.items.filter((item) => matchesFilter(item, filter)) }))
@@ -57,7 +51,7 @@ export default function DiningBarPage() {
       {categories.map((category) => <section className="menu-category" key={category.id}><h3>{category.name}</h3><div className="public-menu-grid">{category.items.map((item) => <MenuItemCard item={item} key={item.id} />)}</div></section>)}
     </section>
 
-    {menu?.movieSpecials.length ? <section className="movie-specials"><span className="eyebrow">ONLY AT THIS SHOW</span><h2>Movie Specials</h2><div className="specials-grid">{menu.movieSpecials.map((special) => <article key={special.movieId}>{special.posterUrl && <img src={special.posterUrl} alt="" />}<div><h3>{special.movieTitle}</h3>{special.items.map((item) => <div className="special-line" key={item.id}><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span><b>${(item.priceCents / 100).toFixed(2)}</b></div>)}<Link href={`/movie/${special.movieId}`}>View movie</Link></div></article>)}</div></section> : null}
+    <MovieSpecials specials={menu?.movieSpecials ?? []} />
 
     <section className="afterglow-callout"><div><span className="eyebrow">{dining.afterglowEyebrow}</span><h2>{dining.afterglowTitle}</h2><p>{dining.afterglowBody}</p><Link className="primary-link" href="/afterglow">{dining.afterglowButton}</Link></div></section>
   </main>;
