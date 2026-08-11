@@ -386,6 +386,7 @@ model Movie {
   posterUrl               String?
   detailPosterUrl         String?
   diningSpecialArtworkUrl String?
+  diningSpecialTitle      String?
   director                String?
   starring                String?
   trailerUrl              String?
