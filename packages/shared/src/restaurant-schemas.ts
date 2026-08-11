@@ -83,6 +83,7 @@ export const updateModifierGroupRequestSchema = z
     required: z.boolean().optional(),
     minSelections: z.number().int().min(0).optional(),
     maxSelections: z.number().int().min(1).nullable().optional(),
+    active: z.boolean().optional(),
     sortOrder: z.number().int().min(0).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one change is required.")

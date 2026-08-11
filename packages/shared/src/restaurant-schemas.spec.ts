@@ -105,6 +105,7 @@ describe("modifier group updates", () => {
         name: "Choose toppings",
         selectionType: "MULTIPLE",
         required: true,
+        active: false,
         minSelections: 1,
         maxSelections: 3,
       }),
@@ -112,6 +113,7 @@ describe("modifier group updates", () => {
       name: "Choose toppings",
       selectionType: "MULTIPLE",
       required: true,
+      active: false,
       minSelections: 1,
       maxSelections: 3,
     });

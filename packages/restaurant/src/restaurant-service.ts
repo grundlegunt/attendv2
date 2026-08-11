@@ -63,6 +63,7 @@ export class RestaurantService {
             include: {
               kitchenStation: true,
               modifierGroups: {
+                where: input.includeInactive ? {} : { active: true },
                 include: {
                   modifiers: {
                     where: input.includeInactive ? {} : { active: true },
@@ -341,6 +342,7 @@ export class RestaurantService {
       required?: boolean;
       minSelections?: number;
       maxSelections?: number | null;
+      active?: boolean;
       sortOrder?: number;
     };
   }) {
@@ -628,7 +630,10 @@ export class RestaurantService {
           menuCategory: { locationId: input.locationId, active: true },
         },
         include: {
-          modifierGroups: { include: { modifiers: { where: { active: true } } } },
+          modifierGroups: {
+            where: { active: true },
+            include: { modifiers: { where: { active: true } } },
+          },
         },
       });
       if (!item) throw new RestaurantError("Active menu item was not found.", "NOT_FOUND");
