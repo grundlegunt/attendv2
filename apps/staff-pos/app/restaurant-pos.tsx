@@ -109,9 +109,23 @@ export function RestaurantPos({
   useEffect(() => setTabId(initialTabId), [initialTabId]);
 
   useEffect(() => {
+    setOrderId("");
+    setBlockedItems([]);
+    setModifierSelections({});
+    setGuestAccessToken("");
+    setTipCents("0");
+    setSavedCardCents("");
+    setTerminalCents("");
+  }, [tabId]);
+
+  useEffect(() => {
+    let active = true;
+    setLiveTab(null);
+    setSettlement(null);
     if (!tabId) {
-      setLiveTab(null);
-      return;
+      return () => {
+        active = false;
+      };
     }
     const refresh = () =>
       Promise.all([
@@ -119,13 +133,17 @@ export function RestaurantPos({
         apiFetch<SettlementTab>(`/restaurant-settlement/tabs/${tabId}`, { accessToken }),
       ])
         .then(([summary, settlementTab]) => {
+          if (!active) return;
           setLiveTab(summary);
           setSettlement(settlementTab);
         })
         .catch(() => undefined);
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
   }, [accessToken, tabId]);
 
   function showError(error: unknown) {
@@ -417,8 +435,13 @@ export function RestaurantPos({
       </form>
       <label className="field">
         <span>Active tab ID</span>
-        <input value={tabId} onChange={(event) => setTabId(event.target.value)} />
+        <input
+          value={tabId}
+          disabled={Boolean(orderId) || pendingActions.length > 0}
+          onChange={(event) => setTabId(event.target.value)}
+        />
       </label>
+      {orderId && <p>Send or remove the current draft before switching tabs.</p>}
       <button
         className="primary"
         type="button"
