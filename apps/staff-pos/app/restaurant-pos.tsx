@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 interface Menu {
@@ -77,6 +77,24 @@ export function RestaurantPos({
   const [terminalCents, setTerminalCents] = useState("");
   const [readerId, setReaderId] = useState("tmr_test_reader");
   const [guestAccessToken, setGuestAccessToken] = useState("");
+  const actionLocks = useRef(new Set<string>());
+  const [pendingActions, setPendingActions] = useState<string[]>([]);
+
+  function beginAction(key: string) {
+    if (actionLocks.current.has(key)) return false;
+    actionLocks.current.add(key);
+    setPendingActions([...actionLocks.current]);
+    return true;
+  }
+
+  function finishAction(key: string) {
+    actionLocks.current.delete(key);
+    setPendingActions([...actionLocks.current]);
+  }
+
+  function isPending(key: string) {
+    return pendingActions.includes(key);
+  }
 
   useEffect(() => {
     const refresh = () =>
@@ -192,6 +210,8 @@ export function RestaurantPos({
   }
 
   async function sendOrder() {
+    const actionKey = `send:${orderId}`;
+    if (!orderId || !beginAction(actionKey)) return;
     try {
       const result = await apiFetch<{
         rejectedDraft: null | {
@@ -214,10 +234,14 @@ export function RestaurantPos({
       );
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
   async function refire(ticketId: string) {
+    const actionKey = `refire:${ticketId}`;
+    if (!beginAction(actionKey)) return;
     try {
       await apiFetch(`/restaurant-tabs/fulfillment/${ticketId}/refire`, {
         method: "POST",
@@ -227,10 +251,14 @@ export function RestaurantPos({
       setMessage("Refire sent to the station.");
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
   async function dropCheck() {
+    const actionKey = `drop:${tabId}`;
+    if (!tabId || !beginAction(actionKey)) return;
     try {
       await apiFetch(`/restaurant-settlement/tabs/${tabId}/drop-check`, {
         method: "POST",
@@ -240,11 +268,15 @@ export function RestaurantPos({
       setMessage("Check dropped. One final order may still be added before payment.");
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
   async function finalizeTab() {
     if (!settlement) return;
+    const actionKey = `finalize:${tabId}`;
+    if (!tabId || !beginAction(actionKey)) return;
     const tenders = [
       ...(Number(savedCardCents) > 0 && settlement.activePaymentMethod
         ? [{
@@ -281,6 +313,8 @@ export function RestaurantPos({
       );
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
@@ -334,8 +368,13 @@ export function RestaurantPos({
             Due ${((settlement.totals.totalCents - settlement.paidCents) / 100).toFixed(2)}
           </strong>
           {!settlement.checkDroppedAt && settlement.status !== "CLOSED" && (
-            <button className="secondary" type="button" onClick={dropCheck}>
-              Drop check
+            <button
+              className="secondary"
+              type="button"
+              disabled={isPending(`drop:${tabId}`)}
+              onClick={dropCheck}
+            >
+              {isPending(`drop:${tabId}`) ? "Dropping check…" : "Drop check"}
             </button>
           )}
           {settlement.status !== "CLOSED" && settlement.activePaymentMethod && (
@@ -377,8 +416,13 @@ export function RestaurantPos({
                 <span>Terminal reader</span>
                 <input value={readerId} onChange={(event) => setReaderId(event.target.value)} />
               </label>
-              <button className="primary" type="button" onClick={finalizeTab}>
-                Collect payment & close
+              <button
+                className="primary"
+                type="button"
+                disabled={isPending(`finalize:${tabId}`)}
+                onClick={finalizeTab}
+              >
+                {isPending(`finalize:${tabId}`) ? "Collecting payment…" : "Collect payment & close"}
               </button>
             </>
           )}
@@ -394,8 +438,13 @@ export function RestaurantPos({
             <strong>{ticket.station}: {ticket.status}</strong>
             <p>Order {order.status}{ticket.refireCount ? ` · refire ${ticket.refireCount}` : ""}</p>
             {ticket.status === "DELIVERED" && (
-              <button className="secondary" type="button" onClick={() => refire(ticket.id)}>
-                Refire
+              <button
+                className="secondary"
+                type="button"
+                disabled={isPending(`refire:${ticket.id}`)}
+                onClick={() => refire(ticket.id)}
+              >
+                {isPending(`refire:${ticket.id}`) ? "Refiring…" : "Refire"}
               </button>
             )}
           </div>
@@ -452,8 +501,13 @@ export function RestaurantPos({
           ))}
         </div>
       ))}
-      <button className="primary" type="button" disabled={!orderId} onClick={sendOrder}>
-        Send order
+      <button
+        className="primary"
+        type="button"
+        disabled={!orderId || isPending(`send:${orderId}`)}
+        onClick={sendOrder}
+      >
+        {isPending(`send:${orderId}`) ? "Sending order…" : "Send order"}
       </button>
     </section>
   );
