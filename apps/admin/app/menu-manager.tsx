@@ -16,6 +16,7 @@ interface Menu {
       description: string | null;
       imageUrl: string | null;
       priceCents: number;
+      chargeCategory: "FOOD" | "ALCOHOL" | "NA_BEVERAGE";
       isVegan: boolean;
       isGlutenFree: boolean;
       sortOrder: number;
@@ -49,6 +50,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [price, setPrice] = useState(0);
+  const [chargeCategory, setChargeCategory] = useState<"FOOD" | "ALCOHOL" | "NA_BEVERAGE">("FOOD");
   const [isVegan, setIsVegan] = useState(false);
   const [isGlutenFree, setIsGlutenFree] = useState(false);
   const [categoryId, setCategoryId] = useState("");
@@ -91,6 +93,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editDescription, setEditDescription] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editPrice, setEditPrice] = useState(0);
+  const [editChargeCategory, setEditChargeCategory] = useState<"FOOD" | "ALCOHOL" | "NA_BEVERAGE">("FOOD");
   const [editCategoryId, setEditCategoryId] = useState("");
   const [originalEditCategoryId, setOriginalEditCategoryId] = useState("");
   const [editStationId, setEditStationId] = useState("");
@@ -156,6 +159,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           description: description || undefined,
           imageUrl: imageUrl || undefined,
           priceCents: Math.round(price * 100),
+          chargeCategory,
           isVegan,
           isGlutenFree,
           sortOrder:
@@ -167,6 +171,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       setName("");
       setDescription("");
       setPrice(0);
+      setChargeCategory("FOOD");
       setIsVegan(false);
       setIsGlutenFree(false);
       setMessage("Menu item created.");
@@ -381,6 +386,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     setEditDescription(item.description ?? "");
     setEditImageUrl(item.imageUrl ?? "");
     setEditPrice(item.priceCents / 100);
+    setEditChargeCategory(item.chargeCategory);
     setEditCategoryId(currentCategoryId);
     setOriginalEditCategoryId(currentCategoryId);
     setEditStationId(item.kitchenStation.id);
@@ -403,6 +409,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           description: editDescription || null,
           imageUrl: editImageUrl || null,
           priceCents: Math.round(editPrice * 100),
+          chargeCategory: editChargeCategory,
           ...(editCategoryId !== originalEditCategoryId
             ? { menuCategoryId: editCategoryId }
             : {}),
@@ -606,6 +613,17 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             />
           </label>
           <label>
+            Tax and charge category
+            <select
+              value={chargeCategory}
+              onChange={(event) => setChargeCategory(event.target.value as "FOOD" | "ALCOHOL" | "NA_BEVERAGE")}
+            >
+              <option value="FOOD">Food</option>
+              <option value="ALCOHOL">Alcohol</option>
+              <option value="NA_BEVERAGE">Non-alcoholic beverage</option>
+            </select>
+          </label>
+          <label>
             Image URL
             <input type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://…" />
           </label>
@@ -705,7 +723,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                   <strong>${(item.priceCents / 100).toFixed(2)}</strong>
                   <span>
                     {item.kitchenStation.name} ·{" "}
-                    {item.active ? "Active" : "Inactive"}
+                    {item.active ? "Active" : "Inactive"} · {item.chargeCategory === "NA_BEVERAGE" ? "Non-alcoholic beverage" : item.chargeCategory === "ALCOHOL" ? "Alcohol" : "Food"}
                   </span>
                 </div>
                 <b className={item.is86d ? "sale-draft" : "sale-open"}>
@@ -765,6 +783,17 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                   value={editPrice}
                   onChange={(event) => setEditPrice(Number(event.target.value))}
                 />
+              </label>
+              <label>
+                Tax and charge category
+                <select
+                  value={editChargeCategory}
+                  onChange={(event) => setEditChargeCategory(event.target.value as "FOOD" | "ALCOHOL" | "NA_BEVERAGE")}
+                >
+                  <option value="FOOD">Food</option>
+                  <option value="ALCOHOL">Alcohol</option>
+                  <option value="NA_BEVERAGE">Non-alcoholic beverage</option>
+                </select>
               </label>
             </div>
             <label>
