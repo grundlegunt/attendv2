@@ -74,7 +74,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       <label className="field"><span>Card cents</span><input type="number" min="0" value={cardCents} onChange={(event) => setCardCents(event.target.value)} /></label>
       <label className="field"><span>Terminal reader</span><input value={readerId} onChange={(event) => setReaderId(event.target.value)} /></label>
       <label className="field"><span>Gift card code</span><input value={giftCardCode} onChange={(event) => { const code = event.target.value.toUpperCase(); setGiftCardCode(code); setGiftCardCents(code ? String(quote.totalCents) : "0"); setCashCents("0"); setCardCents(code ? "0" : String(quote.totalCents)); }} /></label>
-      {giftCardCode && <p>Gift card tender ${(Number(giftCardCents)/100).toFixed(2)} · gift-card-only sales for now</p>}
+      {giftCardCode && <><label className="field"><span>Gift card cents</span><input type="number" min="1" max={quote.totalCents} value={giftCardCents} onChange={(event) => { const giftCents = Number(event.target.value); setGiftCardCents(event.target.value); setCashCents(String(Math.max(0, quote.totalCents - giftCents))); setCardCents("0"); }} /></label><p>Gift card + cash is supported. Gift card + card is not yet available.</p></>}
       <button className="primary" type="button" onClick={checkout} disabled={busy || (Number(cashCents)>0&&!drawer)}>Complete sale</button></div>}
   </aside></section>;
 }

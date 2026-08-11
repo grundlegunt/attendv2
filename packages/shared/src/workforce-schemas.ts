@@ -63,8 +63,8 @@ export const boxOfficeCheckoutRequestSchema = boxOfficeQuoteRequestSchema.extend
   if (value.giftCardCents > 0 && !value.giftCardCode) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["giftCardCode"], message: "A gift card code is required for gift card tender." });
   }
-  if (value.giftCardCents > 0 && (value.cashCents > 0 || value.cardCents > 0)) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ["giftCardCents"], message: "Gift card tender cannot yet be combined with cash or card." });
+  if (value.giftCardCents > 0 && value.cardCents > 0) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["giftCardCents"], message: "Gift card tender cannot yet be combined with card." });
   }
   if (value.cashCents + value.cardCents + value.giftCardCents <= 0) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["cashCents"], message: "At least one tender is required." });
