@@ -146,8 +146,27 @@ model Location {
   cashTransactions   CashTransaction[]
   promotions         Promotion[]
   shifts             Shift[]
+  privateEventInquiries PrivateEventInquiry[]
 
   @@map("locations")
+}
+
+model PrivateEventInquiry {
+  id String @id @default(uuid())
+  locationId String
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name String
+  email String
+  phone String?
+  eventType String
+  preferredDate DateTime?
+  guestCount Int?
+  message String
+  status String @default("NEW")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([locationId, status, createdAt])
+  @@map("private_event_inquiries")
 }
 
 // ---------------------------------------------------------------------------

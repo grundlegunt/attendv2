@@ -22,6 +22,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
     { href: "/location", label: "Location", permissions: ["ticket.price.edit"] },
   ] },
   { label: "Operations", items: [
+    { href: "/private-events", label: "Private Events", permissions: ["reports.view"] },
     { href: "/menu", label: "Menu", permissions: ["menu.edit"] },
     { href: "/refunds", label: "Refunds", permissions: ["payment.refund"] },
     { href: "/labor", label: "Labor", permissions: ["reports.view"] },
