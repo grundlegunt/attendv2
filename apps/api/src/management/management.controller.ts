@@ -45,6 +45,10 @@ const employeeUpdateSchema = z.object({
 const employeeCredentialsSchema = z.object({ password: z.string().min(12).max(200).optional(), pin: z.string().regex(/^\d{4,8}$/).nullable().optional(), resetMfa: z.boolean().optional() }).strict().refine((value) => value.password !== undefined || value.pin !== undefined || value.resetMfa === true, "Provide a password, PIN, or MFA reset.");
 const roleSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
 const inquiryStatusSchema = z.object({ status: z.enum(["NEW", "CONTACTED", "BOOKED", "CLOSED"]) }).strict();
+const inquiryQuerySchema = z.object({
+  status: z.enum(["NEW", "CONTACTED", "BOOKED", "CLOSED"]).optional(),
+  query: z.string().trim().max(200).optional(),
+}).strict();
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
@@ -91,11 +95,11 @@ export class ManagementController {
   people(@CurrentActor() actor: RequestActor) { return this.management.people(this.location(actor)); }
 
   @Get("private-event-inquiries") @RequirePermissions(Permission.ReportsView)
-  privateEventInquiries(@CurrentActor() actor: RequestActor) { return this.management.privateEventInquiries(this.location(actor)); }
+  privateEventInquiries(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(inquiryQuerySchema)) query: unknown) { return this.management.privateEventInquiries(this.location(actor), inquiryQuerySchema.parse(query)); }
 
   @Get("private-event-inquiries.csv") @RequirePermissions(Permission.ReportsView)
-  async privateEventInquiriesCsv(@CurrentActor() actor: RequestActor, @Res() response: Response) {
-    const rows = await this.management.privateEventInquiries(this.location(actor));
+  async privateEventInquiriesCsv(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(inquiryQuerySchema)) query: unknown, @Res() response: Response) {
+    const rows = await this.management.privateEventInquiries(this.location(actor), inquiryQuerySchema.parse(query));
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="private-event-inquiries.csv"');
     response.send(this.management.privateEventInquiriesCsv(rows));
