@@ -37,7 +37,13 @@ textarea { resize: vertical; }
 .checkbox { display: flex; grid-template-columns: auto 1fr; align-items: center; } .checkbox input { width: 24px; min-height: 24px; }
 .pairing-picker { margin: 4px 0 20px; padding: 16px; border: 1px solid var(--color-border); }
 .pairing-picker legend { padding: 0 8px; color: var(--color-text-primary); font-weight: 900; }
-.pairing-picker > p { margin: 0 0 14px; color: var(--color-text-secondary); font-size: .82rem; }
+.pairing-picker__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.pairing-picker__heading p { margin: 0; color: var(--color-text-secondary); font-size: .82rem; }
+.pairing-picker__heading span { flex: 0 0 auto; color: var(--color-accent); font-size: .7rem; font-weight: 900; text-transform: uppercase; }
+.pairing-picker__controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin-bottom: 12px; }
+.pairing-picker__controls input { min-height: 40px; padding: 7px 9px; border-width: 1px; font-size: .8rem; }
+.pairing-picker__controls button { min-height: 40px; padding: 0 10px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); font: inherit; font-size: .72rem; font-weight: 900; cursor: pointer; }
+.pairing-picker__controls button:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .pairing-picker__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .pairing-option { position: relative; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; min-height: 60px; margin: 0; padding: 5px 34px 5px 5px; border: 1px solid var(--color-border); background: var(--color-bg); cursor: pointer; }
 .pairing-option:hover { border-color: var(--color-text-secondary); }
