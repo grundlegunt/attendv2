@@ -1280,13 +1280,19 @@ describe("Milestone 1 cinema configuration", () => {
     provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
 
     const finalized = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`).send({}).expect(201);
-    expect(finalized.body).toMatchObject({ status: "PAID", amountCents: 3500, code: expect.stringMatching(/^ATGC-/), codeLast4: expect.any(String) });
+    expect(finalized.body).toMatchObject({ status: "PAID", amountCents: 3500, code: expect.stringMatching(/^ATGC-/), codeLast4: expect.any(String), delivery: { status: "DELIVERED" } });
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const email = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    expect(email.sentGiftCards).toEqual(expect.arrayContaining([expect.objectContaining({ to: "recipient@example.test", buyerEmail: "buyer@example.test", amountCents: 3500, code: finalized.body.code, message: "Enjoy the show!" })]));
     const replay = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`).send({}).expect(201);
     expect(replay.body.code).toBeNull();
     expect(await prisma.giftCard.count({ where: { purchase: { id: purchase.body.purchaseId } } })).toBe(1);
     const storedPurchase = await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.body.purchaseId } });
-    expect(storedPurchase.deliveryCodeEncrypted).toBeTruthy();
-    expect(storedPurchase.deliveryCodeEncrypted).not.toContain(finalized.body.code);
+    expect(storedPurchase).toMatchObject({ status: "DELIVERED", deliveryCodeEncrypted: null, deliveryClaimedAt: null, deliveryMessageId: expect.any(String), deliveredAt: expect.any(Date) });
+    const sentCount = email.sentGiftCards.length;
+    await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/delivery`).send({}).expect(201);
+    expect(email.sentGiftCards).toHaveLength(sentCount);
     await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: finalized.body.code }).expect(201);
   });
 
