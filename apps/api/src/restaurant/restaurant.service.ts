@@ -62,6 +62,10 @@ export class RestaurantService {
     return this.wrap(() => this.domain.createModifier(input));
   }
 
+  updateModifier(input: Parameters<RestaurantDomainService["updateModifier"]>[0]) {
+    return this.wrap(() => this.domain.updateModifier(input));
+  }
+
   updateMenuItem(input: Parameters<RestaurantDomainService["updateMenuItem"]>[0]) {
     return this.wrap(() => this.domain.updateMenuItem(input));
   }

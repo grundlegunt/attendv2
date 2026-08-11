@@ -75,6 +75,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [modifierGroupId, setModifierGroupId] = useState("");
   const [modifierName, setModifierName] = useState("");
   const [modifierPrice, setModifierPrice] = useState(0);
+  const [editingModifierId, setEditingModifierId] = useState("");
+  const [editingModifierName, setEditingModifierName] = useState("");
+  const [editingModifierPrice, setEditingModifierPrice] = useState(0);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
@@ -294,6 +297,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       refresh();
     } catch (error) {
       showError(error, "Modifier could not be created.");
+    }
+  }
+
+  async function updateModifier(
+    modifier: MenuItem["modifierGroups"][number]["modifiers"][number],
+    changes: { name?: string; priceDeltaCents?: number; active?: boolean },
+  ) {
+    try {
+      await apiFetch(`/restaurant-menu/modifiers/${modifier.id}`, {
+        method: "PATCH",
+        accessToken,
+        body: JSON.stringify(changes),
+      });
+      setEditingModifierId("");
+      setMessage("Modifier updated.");
+      refresh();
+    } catch (error) {
+      showError(error, "Modifier could not be updated.");
     }
   }
 
@@ -887,14 +908,27 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                   {group.maxSelections ?? "No"} maximum
                   {group.required ? " · Required" : " · Optional"}
                 </span>
-                <small>
-                  {group.modifiers
-                    .map(
-                      (modifier) =>
-                        `${modifier.name}${modifier.priceDeltaCents ? ` (${modifier.priceDeltaCents > 0 ? "+" : ""}${(modifier.priceDeltaCents / 100).toFixed(2)})` : ""}`,
-                    )
-                    .join(", ") || "No options yet"}
-                </small>
+                <div className="modifier-option-list">
+                  {group.modifiers.map((modifier) => (
+                    <div key={modifier.id}>
+                      {editingModifierId === modifier.id ? (
+                        <>
+                          <input aria-label="Modifier name" required value={editingModifierName} onChange={(event) => setEditingModifierName(event.target.value)} />
+                          <input aria-label="Modifier price change" type="number" step="0.01" value={editingModifierPrice} onChange={(event) => setEditingModifierPrice(Number(event.target.value))} />
+                          <button className="secondary" type="button" onClick={() => void updateModifier(modifier, { name: editingModifierName, priceDeltaCents: Math.round(editingModifierPrice * 100) })}>Save</button>
+                          <button className="secondary" type="button" onClick={() => setEditingModifierId("")}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <span>{modifier.name}{modifier.priceDeltaCents ? ` (${modifier.priceDeltaCents > 0 ? "+" : ""}${(modifier.priceDeltaCents / 100).toFixed(2)})` : ""}{modifier.active ? "" : " · Inactive"}</span>
+                          <button className="secondary" type="button" onClick={() => { setEditingModifierId(modifier.id); setEditingModifierName(modifier.name); setEditingModifierPrice(modifier.priceDeltaCents / 100); }}>Edit</button>
+                          <button className="secondary" type="button" onClick={() => void updateModifier(modifier, { active: !modifier.active })}>{modifier.active ? "Deactivate" : "Restore"}</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {group.modifiers.length === 0 && <small>No options yet</small>}
+                </div>
               </article>
             ))}
           </div>

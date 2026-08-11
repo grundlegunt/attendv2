@@ -298,6 +298,55 @@ export class RestaurantService {
     });
   }
 
+  async updateModifier(input: {
+    locationId: string;
+    actorId: string;
+    modifierId: string;
+    changes: {
+      name?: string;
+      priceDeltaCents?: number;
+      active?: boolean;
+      sortOrder?: number;
+    };
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.modifier.findFirst({
+        where: {
+          id: input.modifierId,
+          modifierGroup: { menuItem: { menuCategory: { locationId: input.locationId } } },
+        },
+      });
+      if (!existing) throw new RestaurantError("Modifier was not found.", "NOT_FOUND");
+      const modifier = await tx.modifier.update({
+        where: { id: existing.id },
+        data: input.changes,
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "modifier.updated",
+          entityType: "Modifier",
+          entityId: modifier.id,
+          locationId: input.locationId,
+          beforeState: {
+            name: existing.name,
+            priceDeltaCents: existing.priceDeltaCents,
+            active: existing.active,
+            sortOrder: existing.sortOrder,
+          },
+          afterState: {
+            name: modifier.name,
+            priceDeltaCents: modifier.priceDeltaCents,
+            active: modifier.active,
+            sortOrder: modifier.sortOrder,
+          },
+        },
+      });
+      return modifier;
+    });
+  }
+
   async updateMenuItem(input: {
     locationId: string;
     actorId: string;
