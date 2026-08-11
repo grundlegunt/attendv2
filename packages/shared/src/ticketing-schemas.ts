@@ -7,6 +7,7 @@ export const createTicketCheckoutRequestSchema = z.object({
   email: z.string().email().max(320),
   name: z.string().trim().min(1).max(120).optional(),
   promotionCode: z.string().trim().min(1).max(50).optional(),
+  giftCardCode: z.string().trim().min(20).max(40).optional(),
   diningAuthorizationRequested: z.boolean(),
 });
 
@@ -23,11 +24,13 @@ export interface TicketCheckoutResponse {
   feesCents: number;
   taxCents: number;
   totalCents: number;
+  giftCardCents: number;
   currency: string;
   payment: {
     id: string;
     providerPaymentId: string | null;
     status: string;
+    amountCents: number;
     clientSecret?: string;
     attemptNumber: number;
   } | null;

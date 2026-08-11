@@ -112,6 +112,7 @@ export function TicketCheckout({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
+  const [giftCardCode, setGiftCardCode] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -210,6 +211,7 @@ export function TicketCheckout({
             email,
             name: name || undefined,
             promotionCode: promotionCode.trim() || undefined,
+            giftCardCode: giftCardCode.trim() || undefined,
             diningAuthorizationRequested: diningAuthorization,
           }),
         },
@@ -348,6 +350,10 @@ export function TicketCheckout({
               <span>Promotion code</span>
               <input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} autoComplete="off" />
             </label>
+            <label className="field">
+              <span>Gift card code</span>
+              <input value={giftCardCode} onChange={(event) => setGiftCardCode(event.target.value.toUpperCase())} autoComplete="off" />
+            </label>
           </div>
           <div className="checkout-panel authorization-note">
             <h3>Food + drink during the movie</h3>
@@ -401,6 +407,7 @@ export function TicketCheckout({
             {checkout.discountCents > 0 && <p><span>Promotion</span><strong>−{money(checkout.discountCents, checkout.currency)}</strong></p>}
             <p><span>Service fee</span><strong>{money(checkout.feesCents, checkout.currency)}</strong></p>
             <p><span>Tax</span><strong>{money(checkout.taxCents, checkout.currency)}</strong></p>
+            {checkout.giftCardCents > 0 && <p><span>Gift card</span><strong>−{money(checkout.giftCardCents, checkout.currency)}</strong></p>}
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
           <div className="checkout-panel">
@@ -416,7 +423,7 @@ export function TicketCheckout({
               ? "Completing purchase…"
               : !paymentElementReady
                 ? "Loading secure payment…"
-              : `Pay ${money(checkout.totalCents, checkout.currency)}`}
+              : `Pay ${money(checkout.payment?.amountCents ?? checkout.totalCents, checkout.currency)}`}
           </button>
         </form>
       )}
