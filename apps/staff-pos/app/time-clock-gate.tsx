@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import type { AuthenticatedEmployee } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
@@ -8,9 +8,14 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
   const [pin, setPin] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   async function enter(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setMessage(null);
+    event.preventDefault();
+    if (busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setMessage(null);
     const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
     try {
       const status = await apiFetch<{ shift: { id: string } | null }>("/shifts/status", { method: "POST", body });
@@ -18,7 +23,10 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
       onReady(pin);
     } catch (error) {
       setMessage(error instanceof ApiRequestError ? error.body.message : "The time clock is unavailable.");
-    } finally { setBusy(false); }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   return <main className="auth-shell"><div className="auth-card">
