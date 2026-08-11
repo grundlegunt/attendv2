@@ -255,6 +255,58 @@ export class RestaurantService {
     });
   }
 
+  async updateModifierGroup(input: {
+    locationId: string;
+    actorId: string;
+    modifierGroupId: string;
+    changes: {
+      name?: string;
+      selectionType?: "SINGLE" | "MULTIPLE";
+      required?: boolean;
+      minSelections?: number;
+      maxSelections?: number | null;
+      sortOrder?: number;
+    };
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.modifierGroup.findFirst({
+        where: {
+          id: input.modifierGroupId,
+          menuItem: { menuCategory: { locationId: input.locationId } },
+        },
+      });
+      if (!existing) throw new RestaurantError("Modifier group was not found.", "NOT_FOUND");
+      const selectionType = input.changes.selectionType ?? existing.selectionType;
+      const minSelections = input.changes.minSelections ?? existing.minSelections;
+      const maxSelections = input.changes.maxSelections === undefined
+        ? existing.maxSelections
+        : input.changes.maxSelections;
+      if (maxSelections !== null && maxSelections < minSelections) {
+        throw new RestaurantError("Maximum selections must be at least the minimum.", "INVALID");
+      }
+      if (selectionType === "SINGLE" && (minSelections > 1 || (maxSelections ?? 1) > 1)) {
+        throw new RestaurantError("Single-choice groups cannot allow more than one selection.", "INVALID");
+      }
+      const group = await tx.modifierGroup.update({
+        where: { id: existing.id },
+        data: input.changes,
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "modifier_group.updated",
+          entityType: "ModifierGroup",
+          entityId: group.id,
+          locationId: input.locationId,
+          beforeState: existing,
+          afterState: group,
+        },
+      });
+      return group;
+    });
+  }
+
   async createModifier(input: {
     locationId: string;
     actorId: string;

@@ -29,6 +29,7 @@ interface Menu {
         required: boolean;
         minSelections: number;
         maxSelections: number | null;
+        sortOrder: number;
         modifiers: Array<{
           id: string;
           name: string;
@@ -73,6 +74,13 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     number | ""
   >(1);
   const [modifierGroupId, setModifierGroupId] = useState("");
+  const [editingModifierGroupId, setEditingModifierGroupId] = useState("");
+  const [editingModifierGroupName, setEditingModifierGroupName] = useState("");
+  const [editingModifierGroupSelectionType, setEditingModifierGroupSelectionType] = useState<"SINGLE" | "MULTIPLE">("SINGLE");
+  const [editingModifierGroupRequired, setEditingModifierGroupRequired] = useState(false);
+  const [editingModifierGroupMin, setEditingModifierGroupMin] = useState(0);
+  const [editingModifierGroupMax, setEditingModifierGroupMax] = useState<number | "">(1);
+  const [editingModifierGroupOrder, setEditingModifierGroupOrder] = useState(0);
   const [modifierName, setModifierName] = useState("");
   const [modifierPrice, setModifierPrice] = useState(0);
   const [editingModifierId, setEditingModifierId] = useState("");
@@ -298,6 +306,38 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       showError(error, "Modifier could not be created.");
     }
+  }
+
+  async function saveModifierGroup(group: (typeof modifierGroups)[number]) {
+    try {
+      await apiFetch(`/restaurant-menu/modifier-groups/${group.id}`, {
+        method: "PATCH",
+        accessToken,
+        body: JSON.stringify({
+          name: editingModifierGroupName,
+          selectionType: editingModifierGroupSelectionType,
+          required: editingModifierGroupRequired,
+          minSelections: editingModifierGroupMin,
+          maxSelections: editingModifierGroupMax === "" ? null : editingModifierGroupMax,
+          sortOrder: editingModifierGroupOrder,
+        }),
+      });
+      setEditingModifierGroupId("");
+      setMessage("Modifier group updated.");
+      refresh();
+    } catch (error) {
+      showError(error, "Modifier group could not be updated.");
+    }
+  }
+
+  function beginEditingModifierGroup(group: (typeof modifierGroups)[number]) {
+    setEditingModifierGroupId(group.id);
+    setEditingModifierGroupName(group.name);
+    setEditingModifierGroupSelectionType(group.selectionType);
+    setEditingModifierGroupRequired(group.required);
+    setEditingModifierGroupMin(group.minSelections);
+    setEditingModifierGroupMax(group.maxSelections ?? "");
+    setEditingModifierGroupOrder(group.sortOrder);
   }
 
   async function updateModifier(
@@ -897,17 +937,23 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           <div className="modifier-summary">
             {modifierGroups.map((group) => (
               <article key={group.id}>
-                <strong>
-                  {group.itemName} · {group.name}
-                </strong>
-                <span>
-                  {group.selectionType === "SINGLE"
-                    ? "Choose one"
-                    : "Choose multiple"}{" "}
-                  · {group.minSelections} minimum ·{" "}
-                  {group.maxSelections ?? "No"} maximum
-                  {group.required ? " · Required" : " · Optional"}
-                </span>
+                {editingModifierGroupId === group.id ? (
+                  <div className="modifier-group-editor">
+                    <label>Name<input required value={editingModifierGroupName} onChange={(event) => setEditingModifierGroupName(event.target.value)} /></label>
+                    <label>Selection type<select value={editingModifierGroupSelectionType} onChange={(event) => { const value = event.target.value as "SINGLE" | "MULTIPLE"; setEditingModifierGroupSelectionType(value); if (value === "SINGLE") { setEditingModifierGroupMin(Math.min(editingModifierGroupMin, 1)); setEditingModifierGroupMax(1); } }}><option value="SINGLE">Choose one</option><option value="MULTIPLE">Choose multiple</option></select></label>
+                    <label>Minimum<input type="number" min="0" max={editingModifierGroupSelectionType === "SINGLE" ? 1 : undefined} value={editingModifierGroupMin} onChange={(event) => setEditingModifierGroupMin(Number(event.target.value))} /></label>
+                    <label>Maximum<input type="number" min="1" max={editingModifierGroupSelectionType === "SINGLE" ? 1 : undefined} disabled={editingModifierGroupSelectionType === "SINGLE"} placeholder="No limit" value={editingModifierGroupMax} onChange={(event) => setEditingModifierGroupMax(event.target.value === "" ? "" : Number(event.target.value))} /></label>
+                    <label>Display order<input type="number" min="0" step="1" value={editingModifierGroupOrder} onChange={(event) => setEditingModifierGroupOrder(Number(event.target.value))} /></label>
+                    <label className="checkbox"><input type="checkbox" checked={editingModifierGroupRequired} onChange={(event) => { setEditingModifierGroupRequired(event.target.checked); if (event.target.checked && editingModifierGroupMin === 0) setEditingModifierGroupMin(1); }} /><span>Customer must choose</span></label>
+                    <div className="rule-actions"><button className="secondary" type="button" onClick={() => void saveModifierGroup(group)}>Save group</button><button className="secondary" type="button" onClick={() => setEditingModifierGroupId("")}>Cancel</button></div>
+                  </div>
+                ) : (
+                  <>
+                    <strong>{group.itemName} · {group.name}</strong>
+                    <span>{group.selectionType === "SINGLE" ? "Choose one" : "Choose multiple"} · {group.minSelections} minimum · {group.maxSelections ?? "No"} maximum{group.required ? " · Required" : " · Optional"} · order {group.sortOrder}</span>
+                    <button className="secondary" type="button" onClick={() => beginEditingModifierGroup(group)}>Edit group</button>
+                  </>
+                )}
                 <div className="modifier-option-list">
                   {group.modifiers.map((modifier) => (
                     <div key={modifier.id}>

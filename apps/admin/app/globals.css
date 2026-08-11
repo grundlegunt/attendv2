@@ -565,6 +565,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .modifier-option-list > div { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 8px; align-items: center; }
 .modifier-option-list .secondary { width: auto; margin: 0; }
 .modifier-option-list input { min-width: 0; margin: 0; }
+.modifier-group-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.modifier-group-editor label { margin: 0; }
+.modifier-group-editor .rule-actions { display: flex; gap: 8px; align-items: flex-end; }
+.modifier-group-editor .secondary { width: auto; margin: 0; }
 .menu-image-preview { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: center; margin: -6px 0 18px; color: var(--color-text-secondary); font-weight: 700; }
 .menu-image-preview img { width: 120px; aspect-ratio: 4 / 3; border: 1px solid var(--color-border); background: var(--color-bg); object-fit: cover; }
 

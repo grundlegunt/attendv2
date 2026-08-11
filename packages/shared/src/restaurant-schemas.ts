@@ -75,6 +75,25 @@ export const createModifierGroupRequestSchema = z.object({
   { message: "Maximum selections must be at least the minimum.", path: ["maxSelections"] },
 );
 
+export const updateModifierGroupRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    selectionType: z.enum(["SINGLE", "MULTIPLE"]).optional(),
+    required: z.boolean().optional(),
+    minSelections: z.number().int().min(0).optional(),
+    maxSelections: z.number().int().min(1).nullable().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one change is required.")
+  .refine(
+    (value) =>
+      value.minSelections === undefined ||
+      value.maxSelections === undefined ||
+      value.maxSelections === null ||
+      value.maxSelections >= value.minSelections,
+    { message: "Maximum selections must be at least the minimum.", path: ["maxSelections"] },
+  );
+
 export const createModifierRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
   priceDeltaCents: z.number().int(),
