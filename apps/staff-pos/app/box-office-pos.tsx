@@ -47,6 +47,18 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     busyRef.current = false;
     setBusy(false);
   }
+  function resetSale() {
+    checkoutAttemptRef.current = null;
+    setSelected([]);
+    setQuote(null);
+    setHoldTokens([]);
+    setCashCents("0");
+    setCardCents("0");
+    setCashReceived("0");
+    setGiftCardCode("");
+    setGiftCardCents("0");
+    setGiftCardBalance(null);
+  }
 
   async function openDrawer() {
     if (!beginRequest()) return;
@@ -134,8 +146,35 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     }
     try {
       const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ ...checkoutPayload, requestId: checkoutAttemptRef.current.requestId }) });
-      checkoutAttemptRef.current = null; setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); await refresh();
+      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); resetSale(); await refresh();
     } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
+  }
+
+  async function cancelSale() {
+    if (!quote || !beginRequest()) return;
+    try {
+      const releases = await Promise.allSettled(
+        holdTokens.map((holdToken) =>
+          apiFetch(`/cinema/showtimes/${showtimeId}/holds/${encodeURIComponent(holdToken)}`, {
+            method: "DELETE",
+            accessToken,
+            body: JSON.stringify({ holderKey }),
+          }),
+        ),
+      );
+      const failedReleases = releases.filter((release) => release.status === "rejected").length;
+      resetSale();
+      await refresh();
+      setMessage(
+        failedReleases
+          ? `Sale canceled. ${failedReleases} seat hold(s) may remain until they expire.`
+          : "Sale canceled and seat holds released.",
+      );
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      finishRequest();
+    }
   }
 
   async function checkGiftCard() {
@@ -152,7 +191,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     <h2>Box office</h2><p>Select available seats from the live inventory.</p>
     <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={(seat) => { if (busyRef.current || quote) return; const live = seats.find((candidate) => candidate.id === seat.id); if (live?.state !== "AVAILABLE") return; setSelected((current) => current.includes(seat.id!) ? current.filter((id) => id !== seat.id) : [...current, seat.id!]); }} allowUnavailableSelection />
   </div><aside className="checkout-card">
-    {message && <div className={message.startsWith("Sale complete") ? "scan-result valid" : "error-banner"}>{message}</div>}
+    {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
     <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} onChange={(event) => setRegisterId(event.target.value)} /></label>
     {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy}>Open drawer</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
@@ -167,5 +206,6 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       <label className="field"><span>Gift card code</span><input value={giftCardCode} onChange={(event) => { setGiftCardCode(event.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardCents("0"); setCashCents("0"); setCardCents(String(quote.totalCents)); }} /></label>
       {giftCardCode && <><button className="secondary" type="button" onClick={() => void checkGiftCard()} disabled={busy}>Check balance and apply</button>{giftCardBalance !== null && <p>Available ${(giftCardBalance/100).toFixed(2)}</p>}<label className="field"><span>Gift card cents</span><input type="number" min="1" step="1" max={Math.min(quote.totalCents, giftCardBalance ?? quote.totalCents)} value={giftCardCents} onChange={(event) => { const giftCents = Number(event.target.value); const remainder = Math.max(0, quote.totalCents - giftCents); setGiftCardCents(event.target.value); setCashCents(giftRemainderTender === "CASH" ? String(remainder) : "0"); setCardCents(giftRemainderTender === "CARD" ? String(remainder) : "0"); }} /></label><label className="field"><span>Remainder tender</span><select value={giftRemainderTender} onChange={(event) => { const tender = event.target.value as "CASH" | "CARD"; const remainder = Math.max(0, quote.totalCents - Number(giftCardCents)); setGiftRemainderTender(tender); setCashCents(tender === "CASH" ? String(remainder) : "0"); setCardCents(tender === "CARD" ? String(remainder) : "0"); }}><option value="CASH">Cash</option><option value="CARD">Card terminal</option></select></label></>}
       <button className="primary" type="button" onClick={checkout} disabled={busy || (Number(cashCents)>0&&!drawer)}>Complete sale</button></div>}
+      {quote && <button className="secondary" type="button" onClick={cancelSale} disabled={busy}>Cancel sale &amp; release seats</button>}
   </aside></section>;
 }
