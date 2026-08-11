@@ -20,12 +20,16 @@ export function TicketScanner({
   const [cameraActive, setCameraActive] = useState(false);
   const pendingRef = useRef(false);
   const cameraStartingRef = useRef(false);
+  const cameraSessionRef = useRef(0);
+  const detectingRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
   const timeoutRef = useRef<number | null>(null);
 
   function stopCamera() {
+    cameraSessionRef.current += 1;
+    detectingRef.current = false;
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = null;
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
@@ -94,13 +98,25 @@ export function TicketScanner({
       video.srcObject = stream;
       await video.play();
       const detector = new Detector({ formats: ["qr_code"] });
+      const cameraSession = cameraSessionRef.current;
       setMessage("Camera active—point it at the ticket.");
       intervalRef.current = window.setInterval(async () => {
-        const found = await detector.detect(video);
-        if (found[0]?.rawValue) {
+        if (detectingRef.current || cameraSession !== cameraSessionRef.current) return;
+        detectingRef.current = true;
+        try {
+          const found = await detector.detect(video);
+          if (cameraSession !== cameraSessionRef.current) return;
+          if (found[0]?.rawValue) {
+            stopCamera();
+            setCredential(found[0].rawValue);
+            setMessage("QR captured. Press Check ticket.");
+          }
+        } catch {
+          if (cameraSession !== cameraSessionRef.current) return;
           stopCamera();
-          setCredential(found[0].rawValue);
-          setMessage("QR captured. Press Check ticket.");
+          setMessage("Camera scanning stopped unexpectedly. Paste the credential below or try again.");
+        } finally {
+          if (cameraSession === cameraSessionRef.current) detectingRef.current = false;
         }
       }, 350);
       timeoutRef.current = window.setTimeout(() => {
