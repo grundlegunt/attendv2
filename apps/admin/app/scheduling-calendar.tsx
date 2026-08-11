@@ -18,6 +18,8 @@ export interface ScheduleMovie {
   synopsis?: string | null;
   rating?: string | null;
   posterUrl?: string | null;
+  diningSpecialArtworkUrl?: string | null;
+  pairings?: Array<{ menuItemId: string; sortOrder: number }>;
 }
 
 export interface ScheduleFilmSeries {
@@ -645,6 +647,7 @@ export function SchedulingCalendar({
             </div>
             <p className="film-detail-meta">{selectedLibraryMovie.rating || "Not rated"} · {selectedLibraryMovie.runtimeMinutes} min</p>
             <p className="film-detail-synopsis">{selectedLibraryMovie.synopsis || "No synopsis has been added yet."}</p>
+            {selectedLibraryMovie.pairings?.length && !selectedLibraryMovie.diningSpecialArtworkUrl ? <div className="film-special-warning"><strong>Dining special needs artwork</strong><span>Add one combined food-and-drink photo before this special can appear with public showtimes.</span></div> : null}
 
             <div className="film-programming-summary">
               <div>
@@ -713,7 +716,7 @@ export function SchedulingCalendar({
           }}
           onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
           title="Drag this film onto the daily schedule"
-        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button type="button" className="film-quick-add" onClick={(event) => { event.stopPropagation(); void quickAddToSchedule(movie); }} onMouseDown={(event) => event.stopPropagation()}>Add +</button><button
+        ><button type="button" className="film-edit" onClick={(event) => { event.stopPropagation(); onEditMovie(movie); }} onMouseDown={(event) => event.stopPropagation()} aria-label={`Edit ${movie.title}`}>Edit</button><strong>{movie.title}</strong><span>{movie.runtimeMinutes} min</span><button type="button" className="film-quick-add" onClick={(event) => { event.stopPropagation(); void quickAddToSchedule(movie); }} onMouseDown={(event) => event.stopPropagation()}>Add +</button>{movie.pairings?.length && !movie.diningSpecialArtworkUrl ? <span className="film-card-warning" title="Dining special needs combined artwork" aria-label="Dining special needs combined artwork">!</span> : null}<button
           type="button"
           className="film-archive"
           aria-label={`Remove ${movie.title} from the film library`}
