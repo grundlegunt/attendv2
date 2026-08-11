@@ -12,6 +12,7 @@ import { ShiftControls } from "./shift-controls";
 
 type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
+type StaffView = "scanner" | "seats" | "tabs" | "restaurant" | "box-office";
 const STORAGE_KEY = "attend-staff-pos-session";
 
 interface NowPlayingResponse {
@@ -56,7 +57,7 @@ export default function StaffLoginPage() {
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
   const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
-  const [view, setView] = useState<"scanner" | "seats" | "tabs" | "restaurant" | "box-office">("scanner");
+  const [view, setView] = useState<StaffView>("scanner");
   const [tabOrderId, setTabOrderId] = useState("");
   const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
   const [openedTabs, setOpenedTabs] = useState<TabSummary[]>([]);
@@ -84,6 +85,12 @@ export default function StaffLoginPage() {
   function finishAuthRequest() {
     authRequestRef.current = false;
     setLoading(false);
+  }
+
+  function changeView(nextView: StaffView) {
+    seatDetailRequestRef.current += 1;
+    setSeatDetail(null);
+    setView(nextView);
   }
 
   function storeSession(next: ActiveStaffSession) {
@@ -278,11 +285,11 @@ export default function StaffLoginPage() {
         {error && <div className="error-banner">{error}</div>}
 
         <nav className="staff-tabs" aria-label="Staff tools">
-          <button type="button" className={view === "scanner" ? "active" : ""} onClick={() => setView("scanner")}>Scan tickets</button>
-          <button type="button" className={view === "seats" ? "active" : ""} onClick={() => setView("seats")}>Live seats</button>
-          <button type="button" className={view === "tabs" ? "active" : ""} onClick={() => setView("tabs")}>Tab debug</button>
-          <button type="button" className={view === "restaurant" ? "active" : ""} onClick={() => setView("restaurant")}>Server POS</button>
-          {employee.permissions.includes("seat.sell") && <button type="button" className={view === "box-office" ? "active" : ""} onClick={() => setView("box-office")}>Box office</button>}
+          <button type="button" className={view === "scanner" ? "active" : ""} onClick={() => changeView("scanner")}>Scan tickets</button>
+          <button type="button" className={view === "seats" ? "active" : ""} onClick={() => changeView("seats")}>Live seats</button>
+          <button type="button" className={view === "tabs" ? "active" : ""} onClick={() => changeView("tabs")}>Tab debug</button>
+          <button type="button" className={view === "restaurant" ? "active" : ""} onClick={() => changeView("restaurant")}>Server POS</button>
+          {employee.permissions.includes("seat.sell") && <button type="button" className={view === "box-office" ? "active" : ""} onClick={() => changeView("box-office")}>Box office</button>}
         </nav>
 
         {view !== "tabs" && view !== "restaurant" && <section className="showtime-toolbar" aria-label="Select a showtime">
