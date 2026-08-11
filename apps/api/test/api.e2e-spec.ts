@@ -3966,6 +3966,9 @@ describe("Milestone 9 box office and workforce", () => {
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const issued = await request(app.getHttpServer()).post("/api/v1/management/gift-cards")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ amountCents: 100_000 }).expect(201);
+    const staffBalance = await request(app.getHttpServer()).post("/api/v1/box-office/gift-cards/balance")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ code: issued.body.code }).expect(201);
+    expect(staffBalance.body).toEqual({ codeLast4: issued.body.codeLast4, balanceCents: 100_000, currency: issued.body.currency });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `GIFT-${crypto.randomUUID()}`, openingBalanceCents: 20_000 }).expect(201);
     const holderKey = `gift-card-box-office-${crypto.randomUUID()}`;

@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
-import { boxOfficeCheckoutRequestSchema, boxOfficeHoldRequestSchema, boxOfficeQuoteRequestSchema, cashMovementRequestSchema, closeCashDrawerRequestSchema, openCashDrawerRequestSchema, seatBlockRequestSchema, ticketExchangeRequestSchema, ticketRefundRequestSchema } from "@cinema/shared";
+import { boxOfficeCheckoutRequestSchema, boxOfficeHoldRequestSchema, boxOfficeQuoteRequestSchema, cashMovementRequestSchema, closeCashDrawerRequestSchema, giftCardBalanceRequestSchema, openCashDrawerRequestSchema, seatBlockRequestSchema, ticketExchangeRequestSchema, ticketRefundRequestSchema } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -47,6 +47,11 @@ export class BoxOfficeController {
   @Post("quotes")
   quote(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(boxOfficeQuoteRequestSchema)) body: unknown) {
     return this.boxOffice.quote({ ...boxOfficeQuoteRequestSchema.parse(body), locationId: this.location(actor) });
+  }
+
+  @Post("gift-cards/balance")
+  giftCardBalance(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(giftCardBalanceRequestSchema)) body: unknown) {
+    return this.boxOffice.giftCardBalance(this.location(actor), giftCardBalanceRequestSchema.parse(body).code);
   }
 
   @Post("checkouts")

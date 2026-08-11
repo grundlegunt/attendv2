@@ -22,6 +22,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [cardCents, setCardCents] = useState("0");
   const [giftCardCode, setGiftCardCode] = useState("");
   const [giftCardCents, setGiftCardCents] = useState("0");
+  const [giftCardBalance, setGiftCardBalance] = useState<number | null>(null);
   const [cashReceived, setCashReceived] = useState("0");
   const [readerId, setReaderId] = useState("tmr_box_1");
   const [message, setMessage] = useState<string|null>(null);
@@ -45,7 +46,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
       const tokens = holds.map((hold) => hold.holdToken); setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
-      setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0");
+      setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
     } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
   }
 
@@ -53,8 +54,17 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     if (!quote) return; setBusy(true); setMessage(null);
     try {
       const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ requestId: crypto.randomUUID(), holdTokens, holderKey, ticketTypeId, promotionCode: promotionCode || undefined, cashDrawerId: Number(cashCents) > 0 ? drawer?.id : undefined, cashCents: Number(cashCents), cardCents: Number(cardCents), giftCardCents: Number(giftCardCents), giftCardCode: giftCardCode || undefined, readerId: Number(cardCents) > 0 ? readerId : undefined, cashReceivedCents: Number(cashCents) > 0 ? Number(cashReceived) : undefined }) });
-      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); await refresh();
+      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); await refresh();
     } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
+  }
+
+  async function checkGiftCard() {
+    if (!quote || !giftCardCode) return; setBusy(true); setMessage(null);
+    try {
+      const card = await apiFetch<{balanceCents:number;currency:string}>("/box-office/gift-cards/balance", { method: "POST", accessToken, body: JSON.stringify({ code: giftCardCode }) });
+      const applied = Math.min(card.balanceCents, quote.totalCents);
+      setGiftCardBalance(card.balanceCents); setGiftCardCents(String(applied)); setCashCents(String(quote.totalCents - applied)); setCardCents("0");
+    } catch (error) { setGiftCardBalance(null); setGiftCardCents("0"); setMessage(errorMessage(error)); } finally { setBusy(false); }
   }
 
   return <section className="box-office-grid"><div>
@@ -73,8 +83,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       <label className="field"><span>Cash received cents</span><input type="number" min="0" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" value={cardCents} onChange={(event) => setCardCents(event.target.value)} /></label>
       <label className="field"><span>Terminal reader</span><input value={readerId} onChange={(event) => setReaderId(event.target.value)} /></label>
-      <label className="field"><span>Gift card code</span><input value={giftCardCode} onChange={(event) => { const code = event.target.value.toUpperCase(); setGiftCardCode(code); setGiftCardCents(code ? String(quote.totalCents) : "0"); setCashCents("0"); setCardCents(code ? "0" : String(quote.totalCents)); }} /></label>
-      {giftCardCode && <><label className="field"><span>Gift card cents</span><input type="number" min="1" max={quote.totalCents} value={giftCardCents} onChange={(event) => { const giftCents = Number(event.target.value); setGiftCardCents(event.target.value); setCashCents(String(Math.max(0, quote.totalCents - giftCents))); setCardCents("0"); }} /></label><p>Gift card + cash is supported. Gift card + card is not yet available.</p></>}
+      <label className="field"><span>Gift card code</span><input value={giftCardCode} onChange={(event) => { setGiftCardCode(event.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardCents("0"); setCashCents("0"); setCardCents(String(quote.totalCents)); }} /></label>
+      {giftCardCode && <><button className="secondary" type="button" onClick={() => void checkGiftCard()} disabled={busy}>Check balance and apply</button>{giftCardBalance !== null && <p>Available ${(giftCardBalance/100).toFixed(2)}</p>}<label className="field"><span>Gift card cents</span><input type="number" min="1" max={Math.min(quote.totalCents, giftCardBalance ?? quote.totalCents)} value={giftCardCents} onChange={(event) => { const giftCents = Number(event.target.value); setGiftCardCents(event.target.value); setCashCents(String(Math.max(0, quote.totalCents - giftCents))); setCardCents("0"); }} /></label><p>Gift card + cash is supported. Gift card + card is not yet available.</p></>}
       <button className="primary" type="button" onClick={checkout} disabled={busy || (Number(cashCents)>0&&!drawer)}>Complete sale</button></div>}
   </aside></section>;
 }
