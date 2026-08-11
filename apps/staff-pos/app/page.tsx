@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AuthenticatedEmployee, AuthTokenResponse, NowPlayingMovie } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
@@ -61,6 +61,9 @@ export default function StaffLoginPage() {
   const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
   const [openedTabs, setOpenedTabs] = useState<TabSummary[]>([]);
   const [seatDetail, setSeatDetail] = useState<SeatDetail | null>(null);
+  const [openingTabs, setOpeningTabs] = useState(false);
+  const openingTabsRef = useRef(false);
+  const seatDetailRequestRef = useRef(0);
   const [clockReady, setClockReady] = useState(false);
   const [clockPin, setClockPin] = useState("");
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
@@ -175,6 +178,9 @@ export default function StaffLoginPage() {
 
   async function openTabs(event: FormEvent) {
     event.preventDefault();
+    if (openingTabsRef.current) return;
+    openingTabsRef.current = true;
+    setOpeningTabs(true);
     setError(null);
     try {
       setOpenedTabs(await apiFetch<TabSummary[]>("/restaurant-tabs/seat-linked", {
@@ -184,20 +190,26 @@ export default function StaffLoginPage() {
       }));
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Tabs could not be opened.");
+    } finally {
+      openingTabsRef.current = false;
+      setOpeningTabs(false);
     }
   }
 
   async function openSeat(seat: SeatMapSeat) {
     if (!seat.id) return;
+    const requestId = ++seatDetailRequestRef.current;
     setError(null);
     try {
       const detail = await apiFetch<SeatDetail>(
         `/restaurant-tabs/seats/${seat.id}/detail`,
         { accessToken },
       );
+      if (requestId !== seatDetailRequestRef.current) return;
       setSeatDetail(detail);
       setView("restaurant");
     } catch (err) {
+      if (requestId !== seatDetailRequestRef.current) return;
       setError(err instanceof ApiRequestError ? err.body.message : "Seat detail could not be opened.");
     }
   }
@@ -295,7 +307,9 @@ export default function StaffLoginPage() {
                   <option value="SEPARATE">One tab per seat</option>
                 </select>
               </label>
-              <button className="primary">Open tabs</button>
+              <button className="primary" disabled={openingTabs}>
+                {openingTabs ? "Opening tabs…" : "Open tabs"}
+              </button>
             </form>
             {openedTabs.map((tab) => (
               <div className="scan-result valid" key={tab.id}>
