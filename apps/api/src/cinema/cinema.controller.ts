@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { z } from "zod";
 import { Permission } from "@cinema/auth";
 import {
   createAuditoriumRequestSchema,
@@ -19,6 +20,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RequestActor } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { CinemaService } from "./cinema.service";
 
 @Controller("cinema")
@@ -46,7 +48,9 @@ export class CinemaController {
   }
 
   @Post("private-event-inquiries")
-  privateEventInquiry(@Query("locationId") locationId: string | undefined, @Body() body: { name?: string; email?: string; phone?: string; eventType?: string; preferredDate?: string; guestCount?: number; message?: string }) { return this.cinemaService.createPrivateEventInquiry(locationId, body); }
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout", identity: "email" })
+  privateEventInquiry(@Query("locationId") locationId: string | undefined, @Body(new ZodValidationPipe(z.object({ name: z.string().trim().min(1).max(120), email: z.string().trim().email().max(200), phone: z.string().trim().max(40).optional(), eventType: z.string().trim().min(1).max(100), preferredDate: z.string().datetime().optional(), guestCount: z.number().int().min(1).max(5000).optional(), message: z.string().trim().min(1).max(2000) }).strict())) body: unknown) { return this.cinemaService.createPrivateEventInquiry(locationId, body as never); }
 
   @Get("film-series")
   filmSeries(@Query("locationId") locationId?: string) {
