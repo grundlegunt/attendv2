@@ -20,6 +20,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [openingBalance, setOpeningBalance] = useState("20000");
   const [cashCents, setCashCents] = useState("0");
   const [cardCents, setCardCents] = useState("0");
+  const [giftCardCode, setGiftCardCode] = useState("");
+  const [giftCardCents, setGiftCardCents] = useState("0");
   const [cashReceived, setCashReceived] = useState("0");
   const [readerId, setReaderId] = useState("tmr_box_1");
   const [message, setMessage] = useState<string|null>(null);
@@ -43,15 +45,15 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
       const tokens = holds.map((hold) => hold.holdToken); setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
-      setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0");
+      setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0");
     } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
   }
 
   async function checkout() {
     if (!quote) return; setBusy(true); setMessage(null);
     try {
-      const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ requestId: crypto.randomUUID(), holdTokens, holderKey, ticketTypeId, promotionCode: promotionCode || undefined, cashDrawerId: Number(cashCents) > 0 ? drawer?.id : undefined, cashCents: Number(cashCents), cardCents: Number(cardCents), readerId: Number(cardCents) > 0 ? readerId : undefined, cashReceivedCents: Number(cashCents) > 0 ? Number(cashReceived) : undefined }) });
-      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); await refresh();
+      const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ requestId: crypto.randomUUID(), holdTokens, holderKey, ticketTypeId, promotionCode: promotionCode || undefined, cashDrawerId: Number(cashCents) > 0 ? drawer?.id : undefined, cashCents: Number(cashCents), cardCents: Number(cardCents), giftCardCents: Number(giftCardCents), giftCardCode: giftCardCode || undefined, readerId: Number(cardCents) > 0 ? readerId : undefined, cashReceivedCents: Number(cashCents) > 0 ? Number(cashReceived) : undefined }) });
+      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); await refresh();
     } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
   }
 
@@ -71,6 +73,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       <label className="field"><span>Cash received cents</span><input type="number" min="0" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" value={cardCents} onChange={(event) => setCardCents(event.target.value)} /></label>
       <label className="field"><span>Terminal reader</span><input value={readerId} onChange={(event) => setReaderId(event.target.value)} /></label>
+      <label className="field"><span>Gift card code</span><input value={giftCardCode} onChange={(event) => { const code = event.target.value.toUpperCase(); setGiftCardCode(code); setGiftCardCents(code ? String(quote.totalCents) : "0"); setCashCents("0"); setCardCents(code ? "0" : String(quote.totalCents)); }} /></label>
+      {giftCardCode && <p>Gift card tender ${(Number(giftCardCents)/100).toFixed(2)} · gift-card-only sales for now</p>}
       <button className="primary" type="button" onClick={checkout} disabled={busy || (Number(cashCents)>0&&!drawer)}>Complete sale</button></div>}
   </aside></section>;
 }
