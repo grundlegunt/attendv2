@@ -23,6 +23,8 @@ import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { CinemaService } from "./cinema.service";
 
+const giftCardBalanceSchema = z.object({ code: z.string().trim().min(20).max(40) }).strict();
+
 @Controller("cinema")
 export class CinemaController {
   constructor(private readonly cinemaService: CinemaService) {}
@@ -51,6 +53,11 @@ export class CinemaController {
   @UseGuards(RequestRateLimitGuard)
   @RateLimit({ scope: "checkout", identity: "email" })
   privateEventInquiry(@Query("locationId") locationId: string | undefined, @Body(new ZodValidationPipe(z.object({ name: z.string().trim().min(1).max(120), email: z.string().trim().email().max(200), phone: z.string().trim().max(40).optional(), eventType: z.string().trim().min(1).max(100), preferredDate: z.string().datetime().optional(), guestCount: z.number().int().min(1).max(5000).optional(), message: z.string().trim().min(1).max(2000) }).strict())) body: unknown) { return this.cinemaService.createPrivateEventInquiry(locationId, body as never); }
+
+  @Post("gift-cards/balance")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
+  giftCardBalance(@Query("locationId") locationId: string | undefined, @Body(new ZodValidationPipe(giftCardBalanceSchema)) body: unknown) { return this.cinemaService.giftCardBalance(locationId, giftCardBalanceSchema.parse(body).code); }
 
   @Get("film-series")
   filmSeries(@Query("locationId") locationId?: string) {

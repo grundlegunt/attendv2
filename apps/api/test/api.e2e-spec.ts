@@ -1224,6 +1224,13 @@ describe("Milestone 1 cinema configuration", () => {
     expect(issued.body).toEqual(expect.objectContaining({ balanceCents: 2500, initialBalanceCents: 2500, codeLast4: expect.any(String), code: expect.stringMatching(/^ATGC-(?:[A-F0-9]{4}-){5}[A-F0-9]{4}$/) }));
     expect(issued.body).not.toHaveProperty("codeHash");
 
+    const balance = await request(app.getHttpServer())
+      .post("/api/v1/cinema/gift-cards/balance")
+      .send({ code: issued.body.code.toLowerCase() })
+      .expect(201);
+    expect(balance.body).toEqual({ codeLast4: issued.body.codeLast4, balanceCents: 2500, currency: issued.body.currency });
+    expect(balance.body).not.toHaveProperty("recipientEmail");
+
     const listed = await request(app.getHttpServer())
       .get("/api/v1/management/gift-cards")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
