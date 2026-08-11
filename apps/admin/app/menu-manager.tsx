@@ -30,6 +30,7 @@ interface Menu {
         required: boolean;
         minSelections: number;
         maxSelections: number | null;
+        active: boolean;
         sortOrder: number;
         modifiers: Array<{
           id: string;
@@ -340,6 +341,20 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       });
       setEditingModifierGroupId("");
       setMessage("Modifier group updated.");
+      refresh();
+    } catch (error) {
+      showError(error, "Modifier group could not be updated.");
+    }
+  }
+
+  async function toggleModifierGroup(group: (typeof modifierGroups)[number]) {
+    try {
+      await apiFetch(`/restaurant-menu/modifier-groups/${group.id}`, {
+        method: "PATCH",
+        accessToken,
+        body: JSON.stringify({ active: !group.active }),
+      });
+      setMessage(group.active ? "Modifier group retired." : "Modifier group restored.");
       refresh();
     } catch (error) {
       showError(error, "Modifier group could not be updated.");
@@ -1023,8 +1038,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                 ) : (
                   <>
                     <strong>{group.itemName} · {group.name}</strong>
-                    <span>{group.selectionType === "SINGLE" ? "Choose one" : "Choose multiple"} · {group.minSelections} minimum · {group.maxSelections ?? "No"} maximum{group.required ? " · Required" : " · Optional"} · order {group.sortOrder}</span>
-                    <button className="secondary" type="button" onClick={() => beginEditingModifierGroup(group)}>Edit group</button>
+                    <span>{group.selectionType === "SINGLE" ? "Choose one" : "Choose multiple"} · {group.minSelections} minimum · {group.maxSelections ?? "No"} maximum{group.required ? " · Required" : " · Optional"} · order {group.sortOrder}{group.active ? "" : " · Inactive"}</span>
+                    <div className="rule-actions"><button className="secondary" type="button" onClick={() => beginEditingModifierGroup(group)}>Edit group</button><button className="secondary" type="button" onClick={() => void toggleModifierGroup(group)}>{group.active ? "Retire group" : "Restore group"}</button></div>
                   </>
                 )}
                 <div className="modifier-option-list">

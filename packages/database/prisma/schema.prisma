@@ -1380,6 +1380,7 @@ model ModifierGroup {
   required      Boolean               @default(false)
   minSelections Int                   @default(0)
   maxSelections Int?
+  active        Boolean               @default(true)
   sortOrder     Int                   @default(0)
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
@@ -1387,7 +1388,7 @@ model ModifierGroup {
   modifiers Modifier[]
 
   @@unique([menuItemId, name])
-  @@index([menuItemId, sortOrder])
+  @@index([menuItemId, active, sortOrder])
   @@map("modifier_groups")
 }
 
