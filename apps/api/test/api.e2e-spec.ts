@@ -3981,6 +3981,15 @@ describe("Milestone 9 box office and workforce", () => {
     const card = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: { where: { type: "REDEMPTION" } } } });
     expect(card.balanceCents).toBe(100_000 - quote.body.totalCents);
     expect(card.transactions).toEqual([expect.objectContaining({ amountCents: -quote.body.totalCents, balanceAfterCents: card.balanceCents, reference: sale.body.id })]);
+
+    const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E gift card refund" }).expect(201);
+    expect(refunded.body.status).toBe("REFUNDED");
+    const restored = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: { orderBy: { createdAt: "asc" } } } });
+    expect(restored.balanceCents).toBe(100_000);
+    expect(restored.transactions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "REFUND", amountCents: quote.body.totalCents, balanceAfterCents: 100_000, reference: `refund:${sale.body.id}` }),
+    ]));
   });
 
   it("refunds a successful card-present charge exactly once when seat finalization loses its hold", async () => {

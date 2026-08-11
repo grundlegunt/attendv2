@@ -315,6 +315,29 @@ export class BoxOfficeService {
     if (!order) throw AppError.notFound("Refundable ticket order was not found.");
     const cashPaid = order.cashTransactions.filter((entry) => entry.type === "SALE").reduce((sum, entry) => sum + entry.amountCents, 0);
     const cardPaid = order.payment?.status === "SUCCEEDED" ? order.payment.amountCents : 0;
+    const giftRedemption = await prisma.giftCardTransaction.findFirst({ where: { reference: order.id, type: "REDEMPTION" }, select: { giftCardId: true, amountCents: true } });
+    const giftCardPaid = giftRedemption ? -giftRedemption.amountCents : 0;
+    if (giftRedemption && cashPaid === 0 && cardPaid === 0) {
+      return prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
+        const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id } });
+        if (lockedOrder.status === "REFUNDED") return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
+        if (!["PAID", "EXCHANGED"].includes(lockedOrder.status)) throw AppError.conflict("Ticket order is no longer refundable.");
+        await tx.$queryRaw`SELECT "id" FROM "gift_cards" WHERE "id" = ${giftRedemption.giftCardId} FOR UPDATE`;
+        const giftCard = await tx.giftCard.findUniqueOrThrow({ where: { id: giftRedemption.giftCardId } });
+        const reference = `refund:${order.id}`;
+        const existingRefund = await tx.giftCardTransaction.findFirst({ where: { giftCardId: giftCard.id, type: "REFUND", reference } });
+        if (!existingRefund) {
+          const balanceAfterCents = giftCard.balanceCents + giftCardPaid;
+          await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
+          await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: input.locationId, employeeId: input.employeeId, type: "REFUND", amountCents: giftCardPaid, balanceAfterCents, reference } });
+        }
+        await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
+        await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
+        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: 0, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
+        return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
+      });
+    }
     if (cashPaid > 0 && !input.cashDrawerId) throw AppError.validationFailed("An open cash drawer is required for a cash refund.");
     let providerRefund: { id: string; status: "SUCCEEDED" | "PENDING" | "FAILED" } | null = null;
     let refundRow = null;
