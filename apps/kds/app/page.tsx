@@ -49,6 +49,7 @@ type FulfillmentAction =
 type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
 const STORAGE_KEY = "attend-kds-session";
+const STATION_STORAGE_KEY = "attend-kds-station";
 
 function ageClass(firedAt: string) {
   const ageMinutes = (Date.now() - new Date(firedAt).getTime()) / 60_000;
@@ -95,6 +96,12 @@ export default function KdsPage() {
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setStations([]); setStationId(""); setQueue(null);
   }
 
+  function selectStation(nextStationId: string) {
+    setStationId(nextStationId);
+    setQueue(null);
+    window.localStorage.setItem(STATION_STORAGE_KEY, nextStationId);
+  }
+
   useEffect(() => {
     const stored = window.sessionStorage.getItem(STORAGE_KEY);
     if (!stored) { setRestored(true); return; }
@@ -139,7 +146,17 @@ export default function KdsPage() {
     apiFetch<Station[]>("/fulfillment/stations", { accessToken })
       .then((response) => {
         setStations(response);
-        setStationId((current) => current || response[0]?.id || "");
+        const remembered = window.localStorage.getItem(STATION_STORAGE_KEY);
+        const nextStationId =
+          response.find((station) => station.id === remembered)?.id ??
+          response[0]?.id ??
+          "";
+        setStationId(nextStationId);
+        if (nextStationId) {
+          window.localStorage.setItem(STATION_STORAGE_KEY, nextStationId);
+        } else {
+          window.localStorage.removeItem(STATION_STORAGE_KEY);
+        }
       })
       .catch(() => setError("No station is available for this account."));
   }, [accessToken]);
@@ -259,9 +276,9 @@ export default function KdsPage() {
         </div>
         <label>
           Station
-          <select value={stationId} onChange={(event) => setStationId(event.target.value)}>
+          <select value={stationId} onChange={(event) => selectStation(event.target.value)}>
             {stations.map((station) => (
-              <option key={station.id} value={station.id}>{station.name}</option>
+              <option key={station.id} value={station.id}>{station.name} · {station.displayType}</option>
             ))}
           </select>
         </label>
