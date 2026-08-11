@@ -3,7 +3,7 @@ import { Prisma, prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
 import { createTicketCredential } from "@cinema/ticketing";
 import { loadEnv } from "@cinema/config/env";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 import { CinemaService } from "../cinema/cinema.service";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
@@ -80,7 +80,7 @@ export class BoxOfficeService {
     requestId: string; locationId: string; employeeId: string;
     holdTokens: string[]; holderKey: string; ticketTypeId: string;
     promotionCode?: string; cashDrawerId?: string; cashCents: number;
-    cardCents: number; readerId?: string; cashReceivedCents?: number;
+    cardCents: number; giftCardCents: number; giftCardCode?: string; readerId?: string; cashReceivedCents?: number;
     customerEmail?: string; customerName?: string;
   }) {
     const existing = await prisma.ticketOrder.findUnique({
@@ -89,7 +89,7 @@ export class BoxOfficeService {
     });
     if (existing?.status === "PAID") return existing;
     const quote = await this.quote(input);
-    if (input.cashCents + input.cardCents !== quote.totalCents) {
+    if (input.cashCents + input.cardCents + input.giftCardCents !== quote.totalCents) {
       throw AppError.validationFailed(`Tender amounts must total ${quote.totalCents} cents.`);
     }
     if (input.cashCents > 0 && (input.cashReceivedCents ?? 0) < input.cashCents) {
@@ -164,6 +164,17 @@ export class BoxOfficeService {
         if (await tx.ticket.findFirst({ where: { showtimeSeatId: { in: inventoryIds }, status: { notIn: ["REFUNDED", "CANCELED"] } } })) {
           throw AppError.conflict("A selected seat is no longer available.");
         }
+        if (input.giftCardCents > 0) {
+          const codeHash = createHash("sha256").update(input.giftCardCode!.toUpperCase().replace(/[^A-Z0-9]/g, "")).digest("hex");
+          const cardId = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "gift_cards" WHERE "codeHash" = ${codeHash} FOR UPDATE`);
+          const giftCard = cardId[0] ? await tx.giftCard.findFirst({ where: { id: cardId[0].id, organizationId: location.organizationId, status: "ACTIVE" } }) : null;
+          if (!giftCard) throw AppError.notFound("Gift card was not found or is inactive.");
+          if (giftCard.currency !== quote.currency) throw AppError.validationFailed("Gift card currency does not match this sale.");
+          if (giftCard.balanceCents < input.giftCardCents) throw AppError.paymentRequired("Gift card balance is insufficient.");
+          const balanceAfterCents = giftCard.balanceCents - input.giftCardCents;
+          await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
+          await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: input.locationId, employeeId: input.employeeId, type: "REDEMPTION", amountCents: -input.giftCardCents, balanceAfterCents, reference: order.id } });
+        }
         const perTicketPrice = Math.floor((lockedOrder.subtotalCents - lockedOrder.discountCents) / lockedHolds.length);
         await tx.ticket.createMany({ data: lockedHolds.map((hold) => {
           const id = randomUUID();
@@ -185,7 +196,7 @@ export class BoxOfficeService {
         await tx.auditEvent.create({ data: {
           actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
           action: "ticket_order.box_office_sold", entityType: "TicketOrder", entityId: order.id,
-          afterState: { status: "PAID", cashCents: input.cashCents, cardCents: input.cardCents, seatCount: lockedHolds.length },
+          afterState: { status: "PAID", cashCents: input.cashCents, cardCents: input.cardCents, giftCardCents: input.giftCardCents, seatCount: lockedHolds.length },
         } });
         return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true } });
       });

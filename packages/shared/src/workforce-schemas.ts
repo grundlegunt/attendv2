@@ -47,6 +47,8 @@ export const boxOfficeCheckoutRequestSchema = boxOfficeQuoteRequestSchema.extend
   cashDrawerId: z.string().uuid().optional(),
   cashCents: z.number().int().nonnegative().default(0),
   cardCents: z.number().int().nonnegative().default(0),
+  giftCardCents: z.number().int().nonnegative().default(0),
+  giftCardCode: z.string().trim().min(20).max(40).optional(),
   readerId: z.string().trim().min(1).max(200).optional(),
   cashReceivedCents: z.number().int().nonnegative().optional(),
   customerEmail: z.string().email().max(320).optional(),
@@ -58,7 +60,13 @@ export const boxOfficeCheckoutRequestSchema = boxOfficeQuoteRequestSchema.extend
   if (value.cardCents > 0 && !value.readerId) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["readerId"], message: "A Terminal reader is required for card tender." });
   }
-  if (value.cashCents + value.cardCents <= 0) {
+  if (value.giftCardCents > 0 && !value.giftCardCode) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["giftCardCode"], message: "A gift card code is required for gift card tender." });
+  }
+  if (value.giftCardCents > 0 && (value.cashCents > 0 || value.cardCents > 0)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["giftCardCents"], message: "Gift card tender cannot yet be combined with cash or card." });
+  }
+  if (value.cashCents + value.cardCents + value.giftCardCents <= 0) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["cashCents"], message: "At least one tender is required." });
   }
 });
