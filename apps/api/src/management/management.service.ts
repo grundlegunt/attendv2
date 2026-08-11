@@ -171,7 +171,17 @@ export class ManagementService {
     return { employees, roles, permissions };
   }
 
-  privateEventInquiries(locationId: string) { return prisma.privateEventInquiry.findMany({ where: { locationId }, orderBy: { createdAt: "desc" } }); }
+  privateEventInquiries(locationId: string, filters: { status?: string; query?: string } = {}) {
+    const query = filters.query?.trim();
+    return prisma.privateEventInquiry.findMany({
+      where: {
+        locationId,
+        status: filters.status,
+        ...(query ? { OR: ["name", "email", "phone", "eventType", "message"].map((field) => ({ [field]: { contains: query, mode: "insensitive" as const } })) } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+    });
+  }
 
   privateEventInquiriesCsv(rows: Awaited<ReturnType<ManagementService["privateEventInquiries"]>>) {
     const cell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
