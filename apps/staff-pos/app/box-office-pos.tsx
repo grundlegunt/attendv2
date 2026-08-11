@@ -150,16 +150,16 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
 
   return <section className="box-office-grid"><div>
     <h2>Box office</h2><p>Select available seats from the live inventory.</p>
-    <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={(seat) => { const live = seats.find((candidate) => candidate.id === seat.id); if (live?.state !== "AVAILABLE") return; setSelected((current) => current.includes(seat.id!) ? current.filter((id) => id !== seat.id) : [...current, seat.id!]); setQuote(null); }} allowUnavailableSelection />
+    <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={(seat) => { if (busyRef.current || quote) return; const live = seats.find((candidate) => candidate.id === seat.id); if (live?.state !== "AVAILABLE") return; setSelected((current) => current.includes(seat.id!) ? current.filter((id) => id !== seat.id) : [...current, seat.id!]); }} allowUnavailableSelection />
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") ? "scan-result valid" : "error-banner"}>{message}</div>}
     <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} onChange={(event) => setRegisterId(event.target.value)} /></label>
     {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy}>Open drawer</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
-    <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
-      <label className="field"><span>Promotion code</span><input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
-      <button className="primary" disabled={!selected.length || !ticketTypeId || busy}>Price {selected.length} seat(s)</button></form>
-    {quote && <div className="sale-total"><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Discount −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
+    <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
+      <label className="field"><span>Promotion code</span><input value={promotionCode} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
+      <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} seat(s)</button></form>
+    {quote && <div className="sale-total"><p>Pricing locked for the held seats.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Discount −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} onChange={(event) => setCashCents(event.target.value)} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" step="1" value={cardCents} onChange={(event) => setCardCents(event.target.value)} /></label>
