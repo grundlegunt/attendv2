@@ -11,7 +11,7 @@ export function MovieSpecials({ specials, showtimes = false }: { specials: Publi
     <h2>Dining Specials</h2>
     <div className="showtime-specials-grid">{specials.flatMap((special) => special.items.map((item) => <Link href={`/movie/${special.movieId}`} className="showtime-special-card" key={`${special.movieId}-${item.id}`}>
       {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <div className="showtime-special-card__placeholder" aria-hidden="true" />}
-      <div><strong>{item.name}</strong><span>{special.movieTitle}</span><b>${(item.priceCents / 100).toFixed(2)}</b></div>
+      <div><strong>{item.name}</strong><span>{special.movieTitle}</span></div>
     </Link>))}</div>
   </section>;
 

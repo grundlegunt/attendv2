@@ -472,10 +472,6 @@
   letter-spacing: .13em;
   text-transform: uppercase;
 }
-.showtime-special-card b {
-  margin-top: 9px;
-  color: var(--color-accent);
-}
 .specials-grid {
   display: grid;
   gap: 20px;
