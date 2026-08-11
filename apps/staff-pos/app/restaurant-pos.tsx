@@ -134,6 +134,8 @@ export function RestaurantPos({
 
   async function openWalkIn(event: FormEvent) {
     event.preventDefault();
+    const actionKey = "open-walk-in";
+    if (!beginAction(actionKey)) return;
     try {
       const tab = await apiFetch<{ id: string }>("/restaurant-tabs/walk-in", {
         method: "POST",
@@ -144,10 +146,14 @@ export function RestaurantPos({
       setMessage(`Walk-in tab “${walkInLabel}” is open.`);
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
   async function startOrder() {
+    const actionKey = `start-order:${tabId}`;
+    if (!tabId || !beginAction(actionKey)) return;
     try {
       const order = await apiFetch<{ id: string }>(`/restaurant-tabs/${tabId}/orders`, {
         method: "POST",
@@ -158,11 +164,15 @@ export function RestaurantPos({
       setMessage("Order started. Add items, then send.");
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
   async function addItem(item: Menu["categories"][number]["items"][number]) {
     if (!orderId) return setMessage("Start an order first.");
+    const actionKey = `add-item:${orderId}:${item.id}`;
+    if (!beginAction(actionKey)) return;
     try {
       const modifierIds = item.modifierGroups.flatMap(
         (group) => modifierSelections[`${item.id}:${group.id}`] ?? [],
@@ -175,10 +185,14 @@ export function RestaurantPos({
       setMessage(`${item.name} added.`);
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
   async function removeBlockedItem(item: { id: string; name: string }) {
+    const actionKey = `remove-item:${orderId}:${item.id}`;
+    if (!orderId || !beginAction(actionKey)) return;
     try {
       await apiFetch(`/restaurant-tabs/orders/${orderId}/items/${item.id}`, {
         method: "DELETE",
@@ -188,6 +202,8 @@ export function RestaurantPos({
       setMessage(`${item.name} removed. Add a substitute or send the remaining draft.`);
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
@@ -319,6 +335,8 @@ export function RestaurantPos({
   }
 
   async function createGuestLink() {
+    const actionKey = `guest-link:${tabId}`;
+    if (!tabId || !beginAction(actionKey)) return;
     try {
       const result = await apiFetch<{ token: string }>(
         `/restaurant-settlement/tabs/${tabId}/access-link`,
@@ -328,6 +346,8 @@ export function RestaurantPos({
       setMessage("Secure 24-hour guest tab link created.");
     } catch (error) {
       showError(error);
+    } finally {
+      finishAction(actionKey);
     }
   }
 
@@ -346,14 +366,25 @@ export function RestaurantPos({
             onChange={(event) => setWalkInLabel(event.target.value)}
           />
         </label>
-        <button className="primary">Open walk-in tab</button>
+        <button className="primary" disabled={isPending("open-walk-in")}>
+          {isPending("open-walk-in") ? "Opening walk-in…" : "Open walk-in tab"}
+        </button>
       </form>
       <label className="field">
         <span>Active tab ID</span>
         <input value={tabId} onChange={(event) => setTabId(event.target.value)} />
       </label>
-      <button className="primary" type="button" disabled={!tabId || Boolean(orderId)} onClick={startOrder}>
-        {orderId ? "Order in progress" : "Start order"}
+      <button
+        className="primary"
+        type="button"
+        disabled={!tabId || Boolean(orderId) || isPending(`start-order:${tabId}`)}
+        onClick={startOrder}
+      >
+        {isPending(`start-order:${tabId}`)
+          ? "Starting order…"
+          : orderId
+            ? "Order in progress"
+            : "Start order"}
       </button>
       {message && <div className="scan-result valid"><strong>{message}</strong></div>}
       {settlement && (
@@ -378,8 +409,13 @@ export function RestaurantPos({
             </button>
           )}
           {settlement.status !== "CLOSED" && settlement.activePaymentMethod && (
-            <button className="secondary" type="button" onClick={createGuestLink}>
-              Create guest tab link
+            <button
+              className="secondary"
+              type="button"
+              disabled={isPending(`guest-link:${tabId}`)}
+              onClick={createGuestLink}
+            >
+              {isPending(`guest-link:${tabId}`) ? "Creating guest link…" : "Create guest tab link"}
             </button>
           )}
           {guestAccessToken && (
@@ -453,8 +489,13 @@ export function RestaurantPos({
       {blockedItems.map((item) => (
         <div className="scan-result" key={item.id}>
           <strong>{item.name} is unavailable</strong>
-          <button className="secondary" type="button" onClick={() => removeBlockedItem(item)}>
-            Remove from draft
+          <button
+            className="secondary"
+            type="button"
+            disabled={isPending(`remove-item:${orderId}:${item.id}`)}
+            onClick={() => removeBlockedItem(item)}
+          >
+            {isPending(`remove-item:${orderId}:${item.id}`) ? "Removing…" : "Remove from draft"}
           </button>
         </div>
       ))}
@@ -492,10 +533,14 @@ export function RestaurantPos({
               <button
                 className="secondary"
                 type="button"
-                disabled={item.is86d || !orderId}
+                disabled={item.is86d || !orderId || isPending(`add-item:${orderId}:${item.id}`)}
                 onClick={() => addItem(item)}
               >
-                {item.is86d ? "86’d" : "Add item"}
+                {isPending(`add-item:${orderId}:${item.id}`)
+                  ? "Adding…"
+                  : item.is86d
+                    ? "86’d"
+                    : "Add item"}
               </button>
             </div>
           ))}
