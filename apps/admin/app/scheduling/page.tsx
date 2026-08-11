@@ -63,6 +63,7 @@ export default function AdminPage() {
   const [movieTrailerUrl, setMovieTrailerUrl] = useState("");
   const [movieReleaseYear, setMovieReleaseYear] = useState<number | "">("");
   const [pairingMenuItemIds, setPairingMenuItemIds] = useState<string[]>([]);
+  const [pairingMenuSearch, setPairingMenuSearch] = useState("");
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
   const [movieId, setMovieId] = useState("");
   const [auditoriumId, setAuditoriumId] = useState("");
@@ -120,6 +121,7 @@ export default function AdminPage() {
       setMovieDetailPosterUrl("");
       setMovieDiningSpecialArtworkUrl("");
       setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
+      setPairingMenuSearch("");
       setEditingMovieId(null);
       setMovieEditorOpen(false);
       await refresh();
@@ -354,6 +356,7 @@ export default function AdminPage() {
     setMovieTrailerUrl(movie?.trailerUrl ?? "");
     setMovieReleaseYear(movie?.releaseYear ?? "");
     setPairingMenuItemIds(movie?.pairings?.map((pairing) => pairing.menuItemId) ?? []);
+    setPairingMenuSearch("");
     setMovieEditorOpen(true);
   }
 
@@ -455,7 +458,9 @@ export default function AdminPage() {
         <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>
         <label>Release year<input type="number" min="1888" max="2200" value={movieReleaseYear} onChange={(event) => setMovieReleaseYear(event.target.value ? Number(event.target.value) : "")} /></label>
         <label>Synopsis<textarea rows={6} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} placeholder="Short customer-facing film description" /></label>
-        <fieldset className="pairing-picker"><legend>Paired food &amp; drink</legend><p>Choose the menu items featured with this film.</p><div className="pairing-picker__grid">{data?.location.menuCategories.flatMap((category) => category.items.map((item) => {
+        <fieldset className="pairing-picker"><legend>Paired food &amp; drink</legend><div className="pairing-picker__heading"><p>Choose the menu items featured with this film.</p><span>{pairingMenuItemIds.length} selected</span></div>
+          <div className="pairing-picker__controls"><input type="search" value={pairingMenuSearch} onChange={(event) => setPairingMenuSearch(event.target.value)} placeholder="Search food, drinks, or categories" aria-label="Search paired menu items" />{pairingMenuItemIds.length > 0 && <button type="button" onClick={() => setPairingMenuItemIds([])}>Clear</button>}</div>
+          <div className="pairing-picker__grid">{data?.location.menuCategories.flatMap((category) => category.items.filter((item) => `${item.name} ${category.name}`.toLocaleLowerCase().includes(pairingMenuSearch.trim().toLocaleLowerCase())).map((item) => {
           const selected = pairingMenuItemIds.includes(item.id);
           return <label className="pairing-option" data-selected={selected || undefined} key={item.id}>
             <input type="checkbox" checked={selected} onChange={(event) => setPairingMenuItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} />
