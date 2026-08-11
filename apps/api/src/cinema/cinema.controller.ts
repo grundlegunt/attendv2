@@ -45,6 +45,9 @@ export class CinemaController {
     return this.cinemaService.publicContent(locationId);
   }
 
+  @Post("private-event-inquiries")
+  privateEventInquiry(@Query("locationId") locationId: string | undefined, @Body() body: { name?: string; email?: string; phone?: string; eventType?: string; preferredDate?: string; guestCount?: number; message?: string }) { return this.cinemaService.createPrivateEventInquiry(locationId, body); }
+
   @Get("film-series")
   filmSeries(@Query("locationId") locationId?: string) {
     return this.cinemaService.publicFilmSeries(locationId);

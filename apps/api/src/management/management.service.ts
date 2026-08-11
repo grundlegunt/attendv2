@@ -171,6 +171,15 @@ export class ManagementService {
     return { employees, roles, permissions };
   }
 
+  privateEventInquiries(locationId: string) { return prisma.privateEventInquiry.findMany({ where: { locationId }, orderBy: { createdAt: "desc" } }); }
+
+  async updatePrivateEventInquiry(locationId: string, inquiryId: string, status?: string) {
+    if (!status || !["NEW", "CONTACTED", "BOOKED", "CLOSED"].includes(status)) throw AppError.validationFailed("A valid inquiry status is required.");
+    const inquiry = await prisma.privateEventInquiry.findFirst({ where: { id: inquiryId, locationId } });
+    if (!inquiry) throw AppError.notFound("Private-event inquiry was not found.");
+    return prisma.privateEventInquiry.update({ where: { id: inquiry.id }, data: { status } });
+  }
+
   async customer(locationId: string, customerId: string) {
     const customer = await prisma.customer.findFirst({ where: { id: customerId, ticketOrders: { some: { locationId } } }, select: { id: true, name: true, email: true, phone: true } });
     if (!customer) throw AppError.notFound("Customer was not found.");

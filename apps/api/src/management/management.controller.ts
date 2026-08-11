@@ -88,6 +88,12 @@ export class ManagementController {
   @Get("people") @RequirePermissions(Permission.EmployeeEdit)
   people(@CurrentActor() actor: RequestActor) { return this.management.people(this.location(actor)); }
 
+  @Get("private-event-inquiries") @RequirePermissions(Permission.ReportsView)
+  privateEventInquiries(@CurrentActor() actor: RequestActor) { return this.management.privateEventInquiries(this.location(actor)); }
+
+  @Patch("private-event-inquiries/:inquiryId") @RequirePermissions(Permission.ReportsView)
+  updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Body() body: { status?: string }) { return this.management.updatePrivateEventInquiry(this.location(actor), inquiryId, body.status); }
+
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }
 

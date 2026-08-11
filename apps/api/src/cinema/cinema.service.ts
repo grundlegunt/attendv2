@@ -75,6 +75,16 @@ function zonedDate(date: string, hour: number, minute: number, second: number, t
 
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
+  async createPrivateEventInquiry(locationId: string | undefined, input: { name?: string; email?: string; phone?: string; eventType?: string; preferredDate?: string; guestCount?: number; message?: string }) {
+    const location = locationId ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } }) : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const name = input.name?.trim(), email = input.email?.trim().toLowerCase(), eventType = input.eventType?.trim(), message = input.message?.trim();
+    if (!name || !email || !email.includes("@") || !eventType || !message) throw AppError.validationFailed("Name, email, event type, and message are required.");
+    if (input.guestCount != null && (!Number.isInteger(input.guestCount) || input.guestCount < 1 || input.guestCount > 5000)) throw AppError.validationFailed("Guest count must be between 1 and 5000.");
+    const preferredDate = input.preferredDate ? new Date(input.preferredDate) : null;
+    if (preferredDate && Number.isNaN(preferredDate.getTime())) throw AppError.validationFailed("Preferred date is invalid.");
+    return prisma.privateEventInquiry.create({ data: { locationId: location.id, name, email, phone: input.phone?.trim() || null, eventType, preferredDate, guestCount: input.guestCount, message } });
+  }
   private expiryTimer?: ReturnType<typeof setInterval>;
   private readonly minimumCinemaCleaningMinutes = 15;
 
