@@ -320,6 +320,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-series-form-actions, .film-series-row-actions { display: flex; gap: 10px; }
 .film-series-form-actions button { flex: 1; }
 .film-series-list { grid-column: 1 / -1; display: grid; border-top: 1px solid var(--color-border); }
+.film-series-archive { grid-column: 1 / -1; }
 .film-series-list article { display: grid; grid-template-columns: 86px minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 18px 0; border-bottom: 1px solid var(--color-border); }
 .film-series-list article[draggable="true"] { cursor: grab; }
 .film-series-list article[draggable="true"]:active { cursor: grabbing; }
