@@ -413,6 +413,7 @@ export class RestaurantService {
       active?: boolean;
       is86d?: boolean;
       sortOrder?: number;
+      menuCategoryId?: string;
       kitchenStationId?: string;
     };
   }) {
@@ -426,6 +427,16 @@ export class RestaurantService {
           where: { id: input.changes.kitchenStationId, locationId: input.locationId },
         });
         if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+      }
+      if (input.changes.menuCategoryId && input.changes.menuCategoryId !== existing.menuCategoryId) {
+        const category = await tx.menuCategory.findFirst({
+          where: {
+            id: input.changes.menuCategoryId,
+            locationId: input.locationId,
+            active: true,
+          },
+        });
+        if (!category) throw new RestaurantError("Active menu category was not found.", "NOT_FOUND");
       }
       const updated = await tx.menuItem.update({
         where: { id: existing.id },
