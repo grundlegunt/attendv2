@@ -218,7 +218,8 @@ export function TicketCheckout({
       );
       setCheckout(created);
       if (!created.payment?.clientSecret) {
-        throw new Error("A secure payment session could not be created.");
+        setConfirmation(await apiFetch<TicketConfirmationResponse>(`/ticketing/orders/${created.orderId}/finalize`, { method: "POST", body: "{}" }));
+        return;
       }
       await loadStripe();
       if (!window.Stripe || !config.payment.publishableKey) {
@@ -393,7 +394,7 @@ export function TicketCheckout({
               pending ||
               diningAuthorization === null ||
               !config?.ticketTypes.length ||
-              !config.payment.ready
+              (!config.payment.ready && !giftCardCode.trim())
             }
           >
             {pending ? "Preparing secure checkout…" : "Continue to payment"}

@@ -218,8 +218,8 @@ export class TicketingService {
       giftCard = await this.prisma.giftCard.findFirst({ where: { organizationId: location.organizationId, codeHash, status: "ACTIVE" }, select: { id: true, balanceCents: true, currency: true } });
       if (!giftCard) throw TicketingError.notFound("Gift card was not found or is inactive.");
       if (giftCard.currency !== showtime.priceTier.currency) throw TicketingError.validation("Gift card currency does not match this order.");
-      giftCardCents = Math.min(giftCard.balanceCents, totalCents - 50);
-      if (giftCardCents <= 0) throw TicketingError.validation("This order does not have enough remaining total for partial gift-card payment.");
+      giftCardCents = Math.min(giftCard.balanceCents, totalCents);
+      if (giftCardCents <= 0) throw TicketingError.validation("Gift card balance is insufficient.");
     }
     const normalizedEmail = input.email.toLowerCase();
     const customer = await this.prisma.customer.upsert({
@@ -256,7 +256,7 @@ export class TicketingService {
           promotionId: promotion?.id,
           giftCardId: giftCard?.id,
           giftCardCents,
-          payment: {
+          ...(totalCents - giftCardCents > 0 ? { payment: {
             create: {
               purpose: "TICKET_ORDER",
               amountCents: totalCents - giftCardCents,
@@ -265,7 +265,7 @@ export class TicketingService {
               idempotencyKey: `ticket-order:${input.checkoutIdempotencyKey}`,
               provider: this.paymentProvider.name,
             },
-          },
+          } } : {}),
         },
         include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
       });
@@ -347,9 +347,7 @@ export class TicketingService {
     }
 
     if (!order.payment) {
-      // Shouldn't happen -- Payment is always created atomically with
-      // TicketOrder (see createCheckout) -- but don't silently proceed
-      // past a data-integrity assumption that isn't actually true.
+      if (order.giftCardCents === order.totalCents) return this.presentCheckout(order);
       throw TicketingError.notFound("Ticket order has no payment record.");
     }
 
@@ -460,6 +458,9 @@ export class TicketingService {
         tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } },
       },
     });
+    if (order && !order.payment && order.giftCardId && order.giftCardCents === order.totalCents) {
+      return this.finalizeGiftCardOnlyOrder(order.id);
+    }
     if (!order?.payment?.providerPaymentId) {
       throw TicketingError.notFound("Ticket order was not found.");
     }
@@ -717,6 +718,40 @@ export class TicketingService {
       }
       throw error;
     }
+  }
+
+  private async finalizeGiftCardOnlyOrder(orderId: string) {
+    const finalized = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`);
+      const order = await tx.ticketOrder.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { payment: true, location: { include: { organization: true } }, tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } },
+      });
+      if (order.status === TicketOrderStatus.PAID) return order;
+      if (order.payment || !order.giftCardId || order.giftCardCents !== order.totalCents) throw TicketingError.conflict("Gift-card-only order is invalid.");
+      const holds = await tx.$queryRaw<LockedHold[]>(Prisma.sql`
+        SELECT sh."id", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
+        FROM "seat_holds" sh JOIN "showtime_seats" ss ON ss."id" = sh."showtimeSeatId"
+        WHERE sh."holdToken" IN (${Prisma.join(order.holdTokens)}) ORDER BY ss."id" FOR UPDATE OF ss, sh
+      `);
+      const now = new Date();
+      if (holds.length !== order.holdTokens.length || holds.some((hold) => hold.holderKey !== order.holderKey || hold.releasedAt || hold.expiresAt <= now)) throw TicketingError.conflict("The seat hold expired before the gift card could be finalized.", "HOLD_EXPIRED");
+      const inventoryIds = holds.map((hold) => hold.showtimeSeatId);
+      if (await tx.ticket.findFirst({ where: { showtimeSeatId: { in: inventoryIds }, status: { notIn: ["REFUNDED", "CANCELED"] } } })) throw TicketingError.conflict("A selected seat is no longer available.", "SEAT_UNAVAILABLE");
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "gift_cards" WHERE "id" = ${order.giftCardId} FOR UPDATE`);
+      const giftCard = await tx.giftCard.findFirst({ where: { id: order.giftCardId, organizationId: order.location.organizationId, status: "ACTIVE" } });
+      if (!giftCard || giftCard.currency !== order.currency || giftCard.balanceCents < order.giftCardCents) throw TicketingError.paymentRequired("The gift card is no longer available for this order.");
+      const balanceAfterCents = giftCard.balanceCents - order.giftCardCents;
+      await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
+      await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: order.locationId, type: "REDEMPTION", amountCents: -order.giftCardCents, balanceAfterCents, reference: order.id } });
+      const perTicketPrice = Math.floor(order.subtotalCents / holds.length);
+      await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: order.ticketTypeId, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
+      await tx.seatHold.updateMany({ where: { id: { in: holds.map((hold) => hold.id) }, releasedAt: null }, data: { releasedAt: now } });
+      return tx.ticketOrder.update({ where: { id: order.id }, data: { status: TicketOrderStatus.PAID }, include: { payment: true, location: { include: { organization: true } }, tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } } });
+    });
+    const diningAuthorization = await this.persistDiningAuthorization(finalized, undefined);
+    const receiptDelivery = await this.deliverReceipt(finalized);
+    return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization);
   }
 
   async processVerifiedWebhook(event: VerifiedProviderEvent) {
