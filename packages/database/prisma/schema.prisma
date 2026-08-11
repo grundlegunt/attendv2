@@ -47,15 +47,15 @@ model Organization {
 // They have cross-organization visibility only through the dedicated platform
 // API and can never be assigned a cinema role or location permission.
 model PlatformUser {
-  id                  String   @id @default(uuid())
+  id                  String           @id @default(uuid())
   name                String
-  email               String   @unique
+  email               String           @unique
   passwordHash        String
   role                PlatformUserRole @default(OWNER)
-  active              Boolean  @default(true)
-  refreshTokenVersion Int      @default(0)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  active              Boolean          @default(true)
+  refreshTokenVersion Int              @default(0)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
   @@map("platform_users")
 }
@@ -132,42 +132,43 @@ model Location {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  employees          Employee[]
-  employeeRoles      EmployeeRole[]
-  auditEvents        AuditEvent[]
-  auditoriums        Auditorium[]
-  ticketTypes        TicketType[]
-  ticketOrders       TicketOrder[]
-  restaurantTabs     RestaurantTab[]
-  kitchenStations    KitchenStation[]
-  menuCategories     MenuCategory[]
-  taxRules           TaxRule[]
-  serviceChargeRules ServiceChargeRule[]
-  cashDrawers        CashDrawer[]
-  cashTransactions   CashTransaction[]
-  promotions         Promotion[]
-  shifts             Shift[]
+  employees             Employee[]
+  employeeRoles         EmployeeRole[]
+  auditEvents           AuditEvent[]
+  auditoriums           Auditorium[]
+  ticketTypes           TicketType[]
+  ticketOrders          TicketOrder[]
+  restaurantTabs        RestaurantTab[]
+  kitchenStations       KitchenStation[]
+  menuCategories        MenuCategory[]
+  taxRules              TaxRule[]
+  serviceChargeRules    ServiceChargeRule[]
+  cashDrawers           CashDrawer[]
+  cashTransactions      CashTransaction[]
+  promotions            Promotion[]
+  shifts                Shift[]
   privateEventInquiries PrivateEventInquiry[]
-  issuedGiftCards   GiftCard[]
-  giftCardTransactions GiftCardTransaction[]
+  issuedGiftCards       GiftCard[]
+  giftCardTransactions  GiftCardTransaction[]
 
   @@map("locations")
 }
 
 model PrivateEventInquiry {
-  id String @id @default(uuid())
-  locationId String
-  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  name String
-  email String
-  phone String?
-  eventType String
+  id            String    @id @default(uuid())
+  locationId    String
+  location      Location  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name          String
+  email         String
+  phone         String?
+  eventType     String
   preferredDate DateTime?
-  guestCount Int?
-  message String
-  status String @default("NEW")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  guestCount    Int?
+  message       String
+  status        String    @default("NEW")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
   @@index([locationId, status, createdAt])
   @@map("private_event_inquiries")
 }
@@ -185,24 +186,25 @@ enum GiftCardTransactionType {
 }
 
 model GiftCard {
-  id String @id @default(uuid())
-  organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  issuedAtLocationId String
-  issuedAtLocation Location @relation(fields: [issuedAtLocationId], references: [id], onDelete: Restrict)
-  codeHash String @unique
-  codeLast4 String
+  id                  String                @id @default(uuid())
+  organizationId      String
+  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  issuedAtLocationId  String
+  issuedAtLocation    Location              @relation(fields: [issuedAtLocationId], references: [id], onDelete: Restrict)
+  codeHash            String                @unique
+  codeLast4           String
   initialBalanceCents Int
-  balanceCents Int
-  currency String @default("USD")
-  recipientName String?
-  recipientEmail String?
-  status GiftCardStatus @default(ACTIVE)
-  issuedByEmployeeId String
-  issuedByEmployee Employee @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
-  transactions GiftCardTransaction[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  balanceCents        Int
+  currency            String                @default("USD")
+  recipientName       String?
+  recipientEmail      String?
+  status              GiftCardStatus        @default(ACTIVE)
+  issuedByEmployeeId  String
+  issuedByEmployee    Employee              @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
+  transactions        GiftCardTransaction[]
+  ticketOrders        TicketOrder[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   @@index([organizationId, createdAt])
   @@index([organizationId, codeLast4])
@@ -210,18 +212,18 @@ model GiftCard {
 }
 
 model GiftCardTransaction {
-  id String @id @default(uuid())
-  giftCardId String
-  giftCard GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
-  locationId String
-  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  type GiftCardTransactionType
-  amountCents Int
+  id                String                  @id @default(uuid())
+  giftCardId        String
+  giftCard          GiftCard                @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
+  locationId        String
+  location          Location                @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  type              GiftCardTransactionType
+  amountCents       Int
   balanceAfterCents Int
-  employeeId String?
-  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
-  reference String?
-  createdAt DateTime @default(now())
+  employeeId        String?
+  employee          Employee?               @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reference         String?
+  createdAt         DateTime                @default(now())
 
   @@index([giftCardId, createdAt])
   @@index([locationId, createdAt])
@@ -675,6 +677,10 @@ model TicketOrder {
   promotionId String?
   promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
 
+  giftCardId    String?
+  giftCard      GiftCard? @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
+  giftCardCents Int       @default(0)
+
   placedByEmployeeId String?
   placedByEmployee   Employee? @relation(fields: [placedByEmployeeId], references: [id], onDelete: Restrict)
   createdAt          DateTime  @default(now())
@@ -687,6 +693,7 @@ model TicketOrder {
 
   @@index([locationId, createdAt])
   @@index([customerId, createdAt])
+  @@index([giftCardId, createdAt])
   @@map("ticket_orders")
 }
 
@@ -899,12 +906,12 @@ model Employee {
   placedTicketOrders      TicketOrder[]
   ticketScans             TicketScan[]
   restaurantOrders        RestaurantOrder[]
-  droppedRestaurantChecks RestaurantTab[]   @relation("DroppedRestaurantChecks")
-  openedCashDrawers       CashDrawer[]      @relation("OpenedCashDrawers")
-  closedCashDrawers       CashDrawer[]      @relation("ClosedCashDrawers")
+  droppedRestaurantChecks RestaurantTab[]       @relation("DroppedRestaurantChecks")
+  openedCashDrawers       CashDrawer[]          @relation("OpenedCashDrawers")
+  closedCashDrawers       CashDrawer[]          @relation("ClosedCashDrawers")
   cashTransactions        CashTransaction[]
-  shifts                  Shift[]           @relation("EmployeeShifts")
-  adjustedShifts          Shift[]           @relation("AdjustedShifts")
+  shifts                  Shift[]               @relation("EmployeeShifts")
+  adjustedShifts          Shift[]               @relation("AdjustedShifts")
   issuedGiftCards         GiftCard[]
   giftCardTransactions    GiftCardTransaction[]
 

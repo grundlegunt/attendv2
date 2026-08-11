@@ -1760,6 +1760,32 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.body.orderId } })).toMatchObject({ promotionId: promotion.id, discountCents: 100 });
   });
 
+  it("applies and refunds a gift card during online checkout", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `online-gift-card-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const issued = await request(app.getHttpServer()).post("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ amountCents: 500 }).expect(201);
+    const config = await request(app.getHttpServer()).get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`).expect(200);
+    const checkout = await request(app.getHttpServer()).post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`).send({
+        holdTokens: [hold.holdToken], holderKey, ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`, giftCardCode: issued.body.code.toLowerCase(), diningAuthorizationRequested: false,
+      }).expect(201);
+    expect(checkout.body.giftCardCents).toBe(500);
+    expect(checkout.body.payment.amountCents).toBe(checkout.body.totalCents - 500);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
+    await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({}).expect(201);
+    expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(0);
+
+    await request(app.getHttpServer()).post(`/api/v1/management/refunds/ticket-orders/${checkout.body.orderId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E online gift card refund" }).expect(201);
+    expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(500);
+  });
+
   it("issues one ticket after a verified successful payment and is idempotent", async () => {
     const holderKey = "ticket-happy-holder-0001";
     const { seat, hold } = await holdAvailableSeat(holderKey);

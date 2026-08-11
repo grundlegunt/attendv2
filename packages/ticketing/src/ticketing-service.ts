@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   PaymentAttemptStatus,
   PaymentStatus,
@@ -25,6 +25,7 @@ export interface CreateTicketCheckoutInput {
   email: string;
   name?: string;
   promotionCode?: string;
+  giftCardCode?: string;
   diningAuthorizationRequested: boolean;
   checkoutIdempotencyKey: string;
 }
@@ -210,6 +211,16 @@ export class TicketingService {
       (taxableSubtotal * location.ticketTaxRateBasisPoints) / 10_000,
     );
     const totalCents = taxableSubtotal + feesCents + taxCents;
+    let giftCard: { id: string; balanceCents: number; currency: string } | null = null;
+    let giftCardCents = 0;
+    if (input.giftCardCode) {
+      const codeHash = createHash("sha256").update(input.giftCardCode.toUpperCase().replace(/[^A-Z0-9]/g, "")).digest("hex");
+      giftCard = await this.prisma.giftCard.findFirst({ where: { organizationId: location.organizationId, codeHash, status: "ACTIVE" }, select: { id: true, balanceCents: true, currency: true } });
+      if (!giftCard) throw TicketingError.notFound("Gift card was not found or is inactive.");
+      if (giftCard.currency !== showtime.priceTier.currency) throw TicketingError.validation("Gift card currency does not match this order.");
+      giftCardCents = Math.min(giftCard.balanceCents, totalCents - 50);
+      if (giftCardCents <= 0) throw TicketingError.validation("This order does not have enough remaining total for partial gift-card payment.");
+    }
     const normalizedEmail = input.email.toLowerCase();
     const customer = await this.prisma.customer.upsert({
       where: { email: normalizedEmail },
@@ -243,10 +254,12 @@ export class TicketingService {
           totalCents,
           currency: showtime.priceTier.currency,
           promotionId: promotion?.id,
+          giftCardId: giftCard?.id,
+          giftCardCents,
           payment: {
             create: {
               purpose: "TICKET_ORDER",
-              amountCents: totalCents,
+              amountCents: totalCents - giftCardCents,
               currency: showtime.priceTier.currency,
               status: PaymentStatus.CREATED,
               idempotencyKey: `ticket-order:${input.checkoutIdempotencyKey}`,
@@ -294,10 +307,12 @@ export class TicketingService {
     feesCents: number;
     taxCents: number;
     totalCents: number;
+    giftCardCents: number;
     currency: string;
     payment: {
       id: string;
       idempotencyKey: string;
+      amountCents: number;
       providerPaymentId: string | null;
       status: PaymentStatus;
       attempts: Array<{ attemptNumber: number; status: PaymentAttemptStatus }>;
@@ -343,7 +358,7 @@ export class TicketingService {
       connectedAccountId,
       providerCustomerId: paymentCustomer?.providerCustomerId,
       savePaymentMethodForFuture: Boolean(order.diningAuthorizationRequested),
-      amountCents: order.totalCents,
+      amountCents: order.payment.amountCents,
       currency: order.currency,
       metadata: {
         ticketOrderId: order.id,
@@ -640,6 +655,16 @@ export class TicketingService {
               "SEAT_UNAVAILABLE_AFTER_PAYMENT",
             );
           }
+          if (lockedOrder.giftCardId && lockedOrder.giftCardCents > 0) {
+            await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "gift_cards" WHERE "id" = ${lockedOrder.giftCardId} FOR UPDATE`);
+            const giftCard = await tx.giftCard.findFirst({ where: { id: lockedOrder.giftCardId, organizationId: order.location.organizationId, status: "ACTIVE" } });
+            if (!giftCard || giftCard.currency !== lockedOrder.currency || giftCard.balanceCents < lockedOrder.giftCardCents) {
+              throw TicketingError.conflict("The gift card is no longer available for this order.", "GIFT_CARD_UNAVAILABLE_AFTER_PAYMENT");
+            }
+            const balanceAfterCents = giftCard.balanceCents - lockedOrder.giftCardCents;
+            await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
+            await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: lockedOrder.locationId, type: "REDEMPTION", amountCents: -lockedOrder.giftCardCents, balanceAfterCents, reference: lockedOrder.id } });
+          }
           const perTicketPrice = Math.floor(
             lockedOrder.subtotalCents / lockedHolds.length,
           );
@@ -686,7 +711,7 @@ export class TicketingService {
     } catch (error) {
       if (
         error instanceof TicketingError &&
-        ["HOLD_EXPIRED_AFTER_PAYMENT", "SEAT_UNAVAILABLE_AFTER_PAYMENT"].includes(error.code)
+        ["HOLD_EXPIRED_AFTER_PAYMENT", "SEAT_UNAVAILABLE_AFTER_PAYMENT", "GIFT_CARD_UNAVAILABLE_AFTER_PAYMENT"].includes(error.code)
       ) {
         await this.refundUnavailableOrder(order.id, error.code);
       }
@@ -1509,9 +1534,11 @@ export class TicketingService {
       feesCents: number;
       taxCents: number;
       totalCents: number;
+      giftCardCents: number;
       currency: string;
       payment: {
         id: string;
+        amountCents: number;
         providerPaymentId: string | null;
         status: PaymentStatus;
         attempts: Array<{ attemptNumber: number; status: PaymentAttemptStatus }>;
@@ -1528,12 +1555,14 @@ export class TicketingService {
       feesCents: order.feesCents,
       taxCents: order.taxCents,
       totalCents: order.totalCents,
+      giftCardCents: order.giftCardCents,
       currency: order.currency,
       payment: order.payment
         ? {
             id: order.payment.id,
             providerPaymentId: order.payment.providerPaymentId,
             status: order.payment.status,
+            amountCents: order.payment.amountCents,
             clientSecret,
             attemptNumber: order.payment.attempts[0]?.attemptNumber ?? 0,
           }
