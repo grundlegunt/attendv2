@@ -38,6 +38,10 @@ export class RestaurantService {
     return this.wrap(() => this.domain.createKitchenStation(input));
   }
 
+  updateKitchenStation(input: Parameters<RestaurantDomainService["updateKitchenStation"]>[0]) {
+    return this.wrap(() => this.domain.updateKitchenStation(input));
+  }
+
   createMenuCategory(input: { locationId: string; name: string; sortOrder: number }) {
     return this.wrap(() => this.domain.createMenuCategory(input));
   }

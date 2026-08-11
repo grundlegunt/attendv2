@@ -6,6 +6,7 @@ import {
   createMenuItemRequestSchema,
   createModifierGroupRequestSchema,
   createModifierRequestSchema,
+  updateKitchenStationRequestSchema,
   updateMenuCategoryRequestSchema,
   updateMenuItemRequestSchema,
 } from "@cinema/shared";
@@ -47,6 +48,20 @@ export class MenuController {
     return this.restaurant.createKitchenStation({
       ...createKitchenStationRequestSchema.parse(body),
       locationId: this.locationId(actor),
+    });
+  }
+
+  @Patch("stations/:kitchenStationId")
+  @RequirePermissions(Permission.MenuEdit)
+  updateStation(
+    @CurrentActor() actor: RequestActor,
+    @Param("kitchenStationId") kitchenStationId: string,
+    @Body(new ZodValidationPipe(updateKitchenStationRequestSchema)) body: unknown,
+  ) {
+    return this.restaurant.updateKitchenStation({
+      kitchenStationId,
+      locationId: this.locationId(actor),
+      changes: updateKitchenStationRequestSchema.parse(body),
     });
   }
 

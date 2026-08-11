@@ -117,6 +117,32 @@ export class RestaurantService {
     return this.prisma.kitchenStation.create({ data: input });
   }
 
+  async updateKitchenStation(input: {
+    kitchenStationId: string;
+    locationId: string;
+    changes: { name?: string; displayType?: string; active?: boolean };
+  }): Promise<KitchenStation> {
+    const station = await this.prisma.kitchenStation.findFirst({
+      where: { id: input.kitchenStationId, locationId: input.locationId },
+    });
+    if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+    if (input.changes.active === false) {
+      const assignedItems = await this.prisma.menuItem.count({
+        where: { kitchenStationId: station.id, active: true },
+      });
+      if (assignedItems > 0) {
+        throw new RestaurantError(
+          "Reassign or deactivate active menu items before retiring this station.",
+          "CONFLICT",
+        );
+      }
+    }
+    return this.prisma.kitchenStation.update({
+      where: { id: station.id },
+      data: input.changes,
+    });
+  }
+
   createMenuCategory(input: {
     locationId: string;
     name: string;
