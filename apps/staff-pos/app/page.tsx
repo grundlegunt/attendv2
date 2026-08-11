@@ -64,6 +64,7 @@ export default function StaffLoginPage() {
   const [seatDetail, setSeatDetail] = useState<SeatDetail | null>(null);
   const [openingTabs, setOpeningTabs] = useState(false);
   const openingTabsRef = useRef(false);
+  const openingTabsRequestRef = useRef(0);
   const seatDetailRequestRef = useRef(0);
   const availabilityRequestRef = useRef(0);
   const refreshRequestRef = useRef(0);
@@ -108,9 +109,16 @@ export default function StaffLoginPage() {
 
   function signOut() {
     refreshRequestRef.current += 1;
+    availabilityRequestRef.current += 1;
+    seatDetailRequestRef.current += 1;
+    openingTabsRequestRef.current += 1;
+    openingTabsRef.current = false;
     if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY);
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
+    setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setView("scanner");
+    setOpenedTabs([]); setSeatDetail(null); setOpeningTabs(false); setTabOrderId("");
+    setPassword(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setMfaCode(""); setMfaChallengeToken(null); setError(null);
   }
 
   useEffect(() => {
@@ -215,19 +223,25 @@ export default function StaffLoginPage() {
     event.preventDefault();
     if (openingTabsRef.current) return;
     openingTabsRef.current = true;
+    const requestId = ++openingTabsRequestRef.current;
     setOpeningTabs(true);
     setError(null);
     try {
-      setOpenedTabs(await apiFetch<TabSummary[]>("/restaurant-tabs/seat-linked", {
+      const tabs = await apiFetch<TabSummary[]>("/restaurant-tabs/seat-linked", {
         method: "POST",
         accessToken,
         body: JSON.stringify({ ticketOrderId: tabOrderId, mode: tabMode }),
-      }));
+      });
+      if (requestId !== openingTabsRequestRef.current) return;
+      setOpenedTabs(tabs);
     } catch (err) {
+      if (requestId !== openingTabsRequestRef.current) return;
       setError(err instanceof ApiRequestError ? err.body.message : "Tabs could not be opened.");
     } finally {
-      openingTabsRef.current = false;
-      setOpeningTabs(false);
+      if (requestId === openingTabsRequestRef.current) {
+        openingTabsRef.current = false;
+        setOpeningTabs(false);
+      }
     }
   }
 
