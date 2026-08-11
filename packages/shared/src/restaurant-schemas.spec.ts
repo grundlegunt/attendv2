@@ -22,6 +22,14 @@ describe("menu item dietary attributes", () => {
     expect(updateMenuItemRequestSchema.parse({ isVegan: true, isGlutenFree: true }))
       .toEqual({ isVegan: true, isGlutenFree: true });
   });
+
+  it("accepts moving an item to another category", () => {
+    expect(
+      updateMenuItemRequestSchema.parse({
+        menuCategoryId: "10000000-0000-4000-8000-000000000003",
+      }),
+    ).toEqual({ menuCategoryId: "10000000-0000-4000-8000-000000000003" });
+  });
 });
 
 describe("menu category updates", () => {

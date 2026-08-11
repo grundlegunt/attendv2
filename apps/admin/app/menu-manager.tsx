@@ -91,6 +91,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editDescription, setEditDescription] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editPrice, setEditPrice] = useState(0);
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [originalEditCategoryId, setOriginalEditCategoryId] = useState("");
   const [editStationId, setEditStationId] = useState("");
   const [editSortOrder, setEditSortOrder] = useState(0);
   const [editActive, setEditActive] = useState(true);
@@ -364,12 +366,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     );
   }
 
-  function beginEditing(item: MenuItem) {
+  function beginEditing(item: MenuItem, currentCategoryId: string) {
     setEditingItem(item);
     setEditName(item.name);
     setEditDescription(item.description ?? "");
     setEditImageUrl(item.imageUrl ?? "");
     setEditPrice(item.priceCents / 100);
+    setEditCategoryId(currentCategoryId);
+    setOriginalEditCategoryId(currentCategoryId);
     setEditStationId(item.kitchenStation.id);
     setEditSortOrder(item.sortOrder);
     setEditActive(item.active);
@@ -389,6 +393,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           description: editDescription || null,
           imageUrl: editImageUrl || null,
           priceCents: Math.round(editPrice * 100),
+          ...(editCategoryId !== originalEditCategoryId
+            ? { menuCategoryId: editCategoryId }
+            : {}),
           kitchenStationId: editStationId,
           sortOrder: editSortOrder,
           active: editActive,
@@ -692,7 +699,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                 <button
                   className="secondary"
                   type="button"
-                  onClick={() => beginEditing(item)}
+                  onClick={() => beginEditing(item, category.id)}
                 >
                   Edit
                 </button>
@@ -759,6 +766,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             </label>
             {editImageUrl && <div className="menu-image-preview"><img src={editImageUrl} alt="" /><span>Customer menu preview</span></div>}
             <div className="two-fields">
+              <label>
+                Category
+                <select
+                  required
+                  value={editCategoryId}
+                  onChange={(event) => setEditCategoryId(event.target.value)}
+                >
+                  {menu?.categories.map((category) => (
+                    <option
+                      key={category.id}
+                      value={category.id}
+                      disabled={!category.active && category.id !== originalEditCategoryId}
+                    >
+                      {category.name}{category.active ? "" : " (Inactive)"}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 Kitchen station
                 <select

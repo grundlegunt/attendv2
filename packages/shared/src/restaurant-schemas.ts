@@ -120,6 +120,7 @@ export const updateMenuItemRequestSchema = z
     active: z.boolean().optional(),
     is86d: z.boolean().optional(),
     sortOrder: z.number().int().min(0).optional(),
+    menuCategoryId: z.string().uuid().optional(),
     kitchenStationId: z.string().uuid().optional(),
   })
   .refine((value) => Object.keys(value).length > 0, "At least one change is required.");
