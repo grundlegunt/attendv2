@@ -1677,6 +1677,41 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     };
   }
 
+  it("applies an active promotion code to online checkout", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `online-promotion-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const showtime = await prisma.showtime.findUniqueOrThrow({
+      where: { id: showtimeId },
+      select: { auditorium: { select: { locationId: true } }, priceTier: true },
+    });
+    const promotion = await prisma.promotion.create({ data: {
+      locationId: showtime.auditorium.locationId,
+      code: `ONLINE${Date.now()}`,
+      name: "Online checkout promotion",
+      type: "FIXED_AMOUNT",
+      amountCents: 100,
+    } });
+    const config = await request(app.getHttpServer()).get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`).expect(200);
+
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        promotionCode: promotion.code.toLowerCase(),
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+
+    expect(checkout.body.discountCents).toBe(100);
+    expect(checkout.body.totalCents).toBe(showtime.priceTier.ticketPriceMinor - 100 + showtime.priceTier.feeMinor);
+    expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.body.orderId } })).toMatchObject({ promotionId: promotion.id, discountCents: 100 });
+  });
+
   it("issues one ticket after a verified successful payment and is idempotent", async () => {
     const holderKey = "ticket-happy-holder-0001";
     const { seat, hold } = await holdAvailableSeat(holderKey);
