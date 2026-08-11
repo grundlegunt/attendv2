@@ -24,6 +24,7 @@ export interface CreateTicketCheckoutInput {
   ticketTypeId: string;
   email: string;
   name?: string;
+  promotionCode?: string;
   diningAuthorizationRequested: boolean;
   checkoutIdempotencyKey: string;
 }
@@ -176,10 +177,39 @@ export class TicketingService {
 
     const subtotalCents = showtime.priceTier.ticketPriceMinor * holds.length;
     const feesCents = showtime.priceTier.feeMinor * holds.length;
+    const promotion = input.promotionCode
+      ? await this.prisma.promotion.findFirst({
+          where: {
+            locationId: location.id,
+            code: input.promotionCode.toUpperCase(),
+            active: true,
+            AND: [
+              { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
+              { OR: [{ endsAt: null }, { endsAt: { gt: now } }] },
+            ],
+          },
+          include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { id: true } } },
+        })
+      : null;
+    if (input.promotionCode && !promotion) throw TicketingError.notFound("Promotion was not found or is inactive.");
+    if (promotion?.minimumSubtotalCents != null && subtotalCents < promotion.minimumSubtotalCents) {
+      throw TicketingError.validation(`Promotion requires a minimum ticket subtotal of ${promotion.minimumSubtotalCents} cents.`);
+    }
+    if (promotion?.maximumRedemptions != null && promotion.ticketOrders.length >= promotion.maximumRedemptions) {
+      throw TicketingError.conflict("Promotion redemption limit has been reached.");
+    }
+    const discountCents = !promotion
+      ? 0
+      : promotion.type === "COMP"
+        ? subtotalCents
+        : promotion.type === "FIXED_AMOUNT"
+          ? Math.min(subtotalCents, promotion.amountCents ?? 0)
+          : Math.min(subtotalCents, Math.round(subtotalCents * (promotion.percentageBasisPoints ?? 0) / 10_000));
+    const taxableSubtotal = subtotalCents - discountCents;
     const taxCents = Math.round(
-      (subtotalCents * location.ticketTaxRateBasisPoints) / 10_000,
+      (taxableSubtotal * location.ticketTaxRateBasisPoints) / 10_000,
     );
-    const totalCents = subtotalCents + feesCents + taxCents;
+    const totalCents = taxableSubtotal + feesCents + taxCents;
     const normalizedEmail = input.email.toLowerCase();
     const customer = await this.prisma.customer.upsert({
       where: { email: normalizedEmail },
@@ -207,10 +237,12 @@ export class TicketingService {
           orderNumber: publicOrderNumber(),
           checkoutIdempotencyKey: input.checkoutIdempotencyKey,
           subtotalCents,
+          discountCents,
           feesCents,
           taxCents,
           totalCents,
           currency: showtime.priceTier.currency,
+          promotionId: promotion?.id,
           payment: {
             create: {
               purpose: "TICKET_ORDER",
@@ -258,6 +290,7 @@ export class TicketingService {
     orderNumber: string;
     status: TicketOrderStatus;
     subtotalCents: number;
+    discountCents: number;
     feesCents: number;
     taxCents: number;
     totalCents: number;
@@ -1472,6 +1505,7 @@ export class TicketingService {
       orderNumber: string;
       status: TicketOrderStatus;
       subtotalCents: number;
+      discountCents: number;
       feesCents: number;
       taxCents: number;
       totalCents: number;
@@ -1490,6 +1524,7 @@ export class TicketingService {
       orderNumber: order.orderNumber,
       status: order.status,
       subtotalCents: order.subtotalCents,
+      discountCents: order.discountCents,
       feesCents: order.feesCents,
       taxCents: order.taxCents,
       totalCents: order.totalCents,

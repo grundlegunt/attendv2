@@ -1198,7 +1198,7 @@ describe("Milestone 1 cinema configuration", () => {
         subtotalCents: 2000,
         feesCents: 0,
         taxCents: 0,
-        totalCents: 2000,
+        totalCents: 1223,
         promotionId: promotion.body.id,
         discountCents: 777,
         tickets: { create: { showtimeSeatId: showtimeSeat.id, ticketTypeId: ticketType.id, priceCentsPaid: 1223, qrToken: `promo-${crypto.randomUUID()}` } },
@@ -1210,7 +1210,7 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`);
     expect(settings.status).toBe(200);
     expect(settings.body.promotions.find((item: { id: string }) => item.id === promotion.body.id)).toEqual(
-      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalTicketFaceValueCents: 2000, totalCollectedCents: 2000, totalDiscountCents: 777 }),
+      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalTicketFaceValueCents: 2000, totalCollectedCents: 1223, totalDiscountCents: 777 }),
     );
   });
 
@@ -1676,6 +1676,41 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       payment: { providerPaymentId: string };
     };
   }
+
+  it("applies an active promotion code to online checkout", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `online-promotion-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const showtime = await prisma.showtime.findUniqueOrThrow({
+      where: { id: showtimeId },
+      select: { auditorium: { select: { locationId: true } }, priceTier: true },
+    });
+    const promotion = await prisma.promotion.create({ data: {
+      locationId: showtime.auditorium.locationId,
+      code: `ONLINE${Date.now()}`,
+      name: "Online checkout promotion",
+      type: "FIXED_AMOUNT",
+      amountCents: 100,
+    } });
+    const config = await request(app.getHttpServer()).get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`).expect(200);
+
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        promotionCode: promotion.code.toLowerCase(),
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+
+    expect(checkout.body.discountCents).toBe(100);
+    expect(checkout.body.totalCents).toBe(showtime.priceTier.ticketPriceMinor - 100 + showtime.priceTier.feeMinor);
+    expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.body.orderId } })).toMatchObject({ promotionId: promotion.id, discountCents: 100 });
+  });
 
   it("issues one ticket after a verified successful payment and is idempotent", async () => {
     const holderKey = "ticket-happy-holder-0001";

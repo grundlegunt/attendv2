@@ -111,6 +111,7 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [promotionCode, setPromotionCode] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -208,6 +209,7 @@ export function TicketCheckout({
             ticketTypeId: config.ticketTypes[0]?.id,
             email,
             name: name || undefined,
+            promotionCode: promotionCode.trim() || undefined,
             diningAuthorizationRequested: diningAuthorization,
           }),
         },
@@ -342,6 +344,10 @@ export function TicketCheckout({
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
+            <label className="field">
+              <span>Promotion code</span>
+              <input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} autoComplete="off" />
+            </label>
           </div>
           <div className="checkout-panel authorization-note">
             <h3>Food + drink during the movie</h3>
@@ -392,6 +398,7 @@ export function TicketCheckout({
           <div className="checkout-panel order-total">
             <h3>Order</h3>
             <p><span>Tickets ({seats.length})</span><strong>{money(checkout.subtotalCents, checkout.currency)}</strong></p>
+            {checkout.discountCents > 0 && <p><span>Promotion</span><strong>−{money(checkout.discountCents, checkout.currency)}</strong></p>}
             <p><span>Service fee</span><strong>{money(checkout.feesCents, checkout.currency)}</strong></p>
             <p><span>Tax</span><strong>{money(checkout.taxCents, checkout.currency)}</strong></p>
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
