@@ -419,6 +419,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .location-settings-grid small { color: var(--muted); font-size: .74rem; font-weight: 500; }
 .location-settings > button { justify-self: start; }
 .promotion-form { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); align-items: end; gap: 1rem; margin: 1.5rem 0 2rem; }
+.location-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.button-link { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; box-sizing: border-box; text-decoration: none; }
 .promotion-form button { min-height: 46px; }
 .segment-preview { margin: 0 0 2rem; padding: 1.25rem; border: 1px solid var(--line); border-radius: 14px; }
 .segment-preview .report-range { justify-content: flex-start; margin: 1rem 0; }

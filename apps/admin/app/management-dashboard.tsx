@@ -23,6 +23,7 @@ type OperatingSettings = { name: string; address: string | null; timezone: strin
 type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+const CUSTOMER_WEB_URL = process.env.NEXT_PUBLIC_CUSTOMER_WEB_URL ?? (process.env.NODE_ENV === "production" ? "https://attendv2-attend3.vercel.app" : "http://localhost:3000");
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
 const dateTimeInput = (value: string | null) => { if (!value) return ""; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
 const emptyPromotion = (): PromotionDraft => ({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
@@ -199,7 +200,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Auto-settlement tip (%)<input type="number" min="0" max="100" step="0.01" required value={locationDraft.autoSettleTipBasisPoints / 100} onChange={(event) => setLocationDraft({ ...locationDraft, autoSettleTipBasisPoints: Math.round(Number(event.target.value) * 100) })} /></label>
       </div>
       <label className="checkbox"><input type="checkbox" checked={locationDraft.timeClockEnabled} onChange={(event) => setLocationDraft({ ...locationDraft, timeClockEnabled: event.target.checked })} /> Require staff clock-in at this location</label>
-      <button className="primary">Save operating settings</button>
+      <div className="location-actions"><button className="primary">Save operating settings</button><a className="secondary button-link" href={`${CUSTOMER_WEB_URL.replace(/\/$/, "")}/signage?locationId=${encodeURIComponent(settings!.id)}`} target="_blank" rel="noreferrer">Open lobby display</a></div>
     </form>}
     {settings && section === "promotions" && <section className="panel promotions-manager"><p className="kicker">PROMOTIONS</p><h2>Discount codes</h2><p>Create a fixed discount, percentage discount, or complimentary-ticket code. Date windows are optional.</p>
       <form className="promotion-form" onSubmit={(event) => void createPromotion(event)}>
