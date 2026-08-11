@@ -21,7 +21,7 @@ jobs:
     name: Committed-secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -32,7 +32,7 @@ jobs:
     name: Dependency vulnerability scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -47,7 +47,7 @@ jobs:
     name: Lint, typecheck, unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -85,7 +85,7 @@ jobs:
       REFUND_RECONCILIATION_INTERVAL_MS: 0
       RESTAURANT_SETTLEMENT_INTERVAL_MS: 0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -145,7 +145,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -184,7 +184,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://cinema:cinema_test_password@localhost:5432/cinema_migrations_check
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v4
 
@@ -234,7 +234,7 @@ jobs:
       CORS_ORIGINS: http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004
       SEED_OWNER_MFA_SECRET: AAAAAAAAAAAAAAAA
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -288,7 +288,7 @@ jobs:
       SEED_OWNER_MFA_SECRET: AAAAAAAAAAAAAAAA
       LOAD_STAFF_MFA_SECRET: AAAAAAAAAAAAAAAA
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
