@@ -94,6 +94,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editCategoryId, setEditCategoryId] = useState("");
   const [originalEditCategoryId, setOriginalEditCategoryId] = useState("");
   const [editStationId, setEditStationId] = useState("");
+  const [originalEditStationId, setOriginalEditStationId] = useState("");
   const [editSortOrder, setEditSortOrder] = useState(0);
   const [editActive, setEditActive] = useState(true);
   const [editIsVegan, setEditIsVegan] = useState(false);
@@ -106,8 +107,16 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     apiFetch<Menu>("/restaurant-menu/admin", { accessToken })
       .then((response) => {
         setMenu(response);
-        setCategoryId((value) => value || response.categories[0]?.id || "");
-        setStationId((value) => value || response.stations[0]?.id || "");
+        setCategoryId((value) =>
+          response.categories.some((category) => category.id === value && category.active)
+            ? value
+            : response.categories.find((category) => category.active)?.id || "",
+        );
+        setStationId((value) =>
+          response.stations.some((station) => station.id === value && station.active)
+            ? value
+            : response.stations.find((station) => station.active)?.id || "",
+        );
         setModifierItemId(
           (value) =>
             value ||
@@ -375,6 +384,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     setEditCategoryId(currentCategoryId);
     setOriginalEditCategoryId(currentCategoryId);
     setEditStationId(item.kitchenStation.id);
+    setOriginalEditStationId(item.kitchenStation.id);
     setEditSortOrder(item.sortOrder);
     setEditActive(item.active);
     setEditIsVegan(item.isVegan);
@@ -396,7 +406,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           ...(editCategoryId !== originalEditCategoryId
             ? { menuCategoryId: editCategoryId }
             : {}),
-          kitchenStationId: editStationId,
+          ...(editStationId !== originalEditStationId
+            ? { kitchenStationId: editStationId }
+            : {}),
           sortOrder: editSortOrder,
           active: editActive,
           isVegan: editIsVegan,
@@ -614,7 +626,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
               value={categoryId}
               onChange={(event) => setCategoryId(event.target.value)}
             >
-              {menu?.categories.map((category) => (
+              {menu?.categories.filter((category) => category.active).map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.name}
                 </option>
@@ -627,14 +639,17 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
               value={stationId}
               onChange={(event) => setStationId(event.target.value)}
             >
-              {menu?.stations.map((station) => (
+              {menu?.stations.filter((station) => station.active).map((station) => (
                 <option key={station.id} value={station.id}>
                   {station.name}
                 </option>
               ))}
             </select>
           </label>
-          <button className="primary">Add menu item</button>
+          <button className="primary" disabled={!categoryId || !stationId}>Add menu item</button>
+          {menu && (!categoryId || !stationId) && (
+            <p className="builder-help">Create or restore an active category and kitchen station before adding menu items.</p>
+          )}
         </form>
         <div className="filter-grid menu-item-filters">
           <label>
@@ -792,8 +807,12 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                   onChange={(event) => setEditStationId(event.target.value)}
                 >
                   {menu?.stations.map((station) => (
-                    <option key={station.id} value={station.id}>
-                      {station.name}
+                    <option
+                      key={station.id}
+                      value={station.id}
+                      disabled={!station.active && station.id !== originalEditStationId}
+                    >
+                      {station.name}{station.active ? "" : " (Inactive)"}
                     </option>
                   ))}
                 </select>
