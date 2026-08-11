@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
 import { adminBrandingSchema, customerBrandingSchema } from "@cinema/shared";
+import type { Response } from "express";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
@@ -91,6 +92,14 @@ export class ManagementController {
 
   @Get("private-event-inquiries") @RequirePermissions(Permission.ReportsView)
   privateEventInquiries(@CurrentActor() actor: RequestActor) { return this.management.privateEventInquiries(this.location(actor)); }
+
+  @Get("private-event-inquiries.csv") @RequirePermissions(Permission.ReportsView)
+  async privateEventInquiriesCsv(@CurrentActor() actor: RequestActor, @Res() response: Response) {
+    const rows = await this.management.privateEventInquiries(this.location(actor));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="private-event-inquiries.csv"');
+    response.send(this.management.privateEventInquiriesCsv(rows));
+  }
 
   @Patch("private-event-inquiries/:inquiryId") @RequirePermissions(Permission.ReportsView)
   updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Body(new ZodValidationPipe(inquiryStatusSchema)) body: unknown) { return this.management.updatePrivateEventInquiry(this.location(actor), actor.sub, inquiryId, inquiryStatusSchema.parse(body).status); }

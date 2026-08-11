@@ -173,6 +173,24 @@ export class ManagementService {
 
   privateEventInquiries(locationId: string) { return prisma.privateEventInquiry.findMany({ where: { locationId }, orderBy: { createdAt: "desc" } }); }
 
+  privateEventInquiriesCsv(rows: Awaited<ReturnType<ManagementService["privateEventInquiries"]>>) {
+    const cell = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    return [
+      "Status,Received,Name,Email,Phone,Event type,Preferred date,Guest count,Message",
+      ...rows.map((row) => [
+        row.status,
+        row.createdAt.toISOString(),
+        row.name,
+        row.email,
+        row.phone,
+        row.eventType,
+        row.preferredDate?.toISOString(),
+        row.guestCount,
+        row.message,
+      ].map(cell).join(",")),
+    ].join("\n");
+  }
+
   async updatePrivateEventInquiry(locationId: string, employeeId: string, inquiryId: string, status?: string) {
     if (!status || !["NEW", "CONTACTED", "BOOKED", "CLOSED"].includes(status)) throw AppError.validationFailed("A valid inquiry status is required.");
     const inquiry = await prisma.privateEventInquiry.findFirst({ where: { id: inquiryId, locationId } });
