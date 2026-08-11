@@ -300,6 +300,11 @@ export default function AdminPage() {
 
   const selectedMovie = data?.location.organization.movies.find((movie) => movie.id === movieId);
   const selectedRoom = data?.location.auditoriums.find((room) => room.id === auditoriumId);
+  const diningSpecialPreviewTitle = movieDiningSpecialTitle.trim() || data?.location.menuCategories
+    .flatMap((category) => category.items)
+    .filter((item) => pairingMenuItemIds.includes(item.id))
+    .map((item) => item.name)
+    .join(" & ") || "Dining special headline";
   const selectedTiming = useMemo(() => {
     if (!startsAt || !selectedMovie || !data) return null;
     const doors = new Date(startsAt);
@@ -457,7 +462,7 @@ export default function AdminPage() {
         {(moviePosterUrl || movieDetailPosterUrl || movieDiningSpecialArtworkUrl) && <div className="movie-artwork-previews" aria-label="Film artwork previews">
           {moviePosterUrl && <figure><img src={moviePosterUrl} alt="" /><figcaption>Showtimes card</figcaption></figure>}
           {movieDetailPosterUrl && <figure className="movie-artwork-preview--poster"><img src={movieDetailPosterUrl} alt="" /><figcaption>Movie detail poster</figcaption></figure>}
-          {movieDiningSpecialArtworkUrl && <figure><img src={movieDiningSpecialArtworkUrl} alt="" /><figcaption>Dining special · combined food &amp; drink</figcaption></figure>}
+          {movieDiningSpecialArtworkUrl && <figure><div className="movie-special-card-preview"><img src={movieDiningSpecialArtworkUrl} alt="" /><div><strong>{diningSpecialPreviewTitle}</strong><span>{movieTitle || "Movie title"}</span></div></div><figcaption>Dining special · combined food &amp; drink</figcaption></figure>}
         </div>}
         <label>Director<input value={movieDirector} onChange={(event) => setMovieDirector(event.target.value)} /></label>
         <label>Starring<input value={movieStarring} onChange={(event) => setMovieStarring(event.target.value)} placeholder="Comma-separated cast" /></label>
