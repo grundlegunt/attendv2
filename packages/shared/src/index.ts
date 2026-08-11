@@ -5,3 +5,4 @@ export * from "./content-schemas";
 export * from "./ticketing-schemas";
 export * from "./restaurant-schemas";
 export * from "./workforce-schemas";
+export * from "./gift-card-purchase-schemas";

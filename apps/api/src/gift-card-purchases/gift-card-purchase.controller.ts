@@ -1,0 +1,20 @@
+import { Body, Controller, Headers, Param, Post, UseGuards } from "@nestjs/common";
+import { createGiftCardPurchaseSchema } from "@cinema/shared";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
+import { GiftCardPurchaseService } from "./gift-card-purchase.service";
+
+@Controller("gift-card-purchases")
+@UseGuards(RequestRateLimitGuard)
+@RateLimit({ scope: "checkout" })
+export class GiftCardPurchaseController {
+  constructor(private readonly purchases: GiftCardPurchaseService) {}
+
+  @Post()
+  create(@Headers("idempotency-key") idempotencyKey: string | undefined, @Body(new ZodValidationPipe(createGiftCardPurchaseSchema)) body: unknown) {
+    return this.purchases.create({ ...createGiftCardPurchaseSchema.parse(body), idempotencyKey: idempotencyKey ?? "" });
+  }
+
+  @Post(":purchaseId/finalize")
+  finalize(@Param("purchaseId") purchaseId: string) { return this.purchases.finalize(purchaseId); }
+}

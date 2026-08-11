@@ -1,0 +1,82 @@
+import { Inject, Injectable } from "@nestjs/common";
+import { PaymentAttemptStatus, PaymentPurpose, PaymentStatus, Prisma, prisma } from "@cinema/database";
+import type { PaymentProvider } from "@cinema/payments";
+import { createHash, randomBytes } from "node:crypto";
+import { encryptMfaSecret } from "@cinema/auth";
+import { loadEnv } from "@cinema/config/env";
+import { AppError } from "../common/app-error";
+import { PAYMENT_PROVIDER } from "../payments/payments.module";
+
+function localPaymentStatus(status: string) {
+  return status === "SUCCEEDED" ? PaymentStatus.SUCCEEDED : status === "PROCESSING" ? PaymentStatus.PROCESSING : status === "REQUIRES_ACTION" ? PaymentStatus.REQUIRES_ACTION : status === "FAILED" ? PaymentStatus.FAILED : PaymentStatus.REQUIRES_PAYMENT_METHOD;
+}
+
+function localAttemptStatus(status: string) {
+  return status === "SUCCEEDED" ? PaymentAttemptStatus.SUCCEEDED : status === "PROCESSING" ? PaymentAttemptStatus.PROCESSING : status === "REQUIRES_ACTION" ? PaymentAttemptStatus.REQUIRES_ACTION : status === "FAILED" ? PaymentAttemptStatus.FAILED : PaymentAttemptStatus.CREATED;
+}
+
+@Injectable()
+export class GiftCardPurchaseService {
+  constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider) {}
+
+  async create(input: { idempotencyKey: string; locationId: string; amountCents: number; buyerEmail: string; recipientName?: string; recipientEmail: string; message?: string }) {
+    if (input.idempotencyKey.length < 16) throw AppError.validationFailed("A valid purchase idempotency key is required.");
+    const existing = await prisma.giftCardPurchase.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { payment: true, location: { include: { organization: true } } } });
+    if (existing) return this.complete(existing);
+    const location = await prisma.location.findFirst({ where: { id: input.locationId, active: true, organization: { active: true } }, include: { organization: true } });
+    if (!location) throw AppError.notFound("Location was not found.");
+    const purchase = await prisma.giftCardPurchase.create({
+      data: {
+        organization: { connect: { id: location.organizationId } }, location: { connect: { id: location.id } }, amountCents: input.amountCents, currency: location.currency,
+        buyerEmail: input.buyerEmail.toLowerCase(), recipientName: input.recipientName, recipientEmail: input.recipientEmail.toLowerCase(), message: input.message,
+        idempotencyKey: input.idempotencyKey,
+        payment: { create: { purpose: PaymentPurpose.GIFT_CARD_PURCHASE, amountCents: input.amountCents, currency: location.currency, status: PaymentStatus.CREATED, idempotencyKey: `gift-card-purchase:${input.idempotencyKey}`, provider: this.provider.name } },
+      },
+      include: { payment: true, location: { include: { organization: true } } },
+    });
+    return this.complete(purchase);
+  }
+
+  private async complete(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>) {
+    if (purchase.payment.providerPaymentId) {
+      const intent = await this.provider.retrievePaymentIntent({ connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, paymentIntentId: purchase.payment.providerPaymentId });
+      return this.present(purchase, intent.clientSecret);
+    }
+    const intent = await this.provider.createPaymentIntent({
+      connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, amountCents: purchase.amountCents, currency: purchase.currency,
+      metadata: { giftCardPurchaseId: purchase.id, organizationId: purchase.organizationId, locationId: purchase.locationId }, idempotencyKey: purchase.payment.idempotencyKey,
+    });
+    const updated = await prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { payment: { update: { providerPaymentId: intent.id, status: localPaymentStatus(intent.status), attempts: { create: { provider: this.provider.name, providerIntentId: intent.id, attemptNumber: 1, status: localAttemptStatus(intent.status) } } } } }, include: { payment: true, location: { include: { organization: true } } } });
+    return this.present(updated, intent.clientSecret);
+  }
+
+  private purchaseWithPayment(id: string) {
+    return prisma.giftCardPurchase.findUniqueOrThrow({ where: { id }, include: { payment: true, location: { include: { organization: true } } } });
+  }
+
+  async finalize(purchaseId: string) {
+    const purchase = await this.purchaseWithPayment(purchaseId);
+    if (!purchase.payment.providerPaymentId) throw AppError.notFound("Gift card purchase was not found.");
+    const intent = await this.provider.retrievePaymentIntent({ connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, paymentIntentId: purchase.payment.providerPaymentId });
+    if (intent.status !== "SUCCEEDED") throw AppError.paymentRequired(intent.failureMessage ?? "Payment has not completed.");
+    if (intent.amountCents !== purchase.amountCents || intent.currency.toLowerCase() !== purchase.currency.toLowerCase() || intent.metadata.giftCardPurchaseId !== purchase.id) throw AppError.conflict("Payment verification failed and requires manual review.");
+    const raw = randomBytes(12).toString("hex").toUpperCase();
+    const code = `ATGC-${raw.match(/.{1,4}/g)!.join("-")}`;
+    const codeHash = createHash("sha256").update(code.replace(/[^A-Z0-9]/g, "")).digest("hex");
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "gift_card_purchases" WHERE "id" = ${purchase.id} FOR UPDATE`);
+      const locked = await tx.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.id }, include: { giftCard: true } });
+      if (locked.giftCard) return { giftCard: locked.giftCard, created: false };
+      const giftCard = await tx.giftCard.create({ data: { organizationId: purchase.organizationId, issuedAtLocationId: purchase.locationId, codeHash, codeLast4: raw.slice(-4), initialBalanceCents: purchase.amountCents, balanceCents: purchase.amountCents, currency: purchase.currency, recipientName: purchase.recipientName, recipientEmail: purchase.recipientEmail, transactions: { create: { locationId: purchase.locationId, type: "ISSUANCE", amountCents: purchase.amountCents, balanceAfterCents: purchase.amountCents, reference: purchase.id } } } });
+      await tx.giftCardPurchase.update({ where: { id: purchase.id }, data: { giftCardId: giftCard.id, status: "PAID", deliveryCodeEncrypted: encryptMfaSecret(code, loadEnv().JWT_REFRESH_SECRET) } });
+      await tx.payment.update({ where: { id: purchase.paymentId }, data: { status: "SUCCEEDED" } });
+      await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: purchase.locationId, action: "gift_card.online_purchase_paid", entityType: "GiftCardPurchase", entityId: purchase.id, afterState: { giftCardId: giftCard.id, amountCents: purchase.amountCents, recipientEmail: purchase.recipientEmail } } });
+      return { giftCard, created: true };
+    });
+    return { purchaseId: purchase.id, status: "PAID", amountCents: purchase.amountCents, currency: purchase.currency, codeLast4: result.giftCard.codeLast4, code: result.created ? code : null };
+  }
+
+  private present(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, clientSecret?: string) {
+    return { purchaseId: purchase.id, status: purchase.status, amountCents: purchase.amountCents, currency: purchase.currency, recipientEmail: purchase.recipientEmail, payment: { providerPaymentId: purchase.payment.providerPaymentId, status: purchase.payment.status, clientSecret } };
+  }
+}

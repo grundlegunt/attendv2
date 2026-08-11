@@ -32,13 +32,14 @@ model Organization {
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 
-  locations        Location[]
-  roles            Role[]
-  movies           Movie[]
-  filmSeries       FilmSeries[]
-  priceTiers       PriceTier[]
-  paymentCustomers PaymentCustomer[]
-  giftCards        GiftCard[]
+  locations         Location[]
+  roles             Role[]
+  movies            Movie[]
+  filmSeries        FilmSeries[]
+  priceTiers        PriceTier[]
+  paymentCustomers  PaymentCustomer[]
+  giftCards         GiftCard[]
+  giftCardPurchases GiftCardPurchase[]
 
   @@map("organizations")
 }
@@ -150,6 +151,7 @@ model Location {
   privateEventInquiries PrivateEventInquiry[]
   issuedGiftCards       GiftCard[]
   giftCardTransactions  GiftCardTransaction[]
+  giftCardPurchases     GiftCardPurchase[]
 
   @@map("locations")
 }
@@ -185,6 +187,13 @@ enum GiftCardTransactionType {
   ADJUSTMENT
 }
 
+enum GiftCardPurchaseStatus {
+  AWAITING_PAYMENT
+  PAID
+  DELIVERED
+  DELIVERY_FAILED
+}
+
 model GiftCard {
   id                  String                @id @default(uuid())
   organizationId      String
@@ -199,16 +208,47 @@ model GiftCard {
   recipientName       String?
   recipientEmail      String?
   status              GiftCardStatus        @default(ACTIVE)
-  issuedByEmployeeId  String
-  issuedByEmployee    Employee              @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
+  issuedByEmployeeId  String?
+  issuedByEmployee    Employee?             @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
   transactions        GiftCardTransaction[]
   ticketOrders        TicketOrder[]
+  purchase            GiftCardPurchase?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 
   @@index([organizationId, createdAt])
   @@index([organizationId, codeLast4])
   @@map("gift_cards")
+}
+
+model GiftCardPurchase {
+  id                    String                 @id @default(uuid())
+  organizationId        String
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  locationId            String
+  location              Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  paymentId             String                 @unique
+  payment               Payment                @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  giftCardId            String?                @unique
+  giftCard              GiftCard?              @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
+  amountCents           Int
+  currency              String                 @default("USD")
+  buyerEmail            String
+  recipientName         String?
+  recipientEmail        String
+  message               String?
+  status                GiftCardPurchaseStatus @default(AWAITING_PAYMENT)
+  idempotencyKey        String                 @unique
+  deliveryMessageId     String?
+  deliveryCodeEncrypted String?
+  deliveredAt           DateTime?
+  deliveryError         String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([recipientEmail, createdAt])
+  @@map("gift_card_purchases")
 }
 
 model GiftCardTransaction {
@@ -512,6 +552,7 @@ enum ShiftClockMethod {
 enum PaymentPurpose {
   TICKET_ORDER
   RESTAURANT_TAB
+  GIFT_CARD_PURCHASE
 }
 
 enum PaymentStatus {
@@ -814,8 +855,9 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  attempts PaymentAttempt[]
-  refunds  Refund[]
+  attempts         PaymentAttempt[]
+  refunds          Refund[]
+  giftCardPurchase GiftCardPurchase?
 
   @@index([status, createdAt])
   @@index([restaurantTabId, status])

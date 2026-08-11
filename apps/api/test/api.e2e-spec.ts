@@ -1262,6 +1262,32 @@ describe("Milestone 1 cinema configuration", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "GiftCard", entityId: issued.body.id, action: "gift_card.status_updated" } })).toBe(2);
   });
 
+  it("issues a customer gift card exactly once after verified payment", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const idempotencyKey = `gift-card-purchase-${crypto.randomUUID()}`;
+    const purchase = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases")
+      .set("Idempotency-Key", idempotencyKey).send({
+        locationId: owner.locationId, amountCents: 3500, buyerEmail: "buyer@example.test",
+        recipientName: "Movie Fan", recipientEmail: "recipient@example.test", message: "Enjoy the show!",
+      }).expect(201);
+    expect(purchase.body).toMatchObject({ amountCents: 3500, currency: "USD", recipientEmail: "recipient@example.test", payment: { providerPaymentId: expect.any(String), clientSecret: expect.any(String) } });
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
+
+    const finalized = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`).send({}).expect(201);
+    expect(finalized.body).toMatchObject({ status: "PAID", amountCents: 3500, code: expect.stringMatching(/^ATGC-/), codeLast4: expect.any(String) });
+    const replay = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`).send({}).expect(201);
+    expect(replay.body.code).toBeNull();
+    expect(await prisma.giftCard.count({ where: { purchase: { id: purchase.body.purchaseId } } })).toBe(1);
+    const storedPurchase = await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.body.purchaseId } });
+    expect(storedPurchase.deliveryCodeEncrypted).toBeTruthy();
+    expect(storedPurchase.deliveryCodeEncrypted).not.toContain(finalized.body.code);
+    await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: finalized.body.code }).expect(201);
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")
