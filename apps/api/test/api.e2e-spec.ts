@@ -1786,6 +1786,29 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(500);
   });
 
+  it("completes an online ticket order entirely with a gift card", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `online-gift-card-only-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const issued = await request(app.getHttpServer()).post("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ amountCents: 100_000 }).expect(201);
+    const config = await request(app.getHttpServer()).get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`).expect(200);
+    const checkout = await request(app.getHttpServer()).post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`).send({
+        holdTokens: [hold.holdToken], holderKey, ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`, giftCardCode: issued.body.code, diningAuthorizationRequested: false,
+      }).expect(201);
+    expect(checkout.body.giftCardCents).toBe(checkout.body.totalCents);
+    expect(checkout.body.payment).toBeNull();
+
+    const finalized = await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({}).expect(201);
+    expect(finalized.body.status).toBe("PAID");
+    expect(finalized.body.tickets).toHaveLength(1);
+    const giftCard = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: { where: { type: "REDEMPTION" } } } });
+    expect(giftCard.balanceCents).toBe(100_000 - checkout.body.totalCents);
+    expect(giftCard.transactions).toEqual([expect.objectContaining({ amountCents: -checkout.body.totalCents, reference: checkout.body.orderId })]);
+  });
+
   it("issues one ticket after a verified successful payment and is idempotent", async () => {
     const holderKey = "ticket-happy-holder-0001";
     const { seat, hold } = await holdAvailableSeat(holderKey);
