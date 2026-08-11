@@ -2,10 +2,12 @@ import { Inject, Injectable } from "@nestjs/common";
 import { PaymentAttemptStatus, PaymentPurpose, PaymentStatus, Prisma, prisma } from "@cinema/database";
 import type { PaymentProvider } from "@cinema/payments";
 import { createHash, randomBytes } from "node:crypto";
-import { encryptMfaSecret } from "@cinema/auth";
+import { decryptMfaSecret, encryptMfaSecret } from "@cinema/auth";
+import type { EmailProvider } from "@cinema/notifications";
 import { loadEnv } from "@cinema/config/env";
 import { AppError } from "../common/app-error";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 
 function localPaymentStatus(status: string) {
   return status === "SUCCEEDED" ? PaymentStatus.SUCCEEDED : status === "PROCESSING" ? PaymentStatus.PROCESSING : status === "REQUIRES_ACTION" ? PaymentStatus.REQUIRES_ACTION : status === "FAILED" ? PaymentStatus.FAILED : PaymentStatus.REQUIRES_PAYMENT_METHOD;
@@ -17,7 +19,7 @@ function localAttemptStatus(status: string) {
 
 @Injectable()
 export class GiftCardPurchaseService {
-  constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider) {}
+  constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider, @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider) {}
 
   async config(locationId?: string) {
     const location = locationId ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } }, include: { organization: true } }) : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" }, include: { organization: true } });
@@ -80,7 +82,29 @@ export class GiftCardPurchaseService {
       await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: purchase.locationId, action: "gift_card.online_purchase_paid", entityType: "GiftCardPurchase", entityId: purchase.id, afterState: { giftCardId: giftCard.id, amountCents: purchase.amountCents, recipientEmail: purchase.recipientEmail } } });
       return { giftCard, created: true };
     });
-    return { purchaseId: purchase.id, status: "PAID", amountCents: purchase.amountCents, currency: purchase.currency, codeLast4: result.giftCard.codeLast4, code: result.created ? code : null };
+    const delivery = await this.deliver(purchase.id);
+    return { purchaseId: purchase.id, status: "PAID", amountCents: purchase.amountCents, currency: purchase.currency, codeLast4: result.giftCard.codeLast4, code: result.created ? code : null, delivery };
+  }
+
+  async deliver(purchaseId: string) {
+    const now = new Date();
+    const claim = await prisma.giftCardPurchase.updateMany({ where: { id: purchaseId, giftCardId: { not: null }, deliveredAt: null, deliveryCodeEncrypted: { not: null }, OR: [{ deliveryClaimedAt: null }, { deliveryClaimedAt: { lt: new Date(now.getTime() - 60_000) } }] }, data: { deliveryClaimedAt: now } });
+    if (claim.count === 0) {
+      const current = await prisma.giftCardPurchase.findUnique({ where: { id: purchaseId }, select: { status: true, deliveredAt: true } });
+      if (!current) throw AppError.notFound("Gift card purchase was not found.");
+      return { status: current.deliveredAt ? "DELIVERED" : current.status };
+    }
+    const purchase = await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchaseId }, include: { organization: true } });
+    try {
+      const code = decryptMfaSecret(purchase.deliveryCodeEncrypted!, loadEnv().JWT_REFRESH_SECRET);
+      const sent = await this.email.sendGiftCardDelivery({ to: purchase.recipientEmail, recipientName: purchase.recipientName, buyerEmail: purchase.buyerEmail, theaterName: purchase.organization.name, amountCents: purchase.amountCents, currency: purchase.currency, code, message: purchase.message });
+      await prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { status: "DELIVERED", deliveryMessageId: sent.messageId, deliveredAt: new Date(), deliveryCodeEncrypted: null, deliveryClaimedAt: null, deliveryError: null } });
+      return { status: "DELIVERED", messageId: sent.messageId };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown delivery error";
+      await prisma.$transaction([prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { status: "DELIVERY_FAILED", deliveryClaimedAt: null, deliveryError: message } }), prisma.auditEvent.create({ data: { actorType: "SYSTEM", locationId: purchase.locationId, action: "gift_card.delivery_failed", entityType: "GiftCardPurchase", entityId: purchase.id, afterState: { recipientEmail: purchase.recipientEmail, error: message } } })]);
+      return { status: "DELIVERY_FAILED" };
+    }
   }
 
   private present(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, clientSecret?: string) {

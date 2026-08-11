@@ -20,4 +20,7 @@ export class GiftCardPurchaseController {
 
   @Post(":purchaseId/finalize")
   finalize(@Param("purchaseId") purchaseId: string) { return this.purchases.finalize(purchaseId); }
+
+  @Post(":purchaseId/delivery")
+  deliver(@Param("purchaseId") purchaseId: string) { return this.purchases.deliver(purchaseId); }
 }

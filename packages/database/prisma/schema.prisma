@@ -241,6 +241,7 @@ model GiftCardPurchase {
   idempotencyKey        String                 @unique
   deliveryMessageId     String?
   deliveryCodeEncrypted String?
+  deliveryClaimedAt     DateTime?
   deliveredAt           DateTime?
   deliveryError         String?
   createdAt             DateTime               @default(now())
@@ -248,6 +249,7 @@ model GiftCardPurchase {
 
   @@index([organizationId, createdAt])
   @@index([recipientEmail, createdAt])
+  @@index([deliveryClaimedAt])
   @@map("gift_card_purchases")
 }
 

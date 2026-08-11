@@ -14,7 +14,19 @@ export interface TicketReceipt {
   }>;
 }
 
+export interface GiftCardDelivery {
+  to: string;
+  recipientName?: string | null;
+  buyerEmail: string;
+  theaterName: string;
+  amountCents: number;
+  currency: string;
+  code: string;
+  message?: string | null;
+}
+
 export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
+  sendGiftCardDelivery(delivery: GiftCardDelivery): Promise<{ messageId: string }>;
 }
