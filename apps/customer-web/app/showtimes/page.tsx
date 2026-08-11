@@ -91,6 +91,10 @@ export default function ShowtimesPage() {
           new Date(b.showtimes[0]!.startsAt).getTime(),
       );
   }, [program, activeDate, programMovies]);
+  const specialsForActiveDate = useMemo(() => {
+    const movieIds = new Set(moviesForActiveDate.map(({ movie }) => movie.id));
+    return menu?.movieSpecials.filter((special) => movieIds.has(special.movieId)) ?? [];
+  }, [menu, moviesForActiveDate]);
 
   useEffect(() => {
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
@@ -181,19 +185,15 @@ export default function ShowtimesPage() {
             )}
 
           <section className="movie-grid">
-            {moviesForActiveDate.map(({ movie, showtimes }) => {
-              const specials = menu?.movieSpecials.filter((special) => special.movieId === movie.id) ?? [];
-              return <div className="movie-grid__listing" key={movie.id}>
-                <MovieTile
-                  movie={movie}
-                  showtimes={showtimes}
-                  timeZone={program!.location.timezone}
-                  onSelectShowtime={setSelectedShowtimeId}
-                />
-                <MovieSpecials specials={specials} compact />
-              </div>;
-            })}
+            {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
+              key={movie.id}
+              movie={movie}
+              showtimes={showtimes}
+              timeZone={program!.location.timezone}
+              onSelectShowtime={setSelectedShowtimeId}
+            />)}
           </section>
+          <MovieSpecials specials={specialsForActiveDate} showtimes />
         </>
       )}
     </main>

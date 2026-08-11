@@ -409,28 +409,73 @@
   padding: 72px 0;
   border-top: 1px solid var(--color-border);
 }
-.movie-grid__listing {
-  display: grid;
-  gap: 12px;
-}
 .movie-specials--showtimes {
-  margin: 0 0 16px;
-  padding: 0;
-  border-top: 0;
+  width: min(100%, 1500px);
+  margin: 72px auto 0;
+  padding-bottom: 0;
+  text-align: center;
 }
-.movie-specials--showtimes .specials-grid {
-  margin-top: 0;
+.movie-specials--showtimes h2 {
+  margin: 10px 0 32px;
+  font: clamp(2.5rem, 5vw, 4.8rem)/1 var(--font-family-display);
 }
-.movie-specials--showtimes .specials-grid > article {
-  grid-template-columns: 1fr;
-  border-left: 3px solid var(--color-accent);
+.showtime-specials-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
 }
-.movie-specials--showtimes .specials-grid > article > div {
-  padding: 18px 22px;
+.showtime-special-card {
+  position: relative;
+  display: block;
+  min-height: 360px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  color: white;
+  text-decoration: none;
 }
-.movie-specials--showtimes .specials-grid h3 {
-  margin: 5px 0 12px;
-  font-size: clamp(1.35rem, 2vw, 1.8rem);
+.showtime-special-card > img,
+.showtime-special-card__placeholder {
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  object-fit: cover;
+  transition: transform .35s ease;
+}
+.showtime-special-card__placeholder {
+  background: linear-gradient(135deg, var(--color-bg-elevated), color-mix(in srgb, var(--color-accent) 32%, var(--color-bg)));
+}
+.showtime-special-card:hover > img {
+  transform: scale(1.025);
+}
+.showtime-special-card > div:last-child {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: end center;
+  padding: 44px 30px 34px;
+  background: linear-gradient(180deg, transparent 25%, rgba(8, 6, 8, .88));
+  text-align: center;
+}
+.showtime-special-card strong,
+.showtime-special-card span {
+  display: block;
+}
+.showtime-special-card strong {
+  font: clamp(1.6rem, 3vw, 2.7rem)/1.05 var(--font-family-display);
+  text-transform: uppercase;
+}
+.showtime-special-card span {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 2px solid white;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+.showtime-special-card b {
+  margin-top: 9px;
+  color: var(--color-accent);
 }
 .specials-grid {
   display: grid;
@@ -1396,6 +1441,14 @@ body:has(.signage-shell) .site-header { display: none; }
 @media (max-width: 700px) {
   .movie-grid {
     grid-template-columns: 1fr;
+  }
+  .showtime-specials-grid {
+    grid-template-columns: 1fr;
+  }
+  .showtime-special-card,
+  .showtime-special-card > img,
+  .showtime-special-card__placeholder {
+    min-height: 300px;
   }
 }
 @media (max-width: 700px) {
