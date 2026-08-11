@@ -137,6 +137,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-card span { color: #aaa99f; font-size: .7rem; }
 .film-archive { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; padding: 0; border: 1px solid #55564f; border-radius: 50%; background: #1d1e1a; color: #bdbdb5; font-size: 1rem; line-height: 1; cursor: pointer; }
 .film-archive:hover { border-color: #f05a45; color: #f05a45; }
+.film-card-warning { position: absolute; top: 10px; right: 40px; display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid #e5b84d; border-radius: 50%; background: #3d3012; color: #ffd875 !important; font-size: .7rem !important; font-weight: 900; }
 .film-library-empty { display: grid; justify-items: start; gap: 6px; padding: 28px 12px; border-bottom: 1px solid #55564f; color: #aaa99f; }
 .film-library-empty strong { color: white; }
 .film-library-empty button { margin-top: 6px; padding: 8px 11px; border: 1px solid var(--color-accent); background: transparent; color: var(--color-accent); font-weight: 900; cursor: pointer; }
@@ -154,6 +155,9 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-detail-edit:hover { border-color: var(--color-accent); color: var(--color-accent); }
 .film-detail-meta { margin: 0; color: #c0c0b8; font-weight: 800; }
 .film-detail-synopsis { max-width: 800px; margin: 0; color: #aaa99f; line-height: 1.55; }
+.film-special-warning { display: grid; gap: 4px; padding: 11px 13px; border: 1px solid #9a762a; background: #30250e; }
+.film-special-warning strong { color: #ffd875; font-size: .8rem; }
+.film-special-warning span { color: #d9c797; font-size: .72rem; line-height: 1.4; }
 .film-programming-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 6px; padding: 16px 0; border-top: 1px solid #45463f; border-bottom: 1px solid #45463f; }
 .film-programming-summary > div { display: grid; align-content: start; gap: 8px; }
 .film-programming-summary span { color: #aaa99f; font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
