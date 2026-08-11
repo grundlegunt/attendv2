@@ -310,6 +310,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-series-intro h2 { margin: 8px 0 12px; font-family: Georgia, serif; font-size: 2rem; }
 .film-series-intro p:last-child { max-width: 560px; color: var(--color-text-secondary); line-height: 1.55; }
 .film-series-form { display: grid; gap: 14px; }
+.series-artwork-preview { overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); }
+.series-artwork-preview img { display: block; width: 100%; aspect-ratio: 16 / 7; object-fit: cover; }
+.series-artwork-preview > div { display: grid; place-items: center; min-height: 120px; padding: 20px; color: var(--color-text-secondary); text-align: center; }
+.series-artwork-preview > div strong, .series-artwork-preview > div span { display: block; }
+.series-artwork-preview > div strong { color: #ffb3ad; }
+.series-artwork-preview > div span { margin-top: 5px; font-size: .75rem; }
+.series-artwork-preview small { display: block; padding: 8px 10px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
 .film-series-form-actions, .film-series-row-actions { display: flex; gap: 10px; }
 .film-series-form-actions button { flex: 1; }
 .film-series-list { grid-column: 1 / -1; display: grid; border-top: 1px solid var(--color-border); }

@@ -28,6 +28,7 @@ export default function FilmSeriesPage() {
   const [seriesName, setSeriesName] = useState("");
   const [seriesDescription, setSeriesDescription] = useState("");
   const [seriesArtworkUrl, setSeriesArtworkUrl] = useState("");
+  const [seriesArtworkError, setSeriesArtworkError] = useState(false);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [seriesSaving, setSeriesSaving] = useState(false);
   const [draggedSeriesId, setDraggedSeriesId] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function FilmSeriesPage() {
     setSeriesName("");
     setSeriesDescription("");
     setSeriesArtworkUrl("");
+    setSeriesArtworkError(false);
   }
 
   function editSeries(series: FilmSeries) {
@@ -60,6 +62,7 @@ export default function FilmSeriesPage() {
     setSeriesName(series.name);
     setSeriesDescription(series.description ?? "");
     setSeriesArtworkUrl(series.artworkUrl ?? "");
+    setSeriesArtworkError(false);
   }
 
   async function saveSeries(event: FormEvent) {
@@ -150,7 +153,12 @@ export default function FilmSeriesPage() {
       <form className="film-series-form" onSubmit={saveSeries}>
         <label>Name<input required value={seriesName} onChange={(event) => setSeriesName(event.target.value)} placeholder="Summer Classics" /></label>
         <label>Description<textarea rows={4} value={seriesDescription} onChange={(event) => setSeriesDescription(event.target.value)} placeholder="Customer-facing description of the series or event" /></label>
-        <label>Artwork URL<input value={seriesArtworkUrl} onChange={(event) => setSeriesArtworkUrl(event.target.value)} placeholder="https://…" /></label>
+        <label>Artwork URL<input type="url" value={seriesArtworkUrl} onChange={(event) => { setSeriesArtworkUrl(event.target.value); setSeriesArtworkError(false); }} placeholder="https://…" /></label>
+        {seriesArtworkUrl && <div className={`series-artwork-preview ${seriesArtworkError ? "has-error" : ""}`}>
+          {!seriesArtworkError && <img src={seriesArtworkUrl} alt="" onError={() => setSeriesArtworkError(true)} />}
+          {seriesArtworkError && <div><strong>Artwork could not be loaded</strong><span>Check the URL before saving.</span></div>}
+          <small>Customer-facing series artwork preview</small>
+        </div>}
         <div className="film-series-form-actions"><button className="primary" disabled={seriesSaving}>{seriesSaving ? (editingSeriesId ? "Saving…" : "Creating…") : (editingSeriesId ? "Save series" : "Add series")}</button>{editingSeriesId && <button type="button" className="secondary" onClick={resetSeriesForm} disabled={seriesSaving}>Cancel</button>}</div>
       </form>
       <div className="film-series-list">
