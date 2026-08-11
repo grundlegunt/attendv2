@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
@@ -28,45 +28,58 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [readerId, setReaderId] = useState("tmr_box_1");
   const [message, setMessage] = useState<string|null>(null);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
 
   useEffect(() => { setSelected([]); setQuote(null); setHoldTokens([]); apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`).then((data) => { setTicketTypes(data.ticketTypes); setTicketTypeId(data.ticketTypes[0]?.id ?? ""); }).catch(() => setMessage("Ticket types are unavailable.")); }, [showtimeId]);
   useEffect(() => { apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(registerId)}`, { accessToken }).then(setDrawer).catch(() => setDrawer(null)); }, [accessToken, registerId]);
 
   const mapSeats = useMemo(() => seats.map((seat) => ({ ...seat, state: selected.includes(seat.id) ? "selected" as const : seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const })), [seats, selected]);
   function errorMessage(error: unknown) { return error instanceof ApiRequestError ? error.body.message : "The request could not be completed."; }
+  function beginRequest() {
+    if (busyRef.current) return false;
+    busyRef.current = true;
+    setBusy(true);
+    setMessage(null);
+    return true;
+  }
+  function finishRequest() {
+    busyRef.current = false;
+    setBusy(false);
+  }
 
   async function openDrawer() {
-    setBusy(true); setMessage(null);
+    if (!beginRequest()) return;
     try { setDrawer(await apiFetch("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId, openingBalanceCents: Number(openingBalance) }) })); }
-    catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
+    catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
   }
 
   async function prepareSale(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setMessage(null);
+    event.preventDefault();
+    if (!beginRequest()) return;
     try {
       const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
       const tokens = holds.map((hold) => hold.holdToken); setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
       setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
-    } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
+    } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
   }
 
   async function checkout() {
-    if (!quote) return; setBusy(true); setMessage(null);
+    if (!quote || !beginRequest()) return;
     try {
       const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ requestId: crypto.randomUUID(), holdTokens, holderKey, ticketTypeId, promotionCode: promotionCode || undefined, cashDrawerId: Number(cashCents) > 0 ? drawer?.id : undefined, cashCents: Number(cashCents), cardCents: Number(cardCents), giftCardCents: Number(giftCardCents), giftCardCode: giftCardCode || undefined, readerId: Number(cardCents) > 0 ? readerId : undefined, cashReceivedCents: Number(cashCents) > 0 ? Number(cashReceived) : undefined }) });
       setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); await refresh();
-    } catch (error) { setMessage(errorMessage(error)); } finally { setBusy(false); }
+    } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
   }
 
   async function checkGiftCard() {
-    if (!quote || !giftCardCode) return; setBusy(true); setMessage(null);
+    if (!quote || !giftCardCode || !beginRequest()) return;
     try {
       const card = await apiFetch<{balanceCents:number;currency:string}>("/box-office/gift-cards/balance", { method: "POST", accessToken, body: JSON.stringify({ code: giftCardCode }) });
       const applied = Math.min(card.balanceCents, quote.totalCents);
       const remainder = quote.totalCents - applied;
       setGiftCardBalance(card.balanceCents); setGiftCardCents(String(applied)); setCashCents(giftRemainderTender === "CASH" ? String(remainder) : "0"); setCardCents(giftRemainderTender === "CARD" ? String(remainder) : "0");
-    } catch (error) { setGiftCardBalance(null); setGiftCardCents("0"); setMessage(errorMessage(error)); } finally { setBusy(false); }
+    } catch (error) { setGiftCardBalance(null); setGiftCardCents("0"); setMessage(errorMessage(error)); } finally { finishRequest(); }
   }
 
   return <section className="box-office-grid"><div>
