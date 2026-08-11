@@ -78,6 +78,7 @@ export function RestaurantPos({
   const [readerId, setReaderId] = useState("tmr_test_reader");
   const [guestAccessToken, setGuestAccessToken] = useState("");
   const actionLocks = useRef(new Set<string>());
+  const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
 
   function beginAction(key: string) {
@@ -109,6 +110,7 @@ export function RestaurantPos({
   useEffect(() => setTabId(initialTabId), [initialTabId]);
 
   useEffect(() => {
+    settlementAttemptRef.current = null;
     setOrderId("");
     setBlockedItems([]);
     setModifierSelections({});
@@ -372,6 +374,11 @@ export function RestaurantPos({
           }]
         : []),
     ];
+    const settlementPayload = { tipCents: parsedTipCents, tenders };
+    const fingerprint = JSON.stringify(settlementPayload);
+    if (settlementAttemptRef.current?.fingerprint !== fingerprint) {
+      settlementAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     try {
       const result = await apiFetch<{ status: string }>(
         `/restaurant-settlement/tabs/${tabId}/finalize`,
@@ -379,12 +386,12 @@ export function RestaurantPos({
           method: "POST",
           accessToken,
           body: JSON.stringify({
-            requestId: crypto.randomUUID(),
-            tipCents: parsedTipCents,
-            tenders,
+            ...settlementPayload,
+            requestId: settlementAttemptRef.current.requestId,
           }),
         },
       );
+      if (result.status === "CLOSED") settlementAttemptRef.current = null;
       setMessage(
         result.status === "CLOSED"
           ? "Tab paid and closed. Receipt issued."
