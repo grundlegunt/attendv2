@@ -125,6 +125,21 @@ export class RestaurantService {
     return this.prisma.menuCategory.create({ data: input });
   }
 
+  async updateMenuCategory(input: {
+    menuCategoryId: string;
+    locationId: string;
+    changes: { name?: string; sortOrder?: number; active?: boolean };
+  }): Promise<MenuCategory> {
+    const category = await this.prisma.menuCategory.findFirst({
+      where: { id: input.menuCategoryId, locationId: input.locationId },
+    });
+    if (!category) throw new RestaurantError("Menu category was not found.", "NOT_FOUND");
+    return this.prisma.menuCategory.update({
+      where: { id: category.id },
+      data: input.changes,
+    });
+  }
+
   async createMenuItem(input: {
     locationId: string;
     actorId: string;
