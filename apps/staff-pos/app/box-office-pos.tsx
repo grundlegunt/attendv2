@@ -29,6 +29,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [message, setMessage] = useState<string|null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const checkoutAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   useEffect(() => { setSelected([]); setQuote(null); setHoldTokens([]); apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`).then((data) => { setTicketTypes(data.ticketTypes); setTicketTypeId(data.ticketTypes[0]?.id ?? ""); }).catch(() => setMessage("Ticket types are unavailable.")); }, [showtimeId]);
   useEffect(() => { apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(registerId)}`, { accessToken }).then(setDrawer).catch(() => setDrawer(null)); }, [accessToken, registerId]);
@@ -60,7 +61,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
       const tokens = holds.map((hold) => hold.holdToken); setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
-      setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
+      checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
     } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
   }
 
@@ -114,9 +115,26 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       }
     }
     if (!beginRequest()) return;
+    const checkoutPayload = {
+      holdTokens,
+      holderKey,
+      ticketTypeId,
+      promotionCode: promotionCode || undefined,
+      cashDrawerId: parsedCashCents > 0 ? drawer?.id : undefined,
+      cashCents: parsedCashCents,
+      cardCents: parsedCardCents,
+      giftCardCents: parsedGiftCardCents,
+      giftCardCode: parsedGiftCardCents > 0 ? giftCardCode.trim() : undefined,
+      readerId: parsedCardCents > 0 ? readerId.trim() : undefined,
+      cashReceivedCents: parsedCashCents > 0 ? parsedCashReceived : undefined,
+    };
+    const fingerprint = JSON.stringify(checkoutPayload);
+    if (checkoutAttemptRef.current?.fingerprint !== fingerprint) {
+      checkoutAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     try {
-      const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ requestId: crypto.randomUUID(), holdTokens, holderKey, ticketTypeId, promotionCode: promotionCode || undefined, cashDrawerId: parsedCashCents > 0 ? drawer?.id : undefined, cashCents: parsedCashCents, cardCents: parsedCardCents, giftCardCents: parsedGiftCardCents, giftCardCode: parsedGiftCardCents > 0 ? giftCardCode.trim() : undefined, readerId: parsedCardCents > 0 ? readerId.trim() : undefined, cashReceivedCents: parsedCashCents > 0 ? parsedCashReceived : undefined }) });
-      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); await refresh();
+      const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ ...checkoutPayload, requestId: checkoutAttemptRef.current.requestId }) });
+      checkoutAttemptRef.current = null; setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); setSelected([]); setQuote(null); setHoldTokens([]); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); await refresh();
     } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
   }
 
