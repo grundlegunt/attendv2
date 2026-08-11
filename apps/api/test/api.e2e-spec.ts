@@ -1198,7 +1198,7 @@ describe("Milestone 1 cinema configuration", () => {
         subtotalCents: 2000,
         feesCents: 0,
         taxCents: 0,
-        totalCents: 2000,
+        totalCents: 1223,
         promotionId: promotion.body.id,
         discountCents: 777,
         tickets: { create: { showtimeSeatId: showtimeSeat.id, ticketTypeId: ticketType.id, priceCentsPaid: 1223, qrToken: `promo-${crypto.randomUUID()}` } },
@@ -1210,7 +1210,7 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`);
     expect(settings.status).toBe(200);
     expect(settings.body.promotions.find((item: { id: string }) => item.id === promotion.body.id)).toEqual(
-      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalTicketFaceValueCents: 2000, totalCollectedCents: 2000, totalDiscountCents: 777 }),
+      expect.objectContaining({ redemptionCount: 1, discountedTicketCount: 1, totalTicketFaceValueCents: 2000, totalCollectedCents: 1223, totalDiscountCents: 777 }),
     );
   });
 
