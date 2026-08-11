@@ -19,6 +19,7 @@ export function TicketScanner({
   const [cameraStarting, setCameraStarting] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const pendingRef = useRef(false);
+  const scanRequestRef = useRef(0);
   const cameraStartingRef = useRef(false);
   const cameraSessionRef = useRef(0);
   const detectingRef = useRef(false);
@@ -42,10 +43,20 @@ export function TicketScanner({
 
   useEffect(() => stopCamera, []);
 
+  useEffect(() => {
+    scanRequestRef.current += 1;
+    pendingRef.current = false;
+    setPending(false);
+    setResult(null);
+    stopCamera();
+    setMessage("Use the camera or paste a QR credential.");
+  }, [expectedShowtimeId]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (!credential.trim() || pendingRef.current) return;
     pendingRef.current = true;
+    const requestId = ++scanRequestRef.current;
     setPending(true);
     try {
       let deviceId = window.localStorage.getItem("attend-scanner-device-id");
@@ -53,7 +64,7 @@ export function TicketScanner({
         deviceId = crypto.randomUUID();
         window.localStorage.setItem("attend-scanner-device-id", deviceId);
       }
-      setResult(await apiFetch<TicketScanResponse>("/ticketing/scans", {
+      const response = await apiFetch<TicketScanResponse>("/ticketing/scans", {
         method: "POST",
         accessToken,
         body: JSON.stringify({
@@ -62,13 +73,18 @@ export function TicketScanner({
           deviceId,
           entrance: entrance.trim() || undefined,
         }),
-      }));
+      });
+      if (requestId !== scanRequestRef.current) return;
+      setResult(response);
       setCredential("");
     } catch (error) {
+      if (requestId !== scanRequestRef.current) return;
       setMessage(error instanceof ApiRequestError ? error.body.message : "Ticket could not be checked.");
     } finally {
-      pendingRef.current = false;
-      setPending(false);
+      if (requestId === scanRequestRef.current) {
+        pendingRef.current = false;
+        setPending(false);
+      }
     }
   }
 
