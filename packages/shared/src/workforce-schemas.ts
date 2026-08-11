@@ -41,6 +41,10 @@ export const boxOfficeQuoteRequestSchema = z.object({
   promotionCode: z.string().trim().min(1).max(50).optional(),
 });
 
+export const giftCardBalanceRequestSchema = z.object({
+  code: z.string().trim().min(20).max(40),
+});
+
 export const boxOfficeCheckoutRequestSchema = boxOfficeQuoteRequestSchema.extend({
   requestId: z.string().uuid(),
   ticketTypeId: z.string().uuid(),

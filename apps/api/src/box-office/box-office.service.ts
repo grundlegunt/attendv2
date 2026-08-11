@@ -38,6 +38,10 @@ export class BoxOfficeService {
     return customers.map((customer) => ({ ...customer, membership: null }));
   }
 
+  giftCardBalance(locationId: string, code: string) {
+    return this.cinema.giftCardBalance(locationId, code);
+  }
+
   async quote(input: { locationId: string; holdTokens: string[]; holderKey: string; promotionCode?: string }) {
     const tokens = [...new Set(input.holdTokens)].sort();
     const now = new Date();
