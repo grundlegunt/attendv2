@@ -422,11 +422,18 @@ export class RestaurantService {
         where: { id: input.menuItemId, menuCategory: { locationId: input.locationId } },
       });
       if (!existing) throw new RestaurantError("Menu item was not found.", "NOT_FOUND");
-      if (input.changes.kitchenStationId) {
+      if (
+        input.changes.kitchenStationId &&
+        input.changes.kitchenStationId !== existing.kitchenStationId
+      ) {
         const station = await tx.kitchenStation.findFirst({
-          where: { id: input.changes.kitchenStationId, locationId: input.locationId },
+          where: {
+            id: input.changes.kitchenStationId,
+            locationId: input.locationId,
+            active: true,
+          },
         });
-        if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+        if (!station) throw new RestaurantError("Active kitchen station was not found.", "NOT_FOUND");
       }
       if (input.changes.menuCategoryId && input.changes.menuCategoryId !== existing.menuCategoryId) {
         const category = await tx.menuCategory.findFirst({
@@ -1243,14 +1250,14 @@ export class RestaurantService {
   ) {
     const [category, station] = await Promise.all([
       tx.menuCategory.findFirst({
-        where: { id: input.menuCategoryId, locationId: input.locationId },
+        where: { id: input.menuCategoryId, locationId: input.locationId, active: true },
       }),
       tx.kitchenStation.findFirst({
-        where: { id: input.kitchenStationId, locationId: input.locationId },
+        where: { id: input.kitchenStationId, locationId: input.locationId, active: true },
       }),
     ]);
-    if (!category) throw new RestaurantError("Menu category was not found.", "NOT_FOUND");
-    if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+    if (!category) throw new RestaurantError("Active menu category was not found.", "NOT_FOUND");
+    if (!station) throw new RestaurantError("Active kitchen station was not found.", "NOT_FOUND");
   }
 
   private auditTabOperation(
