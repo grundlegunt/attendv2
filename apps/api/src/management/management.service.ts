@@ -246,6 +246,18 @@ export class ManagementService {
     return { ...giftCard, code };
   }
 
+  async updateGiftCardStatus(input: { locationId: string; employeeId: string; giftCardId: string; status: "ACTIVE" | "DEACTIVATED" }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+    const card = await prisma.giftCard.findFirst({ where: { id: input.giftCardId, organizationId: location.organizationId }, select: { id: true, status: true } });
+    if (!card) throw AppError.notFound("Gift card was not found.");
+    if (card.status === input.status) return prisma.giftCard.findUniqueOrThrow({ where: { id: card.id }, select: { id: true, status: true } });
+    return prisma.$transaction(async (tx) => {
+      const updated = await tx.giftCard.update({ where: { id: card.id }, data: { status: input.status }, select: { id: true, status: true } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "gift_card.status_updated", entityType: "GiftCard", entityId: card.id, beforeState: { status: card.status }, afterState: { status: updated.status } } });
+      return updated;
+    });
+  }
+
   async customer(locationId: string, customerId: string) {
     const customer = await prisma.customer.findFirst({ where: { id: customerId, ticketOrders: { some: { locationId } } }, select: { id: true, name: true, email: true, phone: true } });
     if (!customer) throw AppError.notFound("Customer was not found.");
