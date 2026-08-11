@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
 import { prisma } from "@cinema/database";
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 
 @Injectable()
@@ -206,6 +206,44 @@ export class ManagementService {
     const inquiry = await prisma.privateEventInquiry.findFirst({ where: { id: inquiryId, locationId } });
     if (!inquiry) throw AppError.notFound("Private-event inquiry was not found.");
     return prisma.$transaction(async (tx) => { const updated = await tx.privateEventInquiry.update({ where: { id: inquiry.id }, data: { status } }); await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "private_event_inquiry.status_updated", entityType: "PrivateEventInquiry", entityId: inquiry.id, beforeState: { status: inquiry.status }, afterState: { status } } }); return updated; });
+  }
+
+  async giftCards(locationId: string) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
+    return prisma.giftCard.findMany({
+      where: { organizationId: location.organizationId },
+      select: { id: true, codeLast4: true, initialBalanceCents: true, balanceCents: true, currency: true, recipientName: true, recipientEmail: true, status: true, createdAt: true, issuedAtLocation: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+  }
+
+  async issueGiftCard(input: { locationId: string; employeeId: string; amountCents: number; recipientName?: string; recipientEmail?: string }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, currency: true } });
+    const raw = randomBytes(12).toString("hex").toUpperCase();
+    const code = `ATGC-${raw.match(/.{1,4}/g)!.join("-")}`;
+    const codeHash = createHash("sha256").update(code.replace(/[^A-Z0-9]/g, "")).digest("hex");
+    const giftCard = await prisma.$transaction(async (tx) => {
+      const created = await tx.giftCard.create({
+        data: {
+          organizationId: location.organizationId,
+          issuedAtLocationId: input.locationId,
+          issuedByEmployeeId: input.employeeId,
+          codeHash,
+          codeLast4: raw.slice(-4),
+          initialBalanceCents: input.amountCents,
+          balanceCents: input.amountCents,
+          currency: location.currency,
+          recipientName: input.recipientName,
+          recipientEmail: input.recipientEmail?.toLowerCase(),
+          transactions: { create: { locationId: input.locationId, employeeId: input.employeeId, type: "ISSUANCE", amountCents: input.amountCents, balanceAfterCents: input.amountCents } },
+        },
+        select: { id: true, codeLast4: true, initialBalanceCents: true, balanceCents: true, currency: true, recipientName: true, recipientEmail: true, status: true, createdAt: true },
+      });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "gift_card.issued", entityType: "GiftCard", entityId: created.id, afterState: { codeLast4: created.codeLast4, initialBalanceCents: created.initialBalanceCents, currency: created.currency, recipientEmail: created.recipientEmail } } });
+      return created;
+    });
+    return { ...giftCard, code };
   }
 
   async customer(locationId: string, customerId: string) {

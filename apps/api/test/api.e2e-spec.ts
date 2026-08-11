@@ -1214,6 +1214,32 @@ describe("Milestone 1 cinema configuration", () => {
     );
   });
 
+  it("issues organization gift cards with a one-time code and immutable opening ledger entry", async () => {
+    const issued = await request(app.getHttpServer())
+      .post("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ amountCents: 2500, recipientName: "Gift Recipient", recipientEmail: "GIFT@EXAMPLE.TEST" })
+      .expect(201);
+
+    expect(issued.body).toEqual(expect.objectContaining({ balanceCents: 2500, initialBalanceCents: 2500, codeLast4: expect.any(String), code: expect.stringMatching(/^ATGC-(?:[A-F0-9]{4}-){5}[A-F0-9]{4}$/) }));
+    expect(issued.body).not.toHaveProperty("codeHash");
+
+    const listed = await request(app.getHttpServer())
+      .get("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    const card = listed.body.find((candidate: { id: string }) => candidate.id === issued.body.id);
+    expect(card).toEqual(expect.objectContaining({ codeLast4: issued.body.codeLast4, balanceCents: 2500, recipientEmail: "gift@example.test" }));
+    expect(card).not.toHaveProperty("code");
+    expect(card).not.toHaveProperty("codeHash");
+
+    const { prisma } = await import("@cinema/database");
+    expect(await prisma.giftCardTransaction.findMany({ where: { giftCardId: issued.body.id } })).toEqual([
+      expect.objectContaining({ type: "ISSUANCE", amountCents: 2500, balanceAfterCents: 2500 }),
+    ]);
+    expect(await prisma.auditEvent.count({ where: { entityType: "GiftCard", entityId: issued.body.id, action: "gift_card.issued" } })).toBe(1);
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")

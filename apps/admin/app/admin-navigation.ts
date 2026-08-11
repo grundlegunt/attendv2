@@ -29,6 +29,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
   ] },
   { label: "Reports & Finance", items: [
     { href: "/reports", label: "Revenue Reports", permissions: ["reports.view.financial"] },
+    { href: "/gift-cards", label: "Gift Cards", permissions: ["payment.refund"] },
     { href: "/audit-log", label: "Recent Activity", permissions: ["audit.log.view"] },
   ] },
   { label: "Users & Permissions", items: [

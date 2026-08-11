@@ -45,10 +45,11 @@ describe("admin navigation", () => {
     assert.deepEqual(links.map((item) => item.href), ["/", "/menu", "/taxes"]);
   });
 
-  it("does not expose the refund workbench without its read permission", () => {
+  it("does not expose financial operations without payment-refund permission", () => {
     const links = visibleAdminNavigation(["ticket.refund"]).flatMap((group) => group.items);
     assert.deepEqual(links.map((item) => item.href), ["/"]);
+    assert.equal(links.some((item) => item.href === "/gift-cards"), false);
     const managerLinks = visibleAdminNavigation(["payment.refund"]).flatMap((group) => group.items);
-    assert.deepEqual(managerLinks.map((item) => item.href), ["/", "/refunds"]);
+    assert.deepEqual(managerLinks.map((item) => item.href), ["/", "/refunds", "/gift-cards"]);
   });
 });
