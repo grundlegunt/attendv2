@@ -317,6 +317,19 @@ function TicketCard({
     action: FulfillmentAction,
   ) => void;
 }) {
+  const destructiveAction = ticket.status === "READY" ? "VOID" : "CANCEL";
+  const [pendingDestructiveAction, setPendingDestructiveAction] = useState<
+    "CANCEL" | "VOID" | null
+  >(null);
+
+  useEffect(() => {
+    if (!pendingDestructiveAction) return;
+    const timer = window.setTimeout(() => setPendingDestructiveAction(null), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [pendingDestructiveAction]);
+
+  useEffect(() => setPendingDestructiveAction(null), [ticket.status]);
+
   const next =
     ticket.status === "NEW"
       ? { action: "ACCEPT" as const, label: "Accept" }
@@ -353,11 +366,20 @@ function TicketCard({
         <button
           className="destructive"
           type="button"
-          onClick={() =>
-            onTransition(ticket, ticket.status === "READY" ? "VOID" : "CANCEL")
-          }
+          onClick={() => {
+            if (pendingDestructiveAction === destructiveAction) {
+              setPendingDestructiveAction(null);
+              onTransition(ticket, destructiveAction);
+              return;
+            }
+            setPendingDestructiveAction(destructiveAction);
+          }}
         >
-          {ticket.status === "READY" ? "Void" : "Cancel"}
+          {pendingDestructiveAction === destructiveAction
+            ? `Confirm ${destructiveAction === "VOID" ? "void" : "cancel"}`
+            : destructiveAction === "VOID"
+              ? "Void"
+              : "Cancel"}
         </button>
       </div>
     </article>
