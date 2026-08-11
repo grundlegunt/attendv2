@@ -77,6 +77,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editActive, setEditActive] = useState(true);
   const [editIsVegan, setEditIsVegan] = useState(false);
   const [editIsGlutenFree, setEditIsGlutenFree] = useState(false);
+  const [itemQuery, setItemQuery] = useState("");
+  const [itemCategoryFilter, setItemCategoryFilter] = useState("");
+  const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
 
   const refresh = useCallback(() => {
     apiFetch<Menu>("/restaurant-menu/admin", { accessToken })
@@ -304,6 +307,27 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       menuItemId: item.id,
     })),
   );
+  const normalizedItemQuery = itemQuery.trim().toLowerCase();
+  const filteredItems =
+    menu?.categories.flatMap((category) =>
+      category.items
+        .filter((item) => {
+          const matchesQuery =
+            !normalizedItemQuery ||
+            [item.name, item.description, category.name, item.kitchenStation.name]
+              .filter(Boolean)
+              .some((value) => value!.toLowerCase().includes(normalizedItemQuery));
+          const matchesCategory =
+            !itemCategoryFilter || category.id === itemCategoryFilter;
+          const matchesAvailability =
+            !itemAvailabilityFilter ||
+            (itemAvailabilityFilter === "ACTIVE" && item.active && !item.is86d) ||
+            (itemAvailabilityFilter === "86D" && item.is86d) ||
+            (itemAvailabilityFilter === "INACTIVE" && !item.active);
+          return matchesQuery && matchesCategory && matchesAvailability;
+        })
+        .map((item) => ({ item, category })),
+    ) ?? [];
 
   return (
     <section className="management-stack">
@@ -438,9 +462,48 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           </label>
           <button className="primary">Add menu item</button>
         </form>
+        <div className="filter-grid menu-item-filters">
+          <label>
+            Search menu items
+            <input
+              type="search"
+              value={itemQuery}
+              onChange={(event) => setItemQuery(event.target.value)}
+              placeholder="Name, description, category, or station"
+            />
+          </label>
+          <label>
+            Category
+            <select
+              value={itemCategoryFilter}
+              onChange={(event) => setItemCategoryFilter(event.target.value)}
+            >
+              <option value="">All categories</option>
+              {menu?.categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Availability
+            <select
+              value={itemAvailabilityFilter}
+              onChange={(event) => setItemAvailabilityFilter(event.target.value)}
+            >
+              <option value="">All items</option>
+              <option value="ACTIVE">Active and available</option>
+              <option value="86D">86’d</option>
+              <option value="INACTIVE">Inactive</option>
+            </select>
+          </label>
+        </div>
+        <p className="menu-item-filter-count">
+          Showing {filteredItems.length} of {items.length} menu items
+        </p>
         <div className="schedule-list">
-          {menu?.categories.flatMap((category) =>
-            category.items.map((item) => (
+          {filteredItems.map(({ item, category }) => (
               <article key={item.id}>
                 <div className="menu-item-summary">
                   {item.imageUrl && <img src={item.imageUrl} alt="" />}
@@ -474,7 +537,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
                   {item.is86d ? "Restore" : "86 item"}
                 </button>
               </article>
-            )),
+          ))}
+          {menu && filteredItems.length === 0 && (
+            <p>No menu items match these filters.</p>
           )}
         </div>
         {editingItem && (
