@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthenticatedEmployee, AuthTokenResponse } from "@cinema/shared";
 import {
   apiFetch,
@@ -79,6 +79,8 @@ export default function KdsPage() {
   const [refreshToken, setRefreshToken] = useState("");
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
+  const transitioningTicketIdsRef = useRef(new Set<string>());
+  const [transitioningTicketIds, setTransitioningTicketIds] = useState<string[]>([]);
 
   function storeSession(next: ActiveStaffSession) {
     setEmployee(next.employee); setAccessToken(next.accessToken); setRefreshToken(next.refreshToken); setExpiresInSeconds(next.expiresInSeconds);
@@ -219,6 +221,9 @@ export default function KdsPage() {
     ticket: FulfillmentTicket,
     action: FulfillmentAction,
   ) {
+    if (transitioningTicketIdsRef.current.has(ticket.id)) return;
+    transitioningTicketIdsRef.current.add(ticket.id);
+    setTransitioningTicketIds(Array.from(transitioningTicketIdsRef.current));
     try {
       await apiFetch(`/fulfillment/tickets/${ticket.id}`, {
         method: "PATCH",
@@ -228,6 +233,9 @@ export default function KdsPage() {
       await refresh();
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "Status did not update.");
+    } finally {
+      transitioningTicketIdsRef.current.delete(ticket.id);
+      setTransitioningTicketIds(Array.from(transitioningTicketIdsRef.current));
     }
   }
 
@@ -289,7 +297,7 @@ export default function KdsPage() {
         <h2>In progress · {grouped.active.length}</h2>
         <div className="ticket-grid">
           {grouped.active.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} now={now} onTransition={transition} />
+            <TicketCard key={ticket.id} ticket={ticket} now={now} busy={transitioningTicketIds.includes(ticket.id)} onTransition={transition} />
           ))}
         </div>
       </section>
@@ -297,7 +305,7 @@ export default function KdsPage() {
         <h2>Ready · {grouped.ready.length}</h2>
         <div className="ticket-grid">
           {grouped.ready.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} now={now} onTransition={transition} />
+            <TicketCard key={ticket.id} ticket={ticket} now={now} busy={transitioningTicketIds.includes(ticket.id)} onTransition={transition} />
           ))}
         </div>
       </section>
@@ -308,10 +316,12 @@ export default function KdsPage() {
 function TicketCard({
   ticket,
   now,
+  busy,
   onTransition,
 }: {
   ticket: FulfillmentTicket;
   now: number;
+  busy: boolean;
   onTransition: (
     ticket: FulfillmentTicket,
     action: FulfillmentAction,
@@ -360,12 +370,13 @@ function TicketCard({
         ))}
       </ul>
       <div className="ticket-actions">
-        <button type="button" onClick={() => onTransition(ticket, next.action)}>
-          {next.label}
+        <button type="button" disabled={busy} onClick={() => onTransition(ticket, next.action)}>
+          {busy ? "Updating…" : next.label}
         </button>
         <button
           className="destructive"
           type="button"
+          disabled={busy}
           onClick={() => {
             if (pendingDestructiveAction === destructiveAction) {
               setPendingDestructiveAction(null);
