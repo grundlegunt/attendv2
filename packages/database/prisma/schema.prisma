@@ -38,6 +38,7 @@ model Organization {
   filmSeries       FilmSeries[]
   priceTiers       PriceTier[]
   paymentCustomers PaymentCustomer[]
+  giftCards        GiftCard[]
 
   @@map("organizations")
 }
@@ -147,6 +148,8 @@ model Location {
   promotions         Promotion[]
   shifts             Shift[]
   privateEventInquiries PrivateEventInquiry[]
+  issuedGiftCards   GiftCard[]
+  giftCardTransactions GiftCardTransaction[]
 
   @@map("locations")
 }
@@ -167,6 +170,62 @@ model PrivateEventInquiry {
   updatedAt DateTime @updatedAt
   @@index([locationId, status, createdAt])
   @@map("private_event_inquiries")
+}
+
+enum GiftCardStatus {
+  ACTIVE
+  DEACTIVATED
+}
+
+enum GiftCardTransactionType {
+  ISSUANCE
+  REDEMPTION
+  REFUND
+  ADJUSTMENT
+}
+
+model GiftCard {
+  id String @id @default(uuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  issuedAtLocationId String
+  issuedAtLocation Location @relation(fields: [issuedAtLocationId], references: [id], onDelete: Restrict)
+  codeHash String @unique
+  codeLast4 String
+  initialBalanceCents Int
+  balanceCents Int
+  currency String @default("USD")
+  recipientName String?
+  recipientEmail String?
+  status GiftCardStatus @default(ACTIVE)
+  issuedByEmployeeId String
+  issuedByEmployee Employee @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
+  transactions GiftCardTransaction[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, codeLast4])
+  @@map("gift_cards")
+}
+
+model GiftCardTransaction {
+  id String @id @default(uuid())
+  giftCardId String
+  giftCard GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Restrict)
+  locationId String
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  type GiftCardTransactionType
+  amountCents Int
+  balanceAfterCents Int
+  employeeId String?
+  employee Employee? @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  reference String?
+  createdAt DateTime @default(now())
+
+  @@index([giftCardId, createdAt])
+  @@index([locationId, createdAt])
+  @@map("gift_card_transactions")
 }
 
 // ---------------------------------------------------------------------------
@@ -846,6 +905,8 @@ model Employee {
   cashTransactions        CashTransaction[]
   shifts                  Shift[]           @relation("EmployeeShifts")
   adjustedShifts          Shift[]           @relation("AdjustedShifts")
+  issuedGiftCards         GiftCard[]
+  giftCardTransactions    GiftCardTransaction[]
 
   @@map("employees")
 }

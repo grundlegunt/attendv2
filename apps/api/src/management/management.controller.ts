@@ -49,6 +49,11 @@ const inquiryQuerySchema = z.object({
   status: z.enum(["NEW", "CONTACTED", "BOOKED", "CLOSED"]).optional(),
   query: z.string().trim().max(200).optional(),
 }).strict();
+const giftCardSchema = z.object({
+  amountCents: z.number().int().min(500).max(100_000),
+  recipientName: z.string().trim().min(1).max(120).optional(),
+  recipientEmail: z.string().trim().email().max(320).optional(),
+}).strict();
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
@@ -107,6 +112,12 @@ export class ManagementController {
 
   @Patch("private-event-inquiries/:inquiryId") @RequirePermissions(Permission.ReportsView)
   updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Body(new ZodValidationPipe(inquiryStatusSchema)) body: unknown) { return this.management.updatePrivateEventInquiry(this.location(actor), actor.sub, inquiryId, inquiryStatusSchema.parse(body).status); }
+
+  @Get("gift-cards") @RequirePermissions(Permission.PaymentRefund)
+  giftCards(@CurrentActor() actor: RequestActor) { return this.management.giftCards(this.location(actor)); }
+
+  @Post("gift-cards") @RequirePermissions(Permission.PaymentRefund)
+  issueGiftCard(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(giftCardSchema)) body: unknown) { return this.management.issueGiftCard({ ...giftCardSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }
