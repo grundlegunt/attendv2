@@ -50,6 +50,7 @@ export class MenuController {
     return this.restaurant.createKitchenStation({
       ...createKitchenStationRequestSchema.parse(body),
       locationId: this.locationId(actor),
+      actorId: actor.sub,
     });
   }
 
@@ -63,6 +64,7 @@ export class MenuController {
     return this.restaurant.updateKitchenStation({
       kitchenStationId,
       locationId: this.locationId(actor),
+      actorId: actor.sub,
       changes: updateKitchenStationRequestSchema.parse(body),
     });
   }
@@ -76,6 +78,7 @@ export class MenuController {
     return this.restaurant.createMenuCategory({
       ...createMenuCategoryRequestSchema.parse(body),
       locationId: this.locationId(actor),
+      actorId: actor.sub,
     });
   }
 
@@ -89,6 +92,7 @@ export class MenuController {
     return this.restaurant.updateMenuCategory({
       menuCategoryId,
       locationId: this.locationId(actor),
+      actorId: actor.sub,
       changes: updateMenuCategoryRequestSchema.parse(body),
     });
   }

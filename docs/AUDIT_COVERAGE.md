@@ -10,7 +10,7 @@ Milestone 11 reviewed the product/security example list against the implemented 
 | Restaurant settlement/refund/manual closure | check-drop, tip, payment-failed, closed, refund, and attention-required events |
 | Cash adjustment/drawer control | drawer opened/closed and cash-movement events |
 | Employee shift override | `shift.manager_adjusted` with before/after state |
-| Price/tax/service/promotion changes | menu-item, tax-rule, service-charge-rule, promotion, and location-setting events |
+| Price/tax/service/promotion changes | menu-category, kitchen-station, menu-item, modifier, tax-rule, service-charge-rule, promotion, and location-setting events |
 | User/role/permission changes | employee create/access updates and `role.permissions_updated` |
 | Authentication | employee login/logout events; failed credential attempts are rate-limited and logged operationally without recording passwords |
 

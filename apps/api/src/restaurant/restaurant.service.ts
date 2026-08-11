@@ -34,7 +34,7 @@ export class RestaurantService {
     return this.wrap(() => this.domain.getSeatDetail(input));
   }
 
-  createKitchenStation(input: { locationId: string; name: string; displayType: string }) {
+  createKitchenStation(input: Parameters<RestaurantDomainService["createKitchenStation"]>[0]) {
     return this.wrap(() => this.domain.createKitchenStation(input));
   }
 
@@ -42,7 +42,7 @@ export class RestaurantService {
     return this.wrap(() => this.domain.updateKitchenStation(input));
   }
 
-  createMenuCategory(input: { locationId: string; name: string; sortOrder: number }) {
+  createMenuCategory(input: Parameters<RestaurantDomainService["createMenuCategory"]>[0]) {
     return this.wrap(() => this.domain.createMenuCategory(input));
   }
 
