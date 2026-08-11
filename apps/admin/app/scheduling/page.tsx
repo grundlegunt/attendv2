@@ -19,6 +19,7 @@ interface Movie {
   rating?: string | null;
   posterUrl?: string | null;
   detailPosterUrl?: string | null;
+  diningSpecialArtworkUrl?: string | null;
   director?: string | null; starring?: string | null; trailerUrl?: string | null; releaseYear?: number | null;
   pairings?: Array<{ menuItemId: string; sortOrder: number }>;
 }
@@ -56,6 +57,7 @@ export default function AdminPage() {
   const [movieRating, setMovieRating] = useState("");
   const [moviePosterUrl, setMoviePosterUrl] = useState("");
   const [movieDetailPosterUrl, setMovieDetailPosterUrl] = useState("");
+  const [movieDiningSpecialArtworkUrl, setMovieDiningSpecialArtworkUrl] = useState("");
   const [movieDirector, setMovieDirector] = useState("");
   const [movieStarring, setMovieStarring] = useState("");
   const [movieTrailerUrl, setMovieTrailerUrl] = useState("");
@@ -103,6 +105,7 @@ export default function AdminPage() {
           rating: movieRating.trim() || null,
           posterUrl: moviePosterUrl.trim() || null,
           detailPosterUrl: movieDetailPosterUrl.trim() || null,
+          diningSpecialArtworkUrl: movieDiningSpecialArtworkUrl.trim() || null,
           director: movieDirector.trim() || null,
           starring: movieStarring.trim() || null,
           trailerUrl: movieTrailerUrl.trim() || null,
@@ -115,6 +118,7 @@ export default function AdminPage() {
       setMovieRating("");
       setMoviePosterUrl("");
       setMovieDetailPosterUrl("");
+      setMovieDiningSpecialArtworkUrl("");
       setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
       setEditingMovieId(null);
       setMovieEditorOpen(false);
@@ -344,6 +348,7 @@ export default function AdminPage() {
     setMovieRating(movie?.rating ?? "");
     setMoviePosterUrl(movie?.posterUrl ?? "");
     setMovieDetailPosterUrl(movie?.detailPosterUrl ?? "");
+    setMovieDiningSpecialArtworkUrl(movie?.diningSpecialArtworkUrl ?? "");
     setMovieDirector(movie?.director ?? "");
     setMovieStarring(movie?.starring ?? "");
     setMovieTrailerUrl(movie?.trailerUrl ?? "");
@@ -439,6 +444,7 @@ export default function AdminPage() {
         <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} placeholder="PG, PG-13, R…" /></label>
         <label>Showtimes artwork URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="Landscape image used on film cards" /></label>
         <label>Movie detail poster URL<input type="text" value={movieDetailPosterUrl} onChange={(event) => setMovieDetailPosterUrl(event.target.value)} placeholder="Vertical one-sheet used on the film page" /></label>
+        <label>Dining special artwork URL<input type="text" value={movieDiningSpecialArtworkUrl} onChange={(event) => setMovieDiningSpecialArtworkUrl(event.target.value)} placeholder="Single photo showing the paired food and drink" /></label>
         <label>Director<input value={movieDirector} onChange={(event) => setMovieDirector(event.target.value)} /></label>
         <label>Starring<input value={movieStarring} onChange={(event) => setMovieStarring(event.target.value)} placeholder="Comma-separated cast" /></label>
         <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>
