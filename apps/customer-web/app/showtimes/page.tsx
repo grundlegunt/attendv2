@@ -92,8 +92,12 @@ export default function ShowtimesPage() {
       );
   }, [program, activeDate, programMovies]);
   const specialsForActiveDate = useMemo(() => {
-    const movieIds = new Set(moviesForActiveDate.map(({ movie }) => movie.id));
-    return menu?.movieSpecials.filter((special) => movieIds.has(special.movieId)) ?? [];
+    if (!menu) return [];
+    const specialsByMovie = new Map(menu.movieSpecials.map((special) => [special.movieId, special]));
+    return moviesForActiveDate.flatMap(({ movie }) => {
+      const special = specialsByMovie.get(movie.id);
+      return special ? [special] : [];
+    });
   }, [menu, moviesForActiveDate]);
 
   useEffect(() => {
