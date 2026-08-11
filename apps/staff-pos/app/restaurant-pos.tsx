@@ -291,21 +291,66 @@ export function RestaurantPos({
 
   async function finalizeTab() {
     if (!settlement) return;
+    const parsedTipCents = Number(tipCents || 0);
+    const parsedSavedCardCents = Number(savedCardCents || 0);
+    const parsedTerminalCents = Number(terminalCents || 0);
+    if (
+      !Number.isInteger(parsedTipCents) ||
+      !Number.isInteger(parsedSavedCardCents) ||
+      !Number.isInteger(parsedTerminalCents) ||
+      parsedTipCents < 0 ||
+      parsedSavedCardCents < 0 ||
+      parsedTerminalCents < 0
+    ) {
+      setMessage("Tip and tender amounts must be whole, non-negative cents.");
+      return;
+    }
+    if (parsedTipCents > 1_000_000) {
+      setMessage("Tip cannot exceed 1,000,000 cents.");
+      return;
+    }
+    if (parsedSavedCardCents > 10_000_000 || parsedTerminalCents > 10_000_000) {
+      setMessage("A single tender cannot exceed 10,000,000 cents.");
+      return;
+    }
+    if (parsedSavedCardCents > 0 && !settlement.activePaymentMethod) {
+      setMessage("The saved payment method is no longer available.");
+      return;
+    }
+    const balanceCents =
+      settlement.totals.subtotalCents +
+      settlement.totals.taxCents +
+      settlement.totals.serviceChargeCents +
+      parsedTipCents -
+      settlement.paidCents;
+    const tenderedCents = parsedSavedCardCents + parsedTerminalCents;
+    if (balanceCents <= 0) {
+      setMessage("This tab has no remaining balance to collect.");
+      return;
+    }
+    if (tenderedCents !== balanceCents) {
+      setMessage(`Tender amounts must total the remaining balance of ${balanceCents} cents.`);
+      return;
+    }
+    if (parsedTerminalCents > 0 && !readerId.trim()) {
+      setMessage("Choose a Terminal reader for the presented card payment.");
+      return;
+    }
     const actionKey = `finalize:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
     const tenders = [
-      ...(Number(savedCardCents) > 0 && settlement.activePaymentMethod
+      ...(parsedSavedCardCents > 0 && settlement.activePaymentMethod
         ? [{
             type: "SAVED_METHOD",
-            amountCents: Number(savedCardCents),
+            amountCents: parsedSavedCardCents,
             paymentMethodReferenceId: settlement.activePaymentMethod.id,
           }]
         : []),
-      ...(Number(terminalCents) > 0
+      ...(parsedTerminalCents > 0
         ? [{
             type: "CARD_PRESENT",
-            amountCents: Number(terminalCents),
-            readerId,
+            amountCents: parsedTerminalCents,
+            readerId: readerId.trim(),
           }]
         : []),
     ];
@@ -317,7 +362,7 @@ export function RestaurantPos({
           accessToken,
           body: JSON.stringify({
             requestId: crypto.randomUUID(),
-            tipCents: Number(tipCents),
+            tipCents: parsedTipCents,
             tenders,
           }),
         },
@@ -427,7 +472,14 @@ export function RestaurantPos({
             <>
               <label className="field">
                 <span>Tip (cents)</span>
-                <input value={tipCents} onChange={(event) => setTipCents(event.target.value)} />
+                <input
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="1"
+                  value={tipCents}
+                  onChange={(event) => setTipCents(event.target.value)}
+                />
               </label>
               {settlement.activePaymentMethod && (
                 <label className="field">
@@ -436,6 +488,10 @@ export function RestaurantPos({
                     {settlement.activePaymentMethod.last4} amount (cents)
                   </span>
                   <input
+                    type="number"
+                    min="0"
+                    max="10000000"
+                    step="1"
                     value={savedCardCents}
                     onChange={(event) => setSavedCardCents(event.target.value)}
                   />
@@ -444,6 +500,10 @@ export function RestaurantPos({
               <label className="field">
                 <span>Presented card amount (cents)</span>
                 <input
+                  type="number"
+                  min="0"
+                  max="10000000"
+                  step="1"
                   value={terminalCents}
                   onChange={(event) => setTerminalCents(event.target.value)}
                 />
