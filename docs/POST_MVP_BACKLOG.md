@@ -2,22 +2,14 @@
 
 Status: Living reference — tracks real gaps and opportunities surfaced in `COMPETITIVE_LANDSCAPE.md`, `OPEN_QUESTIONS.md`, `PROGRAMMING_AND_SCHEDULING.md`, and `TIMED_ENTRY_EXPANSION_PLAN.md`. None of this is sequenced into `IMPLEMENTATION_PLAN.md`'s Milestones 0–11 on purpose: that list records the MVP foundation for the core customer (an independent dine-in cinema), and mixing it with open-ended expansion ideas would blur "done" with "someday." Promote an item into active work when a concrete business need, customer, or partner makes its requirements real.
 
-## 1. Ready to build whenever there's room
-
-Low ambiguity, no open business decision blocking them, relevant to the core dine-in customer as-is:
-
-- **Gift cards and vouchers** — low-complexity, high-margin, seasonal revenue line; a lot of gift card balances are never fully redeemed. Explicitly out of scope for MVP (`PRODUCT_SPEC.md` §6).
-- **Digital signage** — a read-only lobby/marquee display of showtimes. Comparatively easy since the data already lives in the API; no new architecture needed.
-- **Private screenings, theater buyouts, and group/school sales** — a real, commonly offered revenue line (whole-auditorium rental for a birthday, corporate event, school trip), usually with custom pricing and a different booking flow than per-seat retail sale. Not represented anywhere in the current schema.
-
-## 2. Gated on a real decision or relationship first
+## 1. Gated on a real decision or relationship first
 
 Real, scoped work exists (or has been assessed), but building now would be guessing at requirements that only a real customer/partner can supply:
 
 - **Distributor box-office reporting, Comscore integration, and film-rental/settlement calculations.** Full pre-implementation assessment already produced (architecture, schema, phasing, Comscore integration unknowns) — see the session record for the complete writeup. `OPEN_QUESTIONS.md` §1.1a's original deferral reasoning still applies until a real distributor relationship and its actual contract terms exist. Revisit when: a theater on the platform has a real booking relationship, and it's confirmed whether Comscore reporting is actually required to book the titles in question.
 - **Multi-location consolidated (corporate) reporting**, without breaking per-location reporting — relevant once a customer actually operates more than one location under one Organization.
 
-## 3. Adjacent-market expansion (nonprofit / general-admission venues)
+## 2. Adjacent-market expansion (nonprofit / general-admission venues)
 
 Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre, Nashville) as a stand-in for a whole class of venue the platform doesn't currently fit: nonprofit, general-admission, membership/donation-funded rather than dine-in-driven. None of this matters for the core dine-in customer (Meridian and similar); it only matters if/when pursuing this adjacent segment deliberately.
 
@@ -37,6 +29,9 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 - **Cinema programming and scheduling workspace** — the scheduling foundation is implemented in the cinema Admin app; `PROGRAMMING_AND_SCHEDULING.md` remains its product reference.
 - **Public-site scope for `customer-web`** — resolved toward a broader theater website, with public navigation and content pages alongside the transactional ticket-buying flow.
+- **Gift cards and vouchers** — implemented across admin issuance and ledger management, staff balance checks and redemption, cash/card/terminal split tenders, refunds, online checkout, customer balance lookup, and recipient email delivery with retry handling.
+- **Digital signage** — implemented as a read-only lobby showtime display with a launcher in the location-management screen.
+- **Private screenings, theater buyouts, and group/school sales** — implemented as a public inquiry flow with persisted requests, an admin work queue, status management, search/filtering, and CSV export. Custom contracts and pricing remain an operator follow-up rather than a retail checkout flow.
 
 ## Also tracked elsewhere, not duplicated here
 
