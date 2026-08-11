@@ -9,6 +9,7 @@ import {
   updateKitchenStationRequestSchema,
   updateMenuCategoryRequestSchema,
   updateMenuItemRequestSchema,
+  updateModifierGroupRequestSchema,
   updateModifierRequestSchema,
 } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
@@ -132,6 +133,21 @@ export class MenuController {
       menuItemId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+    });
+  }
+
+  @Patch("modifier-groups/:modifierGroupId")
+  @RequirePermissions(Permission.MenuEdit)
+  updateModifierGroup(
+    @CurrentActor() actor: RequestActor,
+    @Param("modifierGroupId") modifierGroupId: string,
+    @Body(new ZodValidationPipe(updateModifierGroupRequestSchema)) body: unknown,
+  ) {
+    return this.restaurant.updateModifierGroup({
+      modifierGroupId,
+      locationId: this.locationId(actor),
+      actorId: actor.sub,
+      changes: updateModifierGroupRequestSchema.parse(body),
     });
   }
 

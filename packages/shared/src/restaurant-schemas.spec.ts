@@ -4,6 +4,7 @@ import {
   updateMenuCategoryRequestSchema,
   updateMenuItemRequestSchema,
   updateModifierRequestSchema,
+  updateModifierGroupRequestSchema,
 } from "./restaurant-schemas";
 
 describe("menu item dietary attributes", () => {
@@ -74,5 +75,31 @@ describe("modifier updates", () => {
     expect(() => updateModifierRequestSchema.parse({})).toThrow(
       "At least one change is required.",
     );
+  });
+});
+
+describe("modifier group updates", () => {
+  it("accepts selection-rule changes", () => {
+    expect(
+      updateModifierGroupRequestSchema.parse({
+        name: "Choose toppings",
+        selectionType: "MULTIPLE",
+        required: true,
+        minSelections: 1,
+        maxSelections: 3,
+      }),
+    ).toEqual({
+      name: "Choose toppings",
+      selectionType: "MULTIPLE",
+      required: true,
+      minSelections: 1,
+      maxSelections: 3,
+    });
+  });
+
+  it("rejects conflicting limits supplied together", () => {
+    expect(() =>
+      updateModifierGroupRequestSchema.parse({ minSelections: 3, maxSelections: 2 }),
+    ).toThrow("Maximum selections must be at least the minimum.");
   });
 });
