@@ -66,6 +66,7 @@ export default function StaffLoginPage() {
   const openingTabsRef = useRef(false);
   const seatDetailRequestRef = useRef(0);
   const availabilityRequestRef = useRef(0);
+  const refreshRequestRef = useRef(0);
   const [clockReady, setClockReady] = useState(false);
   const [clockPin, setClockPin] = useState("");
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
@@ -99,11 +100,14 @@ export default function StaffLoginPage() {
   }
 
   async function refreshSession(token: string) {
+    const requestId = ++refreshRequestRef.current;
     const next = await apiFetch<ActiveStaffSession>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken: token }) });
+    if (requestId !== refreshRequestRef.current) return;
     storeSession(next);
   }
 
   function signOut() {
+    refreshRequestRef.current += 1;
     if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY);
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
