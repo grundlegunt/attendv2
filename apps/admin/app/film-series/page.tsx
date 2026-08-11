@@ -109,6 +109,22 @@ export default function FilmSeriesPage() {
     }
   }
 
+  async function restoreSeries(series: FilmSeries) {
+    setError(null);
+    setNotice(null);
+    try {
+      await apiFetch(`/cinema/film-series/${series.id}`, {
+        accessToken: accessToken ?? undefined,
+        method: "PATCH",
+        body: JSON.stringify({ active: true }),
+      });
+      await refresh();
+      setNotice(`${series.name} was restored and is available when scheduling showtimes.`);
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
   async function reorderSeries(targetSeriesId: string) {
     if (!accessToken || !draggedSeriesId || draggedSeriesId === targetSeriesId) return;
     const reordered = [...activeSeries];
@@ -137,6 +153,7 @@ export default function FilmSeriesPage() {
   }
 
   const activeSeries = (data?.location.organization.filmSeries ?? []).filter((series) => series.active);
+  const archivedSeries = (data?.location.organization.filmSeries ?? []).filter((series) => !series.active);
 
   return <main>
     <section className="admin-heading">
@@ -178,6 +195,14 @@ export default function FilmSeriesPage() {
         </article>)}
         {data && activeSeries.length === 0 && <p className="builder-help">No film series yet. Add one here, then assign it to showtimes from Scheduling.</p>}
       </div>
+      <details className="archived-films film-series-archive">
+        <summary>Archived series <span>{archivedSeries.length}</span></summary>
+        <p>Archived series stay attached to historical showtimes and reports.</p>
+        {archivedSeries.length ? <div className="archived-film-list">{archivedSeries.map((series) => <div key={series.id}>
+          <span><strong>{series.name}</strong><small>{series.description || "No description added."}</small></span>
+          <div><button type="button" onClick={() => void restoreSeries(series)}>Restore</button></div>
+        </div>)}</div> : <p>No archived series.</p>}
+      </details>
     </section>
   </main>;
 }
