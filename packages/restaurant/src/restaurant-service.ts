@@ -249,6 +249,7 @@ export class RestaurantService {
     description?: string;
     imageUrl?: string | null;
     priceCents: number;
+    chargeCategory: "FOOD" | "ALCOHOL" | "NA_BEVERAGE";
     isVegan: boolean;
     isGlutenFree: boolean;
     sortOrder: number;
@@ -263,6 +264,7 @@ export class RestaurantService {
           description: input.description,
           imageUrl: input.imageUrl,
           priceCents: input.priceCents,
+          chargeCategory: input.chargeCategory,
           isVegan: input.isVegan,
           isGlutenFree: input.isGlutenFree,
           sortOrder: input.sortOrder,
@@ -482,6 +484,7 @@ export class RestaurantService {
       description?: string | null;
       imageUrl?: string | null;
       priceCents?: number;
+      chargeCategory?: "FOOD" | "ALCOHOL" | "NA_BEVERAGE";
       isVegan?: boolean;
       isGlutenFree?: boolean;
       active?: boolean;

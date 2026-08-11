@@ -15,7 +15,13 @@ describe("menu item dietary attributes", () => {
       name: "Popcorn",
       priceCents: 900,
     });
-    expect(parsed).toEqual(expect.objectContaining({ isVegan: false, isGlutenFree: false }));
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        chargeCategory: "FOOD",
+        isVegan: false,
+        isGlutenFree: false,
+      }),
+    );
   });
 
   it("accepts explicit dietary updates", () => {
@@ -29,6 +35,12 @@ describe("menu item dietary attributes", () => {
         menuCategoryId: "10000000-0000-4000-8000-000000000003",
       }),
     ).toEqual({ menuCategoryId: "10000000-0000-4000-8000-000000000003" });
+  });
+
+  it("accepts an explicit alcohol classification", () => {
+    expect(updateMenuItemRequestSchema.parse({ chargeCategory: "ALCOHOL" })).toEqual({
+      chargeCategory: "ALCOHOL",
+    });
   });
 });
 
