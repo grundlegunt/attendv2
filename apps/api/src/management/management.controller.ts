@@ -43,6 +43,7 @@ const employeeUpdateSchema = z.object({
 }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one employee change.");
 const employeeCredentialsSchema = z.object({ password: z.string().min(12).max(200).optional(), pin: z.string().regex(/^\d{4,8}$/).nullable().optional(), resetMfa: z.boolean().optional() }).strict().refine((value) => value.password !== undefined || value.pin !== undefined || value.resetMfa === true, "Provide a password, PIN, or MFA reset.");
 const roleSchema = z.object({ name: z.string().trim().min(1).max(100) }).strict();
+const inquiryStatusSchema = z.object({ status: z.enum(["NEW", "CONTACTED", "BOOKED", "CLOSED"]) }).strict();
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
@@ -92,7 +93,7 @@ export class ManagementController {
   privateEventInquiries(@CurrentActor() actor: RequestActor) { return this.management.privateEventInquiries(this.location(actor)); }
 
   @Patch("private-event-inquiries/:inquiryId") @RequirePermissions(Permission.ReportsView)
-  updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Body() body: { status?: string }) { return this.management.updatePrivateEventInquiry(this.location(actor), inquiryId, body.status); }
+  updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Body(new ZodValidationPipe(inquiryStatusSchema)) body: unknown) { return this.management.updatePrivateEventInquiry(this.location(actor), actor.sub, inquiryId, inquiryStatusSchema.parse(body).status); }
 
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }

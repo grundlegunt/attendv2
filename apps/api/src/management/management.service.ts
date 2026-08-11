@@ -173,11 +173,11 @@ export class ManagementService {
 
   privateEventInquiries(locationId: string) { return prisma.privateEventInquiry.findMany({ where: { locationId }, orderBy: { createdAt: "desc" } }); }
 
-  async updatePrivateEventInquiry(locationId: string, inquiryId: string, status?: string) {
+  async updatePrivateEventInquiry(locationId: string, employeeId: string, inquiryId: string, status?: string) {
     if (!status || !["NEW", "CONTACTED", "BOOKED", "CLOSED"].includes(status)) throw AppError.validationFailed("A valid inquiry status is required.");
     const inquiry = await prisma.privateEventInquiry.findFirst({ where: { id: inquiryId, locationId } });
     if (!inquiry) throw AppError.notFound("Private-event inquiry was not found.");
-    return prisma.privateEventInquiry.update({ where: { id: inquiry.id }, data: { status } });
+    return prisma.$transaction(async (tx) => { const updated = await tx.privateEventInquiry.update({ where: { id: inquiry.id }, data: { status } }); await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "private_event_inquiry.status_updated", entityType: "PrivateEventInquiry", entityId: inquiry.id, beforeState: { status: inquiry.status }, afterState: { status } } }); return updated; });
   }
 
   async customer(locationId: string, customerId: string) {
