@@ -212,7 +212,7 @@ export class ManagementService {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     return prisma.giftCard.findMany({
       where: { organizationId: location.organizationId },
-      select: { id: true, codeLast4: true, initialBalanceCents: true, balanceCents: true, currency: true, recipientName: true, recipientEmail: true, status: true, createdAt: true, issuedAtLocation: { select: { name: true } } },
+      select: { id: true, codeLast4: true, initialBalanceCents: true, balanceCents: true, currency: true, recipientName: true, recipientEmail: true, status: true, createdAt: true, issuedAtLocation: { select: { name: true } }, transactions: { orderBy: { createdAt: "desc" }, take: 20, select: { id: true, type: true, amountCents: true, balanceAfterCents: true, reference: true, createdAt: true, location: { select: { name: true } }, employee: { select: { name: true } } } } },
       orderBy: { createdAt: "desc" },
       take: 100,
     });
