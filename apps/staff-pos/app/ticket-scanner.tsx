@@ -16,6 +16,7 @@ export function TicketScanner({
   const [message, setMessage] = useState("Use the camera or paste a QR credential.");
   const [entrance, setEntrance] = useState("");
   const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
@@ -35,7 +36,8 @@ export function TicketScanner({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!credential.trim()) return;
+    if (!credential.trim() || pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     try {
       let deviceId = window.localStorage.getItem("attend-scanner-device-id");
@@ -57,6 +59,7 @@ export function TicketScanner({
     } catch (error) {
       setMessage(error instanceof ApiRequestError ? error.body.message : "Ticket could not be checked.");
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   }
