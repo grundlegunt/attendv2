@@ -434,20 +434,22 @@
   color: white;
   text-decoration: none;
 }
-.showtime-special-card > img,
+.showtime-special-card__artwork,
 .showtime-special-card__placeholder {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   transition: transform .35s ease;
+}
+.showtime-special-card__artwork {
+  object-fit: cover;
 }
 .showtime-special-card__placeholder {
   background: linear-gradient(135deg, var(--color-bg-elevated), color-mix(in srgb, var(--color-accent) 32%, var(--color-bg)));
 }
-.showtime-special-card:hover > img {
+.showtime-special-card:hover .showtime-special-card__artwork {
   transform: scale(1.025);
 }
-.showtime-special-card > div:last-child {
+.showtime-special-card__copy {
   position: absolute;
   inset: 0;
   display: grid;
@@ -461,7 +463,9 @@
   display: block;
 }
 .showtime-special-card strong {
-  font: clamp(1.6rem, 3vw, 2.7rem)/1.05 var(--font-family-display);
+  max-width: 100%;
+  font: clamp(1.15rem, 2vw, 2rem)/1.08 var(--font-family-display);
+  overflow-wrap: anywhere;
   text-transform: uppercase;
 }
 .showtime-special-card span {

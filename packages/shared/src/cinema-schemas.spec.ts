@@ -65,6 +65,7 @@ describe("cinema programming requests", () => {
       rating: "R",
       posterUrl: "https://images.example.com/matrix.jpg",
       detailPosterUrl: "/posters/matrix-one-sheet.jpg",
+      diningSpecialArtworkUrl: "/specials/matrix-paired-menu.jpg",
       director: "Lana Wachowski, Lilly Wachowski",
       starring: "Keanu Reeves, Carrie-Anne Moss",
       trailerUrl: "https://video.example.com/matrix",
@@ -73,6 +74,7 @@ describe("cinema programming requests", () => {
     });
     expect(parsed.posterUrl).toContain("images.example.com");
     expect(parsed.detailPosterUrl).toBe("/posters/matrix-one-sheet.jpg");
+    expect(parsed.diningSpecialArtworkUrl).toBe("/specials/matrix-paired-menu.jpg");
     expect(parsed.releaseYear).toBe(1999);
     expect(parsed.pairingMenuItemIds).toHaveLength(1);
 

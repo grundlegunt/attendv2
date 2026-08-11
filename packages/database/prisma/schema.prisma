@@ -379,19 +379,20 @@ model Movie {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  title           String
-  synopsis        String?
-  runtimeMinutes  Int
-  rating          String?
-  posterUrl       String?
-  detailPosterUrl String?
-  director        String?
-  starring        String?
-  trailerUrl      String?
-  releaseYear     Int?
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  title                   String
+  synopsis                String?
+  runtimeMinutes          Int
+  rating                  String?
+  posterUrl               String?
+  detailPosterUrl         String?
+  diningSpecialArtworkUrl String?
+  director                String?
+  starring                String?
+  trailerUrl              String?
+  releaseYear             Int?
+  active                  Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   showtimes Showtime[]
   pairings  MoviePairing[]

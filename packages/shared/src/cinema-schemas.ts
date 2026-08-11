@@ -188,6 +188,10 @@ export const createMovieRequestSchema = z.object({
     z.string().trim().url("Detail poster URL must be a valid URL."),
     z.string().trim().regex(/^\/(?!\/)/, "Detail poster path must begin with a single slash."),
   ]).nullable().optional(),
+  diningSpecialArtworkUrl: z.union([
+    z.string().trim().url("Dining special artwork URL must be a valid URL."),
+    z.string().trim().regex(/^\/(?!\/)/, "Dining special artwork path must begin with a single slash."),
+  ]).nullable().optional(),
   director: z.string().trim().max(200).nullable().optional(),
   starring: z.string().trim().max(1000).nullable().optional(),
   trailerUrl: z.string().trim().url("Trailer URL must be a valid URL.").nullable().optional(),
