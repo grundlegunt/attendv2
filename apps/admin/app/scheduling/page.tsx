@@ -445,6 +445,11 @@ export default function AdminPage() {
         <label>Showtimes artwork URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="Landscape image used on film cards" /></label>
         <label>Movie detail poster URL<input type="text" value={movieDetailPosterUrl} onChange={(event) => setMovieDetailPosterUrl(event.target.value)} placeholder="Vertical one-sheet used on the film page" /></label>
         <label>Dining special artwork URL<input type="text" value={movieDiningSpecialArtworkUrl} onChange={(event) => setMovieDiningSpecialArtworkUrl(event.target.value)} placeholder="Single photo showing the paired food and drink" /></label>
+        {(moviePosterUrl || movieDetailPosterUrl || movieDiningSpecialArtworkUrl) && <div className="movie-artwork-previews" aria-label="Film artwork previews">
+          {moviePosterUrl && <figure><img src={moviePosterUrl} alt="" /><figcaption>Showtimes card</figcaption></figure>}
+          {movieDetailPosterUrl && <figure className="movie-artwork-preview--poster"><img src={movieDetailPosterUrl} alt="" /><figcaption>Movie detail poster</figcaption></figure>}
+          {movieDiningSpecialArtworkUrl && <figure><img src={movieDiningSpecialArtworkUrl} alt="" /><figcaption>Dining special · combined food &amp; drink</figcaption></figure>}
+        </div>}
         <label>Director<input value={movieDirector} onChange={(event) => setMovieDirector(event.target.value)} /></label>
         <label>Starring<input value={movieStarring} onChange={(event) => setMovieStarring(event.target.value)} placeholder="Comma-separated cast" /></label>
         <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>
