@@ -35,6 +35,23 @@ input, select, textarea { width: 100%; min-height: 50px; padding: 10px 12px; bor
 textarea { resize: vertical; }
 .two-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .checkbox { display: flex; grid-template-columns: auto 1fr; align-items: center; } .checkbox input { width: 24px; min-height: 24px; }
+.pairing-picker { margin: 4px 0 20px; padding: 16px; border: 1px solid var(--color-border); }
+.pairing-picker legend { padding: 0 8px; color: var(--color-text-primary); font-weight: 900; }
+.pairing-picker > p { margin: 0 0 14px; color: var(--color-text-secondary); font-size: .82rem; }
+.pairing-picker__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.pairing-option { position: relative; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; min-height: 60px; margin: 0; padding: 5px 34px 5px 5px; border: 1px solid var(--color-border); background: var(--color-bg); cursor: pointer; }
+.pairing-option:hover { border-color: var(--color-text-secondary); }
+.pairing-option[data-selected] { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg)); }
+.pairing-option input { position: absolute; width: 1px; height: 1px; min-height: 0; opacity: 0; }
+.pairing-option img, .pairing-option__placeholder { width: 58px; height: 50px; object-fit: cover; border: 1px solid var(--color-border); }
+.pairing-option__placeholder { display: grid; place-items: center; background: var(--color-bg-elevated); color: var(--color-text-secondary); font-family: Georgia, serif; font-size: 1.4rem; }
+.pairing-option__copy { min-width: 0; }
+.pairing-option__copy strong, .pairing-option__copy small { display: block; overflow: hidden; text-overflow: ellipsis; }
+.pairing-option__copy strong { color: var(--color-text-primary); font-size: .78rem; white-space: nowrap; }
+.pairing-option__copy small { margin-top: 4px; color: var(--color-text-secondary); font-size: .68rem; white-space: nowrap; }
+.pairing-option__check { position: absolute; top: 8px; right: 8px; display: none; width: 20px; height: 20px; place-items: center; border-radius: 50%; background: var(--color-accent); color: #000; font-size: .72rem; font-weight: 900; }
+.pairing-option[data-selected] .pairing-option__check { display: grid; }
+.pairing-option:focus-within { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 button.primary { width: 100%; min-height: 54px; border: 0; background: var(--color-accent); color: #000; font-weight: 900; cursor: pointer; }
 button.secondary { min-height: 42px; padding: 8px 14px; border: 1px solid var(--color-border); background: transparent; color: var(--color-text-primary); font-weight: 800; cursor: pointer; }
 form button.secondary { width: 100%; margin-top: 10px; }

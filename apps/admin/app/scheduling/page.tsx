@@ -450,7 +450,15 @@ export default function AdminPage() {
         <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>
         <label>Release year<input type="number" min="1888" max="2200" value={movieReleaseYear} onChange={(event) => setMovieReleaseYear(event.target.value ? Number(event.target.value) : "")} /></label>
         <label>Synopsis<textarea rows={6} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} placeholder="Short customer-facing film description" /></label>
-        <fieldset><legend>Paired food &amp; drink</legend>{data?.location.menuCategories.flatMap((category) => category.items.map((item) => <label className="checkbox" key={item.id}><input type="checkbox" checked={pairingMenuItemIds.includes(item.id)} onChange={(event) => setPairingMenuItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} /><span>{item.name} · {category.name}</span></label>))}</fieldset>
+        <fieldset className="pairing-picker"><legend>Paired food &amp; drink</legend><p>Choose the menu items featured with this film.</p><div className="pairing-picker__grid">{data?.location.menuCategories.flatMap((category) => category.items.map((item) => {
+          const selected = pairingMenuItemIds.includes(item.id);
+          return <label className="pairing-option" data-selected={selected || undefined} key={item.id}>
+            <input type="checkbox" checked={selected} onChange={(event) => setPairingMenuItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id))} />
+            {item.imageUrl ? <img src={item.imageUrl} alt="" /> : <span className="pairing-option__placeholder" aria-hidden="true">{item.name.slice(0, 1)}</span>}
+            <span className="pairing-option__copy"><strong>{item.name}</strong><small>{category.name}</small></span>
+            <span className="pairing-option__check" aria-hidden="true">✓</span>
+          </label>;
+        }))}</div></fieldset>
         <button className="primary">{editingMovieId ? "Save film" : "Add to film library"}</button>
         <button type="button" className="secondary" onClick={() => setMovieEditorOpen(false)}>Cancel</button>
       </form>
