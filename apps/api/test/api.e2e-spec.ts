@@ -1237,6 +1237,7 @@ describe("Milestone 1 cinema configuration", () => {
       .expect(200);
     const card = listed.body.find((candidate: { id: string }) => candidate.id === issued.body.id);
     expect(card).toEqual(expect.objectContaining({ codeLast4: issued.body.codeLast4, balanceCents: 2500, recipientEmail: "gift@example.test" }));
+    expect(card.transactions).toEqual([expect.objectContaining({ type: "ISSUANCE", amountCents: 2500, balanceAfterCents: 2500, location: expect.objectContaining({ name: expect.any(String) }), employee: expect.objectContaining({ name: expect.any(String) }) })]);
     expect(card).not.toHaveProperty("code");
     expect(card).not.toHaveProperty("codeHash");
 
