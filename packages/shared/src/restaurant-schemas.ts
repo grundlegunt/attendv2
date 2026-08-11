@@ -81,6 +81,15 @@ export const createModifierRequestSchema = z.object({
   sortOrder: z.number().int().min(0).default(0),
 });
 
+export const updateModifierRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    priceDeltaCents: z.number().int().optional(),
+    active: z.boolean().optional(),
+    sortOrder: z.number().int().min(0).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one change is required.");
+
 export const updateMenuItemRequestSchema = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),

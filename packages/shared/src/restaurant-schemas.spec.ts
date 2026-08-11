@@ -3,6 +3,7 @@ import {
   updateKitchenStationRequestSchema,
   updateMenuCategoryRequestSchema,
   updateMenuItemRequestSchema,
+  updateModifierRequestSchema,
 } from "./restaurant-schemas";
 
 describe("menu item dietary attributes", () => {
@@ -53,6 +54,24 @@ describe("kitchen station updates", () => {
 
   it("rejects an empty update", () => {
     expect(() => updateKitchenStationRequestSchema.parse({})).toThrow(
+      "At least one change is required.",
+    );
+  });
+});
+
+describe("modifier updates", () => {
+  it("accepts option maintenance changes", () => {
+    expect(
+      updateModifierRequestSchema.parse({
+        name: "Large",
+        priceDeltaCents: 250,
+        active: false,
+      }),
+    ).toEqual({ name: "Large", priceDeltaCents: 250, active: false });
+  });
+
+  it("rejects an empty update", () => {
+    expect(() => updateModifierRequestSchema.parse({})).toThrow(
       "At least one change is required.",
     );
   });
