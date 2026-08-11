@@ -399,6 +399,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             Image URL
             <input type="url" value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="https://…" />
           </label>
+          {imageUrl && <div className="menu-image-preview"><img src={imageUrl} alt="" /><span>Customer menu preview</span></div>}
           <div className="two-fields">
             <label className="checkbox">
               <input type="checkbox" checked={isVegan} onChange={(event) => setIsVegan(event.target.checked)} />
@@ -441,11 +442,11 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           {menu?.categories.flatMap((category) =>
             category.items.map((item) => (
               <article key={item.id}>
-                <div>
-                  <strong>{item.name}</strong>
+                <div className="menu-item-summary">
+                  {item.imageUrl && <img src={item.imageUrl} alt="" />}
                   <span>
-                    {category.name}
-                    {item.description ? ` · ${item.description}` : ""}
+                    <strong>{item.name}</strong>
+                    <small>{category.name}{item.description ? ` · ${item.description}` : ""}</small>
                   </span>
                 </div>
                 <div>
@@ -524,6 +525,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
               Image URL
               <input type="url" value={editImageUrl} onChange={(event) => setEditImageUrl(event.target.value)} placeholder="https://…" />
             </label>
+            {editImageUrl && <div className="menu-image-preview"><img src={editImageUrl} alt="" /><span>Customer menu preview</span></div>}
             <div className="two-fields">
               <label>
                 Kitchen station
