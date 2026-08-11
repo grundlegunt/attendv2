@@ -107,6 +107,11 @@ export class BoxOfficeService {
     }
     const location = await prisma.location.findUnique({ where: { id: input.locationId }, include: { organization: true } });
     if (!location) throw AppError.notFound("Location was not found.");
+    if (input.giftCardCents > 0) {
+      const giftCard = await this.cinema.giftCardBalance(input.locationId, input.giftCardCode!);
+      if (giftCard.currency !== quote.currency) throw AppError.validationFailed("Gift card currency does not match this sale.");
+      if (giftCard.balanceCents < input.giftCardCents) throw AppError.paymentRequired("Gift card balance is insufficient.");
+    }
     const customer = input.customerEmail ? await prisma.customer.upsert({
       where: { email: input.customerEmail.toLowerCase() },
       create: { email: input.customerEmail.toLowerCase(), name: input.customerName, isGuest: true },
@@ -363,6 +368,17 @@ export class BoxOfficeService {
     }
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
+      if (giftRedemption) {
+        await tx.$queryRaw`SELECT "id" FROM "gift_cards" WHERE "id" = ${giftRedemption.giftCardId} FOR UPDATE`;
+        const giftCard = await tx.giftCard.findUniqueOrThrow({ where: { id: giftRedemption.giftCardId } });
+        const reference = `refund:${order.id}`;
+        const existingGiftRefund = await tx.giftCardTransaction.findFirst({ where: { giftCardId: giftCard.id, type: "REFUND", reference } });
+        if (!existingGiftRefund) {
+          const balanceAfterCents = giftCard.balanceCents + giftCardPaid;
+          await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
+          await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: input.locationId, employeeId: input.employeeId, type: "REFUND", amountCents: giftCardPaid, balanceAfterCents, reference } });
+        }
+      }
       if (cashPaid > 0) {
         await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
         const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
@@ -375,7 +391,7 @@ export class BoxOfficeService {
         await tx.refund.update({ where: { id: refundRow.id }, data: { providerRefundId: providerRefund.id, status: providerRefund.status === "SUCCEEDED" ? "SUCCEEDED" : "PROCESSING" } });
         await tx.payment.update({ where: { id: order.payment.id }, data: { status: providerRefund.status === "SUCCEEDED" ? "REFUNDED" : "SUCCEEDED" } });
       }
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: cardPaid, reason: input.reason } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: cardPaid, giftCardCents: giftCardPaid, reason: input.reason } } });
       return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
     });
   }

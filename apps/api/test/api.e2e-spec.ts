@@ -4001,6 +4001,37 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
   });
 
+  it("splits a box-office sale and refund between gift card and card-present tender", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const issued = await request(app.getHttpServer()).post("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ amountCents: 500 }).expect(201);
+    const holderKey = `gift-card-terminal-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+    const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+    const cardCents = quote.body.totalCents - 500;
+    const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
+        requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id,
+        cashCents: 0, cardCents, readerId: "tmr_gift_card_split", giftCardCents: 500, giftCardCode: issued.body.code,
+      }).expect(201);
+    expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
+    expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(0);
+
+    const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E split tender refund" }).expect(201);
+    expect(refunded.body).toMatchObject({ status: "REFUNDED", payment: { amountCents: cardCents, status: "REFUNDED" } });
+    const restored = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: true } });
+    expect(restored.balanceCents).toBe(500);
+    expect(restored.transactions).toEqual(expect.arrayContaining([expect.objectContaining({ type: "REFUND", amountCents: 500, reference: `refund:${sale.body.id}` })]));
+  });
+
   it("refunds a successful card-present charge exactly once when seat finalization loses its hold", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
