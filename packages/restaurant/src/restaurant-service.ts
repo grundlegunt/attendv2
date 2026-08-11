@@ -109,60 +109,134 @@ export class RestaurantService {
     };
   }
 
-  createKitchenStation(input: {
+  async createKitchenStation(input: {
     locationId: string;
+    actorId: string;
     name: string;
     displayType: string;
   }): Promise<KitchenStation> {
-    return this.prisma.kitchenStation.create({ data: input });
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.kitchenStation.create({
+        data: {
+          locationId: input.locationId,
+          name: input.name,
+          displayType: input.displayType,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "kitchen_station.created",
+          entityType: "KitchenStation",
+          entityId: station.id,
+          locationId: input.locationId,
+          afterState: station,
+        },
+      });
+      return station;
+    });
   }
 
   async updateKitchenStation(input: {
     kitchenStationId: string;
     locationId: string;
+    actorId: string;
     changes: { name?: string; displayType?: string; active?: boolean };
   }): Promise<KitchenStation> {
-    const station = await this.prisma.kitchenStation.findFirst({
-      where: { id: input.kitchenStationId, locationId: input.locationId },
-    });
-    if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
-    if (input.changes.active === false) {
-      const assignedItems = await this.prisma.menuItem.count({
-        where: { kitchenStationId: station.id, active: true },
+    return this.prisma.$transaction(async (tx) => {
+      const station = await tx.kitchenStation.findFirst({
+        where: { id: input.kitchenStationId, locationId: input.locationId },
       });
-      if (assignedItems > 0) {
-        throw new RestaurantError(
-          "Reassign or deactivate active menu items before retiring this station.",
-          "CONFLICT",
-        );
+      if (!station) throw new RestaurantError("Kitchen station was not found.", "NOT_FOUND");
+      if (input.changes.active === false) {
+        const assignedItems = await tx.menuItem.count({
+          where: { kitchenStationId: station.id, active: true },
+        });
+        if (assignedItems > 0) {
+          throw new RestaurantError(
+            "Reassign or deactivate active menu items before retiring this station.",
+            "CONFLICT",
+          );
+        }
       }
-    }
-    return this.prisma.kitchenStation.update({
-      where: { id: station.id },
-      data: input.changes,
+      const updated = await tx.kitchenStation.update({
+        where: { id: station.id },
+        data: input.changes,
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "kitchen_station.updated",
+          entityType: "KitchenStation",
+          entityId: updated.id,
+          locationId: input.locationId,
+          beforeState: station,
+          afterState: updated,
+        },
+      });
+      return updated;
     });
   }
 
-  createMenuCategory(input: {
+  async createMenuCategory(input: {
     locationId: string;
+    actorId: string;
     name: string;
     sortOrder: number;
   }): Promise<MenuCategory> {
-    return this.prisma.menuCategory.create({ data: input });
+    return this.prisma.$transaction(async (tx) => {
+      const category = await tx.menuCategory.create({
+        data: {
+          locationId: input.locationId,
+          name: input.name,
+          sortOrder: input.sortOrder,
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "menu_category.created",
+          entityType: "MenuCategory",
+          entityId: category.id,
+          locationId: input.locationId,
+          afterState: category,
+        },
+      });
+      return category;
+    });
   }
 
   async updateMenuCategory(input: {
     menuCategoryId: string;
     locationId: string;
+    actorId: string;
     changes: { name?: string; sortOrder?: number; active?: boolean };
   }): Promise<MenuCategory> {
-    const category = await this.prisma.menuCategory.findFirst({
-      where: { id: input.menuCategoryId, locationId: input.locationId },
-    });
-    if (!category) throw new RestaurantError("Menu category was not found.", "NOT_FOUND");
-    return this.prisma.menuCategory.update({
-      where: { id: category.id },
-      data: input.changes,
+    return this.prisma.$transaction(async (tx) => {
+      const category = await tx.menuCategory.findFirst({
+        where: { id: input.menuCategoryId, locationId: input.locationId },
+      });
+      if (!category) throw new RestaurantError("Menu category was not found.", "NOT_FOUND");
+      const updated = await tx.menuCategory.update({
+        where: { id: category.id },
+        data: input.changes,
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.actorId,
+          action: "menu_category.updated",
+          entityType: "MenuCategory",
+          entityId: updated.id,
+          locationId: input.locationId,
+          beforeState: category,
+          afterState: updated,
+        },
+      });
+      return updated;
     });
   }
 
