@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { AuditActorType, Prisma, prisma } from "@cinema/database";
 import {
   adminUiConfigSchema,
@@ -75,6 +75,16 @@ function zonedDate(date: string, hour: number, minute: number, second: number, t
 
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
+  async giftCardBalance(locationId: string | undefined, code: string) {
+    const location = locationId ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } }, select: { organizationId: true } }) : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" }, select: { organizationId: true } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const normalized = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const codeHash = createHash("sha256").update(normalized).digest("hex");
+    const card = await prisma.giftCard.findFirst({ where: { organizationId: location.organizationId, codeHash, status: "ACTIVE" }, select: { codeLast4: true, balanceCents: true, currency: true } });
+    if (!card) throw AppError.notFound("Gift card was not found or is inactive.");
+    return card;
+  }
+
   async createPrivateEventInquiry(locationId: string | undefined, input: { name?: string; email?: string; phone?: string; eventType?: string; preferredDate?: string; guestCount?: number; message?: string }) {
     const location = locationId ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } } }) : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" } });
     if (!location) throw AppError.notFound("Location not found.");

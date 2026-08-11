@@ -14,6 +14,7 @@ const links = [
   { href: "/about", label: "About" },
   { href: "/directions", label: "Directions" },
   { href: "/private-events", label: "Private Events" },
+  { href: "/gift-cards", label: "Gift Cards" },
 ];
 
 export function SiteHeader() {
