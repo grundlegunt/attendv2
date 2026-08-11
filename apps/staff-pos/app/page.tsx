@@ -71,6 +71,19 @@ export default function StaffLoginPage() {
   const [refreshToken, setRefreshToken] = useState("");
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
+  const authRequestRef = useRef(false);
+
+  function beginAuthRequest() {
+    if (authRequestRef.current) return false;
+    authRequestRef.current = true;
+    setLoading(true);
+    return true;
+  }
+
+  function finishAuthRequest() {
+    authRequestRef.current = false;
+    setLoading(false);
+  }
 
   function storeSession(next: ActiveStaffSession) {
     setEmployee(next.employee); setAccessToken(next.accessToken); setRefreshToken(next.refreshToken); setExpiresInSeconds(next.expiresInSeconds);
@@ -138,8 +151,8 @@ export default function StaffLoginPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!beginAuthRequest()) return;
     setError(null);
-    setLoading(true);
     try {
       const res = await apiFetch<StaffLoginResponse>(
         "/auth/staff/login",
@@ -152,28 +165,30 @@ export default function StaffLoginPage() {
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
     } finally {
-      setLoading(false);
+      finishAuthRequest();
     }
   }
 
   async function verifyMfa(event: FormEvent) {
-    event.preventDefault(); setError(null); setLoading(true);
+    event.preventDefault();
+    if (!beginAuthRequest()) return;
+    setError(null);
     try {
       const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
       storeSession(res); setMfaChallengeToken(null); setMfaCode("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The code could not be verified."); }
-    finally { setLoading(false); }
+    finally { finishAuthRequest(); }
   }
 
   async function changePassword(event: FormEvent) {
     event.preventDefault(); setError(null);
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
-    setLoading(true);
+    if (!beginAuthRequest()) return;
     try {
       const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
       storeSession(res); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
-    finally { setLoading(false); }
+    finally { finishAuthRequest(); }
   }
 
   async function openTabs(event: FormEvent) {
