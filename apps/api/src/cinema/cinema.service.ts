@@ -338,6 +338,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           posterUrl: input.posterUrl ?? null,
           detailPosterUrl: input.detailPosterUrl ?? null,
           diningSpecialArtworkUrl: input.diningSpecialArtworkUrl ?? null,
+          diningSpecialTitle: input.diningSpecialTitle ?? null,
           director: input.director ?? null,
           starring: input.starring ?? null,
           trailerUrl: input.trailerUrl ?? null,
@@ -358,6 +359,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           afterState: {
             title: movie.title, runtimeMinutes: movie.runtimeMinutes, rating: movie.rating,
             posterUrl: movie.posterUrl, detailPosterUrl: movie.detailPosterUrl, diningSpecialArtworkUrl: movie.diningSpecialArtworkUrl,
+            diningSpecialTitle: movie.diningSpecialTitle,
             director: movie.director, starring: movie.starring,
             trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
             pairingMenuItemIds: input.pairingMenuItemIds,
@@ -463,13 +465,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         beforeState: {
           title: existing.title, synopsis: existing.synopsis, runtimeMinutes: existing.runtimeMinutes,
           rating: existing.rating, posterUrl: existing.posterUrl, detailPosterUrl: existing.detailPosterUrl,
-          diningSpecialArtworkUrl: existing.diningSpecialArtworkUrl, director: existing.director,
+          diningSpecialArtworkUrl: existing.diningSpecialArtworkUrl, diningSpecialTitle: existing.diningSpecialTitle, director: existing.director,
           starring: existing.starring, trailerUrl: existing.trailerUrl, releaseYear: existing.releaseYear,
         },
         afterState: {
           title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes,
           rating: movie.rating, posterUrl: movie.posterUrl, detailPosterUrl: movie.detailPosterUrl,
-          diningSpecialArtworkUrl: movie.diningSpecialArtworkUrl, director: movie.director,
+          diningSpecialArtworkUrl: movie.diningSpecialArtworkUrl, diningSpecialTitle: movie.diningSpecialTitle, director: movie.director,
           starring: movie.starring, trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
           ...(pairingMenuItemIds ? { pairingMenuItemIds } : {}),
         },
@@ -1216,6 +1218,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           title: true,
           posterUrl: true,
           diningSpecialArtworkUrl: true,
+          diningSpecialTitle: true,
           pairings: {
             where: { menuItem: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } },
             select: {
@@ -1241,6 +1244,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         movieTitle: movie.title,
         posterUrl: movie.posterUrl,
         artworkUrl: movie.diningSpecialArtworkUrl,
+        headline: movie.diningSpecialTitle,
         items: movie.pairings.map((pairing) => pairing.menuItem),
       })),
     };

@@ -15,7 +15,7 @@ export function MovieSpecials({ specials, showtimes = false }: { specials: Publi
     <div className="showtime-specials-grid">{publishedSpecials.map((special) => {
       return <Link href={`/movie/${special.movieId}`} className="showtime-special-card" key={special.movieId}>
         <img className="showtime-special-card__artwork" src={special.artworkUrl!} alt="" />
-        <div className="showtime-special-card__copy"><strong>{special.items.map((item) => item.name).join(" & ")}</strong><span>{special.movieTitle}</span></div>
+        <div className="showtime-special-card__copy"><strong>{special.headline || special.items.map((item) => item.name).join(" & ")}</strong><span>{special.movieTitle}</span></div>
       </Link>;
     })}</div>
   </section>;

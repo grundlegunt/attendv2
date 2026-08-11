@@ -20,6 +20,7 @@ interface Movie {
   posterUrl?: string | null;
   detailPosterUrl?: string | null;
   diningSpecialArtworkUrl?: string | null;
+  diningSpecialTitle?: string | null;
   director?: string | null; starring?: string | null; trailerUrl?: string | null; releaseYear?: number | null;
   pairings?: Array<{ menuItemId: string; sortOrder: number }>;
 }
@@ -58,6 +59,7 @@ export default function AdminPage() {
   const [moviePosterUrl, setMoviePosterUrl] = useState("");
   const [movieDetailPosterUrl, setMovieDetailPosterUrl] = useState("");
   const [movieDiningSpecialArtworkUrl, setMovieDiningSpecialArtworkUrl] = useState("");
+  const [movieDiningSpecialTitle, setMovieDiningSpecialTitle] = useState("");
   const [movieDirector, setMovieDirector] = useState("");
   const [movieStarring, setMovieStarring] = useState("");
   const [movieTrailerUrl, setMovieTrailerUrl] = useState("");
@@ -107,6 +109,7 @@ export default function AdminPage() {
           posterUrl: moviePosterUrl.trim() || null,
           detailPosterUrl: movieDetailPosterUrl.trim() || null,
           diningSpecialArtworkUrl: movieDiningSpecialArtworkUrl.trim() || null,
+          diningSpecialTitle: movieDiningSpecialTitle.trim() || null,
           director: movieDirector.trim() || null,
           starring: movieStarring.trim() || null,
           trailerUrl: movieTrailerUrl.trim() || null,
@@ -120,6 +123,7 @@ export default function AdminPage() {
       setMoviePosterUrl("");
       setMovieDetailPosterUrl("");
       setMovieDiningSpecialArtworkUrl("");
+      setMovieDiningSpecialTitle("");
       setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
       setPairingMenuSearch("");
       setEditingMovieId(null);
@@ -351,6 +355,7 @@ export default function AdminPage() {
     setMoviePosterUrl(movie?.posterUrl ?? "");
     setMovieDetailPosterUrl(movie?.detailPosterUrl ?? "");
     setMovieDiningSpecialArtworkUrl(movie?.diningSpecialArtworkUrl ?? "");
+    setMovieDiningSpecialTitle(movie?.diningSpecialTitle ?? "");
     setMovieDirector(movie?.director ?? "");
     setMovieStarring(movie?.starring ?? "");
     setMovieTrailerUrl(movie?.trailerUrl ?? "");
@@ -448,6 +453,7 @@ export default function AdminPage() {
         <label>Showtimes artwork URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="Landscape image used on film cards" /></label>
         <label>Movie detail poster URL<input type="text" value={movieDetailPosterUrl} onChange={(event) => setMovieDetailPosterUrl(event.target.value)} placeholder="Vertical one-sheet used on the film page" /></label>
         <label>Dining special artwork URL<input type="text" value={movieDiningSpecialArtworkUrl} onChange={(event) => setMovieDiningSpecialArtworkUrl(event.target.value)} placeholder="Single photo showing the paired food and drink" /></label>
+        <label>Dining special headline<input maxLength={120} value={movieDiningSpecialTitle} onChange={(event) => setMovieDiningSpecialTitle(event.target.value)} placeholder="Optional short promotional name shown over the photo" /></label>
         {(moviePosterUrl || movieDetailPosterUrl || movieDiningSpecialArtworkUrl) && <div className="movie-artwork-previews" aria-label="Film artwork previews">
           {moviePosterUrl && <figure><img src={moviePosterUrl} alt="" /><figcaption>Showtimes card</figcaption></figure>}
           {movieDetailPosterUrl && <figure className="movie-artwork-preview--poster"><img src={movieDetailPosterUrl} alt="" /><figcaption>Movie detail poster</figcaption></figure>}

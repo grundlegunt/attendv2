@@ -101,6 +101,7 @@ export interface PublicMovieSpecial {
   movieTitle: string;
   posterUrl: string | null;
   artworkUrl: string | null;
+  headline: string | null;
   items: PublicMenuItem[];
 }
 
