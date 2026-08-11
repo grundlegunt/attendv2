@@ -227,6 +227,13 @@ button.primary:disabled {
   color: #fff;
 }
 
+.queue-status { margin: 6px 0 0; font-size: .82rem; font-weight: 800; }
+.queue-status.live { color: #7ee2a8; }
+.queue-status.stale { color: #ffbd66; }
+.queue-stale-banner { display: grid; gap: 4px; margin: 18px 0; padding: 14px 18px; border: 1px solid #a66a2d; background: #352818; color: #ffe2b5; }
+.queue-stale-banner span { color: #e3c89d; }
+.ticket-actions button:disabled { cursor: not-allowed; opacity: .55; }
+
 .ready-section .fulfillment-ticket {
   border-color: #50b7ff;
 }

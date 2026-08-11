@@ -73,6 +73,8 @@ export default function KdsPage() {
   const [stations, setStations] = useState<Station[]>([]);
   const [stationId, setStationId] = useState("");
   const [queue, setQueue] = useState<QueueResponse | null>(null);
+  const [queueStale, setQueueStale] = useState(true);
+  const [lastQueueUpdateAt, setLastQueueUpdateAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -101,6 +103,8 @@ export default function KdsPage() {
   function selectStation(nextStationId: string) {
     setStationId(nextStationId);
     setQueue(null);
+    setQueueStale(true);
+    setLastQueueUpdateAt(null);
     window.localStorage.setItem(STATION_STORAGE_KEY, nextStationId);
   }
 
@@ -128,13 +132,18 @@ export default function KdsPage() {
   const refresh = useCallback(async () => {
     if (!accessToken || !stationId) return;
     try {
-      setQueue(
-        await apiFetch<QueueResponse>(`/fulfillment/stations/${stationId}/queue`, {
+      const response = await apiFetch<QueueResponse>(
+        `/fulfillment/stations/${stationId}/queue`,
+        {
           accessToken,
-        }),
+        },
       );
+      setQueue(response);
+      setQueueStale(false);
+      setLastQueueUpdateAt(Date.now());
       setError(null);
     } catch (reason) {
+      setQueueStale(true);
       setError(
         reason instanceof ApiRequestError
           ? reason.body.message
@@ -281,6 +290,13 @@ export default function KdsPage() {
         <div>
           <span>ATTEND · LIVE FULFILLMENT</span>
           <h1>{queue?.station.name ?? "Select station"}</h1>
+          <p className={queueStale ? "queue-status stale" : "queue-status live"}>
+            {queueStale
+              ? queue
+                ? "Connection interrupted · controls paused"
+                : "Connecting to live queue…"
+              : `Live · updated ${lastQueueUpdateAt ? elapsed(new Date(lastQueueUpdateAt).toISOString(), now) : "0:00"} ago`}
+          </p>
         </div>
         <label>
           Station
@@ -293,11 +309,17 @@ export default function KdsPage() {
         <div><p>{employee.name}</p><button type="button" onClick={signOut}>Sign out</button></div>
       </header>
       {error && <div className="error-banner">{error}</div>}
+      {queueStale && queue && (
+        <div className="queue-stale-banner">
+          <strong>Showing the last received queue.</strong>
+          <span>Ticket actions will unlock automatically when the connection recovers.</span>
+        </div>
+      )}
       <section className="queue-section">
         <h2>In progress · {grouped.active.length}</h2>
         <div className="ticket-grid">
           {grouped.active.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} now={now} busy={transitioningTicketIds.includes(ticket.id)} onTransition={transition} />
+            <TicketCard key={ticket.id} ticket={ticket} now={now} busy={transitioningTicketIds.includes(ticket.id)} unavailable={queueStale} onTransition={transition} />
           ))}
         </div>
       </section>
@@ -305,7 +327,7 @@ export default function KdsPage() {
         <h2>Ready · {grouped.ready.length}</h2>
         <div className="ticket-grid">
           {grouped.ready.map((ticket) => (
-            <TicketCard key={ticket.id} ticket={ticket} now={now} busy={transitioningTicketIds.includes(ticket.id)} onTransition={transition} />
+            <TicketCard key={ticket.id} ticket={ticket} now={now} busy={transitioningTicketIds.includes(ticket.id)} unavailable={queueStale} onTransition={transition} />
           ))}
         </div>
       </section>
@@ -317,11 +339,13 @@ function TicketCard({
   ticket,
   now,
   busy,
+  unavailable,
   onTransition,
 }: {
   ticket: FulfillmentTicket;
   now: number;
   busy: boolean;
+  unavailable: boolean;
   onTransition: (
     ticket: FulfillmentTicket,
     action: FulfillmentAction,
@@ -370,13 +394,13 @@ function TicketCard({
         ))}
       </ul>
       <div className="ticket-actions">
-        <button type="button" disabled={busy} onClick={() => onTransition(ticket, next.action)}>
-          {busy ? "Updating…" : next.label}
+        <button type="button" disabled={busy || unavailable} onClick={() => onTransition(ticket, next.action)}>
+          {unavailable ? "Waiting for connection" : busy ? "Updating…" : next.label}
         </button>
         <button
           className="destructive"
           type="button"
-          disabled={busy}
+          disabled={busy || unavailable}
           onClick={() => {
             if (pendingDestructiveAction === destructiveAction) {
               setPendingDestructiveAction(null);
