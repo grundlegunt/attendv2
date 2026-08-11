@@ -317,7 +317,8 @@ export class BoxOfficeService {
     const cardPaid = order.payment?.status === "SUCCEEDED" ? order.payment.amountCents : 0;
     const giftRedemption = await prisma.giftCardTransaction.findFirst({ where: { reference: order.id, type: "REDEMPTION" }, select: { giftCardId: true, amountCents: true } });
     const giftCardPaid = giftRedemption ? -giftRedemption.amountCents : 0;
-    if (giftRedemption && cashPaid === 0 && cardPaid === 0) {
+    if (giftRedemption && cardPaid === 0) {
+      if (cashPaid > 0 && !input.cashDrawerId) throw AppError.validationFailed("An open cash drawer is required for a cash refund.");
       return prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
         const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id } });
@@ -332,9 +333,15 @@ export class BoxOfficeService {
           await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
           await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: input.locationId, employeeId: input.employeeId, type: "REFUND", amountCents: giftCardPaid, balanceAfterCents, reference } });
         }
+        if (cashPaid > 0) {
+          await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
+          const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
+          if (!drawer) throw AppError.conflict("The cash drawer is not open.");
+          await tx.cashTransaction.upsert({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` }, update: {}, create: { locationId: input.locationId, cashDrawerId: drawer.id, ticketOrderId: order.id, employeeId: input.employeeId, type: "REFUND", amountCents: cashPaid, reason: input.reason, idempotencyKey: `box-office-cash-refund:${input.requestId}` } });
+        }
         await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
         await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
-        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: 0, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
+        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
         return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
       });
     }
