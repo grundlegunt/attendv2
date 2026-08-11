@@ -1245,6 +1245,20 @@ describe("Milestone 1 cinema configuration", () => {
       expect.objectContaining({ type: "ISSUANCE", amountCents: 2500, balanceAfterCents: 2500 }),
     ]);
     expect(await prisma.auditEvent.count({ where: { entityType: "GiftCard", entityId: issued.body.id, action: "gift_card.issued" } })).toBe(1);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/gift-cards/${issued.body.id}/status`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ status: "DEACTIVATED" })
+      .expect(200);
+    await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: issued.body.code }).expect(404);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/gift-cards/${issued.body.id}/status`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ status: "ACTIVE" })
+      .expect(200);
+    await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: issued.body.code }).expect(201);
+    expect(await prisma.auditEvent.count({ where: { entityType: "GiftCard", entityId: issued.body.id, action: "gift_card.status_updated" } })).toBe(2);
   });
 
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {

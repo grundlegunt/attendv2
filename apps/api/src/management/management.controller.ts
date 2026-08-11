@@ -54,6 +54,7 @@ const giftCardSchema = z.object({
   recipientName: z.string().trim().min(1).max(120).optional(),
   recipientEmail: z.string().trim().email().max(320).optional(),
 }).strict();
+const giftCardStatusSchema = z.object({ status: z.enum(["ACTIVE", "DEACTIVATED"]) }).strict();
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
@@ -118,6 +119,9 @@ export class ManagementController {
 
   @Post("gift-cards") @RequirePermissions(Permission.PaymentRefund)
   issueGiftCard(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(giftCardSchema)) body: unknown) { return this.management.issueGiftCard({ ...giftCardSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("gift-cards/:giftCardId/status") @RequirePermissions(Permission.PaymentRefund)
+  updateGiftCardStatus(@CurrentActor() actor: RequestActor, @Param("giftCardId") giftCardId: string, @Body(new ZodValidationPipe(giftCardStatusSchema)) body: unknown) { return this.management.updateGiftCardStatus({ ...giftCardStatusSchema.parse(body), giftCardId, locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }
