@@ -16,7 +16,10 @@ export function TicketScanner({
   const [message, setMessage] = useState("Use the camera or paste a QR credential.");
   const [entrance, setEntrance] = useState("");
   const [pending, setPending] = useState(false);
+  const [cameraStarting, setCameraStarting] = useState(false);
+  const [cameraActive, setCameraActive] = useState(false);
   const pendingRef = useRef(false);
+  const cameraStartingRef = useRef(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
@@ -30,6 +33,7 @@ export function TicketScanner({
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraActive(false);
   }
 
   useEffect(() => stopCamera, []);
@@ -65,6 +69,7 @@ export function TicketScanner({
   }
 
   async function startCamera() {
+    if (cameraStartingRef.current || streamRef.current) return;
     const Detector = (window as unknown as {
       BarcodeDetector?: new (options: { formats: string[] }) => {
         detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
@@ -74,6 +79,8 @@ export function TicketScanner({
       setMessage("Camera QR scanning is not supported in this browser. Paste the credential below.");
       return;
     }
+    cameraStartingRef.current = true;
+    setCameraStarting(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       const video = videoRef.current;
@@ -83,6 +90,7 @@ export function TicketScanner({
       }
       stopCamera();
       streamRef.current = stream;
+      setCameraActive(true);
       video.srcObject = stream;
       await video.play();
       const detector = new Detector({ formats: ["qr_code"] });
@@ -100,6 +108,9 @@ export function TicketScanner({
       }, 30_000);
     } catch {
       setMessage("Camera access was unavailable. Paste the credential below.");
+    } finally {
+      cameraStartingRef.current = false;
+      setCameraStarting(false);
     }
   }
 
@@ -107,7 +118,9 @@ export function TicketScanner({
     <section className="scanner-panel">
       <h2>Ticket scanner</h2>
       <video ref={videoRef} className="scanner-preview" muted playsInline aria-label="Ticket scanner camera preview" />
-      <button type="button" onClick={startCamera}>Start camera</button>
+      <button type="button" onClick={startCamera} disabled={cameraStarting || cameraActive}>
+        {cameraStarting ? "Starting camera…" : cameraActive ? "Camera active" : "Start camera"}
+      </button>
       <p>{message}</p>
       <form onSubmit={submit}>
         <label className="field">
