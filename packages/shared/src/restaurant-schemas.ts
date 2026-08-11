@@ -35,6 +35,14 @@ export const createMenuCategoryRequestSchema = z.object({
   sortOrder: z.number().int().min(0).default(0),
 });
 
+export const updateMenuCategoryRequestSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80).optional(),
+    sortOrder: z.number().int().min(0).optional(),
+    active: z.boolean().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, "At least one change is required.");
+
 export const createMenuItemRequestSchema = z.object({
   menuCategoryId: z.string().uuid(),
   kitchenStationId: z.string().uuid(),

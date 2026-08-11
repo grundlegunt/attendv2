@@ -555,6 +555,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .menu-item-summary small { margin-top: 4px; color: var(--color-text-secondary); }
 .menu-item-filters { margin: 28px 0 10px; }
 .menu-item-filter-count { margin: 0 0 12px; color: var(--color-text-secondary); font-size: .82rem; }
+.category-admin-list { display: grid; gap: 10px; margin-top: 18px; }
+.category-admin-list article { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--color-border); }
+.category-admin-list article > div:first-child { display: grid; gap: 4px; }
+.category-admin-list span { color: var(--color-text-secondary); font-size: .78rem; }
+.category-admin-list .rule-actions { display: flex; gap: 8px; }
+.category-admin-list .secondary { width: auto; margin: 0; }
 .menu-image-preview { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: center; margin: -6px 0 18px; color: var(--color-text-secondary); font-weight: 700; }
 .menu-image-preview img { width: 120px; aspect-ratio: 4 / 3; border: 1px solid var(--color-border); background: var(--color-bg); object-fit: cover; }
 

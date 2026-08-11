@@ -8,6 +8,8 @@ interface Menu {
   categories: Array<{
     id: string;
     name: string;
+    sortOrder: number;
+    active: boolean;
     items: Array<{
       id: string;
       name: string;
@@ -52,6 +54,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [stationId, setStationId] = useState("");
   const [message, setMessage] = useState("");
   const [categoryName, setCategoryName] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState("");
+  const [editingCategoryName, setEditingCategoryName] = useState("");
+  const [editingCategorySortOrder, setEditingCategorySortOrder] = useState(0);
   const [stationName, setStationName] = useState("");
   const [stationDisplayType, setStationDisplayType] = useState("KITCHEN");
   const [modifierItemId, setModifierItemId] = useState("");
@@ -175,6 +180,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       refresh();
     } catch (error) {
       showError(error, "Category could not be created.");
+    }
+  }
+
+  async function updateCategory(
+    category: Menu["categories"][number],
+    changes: { name?: string; sortOrder?: number; active?: boolean },
+  ) {
+    try {
+      await apiFetch(`/restaurant-menu/categories/${category.id}`, {
+        method: "PATCH",
+        accessToken,
+        body: JSON.stringify(changes),
+      });
+      setEditingCategoryId("");
+      setMessage("Category updated.");
+      refresh();
+    } catch (error) {
+      showError(error, "Category could not be updated.");
     }
   }
 
@@ -345,13 +368,49 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             />
           </label>
           <button className="primary">Add category</button>
-          <ul>
+          <div className="category-admin-list">
             {menu?.categories.map((category) => (
-              <li key={category.id}>
-                {category.name} · {category.items.length} items
-              </li>
+              <article key={category.id}>
+                {editingCategoryId === category.id ? (
+                  <>
+                    <label>
+                      Category name
+                      <input
+                        required
+                        value={editingCategoryName}
+                        onChange={(event) => setEditingCategoryName(event.target.value)}
+                      />
+                    </label>
+                    <label>
+                      Display order
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={editingCategorySortOrder}
+                        onChange={(event) => setEditingCategorySortOrder(Number(event.target.value))}
+                      />
+                    </label>
+                    <div className="rule-actions">
+                      <button className="secondary" type="button" onClick={() => void updateCategory(category, { name: editingCategoryName, sortOrder: editingCategorySortOrder })}>Save</button>
+                      <button className="secondary" type="button" onClick={() => setEditingCategoryId("")}>Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <strong>{category.name}</strong>
+                      <span>{category.items.length} items · order {category.sortOrder} · {category.active ? "Active" : "Inactive"}</span>
+                    </div>
+                    <div className="rule-actions">
+                      <button className="secondary" type="button" onClick={() => { setEditingCategoryId(category.id); setEditingCategoryName(category.name); setEditingCategorySortOrder(category.sortOrder); }}>Edit</button>
+                      <button className="secondary" type="button" onClick={() => void updateCategory(category, { active: !category.active })}>{category.active ? "Deactivate" : "Restore"}</button>
+                    </div>
+                  </>
+                )}
+              </article>
             ))}
-          </ul>
+          </div>
         </form>
         <form className="panel" onSubmit={createStation}>
           <p className="kicker">ROUTING</p>

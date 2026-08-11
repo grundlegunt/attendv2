@@ -42,6 +42,10 @@ export class RestaurantService {
     return this.wrap(() => this.domain.createMenuCategory(input));
   }
 
+  updateMenuCategory(input: Parameters<RestaurantDomainService["updateMenuCategory"]>[0]) {
+    return this.wrap(() => this.domain.updateMenuCategory(input));
+  }
+
   createMenuItem(input: Parameters<RestaurantDomainService["createMenuItem"]>[0]) {
     return this.wrap(() => this.domain.createMenuItem(input));
   }
