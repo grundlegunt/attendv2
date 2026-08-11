@@ -64,6 +64,7 @@ export default function StaffLoginPage() {
   const [openingTabs, setOpeningTabs] = useState(false);
   const openingTabsRef = useRef(false);
   const seatDetailRequestRef = useRef(0);
+  const availabilityRequestRef = useRef(0);
   const [clockReady, setClockReady] = useState(false);
   const [clockPin, setClockPin] = useState("");
   const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
@@ -124,9 +125,13 @@ export default function StaffLoginPage() {
 
   const loadAvailability = useCallback(async () => {
     if (!selectedShowtimeId) return;
+    const requestId = ++availabilityRequestRef.current;
     try {
-      setAvailability(await apiFetch<SeatAvailabilityResponse>(`/cinema/showtimes/${selectedShowtimeId}/seats`));
+      const response = await apiFetch<SeatAvailabilityResponse>(`/cinema/showtimes/${selectedShowtimeId}/seats`);
+      if (requestId !== availabilityRequestRef.current) return;
+      setAvailability(response);
     } catch {
+      if (requestId !== availabilityRequestRef.current) return;
       setError("The live seat map is temporarily unavailable.");
     }
   }, [selectedShowtimeId]);
@@ -137,7 +142,11 @@ export default function StaffLoginPage() {
       .then((response) => {
         setProgram(response);
         const firstShowtime = response.movies.flatMap((movie) => movie.showtimes)[0];
-        if (firstShowtime) setSelectedShowtimeId(firstShowtime.id);
+        if (firstShowtime) {
+          availabilityRequestRef.current += 1;
+          setAvailability(null);
+          setSelectedShowtimeId(firstShowtime.id);
+        }
       })
       .catch(() => setError("Showtimes are temporarily unavailable."));
   }, [employee]);
@@ -278,7 +287,11 @@ export default function StaffLoginPage() {
 
         {view !== "tabs" && view !== "restaurant" && <section className="showtime-toolbar" aria-label="Select a showtime">
           <label htmlFor="showtime">Showtime</label>
-          <select id="showtime" value={selectedShowtimeId} onChange={(event) => setSelectedShowtimeId(event.target.value)}>
+          <select id="showtime" value={selectedShowtimeId} onChange={(event) => {
+            availabilityRequestRef.current += 1;
+            setAvailability(null);
+            setSelectedShowtimeId(event.target.value);
+          }}>
             {program?.movies.flatMap((movie) =>
               movie.showtimes.map((showtime) => (
                 <option key={showtime.id} value={showtime.id}>
