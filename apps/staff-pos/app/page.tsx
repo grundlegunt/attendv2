@@ -114,6 +114,17 @@ export default function StaffLoginPage() {
     setError(null);
   }
 
+  function changeShowtime(nextShowtimeId: string) {
+    availabilityRequestRef.current += 1;
+    seatDetailRequestRef.current += 1;
+    seatDetailPendingRef.current = false;
+    setAvailability(null);
+    setAvailabilityError(null);
+    setSeatDetail(null);
+    setSeatDetailPending(false);
+    setSelectedShowtimeId(nextShowtimeId);
+  }
+
   function storeSession(next: ActiveStaffSession) {
     setEmployee(next.employee); setAccessToken(next.accessToken); setRefreshToken(next.refreshToken); setExpiresInSeconds(next.expiresInSeconds);
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -361,12 +372,7 @@ export default function StaffLoginPage() {
 
         {view !== "tabs" && view !== "restaurant" && <section className="showtime-toolbar" aria-label="Select a showtime">
           <label htmlFor="showtime">Showtime</label>
-          <select id="showtime" value={selectedShowtimeId} onChange={(event) => {
-            availabilityRequestRef.current += 1;
-            setAvailability(null);
-            setAvailabilityError(null);
-            setSelectedShowtimeId(event.target.value);
-          }}>
+          <select id="showtime" value={selectedShowtimeId} onChange={(event) => changeShowtime(event.target.value)}>
             {program?.movies.flatMap((movie) =>
               movie.showtimes.map((showtime) => (
                 <option key={showtime.id} value={showtime.id}>
