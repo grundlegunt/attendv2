@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type {
   TicketCheckoutResponse,
   TicketConfirmationResponse,
@@ -114,6 +114,7 @@ export function TicketCheckout({
   const [giftCardCode, setGiftCardCode] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [paymentElementReady, setPaymentElementReady] = useState(false);
   const [mountableElements, setMountableElements] = useState<{
@@ -126,19 +127,29 @@ export function TicketCheckout({
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    apiFetch<CheckoutConfig>(
-      `/ticketing/showtimes/${showtimeId}/checkout-config`,
-    )
-      .then(setConfig)
-      .catch((requestError) =>
-        setError(
-          requestError instanceof ApiRequestError
-            ? requestError.body.message
-            : "Checkout is temporarily unavailable.",
+  const loadConfig = useCallback(async () => {
+    setConfigLoading(true);
+    setError(null);
+    try {
+      setConfig(
+        await apiFetch<CheckoutConfig>(
+          `/ticketing/showtimes/${showtimeId}/checkout-config`,
         ),
       );
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : "Checkout is temporarily unavailable.",
+      );
+    } finally {
+      setConfigLoading(false);
+    }
   }, [showtimeId]);
+
+  useEffect(() => {
+    void loadConfig();
+  }, [loadConfig]);
 
   useEffect(() => {
     if (!mountableElements || confirmation) return;
@@ -367,6 +378,11 @@ export function TicketCheckout({
         </p>
       </div>
       {error && <div className="error-banner">{error}</div>}
+      {!config && error && !checkout && (
+        <button className="link" type="button" disabled={configLoading} onClick={() => void loadConfig()}>
+          {configLoading ? "Retrying checkout…" : "Retry checkout setup"}
+        </button>
+      )}
       {!checkout ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
@@ -429,6 +445,7 @@ export function TicketCheckout({
             className="primary"
             disabled={
               pending ||
+              configLoading ||
               diningAuthorization === null ||
               !config?.ticketTypes.length ||
               (!config.payment.ready && !giftCardCode.trim())
