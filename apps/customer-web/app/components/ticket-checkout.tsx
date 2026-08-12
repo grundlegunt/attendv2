@@ -319,7 +319,12 @@ export function TicketCheckout({
 
   return (
     <section className="ticket-checkout">
-      <button className="link" type="button" onClick={onBack}>
+      <button
+        className="link"
+        type="button"
+        disabled={pending || checkout !== null}
+        onClick={onBack}
+      >
         ← Change seats
       </button>
       <div className="checkout-heading">
