@@ -53,6 +53,7 @@ interface SettlementTab {
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DEFAULT_READER_ID = "tmr_test_reader";
 
 export function RestaurantPos({
   accessToken,
@@ -79,7 +80,7 @@ export function RestaurantPos({
   const [tipCents, setTipCents] = useState("0");
   const [savedCardCents, setSavedCardCents] = useState("");
   const [terminalCents, setTerminalCents] = useState("");
-  const [readerId, setReaderId] = useState("tmr_test_reader");
+  const [readerId, setReaderId] = useState(DEFAULT_READER_ID);
   const [guestAccessToken, setGuestAccessToken] = useState("");
   const actionLocks = useRef(new Set<string>());
   const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -184,6 +185,7 @@ export function RestaurantPos({
     setTipCents("0");
     setSavedCardCents("");
     setTerminalCents("");
+    setReaderId(DEFAULT_READER_ID);
   }, [tabId]);
 
   useEffect(() => {
@@ -214,6 +216,7 @@ export function RestaurantPos({
             setTipCents("0");
             setSavedCardCents("");
             setTerminalCents("");
+            setReaderId(DEFAULT_READER_ID);
           }
           setRefreshError(null);
         })
