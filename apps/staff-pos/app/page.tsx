@@ -100,6 +100,7 @@ export default function StaffLoginPage() {
     seatDetailPendingRef.current = false;
     setSeatDetailPending(false);
     setSeatDetail(null);
+    setError(null);
     setView(nextView);
   }
 
