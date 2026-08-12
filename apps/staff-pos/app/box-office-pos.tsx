@@ -32,9 +32,11 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const checkoutAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const checkoutConfigRequestRef = useRef(0);
   const drawerRequestRef = useRef(0);
+  const pricingRequestRef = useRef(0);
 
   useEffect(() => {
     const requestId = ++checkoutConfigRequestRef.current;
+    pricingRequestRef.current += 1;
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
     apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
       .then((data) => {
@@ -102,12 +104,28 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   async function prepareSale(event: FormEvent) {
     event.preventDefault();
     if (!beginRequest()) return;
+    const requestId = ++pricingRequestRef.current;
+    const requestShowtimeId = showtimeId;
+    async function releaseStaleHolds(tokens: string[]) {
+      await Promise.allSettled(tokens.map((holdToken) =>
+        apiFetch(`/cinema/showtimes/${requestShowtimeId}/holds/${encodeURIComponent(holdToken)}`, {
+          method: "DELETE",
+          accessToken,
+          body: JSON.stringify({ holderKey }),
+        }),
+      ));
+    }
     try {
-      const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
-      const tokens = holds.map((hold) => hold.holdToken); setHoldTokens(tokens);
+      const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${requestShowtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
+      const tokens = holds.map((hold) => hold.holdToken);
+      if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
+      setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
+      if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
-    } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
+    } catch (error) {
+      if (requestId === pricingRequestRef.current) setMessage(errorMessage(error));
+    } finally { finishRequest(); }
   }
 
   async function checkout() {
