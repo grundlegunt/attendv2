@@ -163,6 +163,7 @@ export function TicketScanner({
       }, 30_000);
     } catch {
       if (cameraSession !== cameraSessionRef.current) return;
+      stopCamera();
       setMessage("Camera access was unavailable. Paste the credential below.");
     } finally {
       if (cameraSession === cameraSessionRef.current) {
