@@ -289,9 +289,15 @@ export function RestaurantPos({
       setMessage(`${item.name} is unavailable. Choose another item.`);
       return;
     }
-    const missingRequiredGroup = item.modifierGroups.find(
-      (group) => group.required && !(modifierSelections[`${item.id}:${group.id}`]?.length),
-    );
+    const selectedModifiers = item.modifierGroups.map((group) => {
+      const availableIds = new Set(group.modifiers.map((modifier) => modifier.id));
+      return {
+        group,
+        ids: (modifierSelections[`${item.id}:${group.id}`] ?? [])
+          .filter((modifierId) => availableIds.has(modifierId)),
+      };
+    });
+    const missingRequiredGroup = selectedModifiers.find(({ group, ids }) => group.required && !ids.length)?.group;
     if (missingRequiredGroup) {
       setMessage(`Choose an option for ${missingRequiredGroup.name} before adding ${item.name}.`);
       return;
@@ -301,9 +307,7 @@ export function RestaurantPos({
     const requestId = tabActionRequestRef.current;
     const requestedOrderId = orderId;
     try {
-      const modifierIds = item.modifierGroups.flatMap(
-        (group) => modifierSelections[`${item.id}:${group.id}`] ?? [],
-      );
+      const modifierIds = selectedModifiers.flatMap(({ ids }) => ids);
       await apiFetch(`/restaurant-tabs/orders/${requestedOrderId}/items`, {
         method: "POST",
         accessToken,
