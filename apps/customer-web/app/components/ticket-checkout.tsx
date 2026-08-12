@@ -181,6 +181,8 @@ export function TicketCheckout({
     return () => {
       mountableElements.express.unmount();
       mountableElements.payment.unmount();
+      mountableElements.express.destroy();
+      mountableElements.payment.destroy();
     };
   }, [confirmation, mountableElements]);
 
