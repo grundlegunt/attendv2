@@ -213,18 +213,21 @@ export function RestaurantPos({
     if (!orderId) return setMessage("Start an order first.");
     const actionKey = `add-item:${orderId}:${item.id}`;
     if (!beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
+    const requestedOrderId = orderId;
     try {
       const modifierIds = item.modifierGroups.flatMap(
         (group) => modifierSelections[`${item.id}:${group.id}`] ?? [],
       );
-      await apiFetch(`/restaurant-tabs/orders/${orderId}/items`, {
+      await apiFetch(`/restaurant-tabs/orders/${requestedOrderId}/items`, {
         method: "POST",
         accessToken,
         body: JSON.stringify({ menuItemId: item.id, quantity: 1, modifierIds }),
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setMessage(`${item.name} added.`);
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
@@ -233,15 +236,18 @@ export function RestaurantPos({
   async function removeBlockedItem(item: { id: string; name: string }) {
     const actionKey = `remove-item:${orderId}:${item.id}`;
     if (!orderId || !beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
+    const requestedOrderId = orderId;
     try {
-      await apiFetch(`/restaurant-tabs/orders/${orderId}/items/${item.id}`, {
+      await apiFetch(`/restaurant-tabs/orders/${requestedOrderId}/items/${item.id}`, {
         method: "DELETE",
         accessToken,
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setBlockedItems((current) => current.filter((candidate) => candidate.id !== item.id));
       setMessage(`${item.name} removed. Add a substitute or send the remaining draft.`);
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
@@ -268,17 +274,20 @@ export function RestaurantPos({
   async function sendOrder() {
     const actionKey = `send:${orderId}`;
     if (!orderId || !beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
+    const requestedOrderId = orderId;
     try {
       const result = await apiFetch<{
         rejectedDraft: null | {
           orderId: string;
           items: Array<{ id: string; name: string; reason: string }>;
         };
-      }>(`/restaurant-tabs/orders/${orderId}/send`, {
+      }>(`/restaurant-tabs/orders/${requestedOrderId}/send`, {
         method: "POST",
         accessToken,
         body: "{}",
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setOrderId(result.rejectedDraft?.orderId ?? "");
       setBlockedItems(result.rejectedDraft?.items ?? []);
       setMessage(
@@ -289,7 +298,7 @@ export function RestaurantPos({
           : "Order sent to its stations.",
       );
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
