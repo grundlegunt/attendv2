@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { AuthenticatedEmployee } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
@@ -9,23 +9,39 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const clockRequestRef = useRef(0);
+
+  useEffect(() => {
+    clockRequestRef.current += 1;
+    busyRef.current = false;
+    setBusy(false);
+    setPin("");
+    setMessage(null);
+    return () => { clockRequestRef.current += 1; };
+  }, [employee.id, employee.locationId]);
 
   async function enter(event: FormEvent) {
     event.preventDefault();
     if (busyRef.current) return;
     busyRef.current = true;
+    const requestId = ++clockRequestRef.current;
     setBusy(true);
     setMessage(null);
     const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
     try {
       const status = await apiFetch<{ shift: { id: string } | null }>("/shifts/status", { method: "POST", body });
+      if (requestId !== clockRequestRef.current) return;
       if (!status.shift) await apiFetch("/shifts/clock-in", { method: "POST", body });
+      if (requestId !== clockRequestRef.current) return;
       onReady(pin);
     } catch (error) {
+      if (requestId !== clockRequestRef.current) return;
       setMessage(error instanceof ApiRequestError ? error.body.message : "The time clock is unavailable.");
     } finally {
-      busyRef.current = false;
-      setBusy(false);
+      if (requestId === clockRequestRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
