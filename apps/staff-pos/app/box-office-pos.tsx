@@ -103,11 +103,25 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   }
 
   async function openDrawer() {
+    const requestedRegisterId = registerId.trim();
+    const openingBalanceCents = Number(openingBalance);
+    if (!requestedRegisterId) {
+      setMessage("Enter a register ID before opening a cash drawer.");
+      return;
+    }
+    if (!Number.isInteger(openingBalanceCents) || openingBalanceCents < 0) {
+      setMessage("Opening cash must be a whole, non-negative number of cents.");
+      return;
+    }
+    if (openingBalanceCents > 10_000_000) {
+      setMessage("Opening cash cannot exceed 10,000,000 cents.");
+      return;
+    }
     const busyRequestId = beginRequest();
     if (busyRequestId === null) return;
     const requestId = ++drawerRequestRef.current;
     try {
-      const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId, openingBalanceCents: Number(openingBalance) }) });
+      const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId: requestedRegisterId, openingBalanceCents }) });
       if (requestId === drawerRequestRef.current) setDrawer(openedDrawer);
     } catch (error) {
       if (requestId === drawerRequestRef.current) setMessage(errorMessage(error));
