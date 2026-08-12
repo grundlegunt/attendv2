@@ -130,6 +130,8 @@ export function TicketCheckout({
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
+  const checkoutStorageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
+
   const loadConfig = useCallback(async () => {
     if (configLoadingRef.current) return;
     configLoadingRef.current = true;
@@ -202,12 +204,12 @@ export function TicketCheckout({
         confirmParams: { receipt_email: email },
       });
       if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
-      setConfirmation(
-        await apiFetch<TicketConfirmationResponse>(
-          `/ticketing/orders/${orderId}/finalize`,
-          { method: "POST", body: "{}" },
-        ),
+      const completed = await apiFetch<TicketConfirmationResponse>(
+        `/ticketing/orders/${orderId}/finalize`,
+        { method: "POST", body: "{}" },
       );
+      window.sessionStorage.removeItem(checkoutStorageKey);
+      setConfirmation(completed);
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -299,11 +301,10 @@ export function TicketCheckout({
     setPending(true);
     setError(null);
     try {
-      const storageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
-      let idempotencyKey = window.sessionStorage.getItem(storageKey);
+      let idempotencyKey = window.sessionStorage.getItem(checkoutStorageKey);
       if (!idempotencyKey) {
         idempotencyKey = crypto.randomUUID();
-        window.sessionStorage.setItem(storageKey, idempotencyKey);
+        window.sessionStorage.setItem(checkoutStorageKey, idempotencyKey);
       }
       const created = await apiFetch<TicketCheckoutResponse>(
         "/ticketing/checkouts",
@@ -324,7 +325,9 @@ export function TicketCheckout({
       );
       setCheckout(created);
       if (!created.payment?.clientSecret) {
-        setConfirmation(await apiFetch<TicketConfirmationResponse>(`/ticketing/orders/${created.orderId}/finalize`, { method: "POST", body: "{}" }));
+        const completed = await apiFetch<TicketConfirmationResponse>(`/ticketing/orders/${created.orderId}/finalize`, { method: "POST", body: "{}" });
+        window.sessionStorage.removeItem(checkoutStorageKey);
+        setConfirmation(completed);
         return;
       }
       await initializePayment(created);
