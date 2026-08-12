@@ -130,6 +130,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setGiftCardCents("0");
     setGiftCardBalance(null);
     setGiftCardCurrency(null);
+    setGiftRemainderTender("CASH");
   }
   function toggleSeat(seat: SeatMapSeat) {
     if (busyRef.current || quote || !seat.id) return;
@@ -204,7 +205,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: requestedPromotionCode || undefined }) });
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       activeHoldsRef.current = { showtimeId: requestShowtimeId, tokens };
-      checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
+      checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setCashReceived("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
     } catch (error) {
       if (createdHoldTokens.length) {
         await releaseStaleHolds(createdHoldTokens);
