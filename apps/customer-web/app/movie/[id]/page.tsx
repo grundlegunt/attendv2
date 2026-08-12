@@ -19,9 +19,24 @@ export default function MovieDetailPage({ params }: { params: Promise<{ id: stri
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   useEffect(() => {
+    let isCurrent = true;
+
+    setData(null);
+    setError(null);
+    setSelectedShowtimeId(null);
+    setSelectedDate(null);
+
     apiFetch<DetailResponse>(`/cinema/movies/${id}`)
-      .then(setData)
-      .catch((reason) => setError(reason instanceof ApiRequestError ? reason.body.message : "Movie details are unavailable."));
+      .then((response) => {
+        if (isCurrent) setData(response);
+      })
+      .catch((reason) => {
+        if (isCurrent) setError(reason instanceof ApiRequestError ? reason.body.message : "Movie details are unavailable.");
+      });
+
+    return () => {
+      isCurrent = false;
+    };
   }, [id]);
 
   const dates = useMemo(() => data ? Array.from(new Set(data.movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, data.location.timezone)))) : [], [data]);
