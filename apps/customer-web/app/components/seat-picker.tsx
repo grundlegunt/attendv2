@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { TicketCheckout } from "./ticket-checkout";
@@ -52,24 +52,31 @@ export function SeatPicker({
   const [optimisticSeatStates, setOptimisticSeatStates] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const refreshRequestRef = useRef(0);
+  const refreshPendingRef = useRef(false);
 
   useEffect(() => setHolderKey(getHolderKey()), []);
 
   const refresh = useCallback(async () => {
-    if (!holderKey) return;
+    if (!holderKey || refreshPendingRef.current) return;
+    refreshPendingRef.current = true;
+    const requestId = ++refreshRequestRef.current;
     try {
-      setAvailability(
-        await apiFetch<Availability>(
-          `/cinema/showtimes/${showtimeId}/seats?holderKey=${encodeURIComponent(holderKey)}`,
-        ),
+      const nextAvailability = await apiFetch<Availability>(
+        `/cinema/showtimes/${showtimeId}/seats?holderKey=${encodeURIComponent(holderKey)}`,
       );
+      if (requestId !== refreshRequestRef.current) return;
+      setAvailability(nextAvailability);
       setError(null);
     } catch (requestError) {
+      if (requestId !== refreshRequestRef.current) return;
       setError(
         requestError instanceof ApiRequestError
           ? requestError.body.message
           : "Seat availability is temporarily unavailable.",
       );
+    } finally {
+      if (requestId === refreshRequestRef.current) refreshPendingRef.current = false;
     }
   }, [holderKey, showtimeId]);
 
@@ -77,7 +84,11 @@ export function SeatPicker({
     if (checkoutOpen) return;
     void refresh();
     const poller = window.setInterval(() => void refresh(), 2_000);
-    return () => window.clearInterval(poller);
+    return () => {
+      refreshRequestRef.current += 1;
+      refreshPendingRef.current = false;
+      window.clearInterval(poller);
+    };
   }, [checkoutOpen, refresh]);
 
   useEffect(() => {
