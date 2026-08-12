@@ -81,6 +81,7 @@ export function RestaurantPos({
   const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
   const tabRefreshRequestRef = useRef(0);
+  const tabActionRequestRef = useRef(0);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
 
   function beginAction(key: string) {
@@ -123,6 +124,7 @@ export function RestaurantPos({
   useEffect(() => setTabId(initialTabId), [initialTabId]);
 
   useEffect(() => {
+    tabActionRequestRef.current += 1;
     settlementAttemptRef.current = null;
     setOrderId("");
     setBlockedItems([]);
@@ -189,16 +191,19 @@ export function RestaurantPos({
   async function startOrder() {
     const actionKey = `start-order:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
+    const requestId = ++tabActionRequestRef.current;
+    const requestedTabId = tabId;
     try {
-      const order = await apiFetch<{ id: string }>(`/restaurant-tabs/${tabId}/orders`, {
+      const order = await apiFetch<{ id: string }>(`/restaurant-tabs/${requestedTabId}/orders`, {
         method: "POST",
         accessToken,
         body: JSON.stringify(showtimeSeatId ? { showtimeSeatId } : {}),
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setOrderId(order.id);
       setMessage("Order started. Add items, then send.");
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
