@@ -104,6 +104,14 @@ export function RestaurantPos({
     return pendingActions.includes(key);
   }
 
+  function hasPendingOrderMutation(requestedOrderId: string) {
+    return [...actionLocks.current].some((key) =>
+      key === `send:${requestedOrderId}` ||
+      key.startsWith(`add-item:${requestedOrderId}:`) ||
+      key.startsWith(`remove-item:${requestedOrderId}:`),
+    );
+  }
+
   useEffect(() => {
     const refresh = () => {
       const requestId = ++menuRequestRef.current;
@@ -240,6 +248,7 @@ export function RestaurantPos({
 
   async function addItem(item: Menu["categories"][number]["items"][number]) {
     if (!orderId) return setMessage("Start an order first.");
+    if (hasPendingOrderMutation(orderId)) return;
     const actionKey = `add-item:${orderId}:${item.id}`;
     if (!beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
@@ -264,7 +273,7 @@ export function RestaurantPos({
 
   async function removeBlockedItem(item: { id: string; name: string }) {
     const actionKey = `remove-item:${orderId}:${item.id}`;
-    if (!orderId || !beginAction(actionKey)) return;
+    if (!orderId || hasPendingOrderMutation(orderId) || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedOrderId = orderId;
     try {
@@ -302,7 +311,7 @@ export function RestaurantPos({
 
   async function sendOrder() {
     const actionKey = `send:${orderId}`;
-    if (!orderId || !beginAction(actionKey)) return;
+    if (!orderId || hasPendingOrderMutation(orderId) || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedOrderId = orderId;
     try {
@@ -495,6 +504,11 @@ export function RestaurantPos({
   }
 
   const settlementPending = isPending(`finalize:${tabId}`);
+  const orderMutationPending = orderId ? pendingActions.some((key) =>
+    key === `send:${orderId}` ||
+    key.startsWith(`add-item:${orderId}:`) ||
+    key.startsWith(`remove-item:${orderId}:`),
+  ) : false;
 
   return (
     <section className="scanner-panel">
@@ -664,7 +678,7 @@ export function RestaurantPos({
           <button
             className="secondary"
             type="button"
-            disabled={isPending(`remove-item:${orderId}:${item.id}`)}
+            disabled={orderMutationPending}
             onClick={() => removeBlockedItem(item)}
           >
             {isPending(`remove-item:${orderId}:${item.id}`) ? "Removing…" : "Remove from draft"}
@@ -692,6 +706,7 @@ export function RestaurantPos({
                           type={group.selectionType === "SINGLE" ? "radio" : "checkbox"}
                           name={`${item.id}:${group.id}`}
                           checked={selected}
+                          disabled={orderMutationPending}
                           onChange={(event) =>
                             chooseModifier(item.id, group, modifier.id, event.target.checked)
                           }
@@ -705,7 +720,7 @@ export function RestaurantPos({
               <button
                 className="secondary"
                 type="button"
-                disabled={item.is86d || !orderId || isPending(`add-item:${orderId}:${item.id}`)}
+                disabled={item.is86d || !orderId || orderMutationPending}
                 onClick={() => addItem(item)}
               >
                 {isPending(`add-item:${orderId}:${item.id}`)
@@ -721,7 +736,7 @@ export function RestaurantPos({
       <button
         className="primary"
         type="button"
-        disabled={!orderId || isPending(`send:${orderId}`)}
+        disabled={!orderId || orderMutationPending}
         onClick={sendOrder}
       >
         {isPending(`send:${orderId}`) ? "Sending order…" : "Send order"}
