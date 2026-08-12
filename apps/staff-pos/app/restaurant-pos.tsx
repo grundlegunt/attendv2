@@ -487,7 +487,10 @@ export function RestaurantPos({
         },
       );
       if (requestId !== tabActionRequestRef.current) return;
-      if (result.status === "CLOSED") settlementAttemptRef.current = null;
+      if (result.status === "CLOSED") {
+        settlementAttemptRef.current = null;
+        setGuestAccessToken("");
+      }
       setMessage(
         result.status === "CLOSED"
           ? "Tab paid and closed. Receipt issued."
