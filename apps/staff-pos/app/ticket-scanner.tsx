@@ -31,6 +31,7 @@ export function TicketScanner({
   function stopCamera() {
     cameraSessionRef.current += 1;
     detectingRef.current = false;
+    cameraStartingRef.current = false;
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = null;
     if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
@@ -38,6 +39,7 @@ export function TicketScanner({
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraStarting(false);
     setCameraActive(false);
   }
 
@@ -106,20 +108,24 @@ export function TicketScanner({
     setCameraStarting(true);
     setResult(null);
     setMessage("Starting camera…");
+    const cameraSession = cameraSessionRef.current;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      if (cameraSession !== cameraSessionRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const video = videoRef.current;
       if (!video) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
-      stopCamera();
       streamRef.current = stream;
       setCameraActive(true);
       video.srcObject = stream;
       await video.play();
+      if (cameraSession !== cameraSessionRef.current) return;
       const detector = new Detector({ formats: ["qr_code"] });
-      const cameraSession = cameraSessionRef.current;
       setMessage("Camera active—point it at the ticket.");
       intervalRef.current = window.setInterval(async () => {
         if (detectingRef.current || cameraSession !== cameraSessionRef.current) return;
@@ -144,10 +150,13 @@ export function TicketScanner({
         stopCamera();
       }, 30_000);
     } catch {
+      if (cameraSession !== cameraSessionRef.current) return;
       setMessage("Camera access was unavailable. Paste the credential below.");
     } finally {
-      cameraStartingRef.current = false;
-      setCameraStarting(false);
+      if (cameraSession === cameraSessionRef.current) {
+        cameraStartingRef.current = false;
+        setCameraStarting(false);
+      }
     }
   }
 
