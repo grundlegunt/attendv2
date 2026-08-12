@@ -151,6 +151,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     drawerRequestRef.current += 1;
     setDrawer(null);
     setDrawerStatus("loading");
+    setOpeningBalance("");
     setReaderId("");
     setMessage(null);
     setRegisterId(nextRegisterId);
