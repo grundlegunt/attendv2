@@ -64,7 +64,9 @@ export default function FilmSeriesDetailPage() {
             {series.movies.map((movie) => (
               <section className="series-film" key={movie.id}>
                 <Link className="series-poster" href={`/movie/${movie.id}`}>
-                  {movie.posterUrl ? <img src={movie.posterUrl} alt={`${movie.title} poster`} /> : <span>{movie.title}</span>}
+                  {movie.detailPosterUrl || movie.posterUrl
+                    ? <img src={movie.detailPosterUrl ?? movie.posterUrl!} alt={`${movie.title} poster`} />
+                    : <span>{movie.title}</span>}
                 </Link>
                 <div>
                   <p className="movie-meta">{movie.rating ?? "NR"} · {movie.runtimeMinutes} MIN</p>
