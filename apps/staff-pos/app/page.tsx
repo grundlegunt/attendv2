@@ -58,6 +58,7 @@ export default function StaffLoginPage() {
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string>("");
   const [availability, setAvailability] = useState<SeatAvailabilityResponse | null>(null);
+  const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [view, setView] = useState<StaffView>("scanner");
   const [tabOrderId, setTabOrderId] = useState("");
   const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
@@ -119,7 +120,7 @@ export default function StaffLoginPage() {
     if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY);
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
-    setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setView("scanner");
+    setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setAvailabilityError(null); setView("scanner");
     setOpenedTabs([]); setSeatDetail(null); setOpeningTabs(false); setTabOrderId("");
     setPassword(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setMfaCode(""); setMfaChallengeToken(null); setError(null);
   }
@@ -152,9 +153,10 @@ export default function StaffLoginPage() {
       const response = await apiFetch<SeatAvailabilityResponse>(`/cinema/showtimes/${selectedShowtimeId}/seats`);
       if (requestId !== availabilityRequestRef.current) return;
       setAvailability(response);
+      setAvailabilityError(null);
     } catch {
       if (requestId !== availabilityRequestRef.current) return;
-      setError("The live seat map is temporarily unavailable.");
+      setAvailabilityError("The live seat map is temporarily unavailable. Displayed seat information may be out of date.");
     }
   }, [selectedShowtimeId]);
 
@@ -169,6 +171,7 @@ export default function StaffLoginPage() {
         if (firstShowtime) {
           availabilityRequestRef.current += 1;
           setAvailability(null);
+          setAvailabilityError(null);
           setSelectedShowtimeId(firstShowtime.id);
         }
       })
@@ -315,6 +318,7 @@ export default function StaffLoginPage() {
         </header>
 
         {error && <div className="error-banner">{error}</div>}
+        {availabilityError && <div className="error-banner">{availabilityError}</div>}
 
         <nav className="staff-tabs" aria-label="Staff tools">
           <button type="button" className={view === "scanner" ? "active" : ""} onClick={() => changeView("scanner")}>Scan tickets</button>
@@ -329,6 +333,7 @@ export default function StaffLoginPage() {
           <select id="showtime" value={selectedShowtimeId} onChange={(event) => {
             availabilityRequestRef.current += 1;
             setAvailability(null);
+            setAvailabilityError(null);
             setSelectedShowtimeId(event.target.value);
           }}>
             {program?.movies.flatMap((movie) =>
