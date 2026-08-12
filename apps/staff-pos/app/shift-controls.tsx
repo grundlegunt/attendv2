@@ -9,18 +9,27 @@ type Shift = { id: string; breakStartAt: string | null; breakEndAt: string | nul
 export function ShiftControls({ employee, pin, onClockOut }: { employee: AuthenticatedEmployee; pin: string; onClockOut: () => void }) {
   const [shift, setShift] = useState<Shift | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [statusPending, setStatusPending] = useState(true);
   const [pendingAction, setPendingAction] = useState<"break" | "clock-out" | null>(null);
   const actionPendingRef = useRef(false);
   const shiftRequestRef = useRef(0);
   const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
   useEffect(() => {
     const requestId = ++shiftRequestRef.current;
+    setShift(null);
+    setStatusPending(true);
+    setMessage(null);
     apiFetch<{shift:Shift|null}>("/shifts/status", { method: "POST", body })
       .then((result) => {
-        if (requestId === shiftRequestRef.current) setShift(result.shift);
+        if (requestId !== shiftRequestRef.current) return;
+        setShift(result.shift);
+        setStatusPending(false);
+        if (!result.shift) setMessage("No active shift");
       })
       .catch(() => {
-        if (requestId === shiftRequestRef.current) setMessage("Shift status unavailable");
+        if (requestId !== shiftRequestRef.current) return;
+        setStatusPending(false);
+        setMessage("Shift status unavailable");
       });
     return () => { shiftRequestRef.current += 1; };
   }, [body]);
@@ -46,11 +55,12 @@ export function ShiftControls({ employee, pin, onClockOut }: { employee: Authent
     }
   }
   const onBreak = Boolean(shift?.breakStartAt && !shift.breakEndAt);
-  return <div className="shift-controls"><span>{message ?? (onBreak ? "On break" : "Clocked in")}</span>
-    <button type="button" disabled={pendingAction !== null} onClick={() => action(onBreak ? "/shifts/break/end" : "/shifts/break/start", "break")}>
+  const actionsDisabled = statusPending || !shift || pendingAction !== null;
+  return <div className="shift-controls"><span>{statusPending ? "Checking shift…" : message ?? (onBreak ? "On break" : "Clocked in")}</span>
+    <button type="button" disabled={actionsDisabled} onClick={() => action(onBreak ? "/shifts/break/end" : "/shifts/break/start", "break")}>
       {pendingAction === "break" ? "Updating break…" : onBreak ? "End break" : "Start break"}
     </button>
-    <button type="button" disabled={pendingAction !== null} onClick={() => action("/shifts/clock-out", "clock-out")}>
+    <button type="button" disabled={actionsDisabled} onClick={() => action("/shifts/clock-out", "clock-out")}>
       {pendingAction === "clock-out" ? "Clocking out…" : "Clock out"}
     </button>
   </div>;
