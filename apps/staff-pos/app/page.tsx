@@ -122,6 +122,7 @@ export default function StaffLoginPage() {
     seatDetailPendingRef.current = false;
     setAvailability(null);
     setAvailabilityError(null);
+    setError(null);
     setSeatDetail(null);
     setSeatDetailPending(false);
     setSelectedShowtimeId(nextShowtimeId);
