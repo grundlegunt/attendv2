@@ -6,6 +6,7 @@ import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type LiveSeat = Omit<SeatMapSeat, "state"> & { id: string; state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" };
 type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}> };
+const DEFAULT_READER_ID = "tmr_box_1";
 
 export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; refresh: () => Promise<void> }) {
   const [selected, setSelected] = useState<string[]>([]);
@@ -27,7 +28,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [giftCardCurrency, setGiftCardCurrency] = useState<string | null>(null);
   const [giftRemainderTender, setGiftRemainderTender] = useState<"CASH" | "CARD">("CASH");
   const [cashReceived, setCashReceived] = useState("0");
-  const [readerId, setReaderId] = useState("tmr_box_1");
+  const [readerId, setReaderId] = useState(DEFAULT_READER_ID);
   const [message, setMessage] = useState<string|null>(null);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -52,6 +53,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
     setPromotionCode(""); setCashCents("0"); setCardCents("0"); setCashReceived("0");
     setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
+    setReaderId(DEFAULT_READER_ID);
     setMessage(null);
     apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
       .then((data) => {
@@ -142,6 +144,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setGiftCardBalance(null);
     setGiftCardCurrency(null);
     setGiftRemainderTender("CASH");
+    setReaderId(DEFAULT_READER_ID);
   }
   function changeRegister(nextRegisterId: string) {
     drawerRequestRef.current += 1;
