@@ -88,8 +88,15 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
 
   async function openDrawer() {
     if (!beginRequest()) return;
-    try { setDrawer(await apiFetch("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId, openingBalanceCents: Number(openingBalance) }) })); }
-    catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
+    const requestId = ++drawerRequestRef.current;
+    try {
+      const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId, openingBalanceCents: Number(openingBalance) }) });
+      if (requestId === drawerRequestRef.current) setDrawer(openedDrawer);
+    } catch (error) {
+      if (requestId === drawerRequestRef.current) setMessage(errorMessage(error));
+    } finally {
+      finishRequest();
+    }
   }
 
   async function prepareSale(event: FormEvent) {
