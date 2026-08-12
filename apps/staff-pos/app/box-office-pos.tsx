@@ -145,7 +145,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setGiftCardBalance(null);
     setGiftCardCurrency(null);
     setGiftRemainderTender("CASH");
-    setReaderId(DEFAULT_READER_ID);
+    setReaderId("");
   }
   function changeRegister(nextRegisterId: string) {
     drawerRequestRef.current += 1;
