@@ -106,6 +106,15 @@ export function RestaurantPos({
     return pendingActions.includes(key);
   }
 
+  function changeActiveTabId(nextTabId: string) {
+    tabRefreshRequestRef.current += 1;
+    tabRefreshPendingRef.current = false;
+    setLiveTab(null);
+    setSettlement(null);
+    setRefreshError(null);
+    setTabId(nextTabId);
+  }
+
   function hasPendingSettlementAction(requestedTabId: string) {
     return actionLocks.current.has(`drop:${requestedTabId}`) ||
       actionLocks.current.has(`guest-link:${requestedTabId}`) ||
@@ -610,7 +619,7 @@ export function RestaurantPos({
           value={tabId}
           maxLength={36}
           disabled={Boolean(orderId) || pendingActions.length > 0}
-          onChange={(event) => setTabId(event.target.value)}
+          onChange={(event) => changeActiveTabId(event.target.value)}
         />
       </label>
       {orderId && <p>Send or remove the current draft before switching tabs.</p>}
