@@ -105,6 +105,7 @@ export function TicketCheckout({
   onBack: () => void;
 }) {
   const [config, setConfig] = useState<CheckoutConfig | null>(null);
+  const [configShowtimeId, setConfigShowtimeId] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<TicketCheckoutResponse | null>(null);
   const [confirmation, setConfirmation] =
     useState<TicketConfirmationResponse | null>(null);
@@ -141,6 +142,7 @@ export function TicketCheckout({
       );
       if (requestId !== configRequestRef.current) return;
       setConfig(nextConfig);
+      setConfigShowtimeId(showtimeId);
     } catch (requestError) {
       if (requestId !== configRequestRef.current) return;
       setError(
@@ -159,6 +161,8 @@ export function TicketCheckout({
   useEffect(() => {
     configRequestRef.current += 1;
     configLoadingRef.current = false;
+    setConfig(null);
+    setConfigShowtimeId(null);
     void loadConfig();
     return () => {
       configRequestRef.current += 1;
@@ -283,7 +287,12 @@ export function TicketCheckout({
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
-    if (!config || diningAuthorization === null || pendingRef.current) return;
+    if (
+      !config ||
+      configShowtimeId !== showtimeId ||
+      diningAuthorization === null ||
+      pendingRef.current
+    ) return;
     pendingRef.current = true;
     setPending(true);
     setError(null);
@@ -450,7 +459,7 @@ export function TicketCheckout({
               No, I’ll pay separately
             </label>
           </div>
-          {config && !config.payment.ready && (
+          {configShowtimeId === showtimeId && config && !config.payment.ready && (
             <div className="configuration-note">
               Test checkout is built, but this preview still needs its Stripe test
               keys connected before a payment can be submitted.
@@ -461,6 +470,7 @@ export function TicketCheckout({
             disabled={
               pending ||
               configLoading ||
+              configShowtimeId !== showtimeId ||
               diningAuthorization === null ||
               !config?.ticketTypes.length ||
               (!config.payment.ready && !giftCardCode.trim())
