@@ -250,6 +250,8 @@ export function RestaurantPos({
       });
       if (requestId !== tabActionRequestRef.current) return;
       setOrderId(order.id);
+      setBlockedItems([]);
+      setModifierSelections({});
       setMessage("Order started. Add items, then send.");
     } catch (error) {
       if (requestId === tabActionRequestRef.current) showError(error);
