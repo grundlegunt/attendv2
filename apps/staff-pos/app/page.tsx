@@ -71,6 +71,7 @@ export default function StaffLoginPage() {
   const seatDetailRequestRef = useRef(0);
   const seatDetailPendingRef = useRef(false);
   const availabilityRequestRef = useRef(0);
+  const availabilityPendingRef = useRef(false);
   const programRequestRef = useRef(0);
   const refreshRequestRef = useRef(0);
   const [clockReady, setClockReady] = useState(false);
@@ -116,6 +117,7 @@ export default function StaffLoginPage() {
 
   function changeShowtime(nextShowtimeId: string) {
     availabilityRequestRef.current += 1;
+    availabilityPendingRef.current = false;
     seatDetailRequestRef.current += 1;
     seatDetailPendingRef.current = false;
     setAvailability(null);
@@ -141,6 +143,7 @@ export default function StaffLoginPage() {
     refreshRequestRef.current += 1;
     programRequestRef.current += 1;
     availabilityRequestRef.current += 1;
+    availabilityPendingRef.current = false;
     seatDetailRequestRef.current += 1;
     seatDetailPendingRef.current = false;
     openingTabsRequestRef.current += 1;
@@ -175,7 +178,8 @@ export default function StaffLoginPage() {
   }, [accessToken, expiresInSeconds, refreshToken]);
 
   const loadAvailability = useCallback(async () => {
-    if (!selectedShowtimeId) return;
+    if (!selectedShowtimeId || availabilityPendingRef.current) return;
+    availabilityPendingRef.current = true;
     const requestId = ++availabilityRequestRef.current;
     try {
       const response = await apiFetch<SeatAvailabilityResponse>(`/cinema/showtimes/${selectedShowtimeId}/seats`);
@@ -185,6 +189,8 @@ export default function StaffLoginPage() {
     } catch {
       if (requestId !== availabilityRequestRef.current) return;
       setAvailabilityError("The live seat map is temporarily unavailable. Displayed seat information may be out of date.");
+    } finally {
+      if (requestId === availabilityRequestRef.current) availabilityPendingRef.current = false;
     }
   }, [selectedShowtimeId]);
 
