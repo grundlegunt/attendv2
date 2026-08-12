@@ -58,6 +58,8 @@ export function TicketScanner({
     pendingRef.current = true;
     const requestId = ++scanRequestRef.current;
     setPending(true);
+    setResult(null);
+    setMessage("Checking ticket…");
     try {
       let deviceId = window.localStorage.getItem("attend-scanner-device-id");
       if (!deviceId) {
@@ -76,6 +78,7 @@ export function TicketScanner({
       });
       if (requestId !== scanRequestRef.current) return;
       setResult(response);
+      setMessage("Ticket checked.");
       setCredential("");
     } catch (error) {
       if (requestId !== scanRequestRef.current) return;
@@ -101,6 +104,8 @@ export function TicketScanner({
     }
     cameraStartingRef.current = true;
     setCameraStarting(true);
+    setResult(null);
+    setMessage("Starting camera…");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
       const video = videoRef.current;
@@ -157,7 +162,10 @@ export function TicketScanner({
       <form onSubmit={submit}>
         <label className="field">
           <span>QR credential</span>
-          <input value={credential} onChange={(event) => setCredential(event.target.value)} />
+          <input value={credential} onChange={(event) => {
+            setCredential(event.target.value);
+            setResult(null);
+          }} />
         </label>
         <label className="field">
           <span>Entrance (optional)</span>
