@@ -123,6 +123,7 @@ export function TicketCheckout({
   } | null>(null);
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
+  const pendingRef = useRef(false);
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
@@ -159,6 +160,8 @@ export function TicketCheckout({
     elements: StripeElements,
     orderId: string,
   ) {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     setError(null);
     try {
@@ -183,13 +186,15 @@ export function TicketCheckout({
             : "Payment could not be completed.",
       );
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   }
 
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
-    if (!config || diningAuthorization === null) return;
+    if (!config || diningAuthorization === null || pendingRef.current) return;
+    pendingRef.current = true;
     setPending(true);
     setError(null);
     try {
@@ -269,6 +274,7 @@ export function TicketCheckout({
             : "Checkout could not be started.",
       );
     } finally {
+      pendingRef.current = false;
       setPending(false);
     }
   }
