@@ -285,6 +285,10 @@ export function RestaurantPos({
   async function addItem(item: Menu["categories"][number]["items"][number]) {
     if (!orderId) return setMessage("Start an order first.");
     if (actionLocks.current.size > 0) return;
+    if (item.is86d) {
+      setMessage(`${item.name} is unavailable. Choose another item.`);
+      return;
+    }
     const missingRequiredGroup = item.modifierGroups.find(
       (group) => group.required && !(modifierSelections[`${item.id}:${group.id}`]?.length),
     );
