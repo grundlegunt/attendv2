@@ -174,6 +174,11 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
 
   async function prepareSale(event: FormEvent) {
     event.preventDefault();
+    const requestedPromotionCode = promotionCode.trim();
+    if (requestedPromotionCode.length > 50) {
+      setMessage("Promotion codes cannot exceed 50 characters.");
+      return;
+    }
     const busyRequestId = beginRequest();
     if (busyRequestId === null) return;
     const requestId = ++pricingRequestRef.current;
@@ -194,7 +199,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       createdHoldTokens = tokens;
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       setHoldTokens(tokens);
-      const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
+      const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: requestedPromotionCode || undefined }) });
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       activeHoldsRef.current = { showtimeId: requestShowtimeId, tokens };
       checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
@@ -275,7 +280,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       holdTokens,
       holderKey,
       ticketTypeId,
-      promotionCode: promotionCode || undefined,
+      promotionCode: promotionCode.trim() || undefined,
       cashDrawerId: parsedCashCents > 0 ? drawer?.id : undefined,
       cashCents: parsedCashCents,
       cardCents: parsedCardCents,
@@ -358,7 +363,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} disabled={busy || Boolean(quote)} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy || Boolean(quote)}>Open drawer</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
     <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
-      <label className="field"><span>Promotion code</span><input value={promotionCode} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
+      <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
       <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} seat(s)</button></form>
     {quote && <div className="sale-total"><p>Pricing locked for the held seats.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Discount −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => setCashCents(event.target.value)} /></label>
