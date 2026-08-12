@@ -70,6 +70,7 @@ export function RestaurantPos({
   const [walkInLabel, setWalkInLabel] = useState("");
   const [orderId, setOrderId] = useState("");
   const [message, setMessage] = useState("");
+  const [menuError, setMenuError] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
   const [blockedItems, setBlockedItems] = useState<Array<{ id: string; name: string }>>([]);
@@ -109,10 +110,14 @@ export function RestaurantPos({
       return (
       apiFetch<Menu>("/restaurant-menu", { accessToken })
         .then((nextMenu) => {
-          if (requestId === menuRequestRef.current) setMenu(nextMenu);
+          if (requestId !== menuRequestRef.current) return;
+          setMenu(nextMenu);
+          setMenuError(null);
         })
         .catch(() => {
-          if (requestId === menuRequestRef.current) setMessage("The restaurant menu is unavailable.");
+          if (requestId === menuRequestRef.current) {
+            setMenuError("The restaurant menu is temporarily unavailable. Displayed availability may be out of date.");
+          }
         })
       );
     };
@@ -494,6 +499,7 @@ export function RestaurantPos({
       <h2>Server POS</h2>
       {seatLabel && <p><strong>Seat {seatLabel}</strong></p>}
       <p>Open a walk-in tab, or paste an existing seat-linked tab ID.</p>
+      {menuError && <div className="error-banner">{menuError}</div>}
       {refreshError && <div className="error-banner">{refreshError}</div>}
       <form onSubmit={openWalkIn}>
         <label className="field">
