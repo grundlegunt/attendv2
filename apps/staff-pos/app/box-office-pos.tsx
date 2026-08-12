@@ -36,6 +36,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const giftCardRequestRef = useRef(0);
   const saleActionRequestRef = useRef(0);
   const busyRequestRef = useRef(0);
+  const activeHoldsRef = useRef<{ showtimeId: string; tokens: string[] } | null>(null);
 
   useEffect(() => {
     const requestId = ++checkoutConfigRequestRef.current;
@@ -59,8 +60,21 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       .catch(() => {
         if (requestId === checkoutConfigRequestRef.current) setMessage("Ticket types are unavailable.");
       });
-    return () => { checkoutConfigRequestRef.current += 1; };
-  }, [showtimeId]);
+    return () => {
+      checkoutConfigRequestRef.current += 1;
+      const activeHolds = activeHoldsRef.current;
+      activeHoldsRef.current = null;
+      if (activeHolds?.tokens.length) {
+        void Promise.allSettled(activeHolds.tokens.map((holdToken) =>
+          apiFetch(`/cinema/showtimes/${activeHolds.showtimeId}/holds/${encodeURIComponent(holdToken)}`, {
+            method: "DELETE",
+            accessToken,
+            body: JSON.stringify({ holderKey }),
+          }),
+        ));
+      }
+    };
+  }, [accessToken, holderKey, showtimeId]);
   useEffect(() => {
     const requestId = ++drawerRequestRef.current;
     setDrawer(null);
@@ -103,6 +117,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   }
   function resetSale() {
     checkoutAttemptRef.current = null;
+    activeHoldsRef.current = null;
     giftCardRequestRef.current += 1;
     setSelected([]);
     setQuote(null);
@@ -181,6 +196,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
+      activeHoldsRef.current = { showtimeId: requestShowtimeId, tokens };
       checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
     } catch (error) {
       if (createdHoldTokens.length) {
