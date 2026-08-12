@@ -173,16 +173,19 @@ export function RestaurantPos({
     event.preventDefault();
     const actionKey = "open-walk-in";
     if (!beginAction(actionKey)) return;
+    const requestId = ++tabActionRequestRef.current;
+    const requestedLabel = walkInLabel;
     try {
       const tab = await apiFetch<{ id: string }>("/restaurant-tabs/walk-in", {
         method: "POST",
         accessToken,
-        body: JSON.stringify({ label: walkInLabel }),
+        body: JSON.stringify({ label: requestedLabel }),
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setTabId(tab.id);
-      setMessage(`Walk-in tab “${walkInLabel}” is open.`);
+      setMessage(`Walk-in tab “${requestedLabel}” is open.`);
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
