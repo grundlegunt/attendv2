@@ -494,6 +494,8 @@ export function RestaurantPos({
     }
   }
 
+  const settlementPending = isPending(`finalize:${tabId}`);
+
   return (
     <section className="scanner-panel">
       <h2>Server POS</h2>
@@ -585,6 +587,7 @@ export function RestaurantPos({
                   max="1000000"
                   step="1"
                   value={tipCents}
+                  disabled={settlementPending}
                   onChange={(event) => setTipCents(event.target.value)}
                 />
               </label>
@@ -600,6 +603,7 @@ export function RestaurantPos({
                     max="10000000"
                     step="1"
                     value={savedCardCents}
+                    disabled={settlementPending}
                     onChange={(event) => setSavedCardCents(event.target.value)}
                   />
                 </label>
@@ -612,20 +616,21 @@ export function RestaurantPos({
                   max="10000000"
                   step="1"
                   value={terminalCents}
+                  disabled={settlementPending}
                   onChange={(event) => setTerminalCents(event.target.value)}
                 />
               </label>
               <label className="field">
                 <span>Terminal reader</span>
-                <input value={readerId} maxLength={200} disabled={Number(terminalCents) <= 0} onChange={(event) => setReaderId(event.target.value)} />
+                <input value={readerId} maxLength={200} disabled={settlementPending || Number(terminalCents) <= 0} onChange={(event) => setReaderId(event.target.value)} />
               </label>
               <button
                 className="primary"
                 type="button"
-                disabled={isPending(`finalize:${tabId}`)}
+                disabled={settlementPending}
                 onClick={finalizeTab}
               >
-                {isPending(`finalize:${tabId}`) ? "Collecting payment…" : "Collect payment & close"}
+                {settlementPending ? "Collecting payment…" : "Collect payment & close"}
               </button>
             </>
           )}
