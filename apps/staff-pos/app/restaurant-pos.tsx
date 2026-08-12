@@ -130,6 +130,18 @@ export function RestaurantPos({
         .then((nextMenu) => {
           if (requestId !== menuRequestRef.current) return;
           setMenu(nextMenu);
+          const validSelections = new Map<string, Set<string>>();
+          nextMenu.categories.forEach((category) => category.items.forEach((item) =>
+            item.modifierGroups.forEach((group) => validSelections.set(
+              `${item.id}:${group.id}`,
+              new Set(group.modifiers.map((modifier) => modifier.id)),
+            )),
+          ));
+          setModifierSelections((current) => Object.fromEntries(
+            Object.entries(current)
+              .map(([key, ids]) => [key, ids.filter((id) => validSelections.get(key)?.has(id))] as const)
+              .filter(([, ids]) => ids.length),
+          ));
           setMenuError(null);
         })
         .catch(() => {
