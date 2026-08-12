@@ -266,7 +266,7 @@ export function RestaurantPos({
         body: JSON.stringify({ label: requestedLabel }),
       });
       if (requestId !== tabActionRequestRef.current) return;
-      setTabId(tab.id);
+      changeActiveTabId(tab.id);
       setWalkInLabel("");
       setMessage(`Walk-in tab “${requestedLabel}” is open.`);
     } catch (error) {
