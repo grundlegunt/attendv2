@@ -163,6 +163,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     if (busyRequestId === null) return;
     const requestId = ++pricingRequestRef.current;
     const requestShowtimeId = showtimeId;
+    let createdHoldTokens: string[] = [];
     async function releaseStaleHolds(tokens: string[]) {
       await Promise.allSettled(tokens.map((holdToken) =>
         apiFetch(`/cinema/showtimes/${requestShowtimeId}/holds/${encodeURIComponent(holdToken)}`, {
@@ -175,12 +176,17 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     try {
       const holds = await apiFetch<Array<{holdToken:string}>>(`/box-office/showtimes/${requestShowtimeId}/holds`, { method: "POST", accessToken, body: JSON.stringify({ seatIds: selected, holderKey }) });
       const tokens = holds.map((hold) => hold.holdToken);
+      createdHoldTokens = tokens;
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       setHoldTokens(tokens);
       const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: promotionCode || undefined }) });
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
     } catch (error) {
+      if (createdHoldTokens.length) {
+        await releaseStaleHolds(createdHoldTokens);
+        if (requestId === pricingRequestRef.current) setHoldTokens([]);
+      }
       if (requestId === pricingRequestRef.current) setMessage(errorMessage(error));
     } finally { finishRequest(busyRequestId); }
   }
