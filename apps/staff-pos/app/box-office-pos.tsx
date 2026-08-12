@@ -34,11 +34,15 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const drawerRequestRef = useRef(0);
   const pricingRequestRef = useRef(0);
   const giftCardRequestRef = useRef(0);
+  const saleActionRequestRef = useRef(0);
 
   useEffect(() => {
     const requestId = ++checkoutConfigRequestRef.current;
     pricingRequestRef.current += 1;
     giftCardRequestRef.current += 1;
+    saleActionRequestRef.current += 1;
+    busyRef.current = false;
+    setBusy(false);
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
     apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
       .then((data) => {
@@ -181,6 +185,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       }
     }
     if (!beginRequest()) return;
+    const actionRequestId = ++saleActionRequestRef.current;
     const checkoutPayload = {
       holdTokens,
       holderKey,
@@ -200,22 +205,30 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     }
     try {
       const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ ...checkoutPayload, requestId: checkoutAttemptRef.current.requestId }) });
+      if (actionRequestId !== saleActionRequestRef.current) return;
       setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); resetSale(); await refresh();
-    } catch (error) { setMessage(errorMessage(error)); } finally { finishRequest(); }
+    } catch (error) {
+      if (actionRequestId === saleActionRequestRef.current) setMessage(errorMessage(error));
+    } finally {
+      if (actionRequestId === saleActionRequestRef.current) finishRequest();
+    }
   }
 
   async function cancelSale() {
     if (!quote || !beginRequest()) return;
+    const actionRequestId = ++saleActionRequestRef.current;
+    const requestShowtimeId = showtimeId;
     try {
       const releases = await Promise.allSettled(
         holdTokens.map((holdToken) =>
-          apiFetch(`/cinema/showtimes/${showtimeId}/holds/${encodeURIComponent(holdToken)}`, {
+          apiFetch(`/cinema/showtimes/${requestShowtimeId}/holds/${encodeURIComponent(holdToken)}`, {
             method: "DELETE",
             accessToken,
             body: JSON.stringify({ holderKey }),
           }),
         ),
       );
+      if (actionRequestId !== saleActionRequestRef.current) return;
       const failedReleases = releases.filter((release) => release.status === "rejected").length;
       resetSale();
       await refresh();
@@ -225,9 +238,9 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
           : "Sale canceled and seat holds released.",
       );
     } catch (error) {
-      setMessage(errorMessage(error));
+      if (actionRequestId === saleActionRequestRef.current) setMessage(errorMessage(error));
     } finally {
-      finishRequest();
+      if (actionRequestId === saleActionRequestRef.current) finishRequest();
     }
   }
 
