@@ -117,6 +117,7 @@ export function TicketCheckout({
   const [error, setError] = useState<string | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [pending, setPending] = useState(false);
+  const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [paymentElementReady, setPaymentElementReady] = useState(false);
   const [mountableElements, setMountableElements] = useState<{
     payment: StripeElement;
@@ -125,6 +126,7 @@ export function TicketCheckout({
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const pendingRef = useRef(false);
+  const paymentConfirmedRef = useRef(false);
   const configRequestRef = useRef(0);
   const configLoadingRef = useRef(false);
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
@@ -198,12 +200,16 @@ export function TicketCheckout({
     setPending(true);
     setError(null);
     try {
-      const result = await stripe.confirmPayment({
-        elements,
-        redirect: "if_required",
-        confirmParams: { receipt_email: email },
-      });
-      if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
+      if (!paymentConfirmedRef.current) {
+        const result = await stripe.confirmPayment({
+          elements,
+          redirect: "if_required",
+          confirmParams: { receipt_email: email },
+        });
+        if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
+        paymentConfirmedRef.current = true;
+        setPaymentConfirmed(true);
+      }
       const completed = await apiFetch<TicketConfirmationResponse>(
         `/ticketing/orders/${orderId}/finalize`,
         { method: "POST", body: "{}" },
@@ -511,6 +517,8 @@ export function TicketCheckout({
           <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
               ? "Completing purchase…"
+              : paymentConfirmed
+                ? "Complete ticket confirmation"
               : !paymentElementReady
                 ? "Loading secure payment…"
               : `Pay ${money(checkout.payment?.amountCents ?? checkout.totalCents, checkout.currency)}`}
