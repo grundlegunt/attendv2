@@ -190,6 +190,15 @@ export function TicketCheckout({
     };
   }, [confirmation, mountableElements]);
 
+  async function finalizeOrder(orderId: string) {
+    const completed = await apiFetch<TicketConfirmationResponse>(
+      `/ticketing/orders/${orderId}/finalize`,
+      { method: "POST", body: "{}" },
+    );
+    window.sessionStorage.removeItem(checkoutStorageKey);
+    setConfirmation(completed);
+  }
+
   async function confirmAndFinalize(
     stripe: StripeClient,
     elements: StripeElements,
@@ -210,12 +219,7 @@ export function TicketCheckout({
         paymentConfirmedRef.current = true;
         setPaymentConfirmed(true);
       }
-      const completed = await apiFetch<TicketConfirmationResponse>(
-        `/ticketing/orders/${orderId}/finalize`,
-        { method: "POST", body: "{}" },
-      );
-      window.sessionStorage.removeItem(checkoutStorageKey);
-      setConfirmation(completed);
+      await finalizeOrder(orderId);
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -331,9 +335,7 @@ export function TicketCheckout({
       );
       setCheckout(created);
       if (!created.payment?.clientSecret) {
-        const completed = await apiFetch<TicketConfirmationResponse>(`/ticketing/orders/${created.orderId}/finalize`, { method: "POST", body: "{}" });
-        window.sessionStorage.removeItem(checkoutStorageKey);
-        setConfirmation(completed);
+        await finalizeOrder(created.orderId);
         return;
       }
       await initializePayment(created);
@@ -353,12 +355,26 @@ export function TicketCheckout({
 
   async function pay(event: FormEvent) {
     event.preventDefault();
-    if (
-      !checkout ||
-      !stripeRef.current ||
-      !elementsRef.current ||
-      !paymentElementReady
-    ) return;
+    if (!checkout || pendingRef.current) return;
+    if (!checkout.payment?.clientSecret) {
+      pendingRef.current = true;
+      setPending(true);
+      setError(null);
+      try {
+        await finalizeOrder(checkout.orderId);
+      } catch (requestError) {
+        setError(
+          requestError instanceof ApiRequestError
+            ? requestError.body.message
+            : "Ticket confirmation could not be completed.",
+        );
+      } finally {
+        pendingRef.current = false;
+        setPending(false);
+      }
+      return;
+    }
+    if (!stripeRef.current || !elementsRef.current || !paymentElementReady) return;
     await confirmAndFinalize(stripeRef.current, elementsRef.current, checkout.orderId);
   }
 
@@ -501,7 +517,7 @@ export function TicketCheckout({
             {checkout.giftCardCents > 0 && <p><span>Gift card</span><strong>−{money(checkout.giftCardCents, checkout.currency)}</strong></p>}
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
-          <div className="checkout-panel">
+          {checkout.payment?.clientSecret ? <div className="checkout-panel">
             <h3>Payment</h3>
             {!paymentElementReady && !error && (
               <p role="status">Loading secure payment form…</p>
@@ -513,10 +529,12 @@ export function TicketCheckout({
                 {pending ? "Retrying secure payment…" : "Retry secure payment setup"}
               </button>
             )}
-          </div>
-          <button className="primary" disabled={pending || !paymentElementReady}>
+          </div> : <div className="checkout-panel"><h3>Payment complete</h3><p>Your gift card covers this order. Complete confirmation to receive your tickets.</p></div>}
+          <button className="primary" disabled={pending || (Boolean(checkout.payment?.clientSecret) && !paymentElementReady)}>
             {pending
               ? "Completing purchase…"
+              : !checkout.payment?.clientSecret
+                ? "Complete ticket confirmation"
               : paymentConfirmed
                 ? "Complete ticket confirmation"
               : !paymentElementReady
