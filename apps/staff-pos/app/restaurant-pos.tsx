@@ -310,6 +310,9 @@ export function RestaurantPos({
         body: JSON.stringify({ menuItemId: item.id, quantity: 1, modifierIds }),
       });
       if (requestId !== tabActionRequestRef.current) return;
+      setModifierSelections((current) => Object.fromEntries(
+        Object.entries(current).filter(([key]) => !key.startsWith(`${item.id}:`)),
+      ));
       setMessage(`${item.name} added.`);
     } catch (error) {
       if (requestId === tabActionRequestRef.current) showError(error);
