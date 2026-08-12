@@ -363,6 +363,7 @@ export function RestaurantPos({
   }
 
   async function refire(ticketId: string) {
+    if (actionLocks.current.size > 0) return;
     const actionKey = `refire:${ticketId}`;
     if (!beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
@@ -688,7 +689,7 @@ export function RestaurantPos({
               <button
                 className="secondary"
                 type="button"
-                disabled={isPending(`refire:${ticket.id}`)}
+                disabled={pendingActions.length > 0}
                 onClick={() => refire(ticket.id)}
               >
                 {isPending(`refire:${ticket.id}`) ? "Refiring…" : "Refire"}
