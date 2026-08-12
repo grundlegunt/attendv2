@@ -50,6 +50,7 @@ export function TicketScanner({
     pendingRef.current = false;
     setPending(false);
     setResult(null);
+    setCredential("");
     stopCamera();
     setMessage("Use the camera or paste a QR credential.");
   }, [expectedShowtimeId]);
