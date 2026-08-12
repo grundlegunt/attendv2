@@ -101,6 +101,20 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setGiftCardCents("0");
     setGiftCardBalance(null);
   }
+  function toggleSeat(seat: SeatMapSeat) {
+    if (busyRef.current || quote || !seat.id) return;
+    const live = seats.find((candidate) => candidate.id === seat.id);
+    if (live?.state !== "AVAILABLE") return;
+    setSelected((current) => {
+      if (current.includes(seat.id!)) return current.filter((id) => id !== seat.id);
+      if (current.length >= 10) {
+        setMessage("A Box Office sale can include at most 10 seats.");
+        return current;
+      }
+      setMessage(null);
+      return [...current, seat.id!];
+    });
+  }
 
   async function openDrawer() {
     const requestedRegisterId = registerId.trim();
@@ -302,7 +316,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
 
   return <section className="box-office-grid"><div>
     <h2>Box office</h2><p>Select available seats from the live inventory.</p>
-    <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={(seat) => { if (busyRef.current || quote) return; const live = seats.find((candidate) => candidate.id === seat.id); if (live?.state !== "AVAILABLE") return; setSelected((current) => current.includes(seat.id!) ? current.filter((id) => id !== seat.id) : [...current, seat.id!]); }} allowUnavailableSelection />
+    <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
     <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} disabled={busy || Boolean(quote)} onChange={(event) => setRegisterId(event.target.value)} /></label>
