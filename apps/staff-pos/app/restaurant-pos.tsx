@@ -86,6 +86,7 @@ export function RestaurantPos({
   const menuRequestRef = useRef(0);
   const menuPendingRef = useRef(false);
   const tabRefreshRequestRef = useRef(0);
+  const tabRefreshPendingRef = useRef(false);
   const tabActionRequestRef = useRef(0);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
 
@@ -166,6 +167,7 @@ export function RestaurantPos({
 
   useEffect(() => {
     tabRefreshRequestRef.current += 1;
+    tabRefreshPendingRef.current = false;
     setLiveTab(null);
     setSettlement(null);
     setRefreshError(null);
@@ -173,6 +175,8 @@ export function RestaurantPos({
       return () => { tabRefreshRequestRef.current += 1; };
     }
     const refresh = () => {
+      if (tabRefreshPendingRef.current) return Promise.resolve();
+      tabRefreshPendingRef.current = true;
       const requestId = ++tabRefreshRequestRef.current;
       return (
       Promise.all([
@@ -197,12 +201,16 @@ export function RestaurantPos({
             setRefreshError("Live tab details are temporarily unavailable. Displayed information may be out of date.");
           }
         })
+        .finally(() => {
+          if (requestId === tabRefreshRequestRef.current) tabRefreshPendingRef.current = false;
+        })
       );
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
       tabRefreshRequestRef.current += 1;
+      tabRefreshPendingRef.current = false;
       window.clearInterval(timer);
     };
   }, [accessToken, tabId]);
