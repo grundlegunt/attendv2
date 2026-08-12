@@ -31,6 +31,10 @@ export default function FilmSeriesDetailPage() {
       .catch((err) => setError(err instanceof ApiRequestError ? err.body.message : "Film series are unavailable."));
   }, []);
 
+  useEffect(() => {
+    setSelectedShowtimeId(null);
+  }, [id]);
+
   const series = program?.series.find((entry) => entry.id === id);
   const formatShowtime = (startsAt: string) => new Intl.DateTimeFormat("en-US", {
     timeZone: program?.location.timezone,
