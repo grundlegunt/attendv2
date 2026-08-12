@@ -15,6 +15,7 @@ export default function MovieDetailPage({ params }: { params: Promise<{ id: stri
   const { id } = use(params);
   const [data, setData] = useState<DetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
@@ -37,7 +38,7 @@ export default function MovieDetailPage({ params }: { params: Promise<{ id: stri
     return () => {
       isCurrent = false;
     };
-  }, [id]);
+  }, [id, loadAttempt]);
 
   const dates = useMemo(() => data ? Array.from(new Set(data.movie.showtimes.map((showtime) => localDateKey(showtime.startsAt, data.location.timezone)))) : [], [data]);
   const activeDate = selectedDate ?? dates[0] ?? null;
@@ -45,7 +46,7 @@ export default function MovieDetailPage({ params }: { params: Promise<{ id: stri
   const formats = Array.from(new Set(data?.movie.showtimes.map((showtime) => showtime.format).filter(Boolean) ?? []));
 
   if (selectedShowtimeId) return <main className="cinema-shell route-page"><SeatPicker showtimeId={selectedShowtimeId} onClose={() => setSelectedShowtimeId(null)} /></main>;
-  if (error) return <main className="cinema-shell route-page"><div className="error-banner">{error}</div></main>;
+  if (error) return <main className="cinema-shell route-page"><div className="error-banner">{error}</div><button className="primary" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></main>;
   if (!data) return <main className="cinema-shell route-page"><p className="loading-copy">Loading movie…</p></main>;
 
   const { movie } = data;
