@@ -67,6 +67,7 @@ export function TicketScanner({
       setMessage("Entrance names cannot exceed 120 characters.");
       return;
     }
+    stopCamera();
     pendingRef.current = true;
     const requestId = ++scanRequestRef.current;
     setPending(true);
@@ -104,7 +105,7 @@ export function TicketScanner({
   }
 
   async function startCamera() {
-    if (cameraStartingRef.current || streamRef.current) return;
+    if (pendingRef.current || cameraStartingRef.current || streamRef.current) return;
     const Detector = (window as unknown as {
       BarcodeDetector?: new (options: { formats: string[] }) => {
         detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>;
@@ -174,21 +175,21 @@ export function TicketScanner({
     <section className="scanner-panel">
       <h2>Ticket scanner</h2>
       <video ref={videoRef} className="scanner-preview" muted playsInline aria-label="Ticket scanner camera preview" />
-      <button type="button" onClick={startCamera} disabled={cameraStarting || cameraActive}>
+      <button type="button" onClick={startCamera} disabled={pending || cameraStarting || cameraActive}>
         {cameraStarting ? "Starting camera…" : cameraActive ? "Camera active" : "Start camera"}
       </button>
       <p>{message}</p>
       <form onSubmit={submit}>
         <label className="field">
           <span>QR credential</span>
-          <input value={credential} maxLength={2048} onChange={(event) => {
+          <input value={credential} maxLength={2048} disabled={pending} onChange={(event) => {
             setCredential(event.target.value);
             setResult(null);
           }} />
         </label>
         <label className="field">
           <span>Entrance (optional)</span>
-          <input value={entrance} maxLength={120} onChange={(event) => setEntrance(event.target.value)} placeholder="Main entrance" />
+          <input value={entrance} maxLength={120} disabled={pending} onChange={(event) => setEntrance(event.target.value)} placeholder="Main entrance" />
         </label>
         <button className="primary" disabled={pending || !credential.trim()}>
           {pending ? "Checking…" : "Check ticket"}
