@@ -171,10 +171,18 @@ export function RestaurantPos({
 
   async function openWalkIn(event: FormEvent) {
     event.preventDefault();
+    const requestedLabel = walkInLabel.trim();
+    if (!requestedLabel) {
+      setMessage("Enter a walk-in label.");
+      return;
+    }
+    if (requestedLabel.length > 80) {
+      setMessage("Walk-in labels cannot exceed 80 characters.");
+      return;
+    }
     const actionKey = "open-walk-in";
     if (!beginAction(actionKey)) return;
     const requestId = ++tabActionRequestRef.current;
-    const requestedLabel = walkInLabel;
     try {
       const tab = await apiFetch<{ id: string }>("/restaurant-tabs/walk-in", {
         method: "POST",
@@ -478,6 +486,7 @@ export function RestaurantPos({
           <span>Walk-in label</span>
           <input
             required
+            maxLength={80}
             placeholder="Guest name or bar number"
             value={walkInLabel}
             onChange={(event) => setWalkInLabel(event.target.value)}
