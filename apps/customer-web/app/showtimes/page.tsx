@@ -25,6 +25,7 @@ export default function ShowtimesPage() {
   const { menu } = usePublicDiningMenu();
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [programError, setProgramError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(
     null,
   );
@@ -101,6 +102,8 @@ export default function ShowtimesPage() {
   }, [menu, moviesForActiveDate]);
 
   useEffect(() => {
+    setProgramError(null);
+
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
       .then(setProgram)
       .catch((err) =>
@@ -110,7 +113,7 @@ export default function ShowtimesPage() {
             : "Showtimes are unavailable.",
         ),
       );
-  }, []);
+  }, [loadAttempt]);
 
   return (
     <main className="cinema-shell route-page">
@@ -175,7 +178,7 @@ export default function ShowtimesPage() {
         />
       ) : (
         <>
-          {programError && <div className="error-banner">{programError}</div>}
+          {programError && <><div className="error-banner">{programError}</div><button className="primary" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></>}
           {!program && !programError && (
             <p className="loading-copy">{copy.loading}</p>
           )}
