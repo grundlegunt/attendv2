@@ -176,6 +176,13 @@ export function RestaurantPos({
           if (requestId !== tabRefreshRequestRef.current) return;
           setLiveTab(summary);
           setSettlement(settlementTab);
+          if (settlementTab.status === "CLOSED") {
+            settlementAttemptRef.current = null;
+            setGuestAccessToken("");
+            setTipCents("0");
+            setSavedCardCents("");
+            setTerminalCents("");
+          }
           setRefreshError(null);
         })
         .catch(() => {
