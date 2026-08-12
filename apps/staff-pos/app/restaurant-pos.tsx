@@ -84,6 +84,7 @@ export function RestaurantPos({
   const actionLocks = useRef(new Set<string>());
   const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
+  const menuPendingRef = useRef(false);
   const tabRefreshRequestRef = useRef(0);
   const tabActionRequestRef = useRef(0);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
@@ -120,6 +121,8 @@ export function RestaurantPos({
 
   useEffect(() => {
     const refresh = () => {
+      if (menuPendingRef.current) return Promise.resolve();
+      menuPendingRef.current = true;
       const requestId = ++menuRequestRef.current;
       return (
       apiFetch<Menu>("/restaurant-menu", { accessToken })
@@ -133,12 +136,16 @@ export function RestaurantPos({
             setMenuError("The restaurant menu is temporarily unavailable. Displayed availability may be out of date.");
           }
         })
+        .finally(() => {
+          if (requestId === menuRequestRef.current) menuPendingRef.current = false;
+        })
       );
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
       menuRequestRef.current += 1;
+      menuPendingRef.current = false;
       window.clearInterval(timer);
     };
   }, [accessToken]);
