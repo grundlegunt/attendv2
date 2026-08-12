@@ -53,7 +53,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
     setPromotionCode(""); setCashCents("0"); setCardCents("0"); setCashReceived("0");
     setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
-    setReaderId(DEFAULT_READER_ID);
+    setReaderId("");
     setMessage(null);
     apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
       .then((data) => {
