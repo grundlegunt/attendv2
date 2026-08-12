@@ -118,6 +118,14 @@ export function RestaurantPos({
       actionLocks.current.has(`finalize:${requestedTabId}`);
   }
 
+  function settlementBlocked() {
+    if (orderId) {
+      setMessage("Send or remove the current draft before changing the check.");
+      return true;
+    }
+    return actionLocks.current.size > 0;
+  }
+
   useEffect(() => {
     const refresh = () => {
       const requestId = ++menuRequestRef.current;
@@ -373,6 +381,7 @@ export function RestaurantPos({
   }
 
   async function dropCheck() {
+    if (settlementBlocked()) return;
     const actionKey = `drop:${tabId}`;
     if (!tabId || hasPendingSettlementAction(tabId) || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
@@ -394,6 +403,7 @@ export function RestaurantPos({
 
   async function finalizeTab() {
     if (!settlement) return;
+    if (settlementBlocked()) return;
     const parsedTipCents = Number(tipCents || 0);
     const parsedSavedCardCents = Number(savedCardCents || 0);
     const parsedTerminalCents = Number(terminalCents || 0);
@@ -495,6 +505,7 @@ export function RestaurantPos({
   }
 
   async function createGuestLink() {
+    if (settlementBlocked()) return;
     const actionKey = `guest-link:${tabId}`;
     if (!tabId || hasPendingSettlementAction(tabId) || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
@@ -514,15 +525,13 @@ export function RestaurantPos({
     }
   }
 
-  const settlementActionPending = pendingActions.some((key) =>
-    key === `drop:${tabId}` || key === `guest-link:${tabId}` || key === `finalize:${tabId}`,
-  );
   const settlementPending = isPending(`finalize:${tabId}`);
   const orderMutationPending = orderId ? pendingActions.some((key) =>
     key === `send:${orderId}` ||
     key.startsWith(`add-item:${orderId}:`) ||
     key.startsWith(`remove-item:${orderId}:`),
   ) : false;
+  const checkActionBlocked = Boolean(orderId) || pendingActions.length > 0;
 
   return (
     <section className="scanner-panel">
@@ -585,7 +594,7 @@ export function RestaurantPos({
             <button
               className="secondary"
               type="button"
-              disabled={settlementActionPending}
+              disabled={checkActionBlocked}
               onClick={dropCheck}
             >
               {isPending(`drop:${tabId}`) ? "Dropping check…" : "Drop check"}
@@ -595,7 +604,7 @@ export function RestaurantPos({
             <button
               className="secondary"
               type="button"
-              disabled={settlementActionPending}
+              disabled={checkActionBlocked}
               onClick={createGuestLink}
             >
               {isPending(`guest-link:${tabId}`) ? "Creating guest link…" : "Create guest tab link"}
@@ -616,7 +625,7 @@ export function RestaurantPos({
                   max="1000000"
                   step="1"
                   value={tipCents}
-                  disabled={settlementActionPending}
+                  disabled={checkActionBlocked}
                   onChange={(event) => setTipCents(event.target.value)}
                 />
               </label>
@@ -632,7 +641,7 @@ export function RestaurantPos({
                     max="10000000"
                     step="1"
                     value={savedCardCents}
-                    disabled={settlementActionPending}
+                    disabled={checkActionBlocked}
                     onChange={(event) => setSavedCardCents(event.target.value)}
                   />
                 </label>
@@ -645,18 +654,18 @@ export function RestaurantPos({
                   max="10000000"
                   step="1"
                   value={terminalCents}
-                  disabled={settlementActionPending}
+                  disabled={checkActionBlocked}
                   onChange={(event) => setTerminalCents(event.target.value)}
                 />
               </label>
               <label className="field">
                 <span>Terminal reader</span>
-                <input value={readerId} maxLength={200} disabled={settlementActionPending || Number(terminalCents) <= 0} onChange={(event) => setReaderId(event.target.value)} />
+                <input value={readerId} maxLength={200} disabled={checkActionBlocked || Number(terminalCents) <= 0} onChange={(event) => setReaderId(event.target.value)} />
               </label>
               <button
                 className="primary"
                 type="button"
-                disabled={settlementActionPending}
+                disabled={checkActionBlocked}
                 onClick={finalizeTab}
               >
                 {settlementPending ? "Collecting payment…" : "Collect payment & close"}
