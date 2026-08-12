@@ -54,6 +54,7 @@ export function SeatPicker({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const refreshRequestRef = useRef(0);
   const refreshPendingRef = useRef(false);
+  const pendingSeatIdsRef = useRef(new Set<string>());
 
   useEffect(() => setHolderKey(getHolderKey()), []);
 
@@ -113,7 +114,8 @@ export function SeatPicker({
     : 0;
 
   async function toggleSeat(seat: AvailabilitySeat) {
-    if (!holderKey || pendingSeatIds[seat.id]) return;
+    if (!holderKey || pendingSeatIdsRef.current.has(seat.id)) return;
+    pendingSeatIdsRef.current.add(seat.id);
     refreshRequestRef.current += 1;
     refreshPendingRef.current = false;
     const selected = !seat.heldByMe;
@@ -141,6 +143,7 @@ export function SeatPicker({
       );
       await refresh();
     } finally {
+      pendingSeatIdsRef.current.delete(seat.id);
       setOptimisticSeatStates((states) => {
         const next = { ...states };
         delete next[seat.id];
@@ -155,6 +158,7 @@ export function SeatPicker({
   }
 
   async function closeAndRelease() {
+    if (pendingSeatIdsRef.current.size > 0) return;
     if (holderKey && mySeats.length) {
       await Promise.allSettled(
         mySeats
@@ -201,7 +205,13 @@ export function SeatPicker({
   return (
     <section className="seat-picker" aria-live="polite">
       <div className="seat-picker__header">
-        <button className="link" onClick={() => void closeAndRelease()}>← All showtimes</button>
+        <button
+          className="link"
+          disabled={Object.keys(pendingSeatIds).length > 0}
+          onClick={() => void closeAndRelease()}
+        >
+          ← All showtimes
+        </button>
         <div>
           <span className="eyebrow">SELECT SEATS</span>
           <h2>{availability?.showtime.movie.title ?? "Loading seating chart…"}</h2>
