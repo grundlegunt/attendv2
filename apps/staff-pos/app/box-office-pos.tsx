@@ -30,8 +30,22 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const checkoutAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const checkoutConfigRequestRef = useRef(0);
 
-  useEffect(() => { setSelected([]); setQuote(null); setHoldTokens([]); apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`).then((data) => { setTicketTypes(data.ticketTypes); setTicketTypeId(data.ticketTypes[0]?.id ?? ""); }).catch(() => setMessage("Ticket types are unavailable.")); }, [showtimeId]);
+  useEffect(() => {
+    const requestId = ++checkoutConfigRequestRef.current;
+    setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
+    apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .then((data) => {
+        if (requestId !== checkoutConfigRequestRef.current) return;
+        setTicketTypes(data.ticketTypes);
+        setTicketTypeId(data.ticketTypes[0]?.id ?? "");
+      })
+      .catch(() => {
+        if (requestId === checkoutConfigRequestRef.current) setMessage("Ticket types are unavailable.");
+      });
+    return () => { checkoutConfigRequestRef.current += 1; };
+  }, [showtimeId]);
   useEffect(() => { apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(registerId)}`, { accessToken }).then(setDrawer).catch(() => setDrawer(null)); }, [accessToken, registerId]);
 
   const mapSeats = useMemo(() => seats.map((seat) => ({ ...seat, state: selected.includes(seat.id) ? "selected" as const : seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const })), [seats, selected]);
