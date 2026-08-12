@@ -217,6 +217,7 @@ export default function StaffLoginPage() {
 
   async function changePassword(event: FormEvent) {
     event.preventDefault(); setError(null);
+    if (newPassword.length > 200) { setError("New passwords cannot exceed 200 characters."); return; }
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
     if (!beginAuthRequest()) return;
     try {
@@ -282,8 +283,8 @@ export default function StaffLoginPage() {
   if (employee?.mustChangePassword) {
     return <main className="auth-shell"><div className="auth-card"><h1>Choose a new password</h1><p className="subtitle">Replace the temporary password before continuing.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={changePassword}>
       <div className="field"><label htmlFor="current-password">Temporary password</label><input id="current-password" type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
-      <div className="field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" minLength={12} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></div>
-      <div className="field"><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" minLength={12} maxLength={200} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" minLength={12} maxLength={200} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></div>
       <button className="primary" disabled={loading}>{loading ? "Changing password..." : "Change password"}</button>
     </form></div></main>;
   }
