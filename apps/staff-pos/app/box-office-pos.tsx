@@ -136,6 +136,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setSelected([]);
     setQuote(null);
     setHoldTokens([]);
+    setPromotionCode("");
     setCashCents("0");
     setCardCents("0");
     setCashReceived("0");
