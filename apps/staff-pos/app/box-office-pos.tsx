@@ -73,6 +73,19 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       });
     return () => { drawerRequestRef.current += 1; };
   }, [accessToken, registerId]);
+  useEffect(() => {
+    if (busyRef.current || quote) return;
+    const availableSeatIds = new Set(
+      seats.filter((seat) => seat.state === "AVAILABLE").map((seat) => seat.id),
+    );
+    setSelected((current) => {
+      const next = current.filter((seatId) => availableSeatIds.has(seatId));
+      if (next.length !== current.length) {
+        setMessage("Some selected seats are no longer available and were removed.");
+      }
+      return next.length === current.length ? current : next;
+    });
+  }, [quote, seats]);
 
   const mapSeats = useMemo(() => seats.map((seat) => ({ ...seat, state: selected.includes(seat.id) ? "selected" as const : seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const })), [seats, selected]);
   function errorMessage(error: unknown) { return error instanceof ApiRequestError ? error.body.message : "The request could not be completed."; }
