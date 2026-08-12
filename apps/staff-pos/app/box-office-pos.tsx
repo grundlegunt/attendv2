@@ -35,12 +35,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const pricingRequestRef = useRef(0);
   const giftCardRequestRef = useRef(0);
   const saleActionRequestRef = useRef(0);
+  const busyRequestRef = useRef(0);
 
   useEffect(() => {
     const requestId = ++checkoutConfigRequestRef.current;
     pricingRequestRef.current += 1;
     giftCardRequestRef.current += 1;
     saleActionRequestRef.current += 1;
+    busyRequestRef.current += 1;
     busyRef.current = false;
     setBusy(false);
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
@@ -71,13 +73,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const mapSeats = useMemo(() => seats.map((seat) => ({ ...seat, state: selected.includes(seat.id) ? "selected" as const : seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const })), [seats, selected]);
   function errorMessage(error: unknown) { return error instanceof ApiRequestError ? error.body.message : "The request could not be completed."; }
   function beginRequest() {
-    if (busyRef.current) return false;
+    if (busyRef.current) return null;
     busyRef.current = true;
     setBusy(true);
     setMessage(null);
-    return true;
+    return ++busyRequestRef.current;
   }
-  function finishRequest() {
+  function finishRequest(requestId: number) {
+    if (requestId !== busyRequestRef.current) return;
     busyRef.current = false;
     setBusy(false);
   }
@@ -96,7 +99,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   }
 
   async function openDrawer() {
-    if (!beginRequest()) return;
+    const busyRequestId = beginRequest();
+    if (busyRequestId === null) return;
     const requestId = ++drawerRequestRef.current;
     try {
       const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId, openingBalanceCents: Number(openingBalance) }) });
@@ -104,13 +108,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     } catch (error) {
       if (requestId === drawerRequestRef.current) setMessage(errorMessage(error));
     } finally {
-      finishRequest();
+      finishRequest(busyRequestId);
     }
   }
 
   async function prepareSale(event: FormEvent) {
     event.preventDefault();
-    if (!beginRequest()) return;
+    const busyRequestId = beginRequest();
+    if (busyRequestId === null) return;
     const requestId = ++pricingRequestRef.current;
     const requestShowtimeId = showtimeId;
     async function releaseStaleHolds(tokens: string[]) {
@@ -132,7 +137,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null);
     } catch (error) {
       if (requestId === pricingRequestRef.current) setMessage(errorMessage(error));
-    } finally { finishRequest(); }
+    } finally { finishRequest(busyRequestId); }
   }
 
   async function checkout() {
@@ -184,7 +189,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
         return;
       }
     }
-    if (!beginRequest()) return;
+    const busyRequestId = beginRequest();
+    if (busyRequestId === null) return;
     const actionRequestId = ++saleActionRequestRef.current;
     const checkoutPayload = {
       holdTokens,
@@ -210,12 +216,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     } catch (error) {
       if (actionRequestId === saleActionRequestRef.current) setMessage(errorMessage(error));
     } finally {
-      if (actionRequestId === saleActionRequestRef.current) finishRequest();
+      if (actionRequestId === saleActionRequestRef.current) finishRequest(busyRequestId);
     }
   }
 
   async function cancelSale() {
-    if (!quote || !beginRequest()) return;
+    if (!quote) return;
+    const busyRequestId = beginRequest();
+    if (busyRequestId === null) return;
     const actionRequestId = ++saleActionRequestRef.current;
     const requestShowtimeId = showtimeId;
     try {
@@ -240,12 +248,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     } catch (error) {
       if (actionRequestId === saleActionRequestRef.current) setMessage(errorMessage(error));
     } finally {
-      if (actionRequestId === saleActionRequestRef.current) finishRequest();
+      if (actionRequestId === saleActionRequestRef.current) finishRequest(busyRequestId);
     }
   }
 
   async function checkGiftCard() {
-    if (!quote || !giftCardCode || !beginRequest()) return;
+    if (!quote || !giftCardCode) return;
+    const busyRequestId = beginRequest();
+    if (busyRequestId === null) return;
     const requestId = ++giftCardRequestRef.current;
     const requestedCode = giftCardCode.trim();
     const requestedTotalCents = quote.totalCents;
@@ -257,7 +267,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setGiftCardBalance(card.balanceCents); setGiftCardCents(String(applied)); setCashCents(giftRemainderTender === "CASH" ? String(remainder) : "0"); setCardCents(giftRemainderTender === "CARD" ? String(remainder) : "0");
     } catch (error) {
       if (requestId === giftCardRequestRef.current) { setGiftCardBalance(null); setGiftCardCents("0"); setMessage(errorMessage(error)); }
-    } finally { finishRequest(); }
+    } finally { finishRequest(busyRequestId); }
   }
 
   return <section className="box-office-grid"><div>
