@@ -73,17 +73,16 @@ async function loadStripe() {
       'script[src="https://js.stripe.com/v3/"]',
     );
     if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Stripe could not load.")), {
-        once: true,
-      });
-      return;
+      existing.remove();
     }
     const script = document.createElement("script");
     script.src = "https://js.stripe.com/v3/";
     script.async = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Stripe could not load."));
+    script.onerror = () => {
+      script.remove();
+      reject(new Error("Stripe could not load."));
+    };
     document.head.appendChild(script);
   });
 }
@@ -191,6 +190,71 @@ export function TicketCheckout({
     }
   }
 
+  async function initializePayment(created: TicketCheckoutResponse) {
+    if (!created.payment?.clientSecret || !config?.payment.publishableKey) {
+      throw new Error("Stripe test payments are not configured.");
+    }
+    await loadStripe();
+    if (!window.Stripe) throw new Error("Stripe could not load.");
+    const stripe = window.Stripe(config.payment.publishableKey, {
+      stripeAccount: config.payment.connectedAccountId ?? undefined,
+    });
+    const elements = stripe.elements({
+      clientSecret: created.payment.clientSecret,
+      appearance: {
+        theme: "night",
+        variables: { colorPrimary: "#f2573f", borderRadius: "0px" },
+      },
+    });
+    const paymentElement = elements.create("payment", {
+      layout: "tabs",
+    });
+    paymentElement.on("ready", () => setPaymentElementReady(true));
+    paymentElement.on("loaderror", (event) => {
+      setPaymentElementReady(false);
+      stripeRef.current = null;
+      elementsRef.current = null;
+      setMountableElements(null);
+      setError(
+        event.error?.message ??
+          "The secure payment form could not load. Please try again.",
+      );
+    });
+    const expressCheckoutElement = elements.create("expressCheckout", {
+      paymentMethods: { applePay: "always" },
+      buttonType: { applePay: "check-out" },
+    });
+    expressCheckoutElement.on("confirm", () => {
+      void confirmAndFinalize(stripe, elements, created.orderId);
+    });
+    stripeRef.current = stripe;
+    elementsRef.current = elements;
+    setPaymentElementReady(false);
+    setMountableElements({
+      payment: paymentElement,
+      express: expressCheckoutElement,
+    });
+  }
+
+  async function retryPaymentSetup() {
+    if (!checkout || pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
+    setError(null);
+    try {
+      await initializePayment(checkout);
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "The secure payment form could not load.",
+      );
+    } finally {
+      pendingRef.current = false;
+      setPending(false);
+    }
+  }
+
   async function beginCheckout(event: FormEvent) {
     event.preventDefault();
     if (!config || diningAuthorization === null || pendingRef.current) return;
@@ -226,45 +290,7 @@ export function TicketCheckout({
         setConfirmation(await apiFetch<TicketConfirmationResponse>(`/ticketing/orders/${created.orderId}/finalize`, { method: "POST", body: "{}" }));
         return;
       }
-      await loadStripe();
-      if (!window.Stripe || !config.payment.publishableKey) {
-        throw new Error("Stripe test payments are not configured.");
-      }
-      const stripe = window.Stripe(config.payment.publishableKey, {
-        stripeAccount: config.payment.connectedAccountId ?? undefined,
-      });
-      const elements = stripe.elements({
-        clientSecret: created.payment.clientSecret,
-        appearance: {
-          theme: "night",
-          variables: { colorPrimary: "#f2573f", borderRadius: "0px" },
-        },
-      });
-      const paymentElement = elements.create("payment", {
-        layout: "tabs",
-      });
-      paymentElement.on("ready", () => setPaymentElementReady(true));
-      paymentElement.on("loaderror", (event) => {
-        setPaymentElementReady(false);
-        setError(
-          event.error?.message ??
-            "The secure payment form could not load. Please refresh and try again.",
-        );
-      });
-      const expressCheckoutElement = elements.create("expressCheckout", {
-        paymentMethods: { applePay: "always" },
-        buttonType: { applePay: "check-out" },
-      });
-      expressCheckoutElement.on("confirm", () => {
-        void confirmAndFinalize(stripe, elements, created.orderId);
-      });
-      stripeRef.current = stripe;
-      elementsRef.current = elements;
-      setPaymentElementReady(false);
-      setMountableElements({
-        payment: paymentElement,
-        express: expressCheckoutElement,
-      });
+      await initializePayment(created);
     } catch (requestError) {
       setError(
         requestError instanceof ApiRequestError
@@ -429,6 +455,11 @@ export function TicketCheckout({
             )}
             <div id="attend-express-checkout-element" ref={expressCheckoutContainerRef} />
             <div id="attend-payment-element" ref={paymentContainerRef} />
+            {error && !paymentElementReady && (
+              <button className="link" type="button" disabled={pending} onClick={() => void retryPaymentSetup()}>
+                {pending ? "Retrying secure payment…" : "Retry secure payment setup"}
+              </button>
+            )}
           </div>
           <button className="primary" disabled={pending || !paymentElementReady}>
             {pending
