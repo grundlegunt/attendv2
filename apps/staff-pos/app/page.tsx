@@ -191,15 +191,17 @@ export default function StaffLoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!beginAuthRequest()) return;
+    const requestedEmail = email;
+    const requestedPassword = password;
     setError(null);
     try {
       const res = await apiFetch<StaffLoginResponse>(
         "/auth/staff/login",
-        { method: "POST", body: JSON.stringify({ email, password }) },
+        { method: "POST", body: JSON.stringify({ email: requestedEmail, password: requestedPassword }) },
       );
       if ("mfaRequired" in res) { setMfaChallengeToken(res.challengeToken); setPassword(""); return; }
       storeSession(res);
-      setCurrentPassword(password);
+      setCurrentPassword(requestedPassword);
       setPassword("");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
@@ -211,9 +213,11 @@ export default function StaffLoginPage() {
   async function verifyMfa(event: FormEvent) {
     event.preventDefault();
     if (!beginAuthRequest()) return;
+    const requestedChallengeToken = mfaChallengeToken;
+    const requestedCode = mfaCode;
     setError(null);
     try {
-      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
+      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: requestedChallengeToken, code: requestedCode }) });
       storeSession(res); setMfaChallengeToken(null); setMfaCode("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The code could not be verified."); }
     finally { finishAuthRequest(); }
@@ -224,8 +228,10 @@ export default function StaffLoginPage() {
     if (newPassword.length > 200) { setError("New passwords cannot exceed 200 characters."); return; }
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
     if (!beginAuthRequest()) return;
+    const requestedCurrentPassword = currentPassword;
+    const requestedNewPassword = newPassword;
     try {
-      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", body: JSON.stringify({ currentPassword: requestedCurrentPassword, newPassword: requestedNewPassword }) });
       storeSession(res); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
     finally { finishAuthRequest(); }
@@ -284,16 +290,16 @@ export default function StaffLoginPage() {
 
   if (mfaChallengeToken) {
     return <main className="auth-shell"><div className="auth-card"><h1>Authenticator code</h1><p className="subtitle">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={verifyMfa}>
-      <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
+      <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} disabled={loading} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
       <button className="primary" disabled={loading}>{loading ? "Verifying..." : "Verify and sign in"}</button>
     </form></div></main>;
   }
 
   if (employee?.mustChangePassword) {
     return <main className="auth-shell"><div className="auth-card"><h1>Choose a new password</h1><p className="subtitle">Replace the temporary password before continuing.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={changePassword}>
-      <div className="field"><label htmlFor="current-password">Temporary password</label><input id="current-password" type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
-      <div className="field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" minLength={12} maxLength={200} required value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></div>
-      <div className="field"><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" minLength={12} maxLength={200} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="current-password">Temporary password</label><input id="current-password" type="password" required value={currentPassword} disabled={loading} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="new-password">New password</label><input id="new-password" type="password" minLength={12} maxLength={200} required value={newPassword} disabled={loading} onChange={(event) => setNewPassword(event.target.value)} /></div>
+      <div className="field"><label htmlFor="confirm-password">Confirm new password</label><input id="confirm-password" type="password" minLength={12} maxLength={200} required value={confirmPassword} disabled={loading} onChange={(event) => setConfirmPassword(event.target.value)} /></div>
       <button className="primary" disabled={loading}>{loading ? "Changing password..." : "Change password"}</button>
     </form></div></main>;
   }
@@ -423,7 +429,7 @@ export default function StaffLoginPage() {
         <form onSubmit={handleSubmit}>
           <div className="field">
             <label htmlFor="email">Email</label>
-            <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <input id="email" type="email" required value={email} disabled={loading} onChange={(e) => setEmail(e.target.value)} />
           </div>
           <div className="field">
             <label htmlFor="password">Password</label>
@@ -432,6 +438,7 @@ export default function StaffLoginPage() {
               type="password"
               required
               value={password}
+              disabled={loading}
               onChange={(e) => setPassword(e.target.value)}
             />
           </div>
