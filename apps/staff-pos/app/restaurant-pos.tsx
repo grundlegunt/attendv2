@@ -70,6 +70,7 @@ export function RestaurantPos({
   const [walkInLabel, setWalkInLabel] = useState("");
   const [orderId, setOrderId] = useState("");
   const [message, setMessage] = useState("");
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
   const [blockedItems, setBlockedItems] = useState<Array<{ id: string; name: string }>>([]);
   const [liveTab, setLiveTab] = useState<LiveTabSummary | null>(null);
@@ -141,6 +142,7 @@ export function RestaurantPos({
     tabRefreshRequestRef.current += 1;
     setLiveTab(null);
     setSettlement(null);
+    setRefreshError(null);
     if (!UUID_PATTERN.test(tabId)) {
       return () => { tabRefreshRequestRef.current += 1; };
     }
@@ -155,8 +157,13 @@ export function RestaurantPos({
           if (requestId !== tabRefreshRequestRef.current) return;
           setLiveTab(summary);
           setSettlement(settlementTab);
+          setRefreshError(null);
         })
-        .catch(() => undefined)
+        .catch(() => {
+          if (requestId === tabRefreshRequestRef.current) {
+            setRefreshError("Live tab details are temporarily unavailable. Displayed information may be out of date.");
+          }
+        })
       );
     };
     void refresh();
@@ -487,6 +494,7 @@ export function RestaurantPos({
       <h2>Server POS</h2>
       {seatLabel && <p><strong>Seat {seatLabel}</strong></p>}
       <p>Open a walk-in tab, or paste an existing seat-linked tab ID.</p>
+      {refreshError && <div className="error-banner">{refreshError}</div>}
       <form onSubmit={openWalkIn}>
         <label className="field">
           <span>Walk-in label</span>
