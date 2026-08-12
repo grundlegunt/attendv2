@@ -52,9 +52,11 @@ export function SeatPicker({
   const [optimisticSeatStates, setOptimisticSeatStates] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(Date.now());
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const refreshRequestRef = useRef(0);
   const refreshPendingRef = useRef(false);
   const pendingSeatIdsRef = useRef(new Set<string>());
+  const closingRef = useRef(false);
 
   useEffect(() => setHolderKey(getHolderKey()), []);
 
@@ -158,20 +160,27 @@ export function SeatPicker({
   }
 
   async function closeAndRelease() {
-    if (pendingSeatIdsRef.current.size > 0) return;
-    if (holderKey && mySeats.length) {
-      await Promise.allSettled(
-        mySeats
-          .filter((seat) => seat.holdToken)
-          .map((seat) =>
-            apiFetch(`/cinema/showtimes/${showtimeId}/holds/${seat.holdToken!}`, {
-              method: "DELETE",
-              body: JSON.stringify({ holderKey }),
-            }),
-          ),
-      );
+    if (closingRef.current || pendingSeatIdsRef.current.size > 0) return;
+    closingRef.current = true;
+    setClosing(true);
+    try {
+      if (holderKey && mySeats.length) {
+        await Promise.allSettled(
+          mySeats
+            .filter((seat) => seat.holdToken)
+            .map((seat) =>
+              apiFetch(`/cinema/showtimes/${showtimeId}/holds/${seat.holdToken!}`, {
+                method: "DELETE",
+                body: JSON.stringify({ holderKey }),
+              }),
+            ),
+        );
+      }
+      onClose();
+    } finally {
+      closingRef.current = false;
+      setClosing(false);
     }
-    onClose();
   }
 
   const mapSeats = availability?.seats.map((seat) => ({
@@ -207,10 +216,10 @@ export function SeatPicker({
       <div className="seat-picker__header">
         <button
           className="link"
-          disabled={Object.keys(pendingSeatIds).length > 0}
+          disabled={closing || Object.keys(pendingSeatIds).length > 0}
           onClick={() => void closeAndRelease()}
         >
-          ← All showtimes
+          {closing ? "Releasing seats…" : "← All showtimes"}
         </button>
         <div>
           <span className="eyebrow">SELECT SEATS</span>
