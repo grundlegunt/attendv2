@@ -224,13 +224,11 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       !Number.isInteger(parsedCashCents) ||
       !Number.isInteger(parsedCardCents) ||
       !Number.isInteger(parsedGiftCardCents) ||
-      !Number.isInteger(parsedCashReceived) ||
       parsedCashCents < 0 ||
       parsedCardCents < 0 ||
-      parsedGiftCardCents < 0 ||
-      parsedCashReceived < 0
+      parsedGiftCardCents < 0
     ) {
-      setMessage("Tender and cash-received amounts must be whole, non-negative cents.");
+      setMessage("Tender amounts must be whole, non-negative cents.");
       return;
     }
     if (
@@ -241,7 +239,11 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setMessage("A single tender cannot exceed 10,000,000 cents.");
       return;
     }
-    if (parsedCashReceived > 10_000_000) {
+    if (parsedCashCents > 0 && (!Number.isInteger(parsedCashReceived) || parsedCashReceived < 0)) {
+      setMessage("Cash received must be a whole, non-negative number of cents.");
+      return;
+    }
+    if (parsedCashCents > 0 && parsedCashReceived > 10_000_000) {
       setMessage("Cash received cannot exceed 10,000,000 cents.");
       return;
     }
