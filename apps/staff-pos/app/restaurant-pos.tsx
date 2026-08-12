@@ -324,15 +324,18 @@ export function RestaurantPos({
   async function dropCheck() {
     const actionKey = `drop:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
+    const requestedTabId = tabId;
     try {
-      await apiFetch(`/restaurant-settlement/tabs/${tabId}/drop-check`, {
+      await apiFetch(`/restaurant-settlement/tabs/${requestedTabId}/drop-check`, {
         method: "POST",
         accessToken,
         body: "{}",
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setMessage("Check dropped. One final order may still be added before payment.");
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
@@ -387,6 +390,8 @@ export function RestaurantPos({
     }
     const actionKey = `finalize:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
+    const requestedTabId = tabId;
     const tenders = [
       ...(parsedSavedCardCents > 0 && settlement.activePaymentMethod
         ? [{
@@ -410,7 +415,7 @@ export function RestaurantPos({
     }
     try {
       const result = await apiFetch<{ status: string }>(
-        `/restaurant-settlement/tabs/${tabId}/finalize`,
+        `/restaurant-settlement/tabs/${requestedTabId}/finalize`,
         {
           method: "POST",
           accessToken,
@@ -420,6 +425,7 @@ export function RestaurantPos({
           }),
         },
       );
+      if (requestId !== tabActionRequestRef.current) return;
       if (result.status === "CLOSED") settlementAttemptRef.current = null;
       setMessage(
         result.status === "CLOSED"
@@ -427,7 +433,7 @@ export function RestaurantPos({
           : `Settlement needs attention: ${result.status}.`,
       );
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
@@ -436,15 +442,18 @@ export function RestaurantPos({
   async function createGuestLink() {
     const actionKey = `guest-link:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
+    const requestedTabId = tabId;
     try {
       const result = await apiFetch<{ token: string }>(
-        `/restaurant-settlement/tabs/${tabId}/access-link`,
+        `/restaurant-settlement/tabs/${requestedTabId}/access-link`,
         { method: "POST", accessToken, body: "{}" },
       );
+      if (requestId !== tabActionRequestRef.current) return;
       setGuestAccessToken(result.token);
       setMessage("Secure 24-hour guest tab link created.");
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
