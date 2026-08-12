@@ -154,7 +154,7 @@ export default function StaffLoginPage() {
     window.sessionStorage.removeItem(STORAGE_KEY);
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
     setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setAvailabilityError(null); setView("scanner");
-    setOpenedTabs([]); setSeatDetail(null); setSeatDetailPending(false); setOpeningTabs(false); setTabOrderId("");
+    setOpenedTabs([]); setSeatDetail(null); setSeatDetailPending(false); setOpeningTabs(false); setTabOrderId(""); setTabMode("SHARED");
     setPassword(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setMfaCode(""); setMfaChallengeToken(null); setError(null);
   }
 
