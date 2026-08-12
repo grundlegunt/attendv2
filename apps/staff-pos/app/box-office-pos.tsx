@@ -143,6 +143,12 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setGiftCardCurrency(null);
     setGiftRemainderTender("CASH");
   }
+  function changeRegister(nextRegisterId: string) {
+    drawerRequestRef.current += 1;
+    setDrawer(null);
+    setDrawerStatus("loading");
+    setRegisterId(nextRegisterId);
+  }
   function toggleSeat(seat: SeatMapSeat) {
     if (busyRef.current || quote || !seat.id) return;
     const live = seats.find((candidate) => candidate.id === seat.id);
@@ -401,7 +407,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
-    <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} maxLength={100} disabled={busy || Boolean(quote)} onChange={(event) => setRegisterId(event.target.value)} /></label>
+    <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} maxLength={100} disabled={busy || Boolean(quote)} onChange={(event) => changeRegister(event.target.value)} /></label>
     {drawerStatus === "error" && <div className="error-banner">Cash drawer status is unavailable. Check the register ID or try again before opening a drawer.</div>}
     {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} disabled={busy || Boolean(quote) || drawerStatus !== "ready"} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy || Boolean(quote) || drawerStatus !== "ready"}>{drawerStatus === "loading" ? "Checking drawer…" : "Open drawer"}</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
