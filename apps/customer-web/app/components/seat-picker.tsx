@@ -114,6 +114,8 @@ export function SeatPicker({
 
   async function toggleSeat(seat: AvailabilitySeat) {
     if (!holderKey || pendingSeatIds[seat.id]) return;
+    refreshRequestRef.current += 1;
+    refreshPendingRef.current = false;
     const selected = !seat.heldByMe;
     setOptimisticSeatStates((states) => ({ ...states, [seat.id]: selected }));
     setPendingSeatIds((seatIds) => ({ ...seatIds, [seat.id]: true }));
