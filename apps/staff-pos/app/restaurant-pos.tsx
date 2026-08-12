@@ -79,6 +79,8 @@ export function RestaurantPos({
   const [guestAccessToken, setGuestAccessToken] = useState("");
   const actionLocks = useRef(new Set<string>());
   const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const menuRequestRef = useRef(0);
+  const tabRefreshRequestRef = useRef(0);
   const [pendingActions, setPendingActions] = useState<string[]>([]);
 
   function beginAction(key: string) {
@@ -98,13 +100,24 @@ export function RestaurantPos({
   }
 
   useEffect(() => {
-    const refresh = () =>
+    const refresh = () => {
+      const requestId = ++menuRequestRef.current;
+      return (
       apiFetch<Menu>("/restaurant-menu", { accessToken })
-        .then(setMenu)
-        .catch(() => setMessage("The restaurant menu is unavailable."));
+        .then((nextMenu) => {
+          if (requestId === menuRequestRef.current) setMenu(nextMenu);
+        })
+        .catch(() => {
+          if (requestId === menuRequestRef.current) setMessage("The restaurant menu is unavailable.");
+        })
+      );
+    };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      menuRequestRef.current += 1;
+      window.clearInterval(timer);
+    };
   }, [accessToken]);
 
   useEffect(() => setTabId(initialTabId), [initialTabId]);
@@ -121,29 +134,31 @@ export function RestaurantPos({
   }, [tabId]);
 
   useEffect(() => {
-    let active = true;
+    tabRefreshRequestRef.current += 1;
     setLiveTab(null);
     setSettlement(null);
     if (!tabId) {
-      return () => {
-        active = false;
-      };
+      return () => { tabRefreshRequestRef.current += 1; };
     }
-    const refresh = () =>
+    const refresh = () => {
+      const requestId = ++tabRefreshRequestRef.current;
+      return (
       Promise.all([
         apiFetch<LiveTabSummary>(`/restaurant-tabs/${tabId}/summary`, { accessToken }),
         apiFetch<SettlementTab>(`/restaurant-settlement/tabs/${tabId}`, { accessToken }),
       ])
         .then(([summary, settlementTab]) => {
-          if (!active) return;
+          if (requestId !== tabRefreshRequestRef.current) return;
           setLiveTab(summary);
           setSettlement(settlementTab);
         })
-        .catch(() => undefined);
+        .catch(() => undefined)
+      );
+    };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
-      active = false;
+      tabRefreshRequestRef.current += 1;
       window.clearInterval(timer);
     };
   }, [accessToken, tabId]);
