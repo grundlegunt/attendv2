@@ -52,6 +52,8 @@ interface SettlementTab {
   receipt: { receiptNumber: string } | null;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export function RestaurantPos({
   accessToken,
   initialTabId = "",
@@ -139,7 +141,7 @@ export function RestaurantPos({
     tabRefreshRequestRef.current += 1;
     setLiveTab(null);
     setSettlement(null);
-    if (!tabId) {
+    if (!UUID_PATTERN.test(tabId)) {
       return () => { tabRefreshRequestRef.current += 1; };
     }
     const refresh = () => {
@@ -200,6 +202,10 @@ export function RestaurantPos({
   }
 
   async function startOrder() {
+    if (!UUID_PATTERN.test(tabId)) {
+      setMessage("Enter a valid tab ID before starting an order.");
+      return;
+    }
     const actionKey = `start-order:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
     const requestId = ++tabActionRequestRef.current;
@@ -500,6 +506,7 @@ export function RestaurantPos({
         <span>Active tab ID</span>
         <input
           value={tabId}
+          maxLength={36}
           disabled={Boolean(orderId) || pendingActions.length > 0}
           onChange={(event) => setTabId(event.target.value)}
         />
@@ -508,7 +515,7 @@ export function RestaurantPos({
       <button
         className="primary"
         type="button"
-        disabled={!tabId || Boolean(orderId) || isPending(`start-order:${tabId}`)}
+        disabled={!UUID_PATTERN.test(tabId) || Boolean(orderId) || isPending(`start-order:${tabId}`)}
         onClick={startOrder}
       >
         {isPending(`start-order:${tabId}`)
