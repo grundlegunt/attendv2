@@ -307,15 +307,17 @@ export function RestaurantPos({
   async function refire(ticketId: string) {
     const actionKey = `refire:${ticketId}`;
     if (!beginAction(actionKey)) return;
+    const requestId = tabActionRequestRef.current;
     try {
       await apiFetch(`/restaurant-tabs/fulfillment/${ticketId}/refire`, {
         method: "POST",
         accessToken,
         body: "{}",
       });
+      if (requestId !== tabActionRequestRef.current) return;
       setMessage("Refire sent to the station.");
     } catch (error) {
-      showError(error);
+      if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
     }
