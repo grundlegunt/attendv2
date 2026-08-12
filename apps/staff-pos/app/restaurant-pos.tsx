@@ -182,6 +182,7 @@ export function RestaurantPos({
     setBlockedItems([]);
     setModifierSelections({});
     setGuestAccessToken("");
+    setMessage("");
     setTipCents("0");
     setSavedCardCents("");
     setTerminalCents("");
