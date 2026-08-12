@@ -16,8 +16,10 @@ export function ShiftControls({ employee, pin, onClockOut }: { employee: Authent
   const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
   useEffect(() => {
     const requestId = ++shiftRequestRef.current;
+    actionPendingRef.current = false;
     setShift(null);
     setStatusPending(true);
+    setPendingAction(null);
     setMessage(null);
     apiFetch<{shift:Shift|null}>("/shifts/status", { method: "POST", body })
       .then((result) => {
