@@ -199,6 +199,11 @@ export function RestaurantPos({
 
   async function openWalkIn(event: FormEvent) {
     event.preventDefault();
+    if (orderId) {
+      setMessage("Send or remove the current draft before opening another tab.");
+      return;
+    }
+    if (actionLocks.current.size > 0) return;
     const requestedLabel = walkInLabel.trim();
     if (!requestedLabel) {
       setMessage("Enter a walk-in label.");
@@ -534,10 +539,11 @@ export function RestaurantPos({
             maxLength={80}
             placeholder="Guest name or bar number"
             value={walkInLabel}
+            disabled={Boolean(orderId) || pendingActions.length > 0}
             onChange={(event) => setWalkInLabel(event.target.value)}
           />
         </label>
-        <button className="primary" disabled={isPending("open-walk-in")}>
+        <button className="primary" disabled={Boolean(orderId) || pendingActions.length > 0}>
           {isPending("open-walk-in") ? "Opening walk-in…" : "Open walk-in tab"}
         </button>
       </form>
