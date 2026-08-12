@@ -74,7 +74,7 @@ export function TicketScanner({
     setMessage("Checking ticket…");
     try {
       let deviceId = window.localStorage.getItem("attend-scanner-device-id");
-      if (!deviceId) {
+      if (!deviceId?.trim() || deviceId.length > 120) {
         deviceId = crypto.randomUUID();
         window.localStorage.setItem("attend-scanner-device-id", deviceId);
       }
