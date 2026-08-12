@@ -14,6 +14,7 @@ type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type StaffView = "scanner" | "seats" | "tabs" | "restaurant" | "box-office";
 const STORAGE_KEY = "attend-staff-pos-session";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
@@ -229,6 +230,11 @@ export default function StaffLoginPage() {
 
   async function openTabs(event: FormEvent) {
     event.preventDefault();
+    const requestedOrderId = tabOrderId.trim();
+    if (!UUID_PATTERN.test(requestedOrderId)) {
+      setError("Enter a valid ticket order ID.");
+      return;
+    }
     if (openingTabsRef.current) return;
     openingTabsRef.current = true;
     const requestId = ++openingTabsRequestRef.current;
@@ -238,7 +244,7 @@ export default function StaffLoginPage() {
       const tabs = await apiFetch<TabSummary[]>("/restaurant-tabs/seat-linked", {
         method: "POST",
         accessToken,
-        body: JSON.stringify({ ticketOrderId: tabOrderId, mode: tabMode }),
+        body: JSON.stringify({ ticketOrderId: requestedOrderId, mode: tabMode }),
       });
       if (requestId !== openingTabsRequestRef.current) return;
       setOpenedTabs(tabs);
@@ -359,7 +365,7 @@ export default function StaffLoginPage() {
             <form onSubmit={openTabs}>
               <label className="field">
                 <span>Ticket order ID</span>
-                <input required value={tabOrderId} onChange={(event) => setTabOrderId(event.target.value)} />
+                <input required maxLength={36} value={tabOrderId} onChange={(event) => setTabOrderId(event.target.value)} />
               </label>
               <label className="field">
                 <span>Tab arrangement</span>
@@ -368,7 +374,7 @@ export default function StaffLoginPage() {
                   <option value="SEPARATE">One tab per seat</option>
                 </select>
               </label>
-              <button className="primary" disabled={openingTabs}>
+              <button className="primary" disabled={openingTabs || !UUID_PATTERN.test(tabOrderId.trim())}>
                 {openingTabs ? "Opening tabs…" : "Open tabs"}
               </button>
             </form>
