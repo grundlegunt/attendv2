@@ -259,8 +259,17 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setMessage("Choose a Terminal reader for the card tender.");
       return;
     }
+    if (parsedCardCents > 0 && readerId.trim().length > 200) {
+      setMessage("Terminal reader IDs cannot exceed 200 characters.");
+      return;
+    }
     if (parsedGiftCardCents > 0) {
-      if (!giftCardCode.trim() || giftCardBalance === null) {
+      const requestedGiftCardCode = giftCardCode.trim();
+      if (requestedGiftCardCode.length < 20 || requestedGiftCardCode.length > 40) {
+        setMessage("Gift card codes must contain 20 to 40 characters.");
+        return;
+      }
+      if (giftCardBalance === null) {
         setMessage("Check the gift card balance before applying it.");
         return;
       }
@@ -338,10 +347,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
 
   async function checkGiftCard() {
     if (!quote || !giftCardCode) return;
+    const requestedCode = giftCardCode.trim();
+    if (requestedCode.length < 20 || requestedCode.length > 40) {
+      setMessage("Gift card codes must contain 20 to 40 characters.");
+      return;
+    }
     const busyRequestId = beginRequest();
     if (busyRequestId === null) return;
     const requestId = ++giftCardRequestRef.current;
-    const requestedCode = giftCardCode.trim();
     const requestedTotalCents = quote.totalCents;
     try {
       const card = await apiFetch<{balanceCents:number;currency:string}>("/box-office/gift-cards/balance", { method: "POST", accessToken, body: JSON.stringify({ code: requestedCode }) });
@@ -369,8 +382,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => setCashCents(event.target.value)} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} disabled={busy} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" step="1" value={cardCents} disabled={busy} onChange={(event) => setCardCents(event.target.value)} /></label>
-      <label className="field"><span>Terminal reader</span><input value={readerId} disabled={busy} onChange={(event) => setReaderId(event.target.value)} /></label>
-      <label className="field"><span>Gift card code</span><input value={giftCardCode} disabled={busy} onChange={(event) => { giftCardRequestRef.current += 1; setGiftCardCode(event.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardCents("0"); setCashCents("0"); setCardCents(String(quote.totalCents)); }} /></label>
+      <label className="field"><span>Terminal reader</span><input value={readerId} maxLength={200} disabled={busy} onChange={(event) => setReaderId(event.target.value)} /></label>
+      <label className="field"><span>Gift card code</span><input value={giftCardCode} minLength={20} maxLength={40} disabled={busy} onChange={(event) => { giftCardRequestRef.current += 1; setGiftCardCode(event.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardCents("0"); setCashCents("0"); setCardCents(String(quote.totalCents)); }} /></label>
       {giftCardCode && <><button className="secondary" type="button" onClick={() => void checkGiftCard()} disabled={busy}>Check balance and apply</button>{giftCardBalance !== null && <p>Available ${(giftCardBalance/100).toFixed(2)}</p>}<label className="field"><span>Gift card cents</span><input type="number" min="1" step="1" max={Math.min(quote.totalCents, giftCardBalance ?? quote.totalCents)} value={giftCardCents} disabled={busy} onChange={(event) => { const giftCents = Number(event.target.value); const remainder = Math.max(0, quote.totalCents - giftCents); setGiftCardCents(event.target.value); setCashCents(giftRemainderTender === "CASH" ? String(remainder) : "0"); setCardCents(giftRemainderTender === "CARD" ? String(remainder) : "0"); }} /></label><label className="field"><span>Remainder tender</span><select value={giftRemainderTender} disabled={busy} onChange={(event) => { const tender = event.target.value as "CASH" | "CARD"; const remainder = Math.max(0, quote.totalCents - Number(giftCardCents)); setGiftRemainderTender(tender); setCashCents(tender === "CASH" ? String(remainder) : "0"); setCardCents(tender === "CARD" ? String(remainder) : "0"); }}><option value="CASH">Cash</option><option value="CARD">Card terminal</option></select></label></>}
       <button className="primary" type="button" onClick={checkout} disabled={busy || (Number(cashCents)>0&&!drawer)}>Complete sale</button></div>}
       {quote && <button className="secondary" type="button" onClick={cancelSale} disabled={busy}>Cancel sale &amp; release seats</button>}
