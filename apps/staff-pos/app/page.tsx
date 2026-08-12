@@ -64,10 +64,12 @@ export default function StaffLoginPage() {
   const [tabMode, setTabMode] = useState<"SHARED" | "SEPARATE">("SHARED");
   const [openedTabs, setOpenedTabs] = useState<TabSummary[]>([]);
   const [seatDetail, setSeatDetail] = useState<SeatDetail | null>(null);
+  const [seatDetailPending, setSeatDetailPending] = useState(false);
   const [openingTabs, setOpeningTabs] = useState(false);
   const openingTabsRef = useRef(false);
   const openingTabsRequestRef = useRef(0);
   const seatDetailRequestRef = useRef(0);
+  const seatDetailPendingRef = useRef(false);
   const availabilityRequestRef = useRef(0);
   const programRequestRef = useRef(0);
   const refreshRequestRef = useRef(0);
@@ -94,6 +96,8 @@ export default function StaffLoginPage() {
 
   function changeView(nextView: StaffView) {
     seatDetailRequestRef.current += 1;
+    seatDetailPendingRef.current = false;
+    setSeatDetailPending(false);
     setSeatDetail(null);
     setView(nextView);
   }
@@ -115,13 +119,14 @@ export default function StaffLoginPage() {
     programRequestRef.current += 1;
     availabilityRequestRef.current += 1;
     seatDetailRequestRef.current += 1;
+    seatDetailPendingRef.current = false;
     openingTabsRequestRef.current += 1;
     openingTabsRef.current = false;
     if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY);
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
     setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setAvailabilityError(null); setView("scanner");
-    setOpenedTabs([]); setSeatDetail(null); setOpeningTabs(false); setTabOrderId("");
+    setOpenedTabs([]); setSeatDetail(null); setSeatDetailPending(false); setOpeningTabs(false); setTabOrderId("");
     setPassword(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setMfaCode(""); setMfaChallengeToken(null); setError(null);
   }
 
@@ -270,8 +275,10 @@ export default function StaffLoginPage() {
   }
 
   async function openSeat(seat: SeatMapSeat) {
-    if (!seat.id) return;
+    if (!seat.id || seatDetailPendingRef.current) return;
+    seatDetailPendingRef.current = true;
     const requestId = ++seatDetailRequestRef.current;
+    setSeatDetailPending(true);
     setError(null);
     try {
       const detail = await apiFetch<SeatDetail>(
@@ -284,6 +291,11 @@ export default function StaffLoginPage() {
     } catch (err) {
       if (requestId !== seatDetailRequestRef.current) return;
       setError(err instanceof ApiRequestError ? err.body.message : "Seat detail could not be opened.");
+    } finally {
+      if (requestId === seatDetailRequestRef.current) {
+        seatDetailPendingRef.current = false;
+        setSeatDetailPending(false);
+      }
     }
   }
 
@@ -405,6 +417,7 @@ export default function StaffLoginPage() {
         ) : (
           <>
             {selectedShowtimeId && !availability && <p>Loading live seats…</p>}
+            {seatDetailPending && <p>Opening seat details…</p>}
             {availability && (
               <SeatMap
                 seats={seatMapSeats}
