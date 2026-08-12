@@ -241,7 +241,7 @@ export function SeatPicker({
         </div>
         <button
           className="primary"
-          disabled={!mySeats.length || Object.keys(pendingSeatIds).length > 0}
+          disabled={!mySeats.length || remainingSeconds <= 0 || Object.keys(pendingSeatIds).length > 0}
           onClick={() => setCheckoutOpen(true)}
         >
           Continue to tickets
