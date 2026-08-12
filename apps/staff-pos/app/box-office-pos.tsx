@@ -177,6 +177,18 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setMessage("Tender and cash-received amounts must be whole, non-negative cents.");
       return;
     }
+    if (
+      parsedCashCents > 10_000_000 ||
+      parsedCardCents > 10_000_000 ||
+      parsedGiftCardCents > 10_000_000
+    ) {
+      setMessage("A single tender cannot exceed 10,000,000 cents.");
+      return;
+    }
+    if (parsedCashReceived > 10_000_000) {
+      setMessage("Cash received cannot exceed 10,000,000 cents.");
+      return;
+    }
     if (parsedCashCents + parsedCardCents + parsedGiftCardCents !== quote.totalCents) {
       setMessage(`Tender amounts must total ${quote.totalCents} cents.`);
       return;
