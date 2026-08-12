@@ -17,6 +17,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [holdTokens, setHoldTokens] = useState<string[]>([]);
   const [registerId, setRegisterId] = useState("BOX-1");
   const [drawer, setDrawer] = useState<{id:string}|null>(null);
+  const [drawerStatus, setDrawerStatus] = useState<"loading" | "ready" | "error">("loading");
   const [openingBalance, setOpeningBalance] = useState("20000");
   const [cashCents, setCashCents] = useState("0");
   const [cardCents, setCardCents] = useState("0");
@@ -79,12 +80,22 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   useEffect(() => {
     const requestId = ++drawerRequestRef.current;
     setDrawer(null);
-    apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(registerId)}`, { accessToken })
+    const requestedRegisterId = registerId.trim();
+    if (!requestedRegisterId || requestedRegisterId.length > 100) {
+      setDrawerStatus("error");
+      return () => { drawerRequestRef.current += 1; };
+    }
+    setDrawerStatus("loading");
+    apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(requestedRegisterId)}`, { accessToken })
       .then((activeDrawer) => {
-        if (requestId === drawerRequestRef.current) setDrawer(activeDrawer);
+        if (requestId !== drawerRequestRef.current) return;
+        setDrawer(activeDrawer);
+        setDrawerStatus("ready");
       })
       .catch(() => {
-        if (requestId === drawerRequestRef.current) setDrawer(null);
+        if (requestId !== drawerRequestRef.current) return;
+        setDrawer(null);
+        setDrawerStatus("error");
       });
     return () => { drawerRequestRef.current += 1; };
   }, [accessToken, registerId]);
@@ -171,7 +182,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     const requestId = ++drawerRequestRef.current;
     try {
       const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId: requestedRegisterId, openingBalanceCents }) });
-      if (requestId === drawerRequestRef.current) setDrawer(openedDrawer);
+      if (requestId === drawerRequestRef.current) { setDrawer(openedDrawer); setDrawerStatus("ready"); }
     } catch (error) {
       if (requestId === drawerRequestRef.current) setMessage(errorMessage(error));
     } finally {
@@ -391,7 +402,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
     <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} maxLength={100} disabled={busy || Boolean(quote)} onChange={(event) => setRegisterId(event.target.value)} /></label>
-    {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} disabled={busy || Boolean(quote)} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy || Boolean(quote)}>Open drawer</button></>}
+    {drawerStatus === "error" && <div className="error-banner">Cash drawer status is unavailable. Check the register ID or try again before opening a drawer.</div>}
+    {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} disabled={busy || Boolean(quote) || drawerStatus !== "ready"} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy || Boolean(quote) || drawerStatus !== "ready"}>{drawerStatus === "loading" ? "Checking drawer…" : "Open drawer"}</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
     <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
       <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
