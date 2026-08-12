@@ -159,6 +159,7 @@ export function TicketScanner({
       }, 350);
       timeoutRef.current = window.setTimeout(() => {
         stopCamera();
+        setMessage("Camera timed out after 30 seconds. Start it again or paste the credential below.");
       }, 30_000);
     } catch {
       if (cameraSession !== cameraSessionRef.current) return;
