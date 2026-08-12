@@ -11,22 +11,38 @@ export function ShiftControls({ employee, pin, onClockOut }: { employee: Authent
   const [message, setMessage] = useState<string | null>(null);
   const [pendingAction, setPendingAction] = useState<"break" | "clock-out" | null>(null);
   const actionPendingRef = useRef(false);
+  const shiftRequestRef = useRef(0);
   const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
-  useEffect(() => { apiFetch<{shift:Shift|null}>("/shifts/status", { method: "POST", body }).then((result) => setShift(result.shift)).catch(() => setMessage("Shift status unavailable")); }, [body]);
+  useEffect(() => {
+    const requestId = ++shiftRequestRef.current;
+    apiFetch<{shift:Shift|null}>("/shifts/status", { method: "POST", body })
+      .then((result) => {
+        if (requestId === shiftRequestRef.current) setShift(result.shift);
+      })
+      .catch(() => {
+        if (requestId === shiftRequestRef.current) setMessage("Shift status unavailable");
+      });
+    return () => { shiftRequestRef.current += 1; };
+  }, [body]);
   async function action(path: string, actionName: "break" | "clock-out") {
     if (actionPendingRef.current) return;
     actionPendingRef.current = true;
+    const requestId = ++shiftRequestRef.current;
     setPendingAction(actionName);
     setMessage(null);
     try {
       const updated = await apiFetch<Shift>(path, { method: "POST", body });
+      if (requestId !== shiftRequestRef.current) return;
       if (path.endsWith("clock-out")) { onClockOut(); return; }
       setShift(updated);
     } catch (error) {
+      if (requestId !== shiftRequestRef.current) return;
       setMessage(error instanceof ApiRequestError ? error.body.message : "Time-clock action failed.");
     } finally {
-      actionPendingRef.current = false;
-      setPendingAction(null);
+      if (requestId === shiftRequestRef.current) {
+        actionPendingRef.current = false;
+        setPendingAction(null);
+      }
     }
   }
   const onBreak = Boolean(shift?.breakStartAt && !shift.breakEndAt);
