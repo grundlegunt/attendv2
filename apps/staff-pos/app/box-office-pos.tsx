@@ -154,6 +154,10 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setMessage("Enter a register ID before opening a cash drawer.");
       return;
     }
+    if (requestedRegisterId.length > 100) {
+      setMessage("Register IDs cannot exceed 100 characters.");
+      return;
+    }
     if (!Number.isInteger(openingBalanceCents) || openingBalanceCents < 0) {
       setMessage("Opening cash must be a whole, non-negative number of cents.");
       return;
@@ -386,7 +390,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
-    <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} disabled={busy || Boolean(quote)} onChange={(event) => setRegisterId(event.target.value)} /></label>
+    <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} maxLength={100} disabled={busy || Boolean(quote)} onChange={(event) => setRegisterId(event.target.value)} /></label>
     {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} disabled={busy || Boolean(quote)} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy || Boolean(quote)}>Open drawer</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
     <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
