@@ -124,31 +124,46 @@ export function TicketCheckout({
   const stripeRef = useRef<StripeClient | null>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const pendingRef = useRef(false);
+  const configRequestRef = useRef(0);
+  const configLoadingRef = useRef(false);
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
   const loadConfig = useCallback(async () => {
+    if (configLoadingRef.current) return;
+    configLoadingRef.current = true;
+    const requestId = ++configRequestRef.current;
     setConfigLoading(true);
     setError(null);
     try {
-      setConfig(
-        await apiFetch<CheckoutConfig>(
-          `/ticketing/showtimes/${showtimeId}/checkout-config`,
-        ),
+      const nextConfig = await apiFetch<CheckoutConfig>(
+        `/ticketing/showtimes/${showtimeId}/checkout-config`,
       );
+      if (requestId !== configRequestRef.current) return;
+      setConfig(nextConfig);
     } catch (requestError) {
+      if (requestId !== configRequestRef.current) return;
       setError(
         requestError instanceof ApiRequestError
           ? requestError.body.message
           : "Checkout is temporarily unavailable.",
       );
     } finally {
-      setConfigLoading(false);
+      if (requestId === configRequestRef.current) {
+        configLoadingRef.current = false;
+        setConfigLoading(false);
+      }
     }
   }, [showtimeId]);
 
   useEffect(() => {
+    configRequestRef.current += 1;
+    configLoadingRef.current = false;
     void loadConfig();
+    return () => {
+      configRequestRef.current += 1;
+      configLoadingRef.current = false;
+    };
   }, [loadConfig]);
 
   useEffect(() => {
