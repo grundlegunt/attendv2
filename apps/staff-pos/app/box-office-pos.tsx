@@ -31,6 +31,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const busyRef = useRef(false);
   const checkoutAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const checkoutConfigRequestRef = useRef(0);
+  const drawerRequestRef = useRef(0);
 
   useEffect(() => {
     const requestId = ++checkoutConfigRequestRef.current;
@@ -46,7 +47,18 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       });
     return () => { checkoutConfigRequestRef.current += 1; };
   }, [showtimeId]);
-  useEffect(() => { apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(registerId)}`, { accessToken }).then(setDrawer).catch(() => setDrawer(null)); }, [accessToken, registerId]);
+  useEffect(() => {
+    const requestId = ++drawerRequestRef.current;
+    setDrawer(null);
+    apiFetch<{id:string}|null>(`/box-office/cash-drawers/active?registerId=${encodeURIComponent(registerId)}`, { accessToken })
+      .then((activeDrawer) => {
+        if (requestId === drawerRequestRef.current) setDrawer(activeDrawer);
+      })
+      .catch(() => {
+        if (requestId === drawerRequestRef.current) setDrawer(null);
+      });
+    return () => { drawerRequestRef.current += 1; };
+  }, [accessToken, registerId]);
 
   const mapSeats = useMemo(() => seats.map((seat) => ({ ...seat, state: selected.includes(seat.id) ? "selected" as const : seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const })), [seats, selected]);
   function errorMessage(error: unknown) { return error instanceof ApiRequestError ? error.body.message : "The request could not be completed."; }
