@@ -67,6 +67,7 @@ export default function StaffLoginPage() {
   const openingTabsRequestRef = useRef(0);
   const seatDetailRequestRef = useRef(0);
   const availabilityRequestRef = useRef(0);
+  const programRequestRef = useRef(0);
   const refreshRequestRef = useRef(0);
   const [clockReady, setClockReady] = useState(false);
   const [clockPin, setClockPin] = useState("");
@@ -109,6 +110,7 @@ export default function StaffLoginPage() {
 
   function signOut() {
     refreshRequestRef.current += 1;
+    programRequestRef.current += 1;
     availabilityRequestRef.current += 1;
     seatDetailRequestRef.current += 1;
     openingTabsRequestRef.current += 1;
@@ -157,8 +159,10 @@ export default function StaffLoginPage() {
 
   useEffect(() => {
     if (!employee || employee.mustChangePassword) return;
+    const requestId = ++programRequestRef.current;
     apiFetch<NowPlayingResponse>("/cinema/now-playing")
       .then((response) => {
+        if (requestId !== programRequestRef.current) return;
         setProgram(response);
         const firstShowtime = response.movies.flatMap((movie) => movie.showtimes)[0];
         if (firstShowtime) {
@@ -167,7 +171,10 @@ export default function StaffLoginPage() {
           setSelectedShowtimeId(firstShowtime.id);
         }
       })
-      .catch(() => setError("Showtimes are temporarily unavailable."));
+      .catch(() => {
+        if (requestId === programRequestRef.current) setError("Showtimes are temporarily unavailable.");
+      });
+    return () => { programRequestRef.current += 1; };
   }, [employee]);
 
   useEffect(() => {
