@@ -245,6 +245,7 @@ export function RestaurantPos({
       setMessage("Enter a valid tab ID before starting an order.");
       return;
     }
+    if (actionLocks.current.size > 0) return;
     const actionKey = `start-order:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
     const requestId = ++tabActionRequestRef.current;
@@ -569,7 +570,7 @@ export function RestaurantPos({
       <button
         className="primary"
         type="button"
-        disabled={!UUID_PATTERN.test(tabId) || Boolean(orderId) || isPending(`start-order:${tabId}`)}
+        disabled={!UUID_PATTERN.test(tabId) || Boolean(orderId) || pendingActions.length > 0}
         onClick={startOrder}
       >
         {isPending(`start-order:${tabId}`)
