@@ -102,6 +102,18 @@ export default function StaffLoginPage() {
     setView(nextView);
   }
 
+  function changeTabOrderId(nextOrderId: string) {
+    setTabOrderId(nextOrderId);
+    setOpenedTabs([]);
+    setError(null);
+  }
+
+  function changeTabMode(nextMode: "SHARED" | "SEPARATE") {
+    setTabMode(nextMode);
+    setOpenedTabs([]);
+    setError(null);
+  }
+
   function storeSession(next: ActiveStaffSession) {
     setEmployee(next.employee); setAccessToken(next.accessToken); setRefreshToken(next.refreshToken); setExpiresInSeconds(next.expiresInSeconds);
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -389,11 +401,11 @@ export default function StaffLoginPage() {
             <form onSubmit={openTabs}>
               <label className="field">
                 <span>Ticket order ID</span>
-                <input required maxLength={36} value={tabOrderId} disabled={openingTabs} onChange={(event) => setTabOrderId(event.target.value)} />
+                <input required maxLength={36} value={tabOrderId} disabled={openingTabs} onChange={(event) => changeTabOrderId(event.target.value)} />
               </label>
               <label className="field">
                 <span>Tab arrangement</span>
-                <select value={tabMode} disabled={openingTabs} onChange={(event) => setTabMode(event.target.value as "SHARED" | "SEPARATE")}>
+                <select value={tabMode} disabled={openingTabs} onChange={(event) => changeTabMode(event.target.value as "SHARED" | "SEPARATE")}>
                   <option value="SHARED">One shared tab</option>
                   <option value="SEPARATE">One tab per seat</option>
                 </select>
