@@ -56,7 +56,17 @@ export function TicketScanner({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!credential.trim() || pendingRef.current) return;
+    const requestedCredential = credential.trim();
+    const requestedEntrance = entrance.trim();
+    if (!requestedCredential || pendingRef.current) return;
+    if (requestedCredential.length > 2048) {
+      setMessage("QR credentials cannot exceed 2,048 characters.");
+      return;
+    }
+    if (requestedEntrance.length > 120) {
+      setMessage("Entrance names cannot exceed 120 characters.");
+      return;
+    }
     pendingRef.current = true;
     const requestId = ++scanRequestRef.current;
     setPending(true);
@@ -72,10 +82,10 @@ export function TicketScanner({
         method: "POST",
         accessToken,
         body: JSON.stringify({
-          credential: credential.trim(),
+          credential: requestedCredential,
           expectedShowtimeId,
           deviceId,
-          entrance: entrance.trim() || undefined,
+          entrance: requestedEntrance || undefined,
         }),
       });
       if (requestId !== scanRequestRef.current) return;
@@ -171,14 +181,14 @@ export function TicketScanner({
       <form onSubmit={submit}>
         <label className="field">
           <span>QR credential</span>
-          <input value={credential} onChange={(event) => {
+          <input value={credential} maxLength={2048} onChange={(event) => {
             setCredential(event.target.value);
             setResult(null);
           }} />
         </label>
         <label className="field">
           <span>Entrance (optional)</span>
-          <input value={entrance} onChange={(event) => setEntrance(event.target.value)} placeholder="Main entrance" />
+          <input value={entrance} maxLength={120} onChange={(event) => setEntrance(event.target.value)} placeholder="Main entrance" />
         </label>
         <button className="primary" disabled={pending || !credential.trim()}>
           {pending ? "Checking…" : "Check ticket"}
