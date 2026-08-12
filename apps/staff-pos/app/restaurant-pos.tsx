@@ -393,6 +393,10 @@ export function RestaurantPos({
       setMessage("Choose a Terminal reader for the presented card payment.");
       return;
     }
+    if (parsedTerminalCents > 0 && readerId.trim().length > 200) {
+      setMessage("Terminal reader IDs cannot exceed 200 characters.");
+      return;
+    }
     const actionKey = `finalize:${tabId}`;
     if (!tabId || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
@@ -583,7 +587,7 @@ export function RestaurantPos({
               </label>
               <label className="field">
                 <span>Terminal reader</span>
-                <input value={readerId} onChange={(event) => setReaderId(event.target.value)} />
+                <input value={readerId} maxLength={200} disabled={Number(terminalCents) <= 0} onChange={(event) => setReaderId(event.target.value)} />
               </label>
               <button
                 className="primary"
