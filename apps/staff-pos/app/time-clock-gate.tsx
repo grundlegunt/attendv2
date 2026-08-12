@@ -23,17 +23,18 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
   async function enter(event: FormEvent) {
     event.preventDefault();
     if (busyRef.current) return;
+    const requestedPin = pin;
     busyRef.current = true;
     const requestId = ++clockRequestRef.current;
     setBusy(true);
     setMessage(null);
-    const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
+    const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin: requestedPin });
     try {
       const status = await apiFetch<{ shift: { id: string } | null }>("/shifts/status", { method: "POST", body });
       if (requestId !== clockRequestRef.current) return;
       if (!status.shift) await apiFetch("/shifts/clock-in", { method: "POST", body });
       if (requestId !== clockRequestRef.current) return;
-      onReady(pin);
+      onReady(requestedPin);
     } catch (error) {
       if (requestId !== clockRequestRef.current) return;
       setMessage(error instanceof ApiRequestError ? error.body.message : "The time clock is unavailable.");
@@ -50,7 +51,7 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
     <p className="subtitle">Enter your PIN to clock in or resume your active shift.</p>
     {message && <div className="error-banner">{message}</div>}
     <form onSubmit={enter}><div className="field"><label htmlFor="pin">Employee PIN</label>
-      <input id="pin" inputMode="numeric" pattern="[0-9]{4,8}" maxLength={8} type="password" autoFocus required value={pin} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} />
+      <input id="pin" inputMode="numeric" pattern="[0-9]{4,8}" maxLength={8} type="password" autoFocus required value={pin} disabled={busy} onChange={(event) => setPin(event.target.value.replace(/\D/g, ""))} />
     </div><button className="primary" disabled={busy}>{busy ? "Checking…" : "Enter POS"}</button></form>
   </div></main>;
 }
