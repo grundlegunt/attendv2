@@ -258,6 +258,7 @@ export function RestaurantPos({
       });
       if (requestId !== tabActionRequestRef.current) return;
       setTabId(tab.id);
+      setWalkInLabel("");
       setMessage(`Walk-in tab “${requestedLabel}” is open.`);
     } catch (error) {
       if (requestId === tabActionRequestRef.current) showError(error);
