@@ -152,6 +152,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setDrawer(null);
     setDrawerStatus("loading");
     setReaderId("");
+    setMessage(null);
     setRegisterId(nextRegisterId);
   }
   function toggleSeat(seat: SeatMapSeat) {
