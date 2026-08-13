@@ -4897,6 +4897,38 @@ describe("Milestone 9 box office and workforce", () => {
     );
   });
 
+  it("reuses one cash box-office sale when identical register requests arrive concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `RACE-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+    const holderKey = `box-office-race-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+    const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+    const requestId = crypto.randomUUID();
+    const payload = { requestId, holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents: quote.body.totalCents, cashReceivedCents: quote.body.totalCents };
+
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer()).post("/api/v1/box-office/checkouts").set("Authorization", `Bearer ${ownerAccessToken}`).send(payload),
+      request(app.getHttpServer()).post("/api/v1/box-office/checkouts").set("Authorization", `Bearer ${ownerAccessToken}`).send(payload),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.id).toBe(first.body.id);
+    expect(first.body.status).toBe("PAID");
+    expect(second.body.status).toBe("PAID");
+    expect(await prisma.ticketOrder.count({ where: { checkoutIdempotencyKey: requestId } })).toBe(1);
+    expect(await prisma.ticket.count({ where: { ticketOrderId: first.body.id } })).toBe(1);
+    expect(await prisma.cashTransaction.count({ where: { ticketOrderId: first.body.id, type: "SALE" } })).toBe(1);
+  });
+
   it("redeems an active gift card atomically for a box-office ticket sale", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });

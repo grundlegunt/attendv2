@@ -117,24 +117,43 @@ export class BoxOfficeService {
       create: { email: input.customerEmail.toLowerCase(), name: input.customerName, isGuest: true },
       update: input.customerName ? { name: input.customerName } : {},
     }) : null;
-    const order = existing ?? await prisma.ticketOrder.create({
-      data: {
-        locationId: input.locationId, customerId: customer?.id, ticketTypeId: ticketType.id,
-        holdTokens: [...new Set(input.holdTokens)].sort(), holderKey: input.holderKey,
-        guestEmail: input.customerEmail?.toLowerCase(), guestName: input.customerName,
-        channel: "BOX_OFFICE", status: "AWAITING_PAYMENT",
-        orderNumber: `AT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`,
-        checkoutIdempotencyKey: input.requestId, subtotalCents: quote.subtotalCents,
-        discountCents: quote.discountCents, feesCents: quote.feesCents, taxCents: quote.taxCents,
-        totalCents: quote.totalCents, currency: quote.currency, promotionId: quote.promotion?.id,
-        placedByEmployeeId: input.employeeId,
-        ...(input.cardCents > 0 ? { payment: { create: {
-          purpose: "TICKET_ORDER", amountCents: input.cardCents, currency: quote.currency,
-          status: "CREATED", idempotencyKey: `box-office-card:${input.requestId}`, provider: this.paymentProvider.name,
-        } } } : {}),
-      },
-      include: { payment: true },
-    });
+    let order = existing;
+    if (!order) {
+      try {
+        order = await prisma.ticketOrder.create({
+          data: {
+            locationId: input.locationId, customerId: customer?.id, ticketTypeId: ticketType.id,
+            holdTokens: [...new Set(input.holdTokens)].sort(), holderKey: input.holderKey,
+            guestEmail: input.customerEmail?.toLowerCase(), guestName: input.customerName,
+            channel: "BOX_OFFICE", status: "AWAITING_PAYMENT",
+            orderNumber: `AT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`,
+            checkoutIdempotencyKey: input.requestId, subtotalCents: quote.subtotalCents,
+            discountCents: quote.discountCents, feesCents: quote.feesCents, taxCents: quote.taxCents,
+            totalCents: quote.totalCents, currency: quote.currency, promotionId: quote.promotion?.id,
+            placedByEmployeeId: input.employeeId,
+            ...(input.cardCents > 0 ? { payment: { create: {
+              purpose: "TICKET_ORDER", amountCents: input.cardCents, currency: quote.currency,
+              status: "CREATED", idempotencyKey: `box-office-card:${input.requestId}`, provider: this.paymentProvider.name,
+            } } } : {}),
+          },
+          include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true },
+        });
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+        // A second register submission can lose the idempotency-key insert
+        // before the winning transaction is visible on this connection.
+        // Reuse that committed order instead of surfacing a database error.
+        for (let attempt = 0; attempt < 5 && !order; attempt += 1) {
+          order = await prisma.ticketOrder.findUnique({
+            where: { checkoutIdempotencyKey: input.requestId },
+            include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true },
+          });
+          if (!order) await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+        }
+        if (!order) throw error;
+      }
+    }
+    if (!order) throw AppError.conflict("The box-office checkout is still being created. Please retry.");
 
     let cardResult = null;
     if (input.cardCents > 0) {
