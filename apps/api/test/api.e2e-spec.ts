@@ -1844,6 +1844,64 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(giftCard.transactions).toEqual([expect.objectContaining({ amountCents: -checkout.body.totalCents, reference: checkout.body.orderId })]);
   });
 
+  it("redeems a gift-card-only checkout once when finalize requests race", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `online-gift-card-race-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const issued = await request(app.getHttpServer())
+      .post("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ amountCents: 100_000 })
+      .expect(201);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .expect(200);
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        giftCardCode: issued.body.code,
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+        .send({}),
+      request(app.getHttpServer())
+        .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+        .send({}),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(first.body.status).toBe("PAID");
+    expect(second.body.status).toBe("PAID");
+    expect(second.body.tickets[0].id).toBe(first.body.tickets[0].id);
+    const giftCard = await prisma.giftCard.findUniqueOrThrow({
+      where: { id: issued.body.id },
+      include: {
+        transactions: {
+          where: { type: "REDEMPTION", reference: checkout.body.orderId },
+        },
+      },
+    });
+    expect(giftCard.balanceCents).toBe(100_000 - checkout.body.totalCents);
+    expect(giftCard.transactions).toEqual([
+      expect.objectContaining({ amountCents: -checkout.body.totalCents }),
+    ]);
+    expect(
+      await prisma.ticket.count({
+        where: { ticketOrderId: checkout.body.orderId },
+      }),
+    ).toBe(1);
+  });
+
   it("recovers the same payment intent when checkout persistence fails after provider creation", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
