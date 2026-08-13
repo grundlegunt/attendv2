@@ -2072,6 +2072,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .expect(409, {
         code: "CONFLICT",
         message: "The checkout idempotency key was already used with different checkout details.",
+        details: { reason: "CONFLICT" },
       });
     expect(createIntent).toHaveBeenCalledTimes(2);
     createIntent.mockRestore();
