@@ -4994,7 +4994,6 @@ describe("Milestone 9 box office and workforce", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ ...payload, holderKey: `different-holder-${crypto.randomUUID()}` })
       .expect(409, {
-        statusCode: 409,
         code: "CONFLICT",
         message: "The checkout request id was already used with different sale details.",
       });
