@@ -1297,6 +1297,44 @@ describe("Milestone 1 cinema configuration", () => {
     await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: finalized.body.code }).expect(201);
   });
 
+  it("reuses one online gift card purchase when identical requests arrive concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const originalCreate = provider.createPaymentIntent.bind(provider);
+    const createIntent = jest.spyOn(provider, "createPaymentIntent").mockImplementation(async (input) => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return originalCreate(input);
+    });
+    const idempotencyKey = `gift-card-purchase-race-${crypto.randomUUID()}`;
+    const payload = {
+      locationId: owner.locationId, amountCents: 4200, buyerEmail: "race-buyer@example.test",
+      recipientName: "Concurrent Fan", recipientEmail: "race-recipient@example.test",
+    };
+
+    try {
+      const [first, second] = await Promise.all([
+        request(app.getHttpServer()).post("/api/v1/gift-card-purchases").set("Idempotency-Key", idempotencyKey).send(payload),
+        request(app.getHttpServer()).post("/api/v1/gift-card-purchases").set("Idempotency-Key", idempotencyKey).send(payload),
+      ]);
+      expect(first.status).toBe(201);
+      expect(second.status).toBe(201);
+      expect(second.body.purchaseId).toBe(first.body.purchaseId);
+      expect(second.body.payment.providerPaymentId).toBe(first.body.payment.providerPaymentId);
+      expect(first.body.payment.clientSecret).toEqual(expect.any(String));
+      expect(second.body.payment.clientSecret).toEqual(expect.any(String));
+
+      const purchases = await prisma.giftCardPurchase.findMany({ where: { idempotencyKey }, include: { payment: { include: { attempts: true } } } });
+      expect(purchases).toHaveLength(1);
+      expect(purchases[0].payment.attempts).toHaveLength(1);
+      expect(createIntent).toHaveBeenCalled();
+    } finally {
+      createIntent.mockRestore();
+    }
+  });
+
   it("orders movies in the public listing by their next upcoming showtime, not alphabetically by title", async () => {
     const zTitled = await request(app.getHttpServer())
       .post("/api/v1/cinema/movies")
