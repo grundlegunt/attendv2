@@ -4873,7 +4873,11 @@ describe("Milestone 9 box office and workforce", () => {
     await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send({ ...breakEndBody, requestId: crypto.randomUUID() }).expect(409);
     const { WorkforceRateLimitGuard } = await import("../src/workforce/workforce-rate-limit.guard");
     app.get(WorkforceRateLimitGuard).resetForTests();
-    await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(201);
+    const clockOutBody = { ...body, requestId: crypto.randomUUID() };
+    const clockOut = await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(clockOutBody).expect(201);
+    const replayedClockOut = await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(clockOutBody).expect(201);
+    expect(replayedClockOut.body.clockOutAt).toBe(clockOut.body.clockOutAt);
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send({ ...clockOutBody, requestId: crypto.randomUUID() }).expect(409);
     const shift = await prisma.shift.findUniqueOrThrow({ where: { id: clockIn.body.id } });
     expect(shift.clockOutAt).not.toBeNull();
     expect(shift.breakStartAt).not.toBeNull();
