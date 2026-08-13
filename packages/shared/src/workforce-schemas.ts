@@ -87,6 +87,7 @@ export const ticketRefundRequestSchema = z.object({
 });
 
 export const ticketExchangeRequestSchema = z.object({
+  requestId: z.string().uuid(),
   holdToken: z.string().uuid(),
   holderKey: z.string().min(16).max(200),
   reason: z.string().trim().min(1).max(500),

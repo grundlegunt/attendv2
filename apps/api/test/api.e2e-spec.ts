@@ -4983,6 +4983,40 @@ describe("Milestone 9 box office and workforce", () => {
     );
   });
 
+  it("replays a completed ticket exchange without creating another replacement", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const inventories = await prisma.showtimeSeat.findMany({
+      where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() }, auditorium: { locationId: owner.locationId } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+      include: { showtime: { include: { priceTier: true } } },
+      take: 20,
+    });
+    const originalInventory = inventories[0]!;
+    const replacementInventory = inventories.find((inventory) => inventory.id !== originalInventory.id && inventory.showtime.priceTier.ticketPriceMinor === originalInventory.showtime.priceTier.ticketPriceMinor)!;
+    expect(replacementInventory).toBeDefined();
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const order = await prisma.ticketOrder.create({ data: {
+      locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "PAID",
+      orderNumber: `EXCHANGE-REPLAY-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: originalInventory.showtime.priceTier.ticketPriceMinor, feesCents: 0, taxCents: 0, totalCents: originalInventory.showtime.priceTier.ticketPriceMinor,
+      tickets: { create: { showtimeSeatId: originalInventory.id, ticketTypeId: ticketType.id, priceCentsPaid: originalInventory.showtime.priceTier.ticketPriceMinor, qrToken: `exchange-replay-${crypto.randomUUID()}` } },
+    }, include: { tickets: true } });
+    const holderKey = `exchange-replay-${crypto.randomUUID()}`;
+    const holdToken = crypto.randomUUID();
+    await prisma.seatHold.create({ data: { showtimeSeatId: replacementInventory.id, holdToken, holderKey, expiresAt: new Date(Date.now() + 300_000) } });
+    const requestId = crypto.randomUUID();
+    const input = { ticketId: order.tickets[0]!.id, locationId: owner.locationId, employeeId: owner.id, requestId, holdToken, holderKey, reason: "Customer requested another showing" };
+    const boxOffice = app.get(BoxOfficeService);
+
+    const exchanged = await boxOffice.exchangeTicket(input);
+    const replayed = await boxOffice.exchangeTicket(input);
+    expect(replayed.id).toBe(exchanged.id);
+    expect(await prisma.ticket.count({ where: { ticketOrderId: order.id } })).toBe(2);
+    expect(await prisma.auditEvent.count({ where: { action: "ticket.exchanged", entityId: order.tickets[0]!.id } })).toBe(1);
+    await expect(boxOffice.exchangeTicket({ ...input, requestId: crypto.randomUUID() })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(boxOffice.exchangeTicket({ ...input, reason: "Different reason" })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
   it("rejects a cash refund request id reused for a different order", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });

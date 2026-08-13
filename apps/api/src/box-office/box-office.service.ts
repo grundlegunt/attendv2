@@ -342,10 +342,26 @@ export class BoxOfficeService {
     };
   }
 
-  async exchangeTicket(input: { ticketId: string; locationId: string; employeeId: string; holdToken: string; holderKey: string; reason: string }) {
+  async exchangeTicket(input: { ticketId: string; locationId: string; employeeId: string; requestId: string; holdToken: string; holderKey: string; reason: string }) {
     return prisma.$transaction(async (tx) => {
-      const original = await tx.ticket.findFirst({ where: { id: input.ticketId, ticketOrder: { locationId: input.locationId }, status: "ISSUED" }, include: { ticketOrder: true } });
+      await tx.$queryRaw`SELECT "id" FROM "tickets" WHERE "id" = ${input.ticketId} FOR UPDATE`;
+      const original = await tx.ticket.findFirst({ where: { id: input.ticketId, ticketOrder: { locationId: input.locationId } }, include: { ticketOrder: true } });
       if (!original) throw AppError.notFound("Exchangeable ticket was not found.");
+      if (original.status === "CANCELED") {
+        const completed = await tx.auditEvent.findFirst({
+          where: { locationId: input.locationId, action: "ticket.exchanged", entityType: "Ticket", entityId: original.id },
+          orderBy: { occurredAt: "desc" },
+          select: { afterState: true },
+        });
+        const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+          ? completed.afterState as Record<string, unknown>
+          : undefined;
+        if (receipt?.requestId !== input.requestId || receipt.holdToken !== input.holdToken || receipt.reason !== input.reason || typeof receipt.replacementTicketId !== "string") {
+          throw AppError.conflict("This ticket was already exchanged by a different request.");
+        }
+        return tx.ticket.findUniqueOrThrow({ where: { id: receipt.replacementTicketId } });
+      }
+      if (original.status !== "ISSUED") throw AppError.notFound("Exchangeable ticket was not found.");
       const hold = await tx.seatHold.findUnique({ where: { holdToken: input.holdToken }, include: { showtimeSeat: { include: { showtime: { include: { priceTier: true, auditorium: true } } } } } });
       const now = new Date();
       if (!hold || hold.holderKey !== input.holderKey || hold.releasedAt || hold.expiresAt <= now || hold.showtimeSeat.showtime.auditorium.locationId !== input.locationId) throw AppError.conflict("The replacement seat hold is no longer valid.");
@@ -359,7 +375,7 @@ export class BoxOfficeService {
       const replacement = await tx.ticket.create({ data: { id, ticketOrderId: original.ticketOrderId, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: original.ticketTypeId, priceCentsPaid: original.priceCentsPaid, qrToken: createTicketCredential(id, loadEnv().QR_CREDENTIAL_SECRET) } });
       await tx.seatHold.update({ where: { id: hold.id }, data: { releasedAt: now } });
       await tx.ticketOrder.update({ where: { id: original.ticketOrderId }, data: { status: "EXCHANGED" } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.exchanged", entityType: "Ticket", entityId: original.id, beforeState: { showtimeSeatId: original.showtimeSeatId }, afterState: { replacementTicketId: replacement.id, showtimeSeatId: replacement.showtimeSeatId, reason: input.reason } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.exchanged", entityType: "Ticket", entityId: original.id, beforeState: { showtimeSeatId: original.showtimeSeatId }, afterState: { requestId: input.requestId, holdToken: input.holdToken, replacementTicketId: replacement.id, showtimeSeatId: replacement.showtimeSeatId, reason: input.reason } } });
       return replacement;
     });
   }
