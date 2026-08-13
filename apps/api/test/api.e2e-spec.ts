@@ -4989,6 +4989,15 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.ticketOrder.count({ where: { checkoutIdempotencyKey: requestId } })).toBe(1);
     expect(await prisma.ticket.count({ where: { ticketOrderId: first.body.id } })).toBe(1);
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: first.body.id, type: "SALE" } })).toBe(1);
+
+    await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ...payload, holderKey: `different-holder-${crypto.randomUUID()}` })
+      .expect(409, {
+        statusCode: 409,
+        code: "CONFLICT",
+        message: "The checkout request id was already used with different sale details.",
+      });
   });
 
   it("redeems an active gift card atomically for a box-office ticket sale", async () => {

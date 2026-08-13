@@ -91,6 +91,28 @@ export class BoxOfficeService {
       where: { checkoutIdempotencyKey: input.requestId },
       include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true },
     });
+    const assertReplayMatches = (order: NonNullable<typeof existing>) => {
+      const holdTokens = [...new Set(input.holdTokens)].sort();
+      const saleCash = order.cashTransactions.find((transaction) => transaction.type === "SALE");
+      const paidTenderMatches = order.status !== "PAID" || (
+        (saleCash?.amountCents ?? 0) === input.cashCents
+        && (input.cashCents === 0 || saleCash?.cashDrawerId === input.cashDrawerId)
+        && order.totalCents - (order.payment?.amountCents ?? 0) - (saleCash?.amountCents ?? 0) === input.giftCardCents
+      );
+      const matches = order.locationId === input.locationId
+        && order.placedByEmployeeId === input.employeeId
+        && order.ticketTypeId === input.ticketTypeId
+        && order.holderKey === input.holderKey
+        && order.holdTokens.length === holdTokens.length
+        && order.holdTokens.every((token, index) => token === holdTokens[index])
+        && order.guestEmail === (input.customerEmail?.toLowerCase() ?? null)
+        && order.guestName === (input.customerName ?? null)
+        && (order.payment?.amountCents ?? 0) === input.cardCents
+        && order.totalCents === input.cashCents + input.cardCents + input.giftCardCents
+        && paidTenderMatches;
+      if (!matches) throw AppError.conflict("The checkout request id was already used with different sale details.");
+    };
+    if (existing) assertReplayMatches(existing);
     if (existing?.status === "PAID") return existing;
     const quote = await this.quote(input);
     if (input.cashCents + input.cardCents + input.giftCardCents !== quote.totalCents) {
@@ -154,6 +176,7 @@ export class BoxOfficeService {
       }
     }
     if (!order) throw AppError.conflict("The box-office checkout is still being created. Please retry.");
+    assertReplayMatches(order);
 
     let cardResult = null;
     if (input.cardCents > 0) {
