@@ -48,6 +48,7 @@ export function LiveRestaurantTab({
   const paymentPendingRef = useRef(false);
   const refreshPendingRef = useRef(false);
   const refreshRequestRef = useRef(0);
+  const tabIdentityRef = useRef(0);
 
   async function refresh() {
     if (refreshPendingRef.current) return;
@@ -74,9 +75,20 @@ export function LiveRestaurantTab({
   }
 
   useEffect(() => {
+    tabIdentityRef.current += 1;
+    setTab(null);
+    setTipCents(0);
+    setMessage("");
+    setRefreshError("");
+    setTipError("");
+    tipPendingRef.current = false;
+    paymentPendingRef.current = false;
+    setTipPending(false);
+    setPaymentPending(false);
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
+      tabIdentityRef.current += 1;
       refreshRequestRef.current += 1;
       refreshPendingRef.current = false;
       window.clearInterval(timer);
@@ -85,6 +97,7 @@ export function LiveRestaurantTab({
 
   async function chooseTip(value: number) {
     if (tipPendingRef.current || paymentPendingRef.current) return;
+    const tabIdentity = tabIdentityRef.current;
     tipPendingRef.current = true;
     setTipPending(true);
     setTipCents(value);
@@ -101,14 +114,17 @@ export function LiveRestaurantTab({
       );
       await refresh();
     } catch (error) {
+      if (tabIdentity !== tabIdentityRef.current) return;
       setTipError(
         error instanceof ApiRequestError
           ? error.body.message
           : "Your tip could not be updated.",
       );
     } finally {
-      tipPendingRef.current = false;
-      setTipPending(false);
+      if (tabIdentity === tabIdentityRef.current) {
+        tipPendingRef.current = false;
+        setTipPending(false);
+      }
     }
   }
 
@@ -118,6 +134,7 @@ export function LiveRestaurantTab({
       return setMessage("Ask your server to collect a different card at the table.");
     }
     paymentPendingRef.current = true;
+    const tabIdentity = tabIdentityRef.current;
     setPaymentPending(true);
     setMessage("");
     try {
@@ -134,6 +151,7 @@ export function LiveRestaurantTab({
           }),
         },
       );
+      if (tabIdentity !== tabIdentityRef.current) return;
       setMessage(
         result.status === "CLOSED"
           ? "Paid. Your receipt is ready."
@@ -141,14 +159,17 @@ export function LiveRestaurantTab({
       );
       await refresh();
     } catch (error) {
+      if (tabIdentity !== tabIdentityRef.current) return;
       setMessage(
         error instanceof ApiRequestError
           ? error.body.message
           : "Payment could not be completed.",
       );
     } finally {
-      paymentPendingRef.current = false;
-      setPaymentPending(false);
+      if (tabIdentity === tabIdentityRef.current) {
+        paymentPendingRef.current = false;
+        setPaymentPending(false);
+      }
     }
   }
 
