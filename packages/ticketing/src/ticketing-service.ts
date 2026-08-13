@@ -130,7 +130,10 @@ export class TicketingService {
     // got back an order with nothing to actually confirm payment with.
     // completeCheckout finishes that work using this SAME order (never a
     // new one) instead of leaving it stuck.
-    if (existing) return this.completeCheckout(existing);
+    if (existing) {
+      this.assertCheckoutReplayMatches(existing, input, holdTokens);
+      return this.completeCheckout(existing);
+    }
 
     const holds = await this.prisma.seatHold.findMany({
       where: { holdToken: { in: holdTokens } },
@@ -295,7 +298,10 @@ export class TicketingService {
             where: { checkoutIdempotencyKey: input.checkoutIdempotencyKey },
             include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
           });
-          if (concurrent) return this.completeCheckout(concurrent);
+          if (concurrent) {
+            this.assertCheckoutReplayMatches(concurrent, input, holdTokens);
+            return this.completeCheckout(concurrent);
+          }
           await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
         }
       }
@@ -303,6 +309,17 @@ export class TicketingService {
     }
 
     return this.completeCheckout(order);
+  }
+
+  private assertCheckoutReplayMatches(order: { ticketTypeId: string; holdTokens: string[]; holderKey: string; guestEmail: string | null; guestName: string | null; diningAuthorizationRequested: boolean | null }, input: CreateTicketCheckoutInput, holdTokens: string[]) {
+    const matches = order.ticketTypeId === input.ticketTypeId
+      && order.holderKey === input.holderKey
+      && order.holdTokens.length === holdTokens.length
+      && order.holdTokens.every((token, index) => token === holdTokens[index])
+      && order.guestEmail === input.email.toLowerCase()
+      && order.guestName === (input.name?.trim() || null)
+      && order.diningAuthorizationRequested === input.diningAuthorizationRequested;
+    if (!matches) throw TicketingError.conflict("The checkout idempotency key was already used with different checkout details.");
   }
 
   /**
