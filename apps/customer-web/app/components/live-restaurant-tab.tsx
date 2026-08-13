@@ -197,7 +197,9 @@ export function LiveRestaurantTab({
       if (result.status !== "SETTLEMENT_PENDING") paymentAttemptRef.current = null;
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
-      if (error instanceof ApiRequestError) paymentAttemptRef.current = null;
+      if (error instanceof ApiRequestError && error.status < 500) {
+        paymentAttemptRef.current = null;
+      }
       setMessage(
         error instanceof ApiRequestError
           ? error.body.message
