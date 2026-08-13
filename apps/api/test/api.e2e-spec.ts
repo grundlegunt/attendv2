@@ -3903,6 +3903,55 @@ describe("Milestone 6 server POS and menus", () => {
     }
   });
 
+  it("never adds a draft line after its order is sent concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Send add race" });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ menuItemId: cocktail.id, quantity: 1, modifierIds: [] })
+      .expect(201);
+
+    const [sent, added] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({}),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ menuItemId: cocktail.id, quantity: 1, modifierIds: [] }),
+    ]);
+
+    expect([
+      [201, 404],
+      [201, 201],
+    ]).toContainEqual([sent.status, added.status]);
+    const finalOrder = await prisma.restaurantOrder.findUniqueOrThrow({
+      where: { id: order.body.id },
+      include: { items: true },
+    });
+    if (added.status === 404) {
+      expect(finalOrder).toMatchObject({ status: "SENT" });
+      expect(finalOrder.items).toHaveLength(1);
+      expect(finalOrder.items.every((item) => item.status === "SENT")).toBe(true);
+    } else {
+      expect(finalOrder).toMatchObject({ status: "SENT" });
+      expect(finalOrder.items).toHaveLength(2);
+      expect(finalOrder.items.every((item) => item.status === "SENT")).toBe(true);
+    }
+  });
+
   it("sends available lines while preserving an 86'd line in a replacement draft", async () => {
     const { prisma } = await import("@cinema/database");
     const [burger, cocktail] = await Promise.all([
