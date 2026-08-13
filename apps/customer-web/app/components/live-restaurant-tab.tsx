@@ -46,28 +46,41 @@ export function LiveRestaurantTab({
   const [paymentPending, setPaymentPending] = useState(false);
   const tipPendingRef = useRef(false);
   const paymentPendingRef = useRef(false);
+  const refreshPendingRef = useRef(false);
+  const refreshRequestRef = useRef(0);
 
   async function refresh() {
+    if (refreshPendingRef.current) return;
+    refreshPendingRef.current = true;
+    const requestId = ++refreshRequestRef.current;
     try {
-      setTab(
-        await apiFetch<LiveTab>(guestToken
-          ? `/public/restaurant-tabs/${guestToken}`
-          : `/customer/restaurant-tabs/${tabId}`),
+      const nextTab = await apiFetch<LiveTab>(guestToken
+        ? `/public/restaurant-tabs/${guestToken}`
+        : `/customer/restaurant-tabs/${tabId}`
       );
+      if (requestId !== refreshRequestRef.current) return;
+      setTab(nextTab);
       setRefreshError("");
     } catch (error) {
+      if (requestId !== refreshRequestRef.current) return;
       setRefreshError(
         error instanceof ApiRequestError
           ? error.body.message
           : "Your live tab is unavailable.",
       );
+    } finally {
+      if (requestId === refreshRequestRef.current) refreshPendingRef.current = false;
     }
   }
 
   useEffect(() => {
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
-    return () => window.clearInterval(timer);
+    return () => {
+      refreshRequestRef.current += 1;
+      refreshPendingRef.current = false;
+      window.clearInterval(timer);
+    };
   }, [tabId, guestToken]);
 
   async function chooseTip(value: number) {
