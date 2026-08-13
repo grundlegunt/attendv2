@@ -478,28 +478,43 @@ export class BoxOfficeService {
       }
       return existing;
     }
-    return prisma.$transaction(async (tx) => {
-      const movement = await tx.cashTransaction.create({
-        data: {
-          locationId: input.locationId,
-          cashDrawerId: drawer.id,
-          employeeId: input.employeeId,
-          type: input.type,
-          amountCents: input.amountCents,
-          reason: input.reason,
-          idempotencyKey: input.idempotencyKey,
-        },
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const movement = await tx.cashTransaction.create({
+          data: {
+            locationId: input.locationId,
+            cashDrawerId: drawer.id,
+            employeeId: input.employeeId,
+            type: input.type,
+            amountCents: input.amountCents,
+            reason: input.reason,
+            idempotencyKey: input.idempotencyKey,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
+            action: input.type === "PAID_IN" ? "cash_drawer.paid_in" : "cash_drawer.paid_out",
+            entityType: "CashTransaction", entityId: movement.id,
+            afterState: { cashDrawerId: drawer.id, amountCents: input.amountCents, reason: input.reason },
+          },
+        });
+        return movement;
       });
-      await tx.auditEvent.create({
-        data: {
-          actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
-          action: input.type === "PAID_IN" ? "cash_drawer.paid_in" : "cash_drawer.paid_out",
-          entityType: "CashTransaction", entityId: movement.id,
-          afterState: { cashDrawerId: drawer.id, amountCents: input.amountCents, reason: input.reason },
-        },
-      });
-      return movement;
-    });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const concurrent = await prisma.cashTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+        if (concurrent) {
+          if (concurrent.cashDrawerId !== drawer.id || concurrent.amountCents !== input.amountCents || concurrent.type !== input.type) {
+            throw AppError.conflict("Cash movement id was reused with different details.");
+          }
+          return concurrent;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+      }
+      throw error;
+    }
   }
 
   async closeDrawer(input: { drawerId: string; locationId: string; employeeId: string; closingBalanceCents: number }) {
