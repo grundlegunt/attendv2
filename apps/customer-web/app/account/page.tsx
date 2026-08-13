@@ -52,6 +52,8 @@ export default function AccountPage() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [accountLoading, setAccountLoading] = useState(false);
@@ -91,6 +93,9 @@ export default function AccountPage() {
   }
 
   useEffect(() => {
+    setRestoreError(null);
+    setRestoring(true);
+
     void requestAccount(true)
       .then((response) => {
         setAccount(response);
@@ -98,7 +103,7 @@ export default function AccountPage() {
       })
       .catch((err) => {
         if (!(err instanceof ApiRequestError && err.status === 401)) {
-          setError(
+          setRestoreError(
             err instanceof ApiRequestError
               ? err.body.message
               : "Your account could not be loaded.",
@@ -106,7 +111,7 @@ export default function AccountPage() {
         }
       })
       .finally(() => setRestoring(false));
-  }, []);
+  }, [restoreAttempt]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -261,6 +266,7 @@ export default function AccountPage() {
       </section>
 
       {error && <div className="error-banner">{error}</div>}
+      {restoreError && <><div className="error-banner">{restoreError}</div><button className="primary" type="button" onClick={() => setRestoreAttempt((attempt) => attempt + 1)}>Retry account loading</button></>}
 
       {restoring ? (
         <div className="content-panel">
