@@ -10,6 +10,10 @@ export const shiftClockInRequestSchema = shiftPinRequestSchema.extend({
   requestId: z.string().uuid(),
 });
 
+export const shiftBreakStartRequestSchema = shiftPinRequestSchema.extend({
+  requestId: z.string().uuid(),
+});
+
 export const shiftManagerAdjustmentSchema = z.object({
   clockInAt: z.string().datetime().optional(),
   clockOutAt: z.string().datetime().nullable().optional(),
