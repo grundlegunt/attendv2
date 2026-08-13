@@ -1898,7 +1898,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       checkout.payment.providerPaymentId,
       "SUCCEEDED",
     );
-    jest
+    const sendReceipt = jest
       .spyOn(emailProvider, "sendTicketReceipt")
       .mockRejectedValueOnce(new Error("Email provider unavailable"));
 
@@ -1923,6 +1923,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(
       await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
     ).toBe(1);
+    sendReceipt.mockRestore();
   });
 
   it("retries a failed ticket receipt without issuing duplicate tickets", async () => {
@@ -1944,7 +1945,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       checkout.payment.providerPaymentId,
       "SUCCEEDED",
     );
-    jest
+    const sendReceipt = jest
       .spyOn(emailProvider, "sendTicketReceipt")
       .mockRejectedValueOnce(new Error("Email provider unavailable"));
 
@@ -1973,6 +1974,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       receiptEmailClaimedAt: null,
       receiptEmailError: null,
     });
+    sendReceipt.mockRestore();
   });
 
   it("claims ticket receipt delivery once when finalize requests race", async () => {
@@ -2024,6 +2026,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       receiptEmailMessageId: "test-concurrent-ticket-receipt",
       receiptEmailClaimedAt: null,
     });
+    sendReceipt.mockRestore();
   });
 
   it("recovers a successful payment through a replay-safe webhook", async () => {
