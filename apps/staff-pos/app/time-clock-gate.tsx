@@ -10,6 +10,7 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const clockRequestRef = useRef(0);
+  const clockInAttemptRef = useRef<string | null>(null);
 
   useEffect(() => {
     clockRequestRef.current += 1;
@@ -17,6 +18,7 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
     setBusy(false);
     setPin("");
     setMessage(null);
+    clockInAttemptRef.current = null;
     return () => { clockRequestRef.current += 1; };
   }, [employee.id, employee.locationId]);
 
@@ -32,8 +34,12 @@ export function TimeClockGate({ employee, onReady }: { employee: AuthenticatedEm
     try {
       const status = await apiFetch<{ shift: { id: string } | null }>("/shifts/status", { method: "POST", body });
       if (requestId !== clockRequestRef.current) return;
-      if (!status.shift) await apiFetch("/shifts/clock-in", { method: "POST", body });
+      if (!status.shift) {
+        clockInAttemptRef.current ??= crypto.randomUUID();
+        await apiFetch("/shifts/clock-in", { method: "POST", body: JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin: requestedPin, requestId: clockInAttemptRef.current }) });
+      }
       if (requestId !== clockRequestRef.current) return;
+      clockInAttemptRef.current = null;
       onReady(requestedPin);
     } catch (error) {
       if (requestId !== clockRequestRef.current) return;

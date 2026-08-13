@@ -34,21 +34,29 @@ export class WorkforceService {
     return { employee: { id: employee.id, name: employee.name }, shift };
   }
 
-  async clockIn(input: PinInput) {
+  async clockIn(input: PinInput & { requestId: string }) {
     const employee = await this.verifyPin(input);
-    if (await this.activeShift(employee.id, input.locationId)) {
-      throw AppError.conflict("This employee is already clocked in.");
-    }
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "employees" WHERE "id" = ${employee.id} FOR UPDATE`;
       const existing = await tx.shift.findFirst({
         where: { employeeId: employee.id, locationId: input.locationId, clockOutAt: null },
       });
-      if (existing) throw AppError.conflict("This employee is already clocked in.");
+      if (existing) {
+        const completed = await tx.auditEvent.findFirst({
+          where: { locationId: input.locationId, action: "shift.clocked_in", entityType: "Shift", entityId: existing.id },
+          orderBy: { occurredAt: "desc" },
+          select: { afterState: true },
+        });
+        const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+          ? completed.afterState as Record<string, unknown>
+          : undefined;
+        if (receipt?.requestId === input.requestId) return existing;
+        throw AppError.conflict("This employee is already clocked in.");
+      }
       const shift = await tx.shift.create({
         data: { employeeId: employee.id, locationId: input.locationId, clockInAt: new Date(), clockInMethod: "PIN" },
       });
-      await this.audit(tx, employee.id, input.locationId, "shift.clocked_in", shift.id, null, shift);
+      await this.audit(tx, employee.id, input.locationId, "shift.clocked_in", shift.id, null, { ...shift, requestId: input.requestId });
       return shift;
     });
   }
