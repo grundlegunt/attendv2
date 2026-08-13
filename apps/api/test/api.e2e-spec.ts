@@ -2064,6 +2064,16 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
         providerIntentId: first.body.payment.providerPaymentId,
       }),
     ]);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", idempotencyKey)
+      .send({ ...payload, email: `different-${payload.email}` })
+      .expect(409, {
+        code: "CONFLICT",
+        message: "The checkout idempotency key was already used with different checkout details.",
+      });
+    expect(createIntent).toHaveBeenCalledTimes(2);
     createIntent.mockRestore();
   });
 
