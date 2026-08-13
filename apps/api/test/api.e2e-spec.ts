@@ -3857,6 +3857,52 @@ describe("Milestone 6 server POS and menus", () => {
     await prisma.menuItem.update({ where: { id: burger.id }, data: { is86d: false } });
   });
 
+  it("never removes a draft line after its order is sent concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Send remove race" });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    const item = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ menuItemId: cocktail.id, quantity: 1, modifierIds: [] });
+
+    const [sent, removed] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({}),
+      request(app.getHttpServer())
+        .delete(`/api/v1/restaurant-tabs/orders/${order.body.id}/items/${item.body.id}`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`),
+    ]);
+
+    expect([
+      [201, 404],
+      [400, 200],
+    ]).toContainEqual([sent.status, removed.status]);
+    const finalOrder = await prisma.restaurantOrder.findUniqueOrThrow({
+      where: { id: order.body.id },
+      include: { items: true },
+    });
+    if (finalOrder.status === "SENT") {
+      expect(finalOrder.items).toEqual([
+        expect.objectContaining({ id: item.body.id, status: "SENT" }),
+      ]);
+    } else {
+      expect(finalOrder).toMatchObject({ status: "DRAFT", placedAt: null });
+      expect(finalOrder.items).toHaveLength(0);
+    }
+  });
+
   it("sends available lines while preserving an 86'd line in a replacement draft", async () => {
     const { prisma } = await import("@cinema/database");
     const [burger, cocktail] = await Promise.all([

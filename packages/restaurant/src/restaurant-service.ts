@@ -690,20 +690,25 @@ export class RestaurantService {
     orderItemId: string;
     locationId: string;
   }) {
-    const item = await this.prisma.restaurantOrderItem.findFirst({
-      where: {
-        id: input.orderItemId,
-        restaurantOrderId: input.orderId,
-        status: "DRAFT",
-        restaurantOrder: {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_orders" WHERE "id" = ${input.orderId} FOR UPDATE`,
+      );
+      const item = await tx.restaurantOrderItem.findFirst({
+        where: {
+          id: input.orderItemId,
+          restaurantOrderId: input.orderId,
           status: "DRAFT",
-          restaurantTab: { locationId: input.locationId },
+          restaurantOrder: {
+            status: "DRAFT",
+            restaurantTab: { locationId: input.locationId },
+          },
         },
-      },
+      });
+      if (!item) throw new RestaurantError("Draft order item was not found.", "NOT_FOUND");
+      await tx.restaurantOrderItem.delete({ where: { id: item.id } });
+      return { removed: true };
     });
-    if (!item) throw new RestaurantError("Draft order item was not found.", "NOT_FOUND");
-    await this.prisma.restaurantOrderItem.delete({ where: { id: item.id } });
-    return { removed: true };
   }
 
   async sendOrder(input: { orderId: string; locationId: string; actorId: string }) {
