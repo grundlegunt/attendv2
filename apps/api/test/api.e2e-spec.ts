@@ -4083,6 +4083,79 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       }),
     ).toBeNull();
   });
+
+  it("leaves a still-processing restaurant payment pending without extra attempts", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      include: { location: { include: { organization: true } } },
+    });
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const intent = await provider.createPaymentIntent({
+      connectedAccountId:
+        source.location.organization.stripeConnectedAccountId ?? undefined,
+      amountCents: 500,
+      currency: source.location.currency,
+      metadata: { restaurantTabId: "pending-unchanged-fixture" },
+      idempotencyKey: crypto.randomUUID(),
+    });
+    provider.setIntentStatus(intent.id, "PROCESSING");
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        tabType: "WALK_IN",
+        label: "Still processing reconciliation fixture",
+        status: "SETTLEMENT_PENDING",
+        subtotalCents: 500,
+        taxCents: 0,
+        serviceChargeCents: 0,
+        selectedTipCents: 0,
+        totalCents: 500,
+        payments: {
+          create: {
+            purpose: "RESTAURANT_TAB",
+            amountCents: 500,
+            tipCents: 0,
+            currency: source.location.currency,
+            status: "PROCESSING",
+            idempotencyKey: crypto.randomUUID(),
+            provider: provider.name,
+            providerPaymentId: intent.id,
+          },
+        },
+      },
+      include: { payments: true },
+    });
+
+    const result = await app
+      .get(RestaurantSettlementService)
+      .reconcileProcessingPayments();
+
+    expect(result).toMatchObject({ pending: 1, resolved: 0, errors: 0 });
+    expect(
+      await prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).toMatchObject({ status: "SETTLEMENT_PENDING", closedAt: null });
+    expect(
+      await prisma.payment.findUniqueOrThrow({ where: { id: tab.payments[0]!.id } }),
+    ).toMatchObject({ status: "PROCESSING", providerPaymentId: intent.id });
+    expect(
+      await prisma.paymentAttempt.count({
+        where: { paymentId: tab.payments[0]!.id },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.restaurantReceipt.findUnique({
+        where: { restaurantTabId: tab.id },
+      }),
+    ).toBeNull();
+  });
 });
 
 describe("Milestone 9 box office and workforce", () => {
