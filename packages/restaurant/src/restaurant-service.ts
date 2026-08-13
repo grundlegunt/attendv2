@@ -615,6 +615,9 @@ export class RestaurantService {
     course?: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_orders" WHERE "id" = ${input.orderId} FOR UPDATE`,
+      );
       const order = await tx.restaurantOrder.findFirst({
         where: {
           id: input.orderId,
