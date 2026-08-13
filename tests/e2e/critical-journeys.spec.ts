@@ -53,6 +53,51 @@ test("customer account session restores from HttpOnly cookies and clears on logo
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
 
+test("restaurant payment recovery link shows the remaining balance without retrying automatically", async ({ page }) => {
+  let paymentRequests = 0;
+  await page.route("**/api/v1/public/restaurant-tabs/recovery-token**", async (route) => {
+    if (route.request().method() === "POST") paymentRequests += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: "tab-recovery",
+        status: "PAYMENT_FAILED",
+        checkDroppedAt: "2026-08-13T18:00:00.000Z",
+        selectedTipCents: 200,
+        activePaymentMethod: { id: "payment-method-1", brand: "visa", last4: "4242" },
+        orders: [{
+          id: "order-1",
+          items: [{
+            id: "item-1",
+            quantity: 1,
+            unitPriceCentsSnapshot: 1700,
+            modifierTotalCents: 0,
+            menuItem: { name: "Dinner special" },
+          }],
+        }],
+        totals: {
+          subtotalCents: 1700,
+          taxCents: 166,
+          serviceChargeCents: 200,
+          totalCents: 2066,
+        },
+        paidCents: 0,
+        receipt: null,
+      }),
+    });
+  });
+
+  await page.goto("http://127.0.0.1:3000/account?restaurantTab=recovery-token");
+
+  await expect(page.getByRole("heading", { name: "Your live tab" })).toBeVisible();
+  await expect(page.getByText("Your previous payment attempt was not completed. No automatic retry was made."))
+    .toBeVisible();
+  await expect(page.getByRole("heading", { name: "Balance due $20.66" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Retry remaining balance" })).toBeVisible();
+  expect(paymentRequests).toBe(0);
+});
+
 test("staff signs in, clocks in, and reaches live operational tools", async ({ page }) => {
   await page.goto("http://127.0.0.1:3001");
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
