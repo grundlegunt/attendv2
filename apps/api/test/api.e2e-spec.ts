@@ -4962,11 +4962,19 @@ describe("Milestone 9 box office and workforce", () => {
 
     await request(app.getHttpServer()).post(`/api/v1/box-office/tickets/${sale.body.tickets[0].id}/reprint`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({}).expect(201);
+    const refundRequestId = crypto.randomUUID();
+    const refundPayload = { requestId: refundRequestId, reason: "E2E full refund", cashDrawerId: drawer.body.id };
     const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E full refund", cashDrawerId: drawer.body.id }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(refundPayload).expect(201);
     expect(refunded.body.status).toBe("REFUNDED");
     expect(refunded.body.tickets[0].status).toBe("REFUNDED");
+    const replayed = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(refundPayload).expect(201);
+    expect(replayed.body.id).toBe(refunded.body.id);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ ...refundPayload, reason: "Changed reason" }).expect(409);
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
+    expect(await prisma.refund.count({ where: { idempotencyKey: `box-office-refund:${refundRequestId}` } })).toBe(1);
     const history = await request(app.getHttpServer()).get(`/api/v1/management/refunds/history?query=${encodeURIComponent(sale.body.orderNumber)}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(history.body.ticketOrders.map((order: { id: string }) => order.id)).toContain(sale.body.id);
@@ -5080,13 +5088,14 @@ describe("Milestone 9 box office and workforce", () => {
     expect(card.balanceCents).toBe(100_000 - giftCardCents);
     expect(card.transactions).toEqual([expect.objectContaining({ amountCents: -giftCardCents, balanceAfterCents: card.balanceCents, reference: sale.body.id })]);
 
+    const refundRequestId = crypto.randomUUID();
     const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E gift card refund", cashDrawerId: drawer.body.id }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: refundRequestId, reason: "E2E gift card refund", cashDrawerId: drawer.body.id }).expect(201);
     expect(refunded.body.status).toBe("REFUNDED");
     const restored = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: { orderBy: { createdAt: "asc" } } } });
     expect(restored.balanceCents).toBe(100_000);
     expect(restored.transactions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ type: "REFUND", amountCents: giftCardCents, balanceAfterCents: 100_000, reference: `refund:${sale.body.id}` }),
+      expect.objectContaining({ type: "REFUND", amountCents: giftCardCents, balanceAfterCents: 100_000, reference: `refund:${sale.body.id}:${refundRequestId}` }),
     ]));
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
   });
@@ -5114,12 +5123,13 @@ describe("Milestone 9 box office and workforce", () => {
     expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
     expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(0);
 
+    const refundRequestId = crypto.randomUUID();
     const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E split tender refund" }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: refundRequestId, reason: "E2E split tender refund" }).expect(201);
     expect(refunded.body).toMatchObject({ status: "REFUNDED", payment: { amountCents: cardCents, status: "REFUNDED" } });
     const restored = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: true } });
     expect(restored.balanceCents).toBe(500);
-    expect(restored.transactions).toEqual(expect.arrayContaining([expect.objectContaining({ type: "REFUND", amountCents: 500, reference: `refund:${sale.body.id}` })]));
+    expect(restored.transactions).toEqual(expect.arrayContaining([expect.objectContaining({ type: "REFUND", amountCents: 500, reference: `refund:${sale.body.id}:${refundRequestId}` })]));
   });
 
   it("refunds a successful card-present charge exactly once when seat finalization loses its hold", async () => {
