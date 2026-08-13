@@ -67,10 +67,24 @@ export class ManagementRefundService {
 
   async refundRestaurant(input: { tabId: string; locationId: string; employeeId: string; requestId: string; reason: string }) {
     const tab = await prisma.restaurantTab.findFirst({
-      where: { id: input.tabId, locationId: input.locationId, status: { in: ["CLOSED", "MANAGER_REVIEW"] } },
+      where: { id: input.tabId, locationId: input.locationId, status: { in: ["CLOSED", "MANAGER_REVIEW", "REFUNDED"] } },
       include: { payments: { where: { status: { in: ["SUCCEEDED", "REFUNDED"] } }, include: { refunds: { orderBy: { createdAt: "desc" } } } }, location: { include: { organization: true } } },
     });
     if (!tab) throw AppError.notFound("Refundable restaurant tab was not found.");
+    if (tab.status === "REFUNDED") {
+      const completed = await prisma.auditEvent.findFirst({
+        where: { locationId: input.locationId, action: "restaurant_tab.refunded", entityType: "RestaurantTab", entityId: tab.id },
+        orderBy: { occurredAt: "desc" },
+        select: { afterState: true },
+      });
+      const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+        ? completed.afterState as Record<string, unknown>
+        : undefined;
+      if (receipt?.requestId !== input.requestId || receipt.reason !== input.reason) {
+        throw AppError.conflict("This restaurant tab was already refunded by a different request.");
+      }
+      return prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id }, include: { payments: { include: { refunds: true } }, receipt: true } });
+    }
     if (!tab.payments.length) throw AppError.conflict("The restaurant tab has no refundable payments.");
     if (tab.payments.some((payment) => payment.status !== "REFUNDED" && !payment.providerPaymentId)) throw AppError.conflict("A restaurant payment is missing its provider reference.");
 
@@ -113,7 +127,7 @@ export class ManagementRefundService {
     const status = !requiresAttention && paymentStates.every((payment) => payment.status === "REFUNDED") ? "REFUNDED" : "MANAGER_REVIEW";
     await prisma.$transaction(async (tx) => {
       await tx.restaurantTab.update({ where: { id: tab.id }, data: { status } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: status === "REFUNDED" ? "restaurant_tab.refunded" : "restaurant_tab.refund_attention_required", entityType: "RestaurantTab", entityId: tab.id, afterState: { reason: input.reason, paymentCount: tab.payments.length, status } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: status === "REFUNDED" ? "restaurant_tab.refunded" : "restaurant_tab.refund_attention_required", entityType: "RestaurantTab", entityId: tab.id, afterState: { requestId: input.requestId, reason: input.reason, paymentCount: tab.payments.length, status } } });
     });
     if (status === "MANAGER_REVIEW") throw AppError.conflict("One or more restaurant refunds require manager review; completed tenders were preserved and this tab can be retried.");
     return prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id }, include: { payments: { include: { refunds: true } }, receipt: true } });
