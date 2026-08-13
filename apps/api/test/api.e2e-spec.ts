@@ -1974,6 +1974,57 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     });
   });
 
+  it("claims ticket receipt delivery once when finalize requests race", async () => {
+    const holderKey = `ticket-receipt-race-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const { prisma } = await import("@cinema/database");
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    paymentProvider.setIntentStatus(
+      checkout.payment.providerPaymentId,
+      "SUCCEEDED",
+    );
+    const sendReceipt = jest
+      .spyOn(emailProvider, "sendTicketReceipt")
+      .mockImplementationOnce(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        return { messageId: "test-concurrent-ticket-receipt" };
+      });
+
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+        .send({}),
+      request(app.getHttpServer())
+        .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+        .send({}),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(sendReceipt).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+    await expect(
+      prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.orderId } }),
+    ).resolves.toMatchObject({
+      status: "PAID",
+      receiptEmailSentAt: expect.any(Date),
+      receiptEmailMessageId: "test-concurrent-ticket-receipt",
+      receiptEmailClaimedAt: null,
+    });
+  });
+
   it("recovers a successful payment through a replay-safe webhook", async () => {
     const holderKey = "ticket-webhook-holder-0002";
     const { hold } = await holdAvailableSeat(holderKey);
