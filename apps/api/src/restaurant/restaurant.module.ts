@@ -12,9 +12,10 @@ import {
 import { RestaurantSettlementService } from "./restaurant-settlement.service";
 import { RestaurantSettlementSchedulerService } from "./restaurant-settlement-scheduler.service";
 import { PaymentsModule } from "../payments/payments.module";
+import { NotificationsModule } from "../notifications/notifications.module";
 
 @Module({
-  imports: [PaymentsModule],
+  imports: [PaymentsModule, NotificationsModule],
   controllers: [
     RestaurantController,
     MenuController,

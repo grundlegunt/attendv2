@@ -63,6 +63,13 @@ export default function AccountPage() {
   const [tabLookup, setTabLookup] = useState("");
   const [guestTabToken, setGuestTabToken] = useState("");
 
+  useEffect(() => {
+    const token = new URLSearchParams(window.location.search).get(
+      "restaurantTab",
+    );
+    if (token) setGuestTabToken(token);
+  }, []);
+
   const upcomingOrders = useMemo(
     () => account?.orders.filter(hasUpcomingTicket) ?? [],
     [account],

@@ -3940,6 +3940,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       where: { id: milestone8TabId },
       include: {
         activePaymentMethod: { include: { paymentCustomer: true } },
+        primaryCustomer: true,
         showtime: true,
         orders: { include: { items: true } },
       },
@@ -4006,7 +4007,15 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { RestaurantSettlementService } = await import(
       "../src/restaurant/restaurant-settlement.service"
     );
+    const { EMAIL_PROVIDER } = await import(
+      "../src/notifications/notifications.module"
+    );
+    const { TestEmailProvider } = await import("@cinema/notifications");
     const settlement = app.get(RestaurantSettlementService);
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    const noticesBefore = emailProvider.sentRestaurantPaymentFailures.length;
     await settlement.runFallback();
     await settlement.runFallback();
     expect(
@@ -4021,6 +4030,26 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       .expect(200);
     expect(attention.body.map((candidate: { id: string }) => candidate.id))
       .toContain(tab.id);
+    const notices = emailProvider.sentRestaurantPaymentFailures.slice(
+      noticesBefore,
+    );
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatchObject({
+      to: source.primaryCustomer!.email,
+      tabId: tab.id,
+      amountDueCents: expect.any(Number),
+      currency: "usd",
+    });
+    expect(notices[0]!.amountDueCents).toBeGreaterThan(0);
+    const recoveryUrl = new URL(notices[0]!.paymentUrl);
+    expect(`${recoveryUrl.origin}${recoveryUrl.pathname}`).toBe(
+      `${CUSTOMER_WEB_ORIGIN}/account`,
+    );
+    const guestToken = recoveryUrl.searchParams.get("restaurantTab");
+    expect(guestToken).toBeTruthy();
+    await request(app.getHttpServer())
+      .get(`/api/v1/public/restaurant-tabs/${encodeURIComponent(guestToken!)}`)
+      .expect(200);
   });
 
   it("reconciles a processing restaurant payment and closes the paid tab", async () => {
