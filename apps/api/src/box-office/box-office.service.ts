@@ -365,7 +365,10 @@ export class BoxOfficeService {
           await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
           const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
           if (!drawer) throw AppError.conflict("The cash drawer is not open.");
-          await tx.cashTransaction.upsert({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` }, update: {}, create: { locationId: input.locationId, cashDrawerId: drawer.id, ticketOrderId: order.id, employeeId: input.employeeId, type: "REFUND", amountCents: cashPaid, reason: input.reason, idempotencyKey: `box-office-cash-refund:${input.requestId}` } });
+          const cashRefund = await tx.cashTransaction.upsert({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` }, update: {}, create: { locationId: input.locationId, cashDrawerId: drawer.id, ticketOrderId: order.id, employeeId: input.employeeId, type: "REFUND", amountCents: cashPaid, reason: input.reason, idempotencyKey: `box-office-cash-refund:${input.requestId}` } });
+          if (cashRefund.ticketOrderId !== order.id || cashRefund.cashDrawerId !== drawer.id || cashRefund.amountCents !== cashPaid || cashRefund.reason !== input.reason || cashRefund.type !== "REFUND") {
+            throw AppError.conflict("The refund request id was already used with different details.");
+          }
         }
         await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
         await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
@@ -379,6 +382,9 @@ export class BoxOfficeService {
     if (cardPaid > 0) {
       if (!order.payment?.providerPaymentId) throw AppError.conflict("The card payment is missing its provider reference.");
       refundRow = await prisma.refund.upsert({ where: { idempotencyKey: `box-office-refund:${input.requestId}` }, update: {}, create: { paymentId: order.payment.id, amountCents: cardPaid, reason: input.reason, scope: "TICKET", idempotencyKey: `box-office-refund:${input.requestId}` } });
+      if (refundRow.paymentId !== order.payment.id || refundRow.amountCents !== cardPaid || refundRow.reason !== input.reason || refundRow.scope !== "TICKET") {
+        throw AppError.conflict("The refund request id was already used with different details.");
+      }
       providerRefund = await this.paymentProvider.refund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerPaymentId: order.payment.providerPaymentId, amountCents: cardPaid, reason: "requested_by_customer", idempotencyKey: refundRow.idempotencyKey, metadata: { refundId: refundRow.id, ticketOrderId: order.id } });
       if (providerRefund.status === "FAILED") {
         await prisma.refund.update({ where: { id: refundRow.id }, data: { status: "FAILED", providerRefundId: providerRefund.id } });
@@ -402,7 +408,10 @@ export class BoxOfficeService {
         await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
         const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
         if (!drawer) throw AppError.conflict("The cash drawer is not open.");
-        await tx.cashTransaction.upsert({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` }, update: {}, create: { locationId: input.locationId, cashDrawerId: drawer.id, ticketOrderId: order.id, employeeId: input.employeeId, type: "REFUND", amountCents: cashPaid, reason: input.reason, idempotencyKey: `box-office-cash-refund:${input.requestId}` } });
+        const cashRefund = await tx.cashTransaction.upsert({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` }, update: {}, create: { locationId: input.locationId, cashDrawerId: drawer.id, ticketOrderId: order.id, employeeId: input.employeeId, type: "REFUND", amountCents: cashPaid, reason: input.reason, idempotencyKey: `box-office-cash-refund:${input.requestId}` } });
+        if (cashRefund.ticketOrderId !== order.id || cashRefund.cashDrawerId !== drawer.id || cashRefund.amountCents !== cashPaid || cashRefund.reason !== input.reason || cashRefund.type !== "REFUND") {
+          throw AppError.conflict("The refund request id was already used with different details.");
+        }
       }
       await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
       await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });

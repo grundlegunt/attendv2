@@ -4927,6 +4927,38 @@ describe("Milestone 9 box office and workforce", () => {
     );
   });
 
+  it("rejects a cash refund request id reused for a different order", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `REFUND-REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+    const orders = await Promise.all([0, 1].map((index) => prisma.ticketOrder.create({
+      data: {
+        locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(),
+        channel: "BOX_OFFICE", status: "PAID", orderNumber: `REFUND-REPLAY-${index}-${crypto.randomUUID()}`,
+        checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1000, feesCents: 0, taxCents: 0, totalCents: 1000,
+        placedByEmployeeId: owner.id,
+      },
+    })));
+    await Promise.all(orders.map((order) => prisma.cashTransaction.create({
+      data: {
+        locationId: owner.locationId, cashDrawerId: drawer.body.id, ticketOrderId: order.id, employeeId: owner.id,
+        type: "SALE", amountCents: 1000, cashReceivedCents: 1000, changeGivenCents: 0, idempotencyKey: `refund-replay-sale:${order.id}`,
+      },
+    })));
+    const requestId = crypto.randomUUID();
+    const payload = { requestId, reason: "Customer request", cashDrawerId: drawer.body.id };
+
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${orders[0].id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(payload).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${orders[1].id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(payload).expect(409);
+
+    expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: orders[1].id } })).toMatchObject({ status: "PAID" });
+    expect(await prisma.cashTransaction.count({ where: { idempotencyKey: `box-office-cash-refund:${requestId}` } })).toBe(1);
+  });
+
   it("reuses one cash box-office sale when identical register requests arrive concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
