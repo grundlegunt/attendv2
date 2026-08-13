@@ -40,6 +40,7 @@ export function LiveRestaurantTab({
   const [tab, setTab] = useState<LiveTab | null>(null);
   const [tipCents, setTipCents] = useState(0);
   const [message, setMessage] = useState("");
+  const [refreshError, setRefreshError] = useState("");
 
   async function refresh() {
     try {
@@ -48,8 +49,9 @@ export function LiveRestaurantTab({
           ? `/public/restaurant-tabs/${guestToken}`
           : `/customer/restaurant-tabs/${tabId}`),
       );
+      setRefreshError("");
     } catch (error) {
-      setMessage(
+      setRefreshError(
         error instanceof ApiRequestError
           ? error.body.message
           : "Your live tab is unavailable.",
@@ -114,7 +116,7 @@ export function LiveRestaurantTab({
     return (
       <section className="account-panel">
         <button className="link" onClick={onClose}>Back</button>
-        <p>{message || "Loading your tab…"}</p>
+        <p>{refreshError || "Loading your tab…"}</p>
       </section>
     );
   }
@@ -175,6 +177,7 @@ export function LiveRestaurantTab({
         <button className="primary" onClick={pay}>Pay & close tab</button>
       )}
       {tab.receipt && <p>Receipt {tab.receipt.receiptNumber}</p>}
+      {refreshError && <div className="error-banner">{refreshError}</div>}
       {message && <div className="error-banner">{message}</div>}
     </section>
   );
