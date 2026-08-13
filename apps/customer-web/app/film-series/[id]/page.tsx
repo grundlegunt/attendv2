@@ -23,13 +23,16 @@ export default function FilmSeriesDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [program, setProgram] = useState<FilmSeriesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [selectedShowtimeId, setSelectedShowtimeId] = useState<string | null>(null);
 
   useEffect(() => {
+    setError(null);
+
     apiFetch<FilmSeriesResponse>("/cinema/film-series")
       .then(setProgram)
       .catch((err) => setError(err instanceof ApiRequestError ? err.body.message : "Film series are unavailable."));
-  }, []);
+  }, [loadAttempt]);
 
   useEffect(() => {
     setSelectedShowtimeId(null);
@@ -51,7 +54,7 @@ export default function FilmSeriesDetailPage() {
 
   return (
     <main className="cinema-shell route-page">
-      {error && <div className="error-banner">{error}</div>}
+      {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></>}
       {!program && !error && <p className="loading-copy">Loading film series…</p>}
       {program && !series && <div className="error-banner">This film series is not available.</div>}
       {series && (
