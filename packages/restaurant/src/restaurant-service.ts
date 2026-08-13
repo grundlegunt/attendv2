@@ -581,27 +581,32 @@ export class RestaurantService {
     actorId: string;
     showtimeSeatId?: string;
   }) {
-    const tab = await this.prisma.restaurantTab.findFirst({
-      where: {
-        id: input.tabId,
-        locationId: input.locationId,
-        status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"] },
-      },
-      include: { seats: true },
-    });
-    if (!tab) throw new RestaurantError("Open restaurant tab was not found.", "NOT_FOUND");
-    if (
-      input.showtimeSeatId &&
-      !tab.seats.some((seat) => seat.showtimeSeatId === input.showtimeSeatId)
-    ) {
-      throw new RestaurantError("The selected seat does not belong to this tab.", "INVALID");
-    }
-    return this.prisma.restaurantOrder.create({
-      data: {
-        restaurantTabId: tab.id,
-        serverEmployeeId: input.actorId,
-        showtimeSeatId: input.showtimeSeatId,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(
+        Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${input.tabId} FOR UPDATE`,
+      );
+      const tab = await tx.restaurantTab.findFirst({
+        where: {
+          id: input.tabId,
+          locationId: input.locationId,
+          status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"] },
+        },
+        include: { seats: true },
+      });
+      if (!tab) throw new RestaurantError("Open restaurant tab was not found.", "NOT_FOUND");
+      if (
+        input.showtimeSeatId &&
+        !tab.seats.some((seat) => seat.showtimeSeatId === input.showtimeSeatId)
+      ) {
+        throw new RestaurantError("The selected seat does not belong to this tab.", "INVALID");
+      }
+      return tx.restaurantOrder.create({
+        data: {
+          restaurantTabId: tab.id,
+          serverEmployeeId: input.actorId,
+          showtimeSeatId: input.showtimeSeatId,
+        },
+      });
     });
   }
 
