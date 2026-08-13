@@ -271,11 +271,18 @@ export class TicketingService {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-        const concurrent = await this.prisma.ticketOrder.findUnique({
-          where: { checkoutIdempotencyKey: input.checkoutIdempotencyKey },
-          include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
-        });
-        if (concurrent) return this.completeCheckout(concurrent);
+        // PostgreSQL can report the unique-key conflict before the winning
+        // transaction's row is visible to this connection. Give that commit
+        // a brief bounded window to become readable instead of turning a
+        // valid concurrent replay into a 500 response.
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          const concurrent = await this.prisma.ticketOrder.findUnique({
+            where: { checkoutIdempotencyKey: input.checkoutIdempotencyKey },
+            include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
+          });
+          if (concurrent) return this.completeCheckout(concurrent);
+          await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+        }
       }
       throw error;
     }
