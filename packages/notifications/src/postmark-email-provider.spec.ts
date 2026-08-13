@@ -70,4 +70,41 @@ describe("PostmarkEmailProvider", () => {
       }),
     ).rejects.toThrow("Sender not allowed");
   });
+
+  it("sends a restaurant payment failure notice with a recovery link", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ MessageID: "message-2", ErrorCode: 0 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider(
+      "POSTMARK_API_TEST",
+      "receipts@example.com",
+    );
+
+    await expect(
+      provider.sendRestaurantPaymentFailed({
+        to: "guest@example.com",
+        customerName: "Guest",
+        theaterName: "Meridian Cinema",
+        tabId: "tab-1",
+        amountDueCents: 2066,
+        currency: "USD",
+        paymentUrl: "https://cinema.example/account/tabs/tab-1",
+      }),
+    ).resolves.toEqual({ messageId: "message-2" });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body).toMatchObject({
+      To: "guest@example.com",
+      Subject: "Action needed for your Meridian Cinema dining tab",
+    });
+    expect(body.HtmlBody).toContain(
+      "https://cinema.example/account/tabs/tab-1",
+    );
+    expect(body.TextBody).toContain("$20.66");
+  });
 });
