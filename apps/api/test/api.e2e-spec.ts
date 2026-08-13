@@ -3952,6 +3952,53 @@ describe("Milestone 6 server POS and menus", () => {
     }
   });
 
+  it("never creates a draft order after its tab is settled concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Settle create race" })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${tab.body.id}/drop-check`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+
+    const [finalized, created] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${tab.body.id}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [{ type: "CARD_PRESENT", amountCents: 1, readerId: "tmr_race" }],
+        }),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({}),
+    ]);
+
+    expect([
+      [201, 404],
+      [409, 201],
+    ]).toContainEqual([finalized.status, created.status]);
+    const finalTab = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: tab.body.id },
+      include: { orders: true },
+    });
+    if (finalized.status === 201) {
+      expect(finalTab).toMatchObject({ status: "CLOSED" });
+      expect(finalTab.orders).toHaveLength(0);
+    } else {
+      expect(finalTab).toMatchObject({ status: "READY_TO_CLOSE" });
+      expect(finalTab.orders).toEqual([
+        expect.objectContaining({ id: created.body.id, status: "DRAFT" }),
+      ]);
+    }
+  });
+
   it("sends available lines while preserving an 86'd line in a replacement draft", async () => {
     const { prisma } = await import("@cinema/database");
     const [burger, cocktail] = await Promise.all([
