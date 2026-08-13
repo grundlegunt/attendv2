@@ -1216,14 +1216,23 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("issues organization gift cards with a one-time code and immutable opening ledger entry", async () => {
+    const issuanceKey = crypto.randomUUID();
     const issued = await request(app.getHttpServer())
       .post("/api/v1/management/gift-cards")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", issuanceKey)
       .send({ amountCents: 2500, recipientName: "Gift Recipient", recipientEmail: "GIFT@EXAMPLE.TEST" })
       .expect(201);
 
     expect(issued.body).toEqual(expect.objectContaining({ balanceCents: 2500, initialBalanceCents: 2500, codeLast4: expect.any(String), code: expect.stringMatching(/^ATGC-(?:[A-F0-9]{4}-){5}[A-F0-9]{4}$/) }));
     expect(issued.body).not.toHaveProperty("codeHash");
+    const replay = await request(app.getHttpServer())
+      .post("/api/v1/management/gift-cards")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", issuanceKey)
+      .send({ amountCents: 2500, recipientName: "Gift Recipient", recipientEmail: "GIFT@EXAMPLE.TEST" })
+      .expect(201);
+    expect(replay.body).toMatchObject({ id: issued.body.id, code: issued.body.code });
 
     const balance = await request(app.getHttpServer())
       .post("/api/v1/cinema/gift-cards/balance")

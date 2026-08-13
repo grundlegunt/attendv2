@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
-import { hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
-import { prisma } from "@cinema/database";
+import { decryptMfaSecret, encryptMfaSecret, hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
+import { loadEnv } from "@cinema/config/env";
+import { Prisma, prisma } from "@cinema/database";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 
@@ -218,17 +219,42 @@ export class ManagementService {
     });
   }
 
-  async issueGiftCard(input: { locationId: string; employeeId: string; amountCents: number; recipientName?: string; recipientEmail?: string }) {
+  async issueGiftCard(input: { requestId: string; locationId: string; employeeId: string; amountCents: number; recipientName?: string; recipientEmail?: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("A valid gift card issuance idempotency key is required.");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, currency: true } });
+    const existing = await prisma.giftCard.findUnique({
+      where: { issuanceRequestId: input.requestId },
+      select: {
+        id: true, organizationId: true, issuedAtLocationId: true, issuedByEmployeeId: true,
+        initialBalanceCents: true, balanceCents: true, currency: true, recipientName: true,
+        recipientEmail: true, status: true, createdAt: true, issuanceCodeEncrypted: true,
+      },
+    });
+    if (existing) {
+      const matches = existing.organizationId === location.organizationId && existing.issuedAtLocationId === input.locationId && existing.issuedByEmployeeId === input.employeeId && existing.initialBalanceCents === input.amountCents && existing.recipientName === (input.recipientName ?? null) && existing.recipientEmail === (input.recipientEmail?.toLowerCase() ?? null);
+      if (!matches) throw AppError.conflict("The gift card issuance idempotency key was already used with different details.");
+      const code = decryptMfaSecret(existing.issuanceCodeEncrypted!, loadEnv().JWT_REFRESH_SECRET);
+      return {
+        id: existing.id, codeLast4: code.replace(/[^A-Z0-9]/g, "").slice(-4),
+        initialBalanceCents: existing.initialBalanceCents, balanceCents: existing.balanceCents,
+        currency: existing.currency, recipientName: existing.recipientName, recipientEmail: existing.recipientEmail,
+        status: existing.status, createdAt: existing.createdAt,
+        code,
+      };
+    }
     const raw = randomBytes(12).toString("hex").toUpperCase();
     const code = `ATGC-${raw.match(/.{1,4}/g)!.join("-")}`;
     const codeHash = createHash("sha256").update(code.replace(/[^A-Z0-9]/g, "")).digest("hex");
-    const giftCard = await prisma.$transaction(async (tx) => {
+    let giftCard;
+    try {
+      giftCard = await prisma.$transaction(async (tx) => {
       const created = await tx.giftCard.create({
         data: {
           organizationId: location.organizationId,
           issuedAtLocationId: input.locationId,
           issuedByEmployeeId: input.employeeId,
+          issuanceRequestId: input.requestId,
+          issuanceCodeEncrypted: encryptMfaSecret(code, loadEnv().JWT_REFRESH_SECRET),
           codeHash,
           codeLast4: raw.slice(-4),
           initialBalanceCents: input.amountCents,
@@ -242,7 +268,26 @@ export class ManagementService {
       });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "gift_card.issued", entityType: "GiftCard", entityId: created.id, afterState: { codeLast4: created.codeLast4, initialBalanceCents: created.initialBalanceCents, currency: created.currency, recipientEmail: created.recipientEmail } } });
       return created;
-    });
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        for (let attempt = 1; attempt <= 5; attempt += 1) {
+          const concurrent = await prisma.giftCard.findUnique({ where: { issuanceRequestId: input.requestId } });
+          if (concurrent?.issuanceCodeEncrypted) {
+            const concurrentCode = decryptMfaSecret(concurrent.issuanceCodeEncrypted, loadEnv().JWT_REFRESH_SECRET);
+            return {
+              id: concurrent.id, codeLast4: concurrent.codeLast4,
+              initialBalanceCents: concurrent.initialBalanceCents, balanceCents: concurrent.balanceCents,
+              currency: concurrent.currency, recipientName: concurrent.recipientName, recipientEmail: concurrent.recipientEmail,
+              status: concurrent.status, createdAt: concurrent.createdAt, code: concurrentCode,
+            };
+          }
+          await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+        }
+        throw AppError.conflict("The gift card issuance is still being created. Please retry.");
+      }
+      throw error;
+    }
     return { ...giftCard, code };
   }
 

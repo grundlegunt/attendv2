@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
 import { adminBrandingSchema, customerBrandingSchema } from "@cinema/shared";
 import type { Response } from "express";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
@@ -118,7 +119,7 @@ export class ManagementController {
   giftCards(@CurrentActor() actor: RequestActor) { return this.management.giftCards(this.location(actor)); }
 
   @Post("gift-cards") @RequirePermissions(Permission.PaymentRefund)
-  issueGiftCard(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(giftCardSchema)) body: unknown) { return this.management.issueGiftCard({ ...giftCardSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  issueGiftCard(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(giftCardSchema)) body: unknown) { return this.management.issueGiftCard({ ...giftCardSchema.parse(body), requestId: requestId ?? randomUUID(), locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Patch("gift-cards/:giftCardId/status") @RequirePermissions(Permission.PaymentRefund)
   updateGiftCardStatus(@CurrentActor() actor: RequestActor, @Param("giftCardId") giftCardId: string, @Body(new ZodValidationPipe(giftCardStatusSchema)) body: unknown) { return this.management.updateGiftCardStatus({ ...giftCardStatusSchema.parse(body), giftCardId, locationId: this.location(actor), employeeId: actor.sub }); }
