@@ -4147,6 +4147,26 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     await request(app.getHttpServer())
       .get(`/api/v1/public/restaurant-tabs/${encodeURIComponent(guestToken!)}`)
       .expect(200);
+
+    jest
+      .spyOn(emailProvider, "sendRestaurantPaymentFailed")
+      .mockRejectedValueOnce(new Error("Email provider unavailable"));
+    await (
+      settlement as unknown as {
+        notifyPaymentFailure(tabId: string): Promise<void>;
+      }
+    ).notifyPaymentFailure(tab.id);
+    await expect(
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).resolves.toMatchObject({ status: "PAYMENT_FAILED" });
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          entityId: tab.id,
+          action: "restaurant_tab.payment_failure_notification_failed",
+        },
+      }),
+    ).toBe(1);
   });
 
   it("reconciles a processing restaurant payment and closes the paid tab", async () => {
