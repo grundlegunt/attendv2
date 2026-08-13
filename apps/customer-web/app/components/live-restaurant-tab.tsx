@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 
 interface LiveTab {
@@ -42,6 +42,8 @@ export function LiveRestaurantTab({
   const [message, setMessage] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [tipError, setTipError] = useState("");
+  const [tipPending, setTipPending] = useState(false);
+  const tipPendingRef = useRef(false);
 
   async function refresh() {
     try {
@@ -67,6 +69,9 @@ export function LiveRestaurantTab({
   }, [tabId, guestToken]);
 
   async function chooseTip(value: number) {
+    if (tipPendingRef.current) return;
+    tipPendingRef.current = true;
+    setTipPending(true);
     setTipCents(value);
     setTipError("");
     try {
@@ -86,6 +91,9 @@ export function LiveRestaurantTab({
           ? error.body.message
           : "Your tip could not be updated.",
       );
+    } finally {
+      tipPendingRef.current = false;
+      setTipPending(false);
     }
   }
 
@@ -163,6 +171,7 @@ export function LiveRestaurantTab({
             <button
               className="secondary"
               key={percent}
+              disabled={tipPending}
               onClick={() => void chooseTip(value)}
             >
               {percent}%
@@ -175,16 +184,17 @@ export function LiveRestaurantTab({
         <input
           type="number"
           min="0"
+          disabled={tipPending}
           value={tipCents}
           onChange={(event) => setTipCents(Number(event.target.value))}
-          onBlur={() => void chooseTip(tipCents)}
         />
       </label>
+      <button className="secondary" disabled={tipPending} onClick={() => void chooseTip(tipCents)}>Update custom tip</button>
       <h3>
         Total ${((tab.totals.totalCents - tab.paidCents) / 100).toFixed(2)}
       </h3>
       {tab.status !== "CLOSED" && (
-        <button className="primary" onClick={pay}>Pay & close tab</button>
+        <button className="primary" disabled={tipPending} onClick={pay}>{tipPending ? "Saving tip…" : "Pay & close tab"}</button>
       )}
       {tab.receipt && <p>Receipt {tab.receipt.receiptNumber}</p>}
       {refreshError && <div className="error-banner">{refreshError}</div>}
