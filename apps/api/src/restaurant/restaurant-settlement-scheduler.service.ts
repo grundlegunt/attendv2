@@ -38,8 +38,13 @@ export class RestaurantSettlementSchedulerService
     if (this.running) return;
     this.running = true;
     try {
-      const result = await this.settlement.runFallback();
-      this.logger.log("Restaurant fallback settlement sweep complete.", result);
+      const processingPayments =
+        await this.settlement.reconcileProcessingPayments();
+      const fallbackTabs = await this.settlement.runFallback();
+      this.logger.log("Restaurant settlement sweep complete.", {
+        processingPayments,
+        fallbackTabs,
+      });
     } catch (error) {
       this.logger.error(
         "Restaurant fallback settlement sweep failed.",

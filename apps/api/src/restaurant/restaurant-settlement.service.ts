@@ -296,6 +296,50 @@ export class RestaurantSettlementService {
     return results;
   }
 
+  async reconcileProcessingPayments() {
+    const payments = await prisma.payment.findMany({
+      where: {
+        purpose: "RESTAURANT_TAB",
+        status: "PROCESSING",
+        providerPaymentId: { not: null },
+        restaurantTabId: { not: null },
+      },
+      include: {
+        restaurantTab: {
+          include: { location: { include: { organization: true } } },
+        },
+      },
+      orderBy: { updatedAt: "asc" },
+      take: 100,
+    });
+    let resolved = 0;
+    let pending = 0;
+    let errors = 0;
+    for (const payment of payments) {
+      try {
+        const result = await this.provider.retrievePaymentIntent({
+          connectedAccountId:
+            payment.restaurantTab!.location.organization.stripeConnectedAccountId ??
+            undefined,
+          paymentIntentId: payment.providerPaymentId!,
+        });
+        if (result.status === "PROCESSING") {
+          pending += 1;
+          continue;
+        }
+        await this.recordProviderResult(payment.id, result);
+        await this.closeIfPaid(payment.restaurantTabId!, {
+          actorType: "SYSTEM",
+          actorId: null,
+        });
+        resolved += 1;
+      } catch {
+        errors += 1;
+      }
+    }
+    return { checked: payments.length, resolved, pending, errors };
+  }
+
   private async settle(input: {
     tabId: string;
     requestKey: string;
