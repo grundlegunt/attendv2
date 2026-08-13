@@ -1924,6 +1924,56 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     ).toBe(1);
   });
 
+  it("retries a failed ticket receipt without issuing duplicate tickets", async () => {
+    const holderKey = `ticket-receipt-retry-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const { prisma } = await import("@cinema/database");
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    paymentProvider.setIntentStatus(
+      checkout.payment.providerPaymentId,
+      "SUCCEEDED",
+    );
+    jest
+      .spyOn(emailProvider, "sendTicketReceipt")
+      .mockRejectedValueOnce(new Error("Email provider unavailable"));
+
+    const failedDelivery = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({})
+      .expect(201);
+    const recoveredDelivery = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({})
+      .expect(201);
+
+    expect(failedDelivery.body.receiptDelivery).toBe("FAILED");
+    expect(recoveredDelivery.body).toMatchObject({
+      status: "PAID",
+      receiptDelivery: "SENT",
+      tickets: [{ id: failedDelivery.body.tickets[0].id }],
+    });
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+    await expect(
+      prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.orderId } }),
+    ).resolves.toMatchObject({
+      receiptEmailSentAt: expect.any(Date),
+      receiptEmailClaimedAt: null,
+      receiptEmailError: null,
+    });
+  });
+
   it("recovers a successful payment through a replay-safe webhook", async () => {
     const holderKey = "ticket-webhook-holder-0002";
     const { hold } = await holdAvailableSeat(holderKey);
