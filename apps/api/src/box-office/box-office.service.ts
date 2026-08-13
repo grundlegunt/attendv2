@@ -473,7 +473,7 @@ export class BoxOfficeService {
     if (!drawer) throw AppError.notFound("Open cash drawer not found.");
     const existing = await prisma.cashTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) {
-      if (existing.cashDrawerId !== drawer.id || existing.amountCents !== input.amountCents || existing.type !== input.type) {
+      if (existing.cashDrawerId !== drawer.id || existing.amountCents !== input.amountCents || existing.type !== input.type || existing.reason !== input.reason) {
         throw AppError.conflict("Cash movement id was reused with different details.");
       }
       return existing;
@@ -506,7 +506,7 @@ export class BoxOfficeService {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const concurrent = await prisma.cashTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
         if (concurrent) {
-          if (concurrent.cashDrawerId !== drawer.id || concurrent.amountCents !== input.amountCents || concurrent.type !== input.type) {
+          if (concurrent.cashDrawerId !== drawer.id || concurrent.amountCents !== input.amountCents || concurrent.type !== input.type || concurrent.reason !== input.reason) {
             throw AppError.conflict("Cash movement id was reused with different details.");
           }
           return concurrent;
