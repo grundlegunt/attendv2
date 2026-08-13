@@ -43,7 +43,9 @@ export function LiveRestaurantTab({
   const [refreshError, setRefreshError] = useState("");
   const [tipError, setTipError] = useState("");
   const [tipPending, setTipPending] = useState(false);
+  const [paymentPending, setPaymentPending] = useState(false);
   const tipPendingRef = useRef(false);
+  const paymentPendingRef = useRef(false);
 
   async function refresh() {
     try {
@@ -69,7 +71,7 @@ export function LiveRestaurantTab({
   }, [tabId, guestToken]);
 
   async function chooseTip(value: number) {
-    if (tipPendingRef.current) return;
+    if (tipPendingRef.current || paymentPendingRef.current) return;
     tipPendingRef.current = true;
     setTipPending(true);
     setTipCents(value);
@@ -98,9 +100,13 @@ export function LiveRestaurantTab({
   }
 
   async function pay() {
+    if (paymentPendingRef.current || tipPendingRef.current) return;
     if (!tab?.activePaymentMethod) {
       return setMessage("Ask your server to collect a different card at the table.");
     }
+    paymentPendingRef.current = true;
+    setPaymentPending(true);
+    setMessage("");
     try {
       const result = await apiFetch<{ status: string }>(
         guestToken
@@ -127,6 +133,9 @@ export function LiveRestaurantTab({
           ? error.body.message
           : "Payment could not be completed.",
       );
+    } finally {
+      paymentPendingRef.current = false;
+      setPaymentPending(false);
     }
   }
 
@@ -171,7 +180,7 @@ export function LiveRestaurantTab({
             <button
               className="secondary"
               key={percent}
-              disabled={tipPending}
+              disabled={tipPending || paymentPending}
               onClick={() => void chooseTip(value)}
             >
               {percent}%
@@ -184,17 +193,17 @@ export function LiveRestaurantTab({
         <input
           type="number"
           min="0"
-          disabled={tipPending}
+          disabled={tipPending || paymentPending}
           value={tipCents}
           onChange={(event) => setTipCents(Number(event.target.value))}
         />
       </label>
-      <button className="secondary" disabled={tipPending} onClick={() => void chooseTip(tipCents)}>Update custom tip</button>
+      <button className="secondary" disabled={tipPending || paymentPending} onClick={() => void chooseTip(tipCents)}>Update custom tip</button>
       <h3>
         Total ${((tab.totals.totalCents - tab.paidCents) / 100).toFixed(2)}
       </h3>
       {tab.status !== "CLOSED" && (
-        <button className="primary" disabled={tipPending} onClick={pay}>{tipPending ? "Saving tip…" : "Pay & close tab"}</button>
+        <button className="primary" disabled={tipPending || paymentPending} onClick={pay}>{tipPending ? "Saving tip…" : paymentPending ? "Processing payment…" : "Pay & close tab"}</button>
       )}
       {tab.receipt && <p>Receipt {tab.receipt.receiptNumber}</p>}
       {refreshError && <div className="error-banner">{refreshError}</div>}
