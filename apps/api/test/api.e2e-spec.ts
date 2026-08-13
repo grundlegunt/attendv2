@@ -2029,6 +2029,63 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     sendReceipt.mockRestore();
   });
 
+  it("reclaims a stale ticket receipt delivery without issuing duplicate tickets", async () => {
+    const holderKey = `ticket-receipt-stale-claim-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const { prisma } = await import("@cinema/database");
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    paymentProvider.setIntentStatus(
+      checkout.payment.providerPaymentId,
+      "SUCCEEDED",
+    );
+    await prisma.ticketOrder.update({
+      where: { id: checkout.orderId },
+      data: { receiptEmailClaimedAt: new Date() },
+    });
+    const sendReceipt = jest.spyOn(emailProvider, "sendTicketReceipt");
+
+    const claimed = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({})
+      .expect(201);
+    expect(claimed.body.receiptDelivery).toBe("NOT_REQUESTED");
+    expect(sendReceipt).not.toHaveBeenCalled();
+
+    await prisma.ticketOrder.update({
+      where: { id: checkout.orderId },
+      data: { receiptEmailClaimedAt: new Date(Date.now() - 6 * 60_000) },
+    });
+    const recovered = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({})
+      .expect(201);
+
+    expect(recovered.body.receiptDelivery).toBe("SENT");
+    expect(sendReceipt).toHaveBeenCalledTimes(1);
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+    await expect(
+      prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.orderId } }),
+    ).resolves.toMatchObject({
+      status: "PAID",
+      receiptEmailSentAt: expect.any(Date),
+      receiptEmailClaimedAt: null,
+      receiptEmailError: null,
+    });
+    sendReceipt.mockRestore();
+  });
+
   it("recovers a successful payment through a replay-safe webhook", async () => {
     const holderKey = "ticket-webhook-holder-0002";
     const { hold } = await holdAvailableSeat(holderKey);
