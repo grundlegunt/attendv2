@@ -111,13 +111,35 @@ export class WorkforceService {
     });
   }
 
-  async clockOut(input: PinInput) {
+  async clockOut(input: PinInput & { requestId: string }) {
     const employee = await this.verifyPin(input);
-    const shift = await this.requireActiveShift(employee.id, input.locationId);
-    if (shift.breakStartAt && !shift.breakEndAt) throw AppError.conflict("End the active break before clocking out.");
-    const updated = await prisma.shift.update({ where: { id: shift.id }, data: { clockOutAt: new Date() } });
-    await this.audit(prisma, employee.id, input.locationId, "shift.clocked_out", shift.id, shift, updated);
-    return updated;
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "employees" WHERE "id" = ${employee.id} FOR UPDATE`;
+      const active = await tx.shift.findFirst({
+        where: { employeeId: employee.id, locationId: input.locationId, clockOutAt: null },
+        orderBy: { clockInAt: "desc" },
+      });
+      if (!active) {
+        const latest = await tx.shift.findFirst({
+          where: { employeeId: employee.id, locationId: input.locationId, clockOutAt: { not: null } },
+          orderBy: { clockOutAt: "desc" },
+        });
+        const completed = latest ? await tx.auditEvent.findFirst({
+          where: { locationId: input.locationId, action: "shift.clocked_out", entityType: "Shift", entityId: latest.id },
+          orderBy: { occurredAt: "desc" },
+          select: { afterState: true },
+        }) : null;
+        const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+          ? completed.afterState as Record<string, unknown>
+          : undefined;
+        if (latest && receipt?.requestId === input.requestId) return latest;
+        throw AppError.conflict("This employee is not clocked in.");
+      }
+      if (active.breakStartAt && !active.breakEndAt) throw AppError.conflict("End the active break before clocking out.");
+      const updated = await tx.shift.update({ where: { id: active.id }, data: { clockOutAt: new Date() } });
+      await this.audit(tx, employee.id, input.locationId, "shift.clocked_out", active.id, active, { ...updated, requestId: input.requestId });
+      return updated;
+    });
   }
 
   private async verifyPin(input: PinInput) {
