@@ -225,6 +225,7 @@ export function LiveRestaurantTab({
   const customerPaymentAvailable = ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(tab.status);
   const controlsDisabled = tipPending || paymentPending;
   const balanceDueCents = Math.max(0, tab.totals.totalCents - tab.paidCents);
+  const paymentFailed = tab.status === "PAYMENT_FAILED";
   const statusCopy = settlementProcessing
     ? "Your payment is processing. This page will update automatically."
     : tab.status === "CLOSED"
@@ -235,6 +236,8 @@ export function LiveRestaurantTab({
           ? "Your tab has been voided."
           : tab.status === "MANAGER_REVIEW"
             ? "Your payment needs attention. A manager has been notified."
+            : paymentFailed
+              ? "Your previous payment attempt was not completed. No automatic retry was made. Review the remaining balance and try again below."
             : tab.checkDroppedAt
               ? "Your check has been dropped. You can pay here or with your server."
               : "Your tab is still open.";
@@ -294,7 +297,7 @@ export function LiveRestaurantTab({
         Balance due ${(balanceDueCents / 100).toFixed(2)}
       </h3>
       {customerPaymentAvailable && (
-        <button className="primary" disabled={tipPending || paymentPending} onClick={pay}>{tipPending ? "Saving tip…" : paymentPending ? "Processing payment…" : "Pay & close tab"}</button>
+        <button className="primary" disabled={tipPending || paymentPending} onClick={pay}>{tipPending ? "Saving tip…" : paymentPending ? "Processing payment…" : paymentFailed ? "Retry remaining balance" : "Pay & close tab"}</button>
       )}
       {tab.receipt && <p>Receipt {tab.receipt.receiptNumber}</p>}
       {refreshError && <div className="error-banner">{refreshError}</div>}
