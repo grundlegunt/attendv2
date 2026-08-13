@@ -39,6 +39,7 @@ export function LiveRestaurantTab({
 }) {
   const [tab, setTab] = useState<LiveTab | null>(null);
   const [tipCents, setTipCents] = useState(0);
+  const [customTipCents, setCustomTipCents] = useState("0");
   const [message, setMessage] = useState("");
   const [refreshError, setRefreshError] = useState("");
   const [tipError, setTipError] = useState("");
@@ -78,6 +79,7 @@ export function LiveRestaurantTab({
     tabIdentityRef.current += 1;
     setTab(null);
     setTipCents(0);
+    setCustomTipCents("0");
     setMessage("");
     setRefreshError("");
     setTipError("");
@@ -97,10 +99,13 @@ export function LiveRestaurantTab({
 
   async function chooseTip(value: number) {
     if (tipPendingRef.current || paymentPendingRef.current) return;
+    if (!Number.isInteger(value) || value < 0 || value > 1_000_000) {
+      setTipError("Enter a whole number from 0 to 1,000,000 cents.");
+      return;
+    }
     const tabIdentity = tabIdentityRef.current;
     tipPendingRef.current = true;
     setTipPending(true);
-    setTipCents(value);
     setTipError("");
     try {
       await apiFetch(
@@ -112,6 +117,9 @@ export function LiveRestaurantTab({
         body: JSON.stringify({ tipCents: value }),
         },
       );
+      if (tabIdentity !== tabIdentityRef.current) return;
+      setTipCents(value);
+      setCustomTipCents(String(value));
       await refresh();
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
@@ -227,12 +235,14 @@ export function LiveRestaurantTab({
         <input
           type="number"
           min="0"
+          max="1000000"
+          step="1"
           disabled={tipPending || paymentPending}
-          value={tipCents}
-          onChange={(event) => setTipCents(Number(event.target.value))}
+          value={customTipCents}
+          onChange={(event) => setCustomTipCents(event.target.value)}
         />
       </label>
-      <button className="secondary" disabled={tipPending || paymentPending} onClick={() => void chooseTip(tipCents)}>Update custom tip</button>
+      <button className="secondary" disabled={tipPending || paymentPending} onClick={() => void chooseTip(Number(customTipCents))}>Update custom tip</button>
       <h3>
         Total ${((tab.totals.totalCents - tab.paidCents) / 100).toFixed(2)}
       </h3>
