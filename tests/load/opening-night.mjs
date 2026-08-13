@@ -30,7 +30,7 @@ const session = login.mfaRequired
   ? await call("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: login.challengeToken, code: authenticator.generate(ownerMfaSecret) }) })
   : login;
 const auth = { authorization: `Bearer ${session.accessToken}` };
-const drawers = await Promise.all(showtimeIds.map((_, index) => call("/box-office/cash-drawers", { method: "POST", headers: auth, body: JSON.stringify({ registerId: `opening-night-${index + 1}-${randomUUID()}`, openingBalanceCents: 0 }) })));
+const drawers = await Promise.all(showtimeIds.map((_, index) => call("/box-office/cash-drawers", { method: "POST", headers: auth, body: JSON.stringify({ requestId: randomUUID(), registerId: `opening-night-${index + 1}-${randomUUID()}`, openingBalanceCents: 0 }) })));
 const menu = await call("/restaurant-menu", { headers: auth });
 const menuItem = menu.categories.flatMap((category) => category.items).find((item) => !item.is86d);
 if (!menuItem) throw new Error("The load fixture needs at least one active, available menu item.");
