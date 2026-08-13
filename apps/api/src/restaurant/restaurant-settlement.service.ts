@@ -400,7 +400,26 @@ export class RestaurantSettlementService {
         _sum: { amountCents: true },
       });
       const remaining = totals.totalCents - (paid._sum.amountCents ?? 0);
-      if (remaining <= 0) return { tab, payments: [], totals, alreadyClosed: false };
+      if (remaining <= 0) {
+        const updatedTab = await tx.restaurantTab.update({
+          where: { id: tab.id },
+          data: {
+            status: "SETTLEMENT_PENDING",
+            selectedTipCents: input.tipCents,
+            ...totals,
+          },
+          include: {
+            location: { include: { organization: true } },
+            orders: { select: { status: true } },
+          },
+        });
+        return {
+          tab: updatedTab,
+          payments: [],
+          totals,
+          alreadyClosed: false,
+        };
+      }
       const tenders = input.tenders.map((tender, index) =>
         input.fillRemainingTender && index === 0
           ? { ...tender, amountCents: remaining }
