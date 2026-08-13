@@ -107,4 +107,71 @@ describe("PostmarkEmailProvider", () => {
     );
     expect(body.TextBody).toContain("$20.66");
   });
+
+  it("sends an itemized restaurant receipt", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ MessageID: "message-3", ErrorCode: 0 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider(
+      "POSTMARK_API_TEST",
+      "receipts@example.com",
+    );
+
+    await expect(
+      provider.sendRestaurantReceipt({
+        to: "guest@example.com",
+        customerName: "Guest",
+        theaterName: "Meridian Cinema",
+        receiptNumber: "R-2026-TEST",
+        subtotalCents: 1700,
+        taxCents: 166,
+        serviceChargeCents: 200,
+        tipCents: 300,
+        totalCents: 2366,
+        currency: "USD",
+      }),
+    ).resolves.toEqual({ messageId: "message-3" });
+
+    const body = JSON.parse(
+      (fetchMock.mock.calls[0]![1] as RequestInit).body as string,
+    );
+    expect(body).toMatchObject({
+      To: "guest@example.com",
+      Subject: "Your Meridian Cinema dining receipt",
+    });
+    expect(body.HtmlBody).toContain("R-2026-TEST");
+    expect(body.TextBody).toContain("Subtotal: $17.00");
+    expect(body.TextBody).toContain("Service charge: $2.00");
+    expect(body.TextBody).toContain("Total: $23.66");
+  });
+
+  it("rejects a failed restaurant receipt delivery", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ Message: "Mailbox unavailable" }), {
+        status: 422,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider(
+      "POSTMARK_API_TEST",
+      "receipts@example.com",
+    );
+
+    await expect(
+      provider.sendRestaurantReceipt({
+        to: "guest@example.com",
+        theaterName: "Meridian Cinema",
+        receiptNumber: "R-2026-TEST",
+        subtotalCents: 1700,
+        taxCents: 166,
+        serviceChargeCents: 200,
+        tipCents: 300,
+        totalCents: 2366,
+        currency: "USD",
+      }),
+    ).rejects.toThrow("Mailbox unavailable");
+  });
 });
