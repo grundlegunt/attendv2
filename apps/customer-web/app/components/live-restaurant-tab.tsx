@@ -7,6 +7,7 @@ interface LiveTab {
   id: string;
   status: string;
   checkDroppedAt: string | null;
+  selectedTipCents: number | null;
   activePaymentMethod: { id: string; brand: string; last4: string } | null;
   orders: Array<{
     id: string;
@@ -50,6 +51,7 @@ export function LiveRestaurantTab({
   const refreshPendingRef = useRef(false);
   const refreshRequestRef = useRef(0);
   const tabIdentityRef = useRef(0);
+  const tipHydratedRef = useRef(false);
 
   async function refresh() {
     if (refreshPendingRef.current || tipPendingRef.current || paymentPendingRef.current) return;
@@ -62,6 +64,12 @@ export function LiveRestaurantTab({
       );
       if (requestId !== refreshRequestRef.current) return;
       setTab(nextTab);
+      if (!tipHydratedRef.current) {
+        const persistedTipCents = nextTab.selectedTipCents ?? 0;
+        setTipCents(persistedTipCents);
+        setCustomTipCents(String(persistedTipCents));
+        tipHydratedRef.current = true;
+      }
       setRefreshError("");
     } catch (error) {
       if (requestId !== refreshRequestRef.current) return;
@@ -83,6 +91,7 @@ export function LiveRestaurantTab({
     setMessage("");
     setRefreshError("");
     setTipError("");
+    tipHydratedRef.current = false;
     tipPendingRef.current = false;
     paymentPendingRef.current = false;
     setTipPending(false);
