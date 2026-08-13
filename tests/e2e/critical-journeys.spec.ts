@@ -21,7 +21,20 @@ test("customer browses a live program and safely holds a seat", async ({ page })
   const seat = seatMap.locator("button:not([disabled])").first();
   await seat.click();
   await expect(page.getByText("Seats held")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Continue to tickets" })).toBeEnabled();
+  const continueToTickets = page.getByRole("button", { name: "Continue to tickets" });
+  await expect(continueToTickets).toBeEnabled();
+  await continueToTickets.click();
+
+  const authorizeDining = page.getByRole("radio", { name: "Yes, save and authorize this card" });
+  const paySeparately = page.getByRole("radio", { name: "No, I’ll pay separately" });
+  const continueToPayment = page.getByRole("button", { name: "Continue to payment" });
+  await expect(authorizeDining).not.toBeChecked();
+  await expect(paySeparately).not.toBeChecked();
+  await expect(continueToPayment).toBeDisabled();
+
+  await paySeparately.check();
+  await expect(paySeparately).toBeChecked();
+  await expect(authorizeDining).not.toBeChecked();
 });
 
 test("customer account session restores from HttpOnly cookies and clears on logout", async ({ page, context }) => {
