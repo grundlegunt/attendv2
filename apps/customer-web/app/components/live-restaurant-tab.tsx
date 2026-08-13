@@ -41,6 +41,7 @@ export function LiveRestaurantTab({
   const [tipCents, setTipCents] = useState(0);
   const [message, setMessage] = useState("");
   const [refreshError, setRefreshError] = useState("");
+  const [tipError, setTipError] = useState("");
 
   async function refresh() {
     try {
@@ -67,16 +68,25 @@ export function LiveRestaurantTab({
 
   async function chooseTip(value: number) {
     setTipCents(value);
-    await apiFetch(
-      guestToken
-        ? `/public/restaurant-tabs/${guestToken}/tip`
-        : `/customer/restaurant-tabs/${tabId}/tip`,
-      {
-      method: "POST",
-      body: JSON.stringify({ tipCents: value }),
-      },
-    );
-    await refresh();
+    setTipError("");
+    try {
+      await apiFetch(
+        guestToken
+          ? `/public/restaurant-tabs/${guestToken}/tip`
+          : `/customer/restaurant-tabs/${tabId}/tip`,
+        {
+        method: "POST",
+        body: JSON.stringify({ tipCents: value }),
+        },
+      );
+      await refresh();
+    } catch (error) {
+      setTipError(
+        error instanceof ApiRequestError
+          ? error.body.message
+          : "Your tip could not be updated.",
+      );
+    }
   }
 
   async function pay() {
@@ -178,6 +188,7 @@ export function LiveRestaurantTab({
       )}
       {tab.receipt && <p>Receipt {tab.receipt.receiptNumber}</p>}
       {refreshError && <div className="error-banner">{refreshError}</div>}
+      {tipError && <div className="error-banner">{tipError}</div>}
       {message && <div className="error-banner">{message}</div>}
     </section>
   );
