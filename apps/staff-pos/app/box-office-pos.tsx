@@ -33,6 +33,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const checkoutAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const openDrawerAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const checkoutConfigRequestRef = useRef(0);
   const drawerRequestRef = useRef(0);
   const pricingRequestRef = useRef(0);
@@ -148,6 +149,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setReaderId("");
   }
   function changeRegister(nextRegisterId: string) {
+    openDrawerAttemptRef.current = null;
     drawerRequestRef.current += 1;
     setDrawer(null);
     setDrawerStatus("loading");
@@ -193,9 +195,13 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     const busyRequestId = beginRequest();
     if (busyRequestId === null) return;
     const requestId = ++drawerRequestRef.current;
+    const fingerprint = `${requestedRegisterId}:${openingBalanceCents}`;
+    if (openDrawerAttemptRef.current?.fingerprint !== fingerprint) {
+      openDrawerAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     try {
-      const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ registerId: requestedRegisterId, openingBalanceCents }) });
-      if (requestId === drawerRequestRef.current) { setDrawer(openedDrawer); setDrawerStatus("ready"); }
+      const openedDrawer = await apiFetch<{id:string}>("/box-office/cash-drawers", { method: "POST", accessToken, body: JSON.stringify({ requestId: openDrawerAttemptRef.current.requestId, registerId: requestedRegisterId, openingBalanceCents }) });
+      if (requestId === drawerRequestRef.current) { openDrawerAttemptRef.current = null; setDrawer(openedDrawer); setDrawerStatus("ready"); }
     } catch (error) {
       if (requestId === drawerRequestRef.current) setMessage(errorMessage(error));
     } finally {

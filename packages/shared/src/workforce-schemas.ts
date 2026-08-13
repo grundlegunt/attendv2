@@ -15,6 +15,7 @@ export const shiftManagerAdjustmentSchema = z.object({
 });
 
 export const openCashDrawerRequestSchema = z.object({
+  requestId: z.string().uuid(),
   registerId: z.string().trim().min(1).max(100),
   openingBalanceCents: z.number().int().nonnegative(),
 });
