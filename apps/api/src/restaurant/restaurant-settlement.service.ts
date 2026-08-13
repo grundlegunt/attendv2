@@ -660,6 +660,9 @@ export class RestaurantSettlementService {
         location: { include: { organization: true } },
         payments: true,
         receipt: true,
+        orders: {
+          include: { items: { include: { menuItem: true } } },
+        },
       },
     });
     if (!tab?.primaryCustomer?.email || !tab.receipt) return;
@@ -676,6 +679,16 @@ export class RestaurantSettlementService {
         tipCents: tab.receipt.tipCents,
         totalCents: tab.receipt.totalCents,
         currency,
+        items: tab.orders
+          .flatMap((order) => order.items)
+          .filter((item) => !["CANCELED", "VOIDED"].includes(item.status))
+          .map((item) => ({
+            name: item.menuItem.name,
+            quantity: item.quantity,
+            totalCents:
+              (item.unitPriceCentsSnapshot + item.modifierTotalCents) *
+              item.quantity,
+          })),
       });
     } catch (error) {
       await prisma.auditEvent.create({

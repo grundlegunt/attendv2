@@ -46,6 +46,11 @@ export interface RestaurantReceiptDelivery {
   tipCents: number;
   totalCents: number;
   currency: string;
+  items: Array<{
+    name: string;
+    quantity: number;
+    totalCents: number;
+  }>;
 }
 
 export interface EmailProvider {

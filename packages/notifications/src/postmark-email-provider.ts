@@ -133,6 +133,15 @@ export class PostmarkEmailProvider implements EmailProvider {
       style: "currency",
       currency: receipt.currency,
     }).format(cents / 100);
+    const itemHtml = receipt.items
+      .map(
+        (item) =>
+          `<li>${item.quantity}× ${escapeHtml(item.name)} — ${escapeHtml(money(item.totalCents))}</li>`,
+      )
+      .join("");
+    const itemText = receipt.items
+      .map((item) => `${item.quantity}x ${item.name} — ${money(item.totalCents)}`)
+      .join("\n");
     const response = await fetch("https://api.postmarkapp.com/email", {
       method: "POST",
       signal: AbortSignal.timeout(8_000),
@@ -145,8 +154,8 @@ export class PostmarkEmailProvider implements EmailProvider {
         From: this.from,
         To: receipt.to,
         Subject: `Your ${receipt.theaterName} dining receipt`,
-        HtmlBody: `<p>Hi ${escapeHtml(receipt.customerName?.trim() || "there")},</p><p>Thanks for dining with us. Receipt <strong>${escapeHtml(receipt.receiptNumber)}</strong> is paid.</p><ul><li>Subtotal: ${escapeHtml(money(receipt.subtotalCents))}</li><li>Tax: ${escapeHtml(money(receipt.taxCents))}</li><li>Service charge: ${escapeHtml(money(receipt.serviceChargeCents))}</li><li>Tip: ${escapeHtml(money(receipt.tipCents))}</li></ul><p><strong>Total: ${escapeHtml(money(receipt.totalCents))}</strong></p>`,
-        TextBody: `Receipt ${receipt.receiptNumber} is paid. Subtotal: ${money(receipt.subtotalCents)}. Tax: ${money(receipt.taxCents)}. Service charge: ${money(receipt.serviceChargeCents)}. Tip: ${money(receipt.tipCents)}. Total: ${money(receipt.totalCents)}.`,
+        HtmlBody: `<p>Hi ${escapeHtml(receipt.customerName?.trim() || "there")},</p><p>Thanks for dining with us. Receipt <strong>${escapeHtml(receipt.receiptNumber)}</strong> is paid.</p><h2>Items</h2><ul>${itemHtml}</ul><h2>Totals</h2><ul><li>Subtotal: ${escapeHtml(money(receipt.subtotalCents))}</li><li>Tax: ${escapeHtml(money(receipt.taxCents))}</li><li>Service charge: ${escapeHtml(money(receipt.serviceChargeCents))}</li><li>Tip: ${escapeHtml(money(receipt.tipCents))}</li></ul><p><strong>Total: ${escapeHtml(money(receipt.totalCents))}</strong></p>`,
+        TextBody: `Receipt ${receipt.receiptNumber} is paid.\n\nItems\n${itemText}\n\nSubtotal: ${money(receipt.subtotalCents)}. Tax: ${money(receipt.taxCents)}. Service charge: ${money(receipt.serviceChargeCents)}. Tip: ${money(receipt.tipCents)}. Total: ${money(receipt.totalCents)}.`,
         MessageStream: "outbound",
       }),
     });
