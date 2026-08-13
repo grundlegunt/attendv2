@@ -150,7 +150,10 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     if (!shiftDraft) return;
     setError(null);
     if (shiftDraft.clockOutAt && new Date(shiftDraft.clockOutAt) <= new Date(shiftDraft.clockInAt)) { setError("Clock-out must be after clock-in."); return; }
+    if (shiftDraft.breakStartAt && new Date(shiftDraft.breakStartAt) < new Date(shiftDraft.clockInAt)) { setError("Break start cannot be before clock-in."); return; }
     if (shiftDraft.breakEndAt && (!shiftDraft.breakStartAt || new Date(shiftDraft.breakEndAt) <= new Date(shiftDraft.breakStartAt))) { setError("Break end must be after break start."); return; }
+    if (shiftDraft.clockOutAt && shiftDraft.breakStartAt && new Date(shiftDraft.breakStartAt) > new Date(shiftDraft.clockOutAt)) { setError("Break start cannot be after clock-out."); return; }
+    if (shiftDraft.clockOutAt && shiftDraft.breakEndAt && new Date(shiftDraft.breakEndAt) > new Date(shiftDraft.clockOutAt)) { setError("Break end cannot be after clock-out."); return; }
     try {
       await apiFetch(`/shifts/${shiftDraft.shiftId}`, { accessToken, method: "PATCH", body: JSON.stringify({ clockInAt: new Date(shiftDraft.clockInAt).toISOString(), clockOutAt: shiftDraft.clockOutAt ? new Date(shiftDraft.clockOutAt).toISOString() : null, breakStartAt: shiftDraft.breakStartAt ? new Date(shiftDraft.breakStartAt).toISOString() : null, breakEndAt: shiftDraft.breakEndAt ? new Date(shiftDraft.breakEndAt).toISOString() : null, notes: shiftDraft.notes }) });
       setShiftDraft(null);

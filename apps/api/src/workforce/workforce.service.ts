@@ -16,6 +16,15 @@ export class WorkforceService {
       await tx.$queryRaw`SELECT "id" FROM "shifts" WHERE "id" = ${input.shiftId} FOR UPDATE`;
       const shift = await tx.shift.findFirst({ where: { id: input.shiftId, locationId: input.locationId } });
       if (!shift) throw AppError.notFound("Shift was not found.");
+      const clockInAt = input.clockInAt === undefined ? shift.clockInAt : new Date(input.clockInAt);
+      const clockOutAt = input.clockOutAt === undefined ? shift.clockOutAt : input.clockOutAt ? new Date(input.clockOutAt) : null;
+      const breakStartAt = input.breakStartAt === undefined ? shift.breakStartAt : input.breakStartAt ? new Date(input.breakStartAt) : null;
+      const breakEndAt = input.breakEndAt === undefined ? shift.breakEndAt : input.breakEndAt ? new Date(input.breakEndAt) : null;
+      if (clockOutAt && clockOutAt < clockInAt) throw AppError.validationFailed("Clock-out cannot be before clock-in.");
+      if (breakStartAt && breakStartAt < clockInAt) throw AppError.validationFailed("Break start cannot be before clock-in.");
+      if (breakEndAt && (!breakStartAt || breakEndAt < breakStartAt)) throw AppError.validationFailed("Break end cannot be before break start.");
+      if (clockOutAt && breakStartAt && breakStartAt > clockOutAt) throw AppError.validationFailed("Break start cannot be after clock-out.");
+      if (clockOutAt && breakEndAt && breakEndAt > clockOutAt) throw AppError.validationFailed("Break end cannot be after clock-out.");
       const updated = await tx.shift.update({ where: { id: shift.id }, data: {
         ...(input.clockInAt !== undefined ? { clockInAt: new Date(input.clockInAt) } : {}),
         ...(input.clockOutAt !== undefined ? { clockOutAt: input.clockOutAt ? new Date(input.clockOutAt) : null } : {}),

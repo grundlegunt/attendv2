@@ -4886,6 +4886,9 @@ describe("Milestone 9 box office and workforce", () => {
     const correctedClockOut = new Date(shift.clockOutAt!.getTime() + 60_000).toISOString();
     await request(app.getHttpServer()).patch(`/api/v1/shifts/${shift.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ breakEndAt: new Date(new Date(correctedClockOut).getTime() + 60_000).toISOString(), notes: "Invalid correction" }).expect(400);
+    await request(app.getHttpServer()).patch(`/api/v1/shifts/${shift.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ clockOutAt: correctedClockOut, notes: "Manager correction for E2E verification" }).expect(200);
     expect(await prisma.auditEvent.count({ where: { entityType: "Shift", entityId: shift.id, action: "shift.manager_adjusted" } })).toBe(1);
   });
