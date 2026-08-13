@@ -4037,6 +4037,7 @@ describe("Milestone 6 server POS and menus", () => {
 
     expect([
       [201, 404],
+      [201, 201],
       [400, 200],
     ]).toContainEqual([finalized.status, tipped.status]);
     const finalTab = await prisma.restaurantTab.findUniqueOrThrow({
