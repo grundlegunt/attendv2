@@ -4281,6 +4281,26 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       });
     expect(finalized.status).toBe(201);
     expect(finalized.body.status).toBe("CLOSED");
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${milestone8TabId}/finalize`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        requestId: "88000000-0000-0000-0000-000000000001",
+        tipCents: 881,
+        tenders: [
+          {
+            type: "SAVED_METHOD",
+            amountCents: 3000,
+            paymentMethodReferenceId: tab.activePaymentMethodId,
+          },
+          {
+            type: "CARD_PRESENT",
+            amountCents: 2820,
+            readerId: "tmr_test_split",
+          },
+        ],
+      })
+      .expect(409);
     expect(
       await prisma.payment.count({
         where: { restaurantTabId: milestone8TabId, status: "SUCCEEDED" },

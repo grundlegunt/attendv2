@@ -203,9 +203,18 @@ export class RestaurantSettlementService {
     if (!tab.checkDroppedAt) {
       throw AppError.conflict("Drop the check before staff settlement.");
     }
+    const requestKey = `staff:${input.requestId}`;
+    const existingPayments = await prisma.payment.findMany({
+      where: { idempotencyKey: { startsWith: `${requestKey}:` } },
+      orderBy: { idempotencyKey: "asc" },
+    });
+    if (existingPayments.length > 0) {
+      this.assertSettlementReplayMatches(existingPayments, tab.id, input.tipCents, input.tenders);
+      return this.tabView({ tabId: tab.id, locationId: input.locationId });
+    }
     return this.settle({
       tabId: tab.id,
-      requestKey: `staff:${input.requestId}`,
+      requestKey,
       tipCents: input.tipCents,
       tenders: input.tenders,
       actor: { actorType: "EMPLOYEE", actorId: input.employeeId },
@@ -412,7 +421,12 @@ export class RestaurantSettlementService {
         if (existing) {
           if (
             existing.restaurantTabId !== tab.id ||
-            existing.amountCents !== tender.amountCents
+            existing.amountCents !== tender.amountCents ||
+            existing.tipCents !== (index === 0 ? input.tipCents : 0) ||
+            (existing.paymentMethodReferenceId === null) !==
+              (tender.type === "CARD_PRESENT") ||
+            (tender.type === "SAVED_METHOD" &&
+              existing.paymentMethodReferenceId !== tender.paymentMethodReferenceId)
           ) {
             throw AppError.conflict("Settlement request id was reused with different details.");
           }
@@ -515,6 +529,36 @@ export class RestaurantSettlementService {
       await this.recordProviderResult(reserved.payment.id, result);
     }
     return this.closeIfPaid(input.tabId, input.actor);
+  }
+
+  private assertSettlementReplayMatches(
+    payments: Array<{
+      restaurantTabId: string | null;
+      amountCents: number;
+      tipCents: number | null;
+      paymentMethodReferenceId: string | null;
+    }>,
+    tabId: string,
+    tipCents: number,
+    tenders: TenderInput[],
+  ) {
+    if (
+      payments.length !== tenders.length ||
+      payments.some((payment, index) => {
+        const tender = tenders[index]!;
+        return (
+          payment.restaurantTabId !== tabId ||
+          payment.amountCents !== tender.amountCents ||
+          payment.tipCents !== (index === 0 ? tipCents : 0) ||
+          (payment.paymentMethodReferenceId === null) !==
+            (tender.type === "CARD_PRESENT") ||
+          (tender.type === "SAVED_METHOD" &&
+            payment.paymentMethodReferenceId !== tender.paymentMethodReferenceId)
+        );
+      })
+    ) {
+      throw AppError.conflict("Settlement request id was reused with different details.");
+    }
   }
 
   private async recordProviderResult(
