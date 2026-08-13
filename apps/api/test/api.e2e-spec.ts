@@ -3951,6 +3951,86 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
+  it("keeps a restaurant tab closed and audits a failed receipt email", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const { EMAIL_PROVIDER } = await import(
+      "../src/notifications/notifications.module"
+    );
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: {
+        locationId: true,
+        primaryCustomerId: true,
+        activePaymentMethodId: true,
+      },
+    });
+    const server = await prisma.employee.findFirstOrThrow({
+      where: { email: `server@${SEED_SUFFIX}` },
+    });
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "WALK_IN",
+        label: "Receipt email failure fixture",
+        status: "OPEN",
+        activePaymentMethodId: source.activePaymentMethodId,
+        orders: {
+          create: {
+            serverEmployeeId: server.id,
+            status: "SENT",
+            placedAt: new Date(),
+            items: {
+              create: {
+                menuItemId: cocktail.id,
+                quantity: 1,
+                unitPriceCentsSnapshot: cocktail.priceCents,
+                selectedModifiers: [],
+                kitchenStationId: cocktail.kitchenStationId,
+                status: "SENT",
+              },
+            },
+          },
+        },
+      },
+    });
+    const settlement = app.get(RestaurantSettlementService);
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    jest
+      .spyOn(emailProvider, "sendRestaurantReceipt")
+      .mockRejectedValueOnce(new Error("Email provider unavailable"));
+
+    await expect(
+      settlement.payCustomer({
+        tabId: tab.id,
+        customerId: source.primaryCustomerId!,
+        requestId: "88000000-0000-0000-0000-000000000004",
+        tipCents: 100,
+        paymentMethodReferenceId: source.activePaymentMethodId!,
+      }),
+    ).resolves.toMatchObject({ status: "CLOSED" });
+    await expect(
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).resolves.toMatchObject({ status: "CLOSED" });
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          entityId: tab.id,
+          action: "restaurant_tab.receipt_notification_failed",
+        },
+      }),
+    ).toBe(1);
+  });
+
   it("runs fallback once, does not retry a failed card, and surfaces attention", async () => {
     const { prisma } = await import("@cinema/database");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
