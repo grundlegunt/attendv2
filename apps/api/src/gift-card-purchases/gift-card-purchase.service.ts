@@ -17,6 +17,10 @@ function localAttemptStatus(status: string) {
   return status === "SUCCEEDED" ? PaymentAttemptStatus.SUCCEEDED : status === "PROCESSING" ? PaymentAttemptStatus.PROCESSING : status === "REQUIRES_ACTION" ? PaymentAttemptStatus.REQUIRES_ACTION : status === "FAILED" ? PaymentAttemptStatus.FAILED : PaymentAttemptStatus.CREATED;
 }
 
+function isUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+}
+
 @Injectable()
 export class GiftCardPurchaseService {
   constructor(@Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider, @Inject(EMAIL_PROVIDER) private readonly email: EmailProvider) {}
@@ -34,15 +38,21 @@ export class GiftCardPurchaseService {
     if (existing) return this.complete(existing);
     const location = await prisma.location.findFirst({ where: { id: input.locationId, active: true, organization: { active: true } }, include: { organization: true } });
     if (!location) throw AppError.notFound("Location was not found.");
-    const purchase = await prisma.giftCardPurchase.create({
-      data: {
-        organization: { connect: { id: location.organizationId } }, location: { connect: { id: location.id } }, amountCents: input.amountCents, currency: location.currency,
-        buyerEmail: input.buyerEmail.toLowerCase(), recipientName: input.recipientName, recipientEmail: input.recipientEmail.toLowerCase(), message: input.message,
-        idempotencyKey: input.idempotencyKey,
-        payment: { create: { purpose: PaymentPurpose.GIFT_CARD_PURCHASE, amountCents: input.amountCents, currency: location.currency, status: PaymentStatus.CREATED, idempotencyKey: `gift-card-purchase:${input.idempotencyKey}`, provider: this.provider.name } },
-      },
-      include: { payment: true, location: { include: { organization: true } } },
-    });
+    let purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>;
+    try {
+      purchase = await prisma.giftCardPurchase.create({
+        data: {
+          organization: { connect: { id: location.organizationId } }, location: { connect: { id: location.id } }, amountCents: input.amountCents, currency: location.currency,
+          buyerEmail: input.buyerEmail.toLowerCase(), recipientName: input.recipientName, recipientEmail: input.recipientEmail.toLowerCase(), message: input.message,
+          idempotencyKey: input.idempotencyKey,
+          payment: { create: { purpose: PaymentPurpose.GIFT_CARD_PURCHASE, amountCents: input.amountCents, currency: location.currency, status: PaymentStatus.CREATED, idempotencyKey: `gift-card-purchase:${input.idempotencyKey}`, provider: this.provider.name } },
+        },
+        include: { payment: true, location: { include: { organization: true } } },
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+      purchase = await this.waitForPurchase(input.idempotencyKey);
+    }
     return this.complete(purchase);
   }
 
@@ -55,8 +65,32 @@ export class GiftCardPurchaseService {
       connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, amountCents: purchase.amountCents, currency: purchase.currency,
       metadata: { giftCardPurchaseId: purchase.id, organizationId: purchase.organizationId, locationId: purchase.locationId }, idempotencyKey: purchase.payment.idempotencyKey,
     });
-    const updated = await prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { payment: { update: { providerPaymentId: intent.id, status: localPaymentStatus(intent.status), attempts: { create: { provider: this.provider.name, providerIntentId: intent.id, attemptNumber: 1, status: localAttemptStatus(intent.status) } } } } }, include: { payment: true, location: { include: { organization: true } } } });
+    let updated: Awaited<ReturnType<typeof this.purchaseWithPayment>>;
+    try {
+      updated = await prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { payment: { update: { providerPaymentId: intent.id, status: localPaymentStatus(intent.status), attempts: { create: { provider: this.provider.name, providerIntentId: intent.id, attemptNumber: 1, status: localAttemptStatus(intent.status) } } } } }, include: { payment: true, location: { include: { organization: true } } } });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+      updated = await this.waitForCompletedPurchase(purchase.id);
+    }
     return this.present(updated, intent.clientSecret);
+  }
+
+  private async waitForPurchase(idempotencyKey: string) {
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const purchase = await prisma.giftCardPurchase.findUnique({ where: { idempotencyKey }, include: { payment: true, location: { include: { organization: true } } } });
+      if (purchase) return purchase;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+    }
+    throw AppError.conflict("The gift card purchase is still being created. Please retry.");
+  }
+
+  private async waitForCompletedPurchase(id: string) {
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const purchase = await this.purchaseWithPayment(id);
+      if (purchase.payment.providerPaymentId) return purchase;
+      await new Promise((resolve) => setTimeout(resolve, attempt * 10));
+    }
+    throw AppError.conflict("The gift card payment is still being created. Please retry.");
   }
 
   private purchaseWithPayment(id: string) {

@@ -222,15 +222,30 @@ export class TicketingService {
       if (giftCardCents <= 0) throw TicketingError.validation("Gift card balance is insufficient.");
     }
     const normalizedEmail = input.email.toLowerCase();
-    const customer = await this.prisma.customer.upsert({
-      where: { email: normalizedEmail },
-      create: {
-        email: normalizedEmail,
-        name: input.name?.trim() || null,
-        isGuest: true,
-      },
-      update: input.name?.trim() ? { name: input.name.trim() } : {},
-    });
+    let customer;
+    try {
+      customer = await this.prisma.customer.upsert({
+        where: { email: normalizedEmail },
+        create: {
+          email: normalizedEmail,
+          name: input.name?.trim() || null,
+          isGuest: true,
+        },
+        update: input.name?.trim() ? { name: input.name.trim() } : {},
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      // Two first-time checkouts for the same email can both choose the
+      // create side of Prisma's upsert. PostgreSQL rejects the loser before
+      // the winner is necessarily visible on this connection, so briefly
+      // wait for that committed customer instead of returning a 500.
+      customer = null;
+      for (let attempt = 0; attempt < 5 && !customer; attempt += 1) {
+        customer = await this.prisma.customer.findUnique({ where: { email: normalizedEmail } });
+        if (!customer) await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+      }
+      if (!customer) throw error;
+    }
 
     let order;
     try {
