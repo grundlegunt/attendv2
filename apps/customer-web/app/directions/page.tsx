@@ -19,8 +19,11 @@ export default function DirectionsPage() {
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
+    setError(null);
+
     apiFetch<LocationResponse>("/cinema/now-playing")
       .then((response) => setLocation(response.location))
       .catch((err) =>
@@ -30,7 +33,7 @@ export default function DirectionsPage() {
             : "Location details are unavailable.",
         ),
       );
-  }, []);
+  }, [loadAttempt]);
 
   const directionsUrl = location?.address
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.address)}`
@@ -44,7 +47,7 @@ export default function DirectionsPage() {
         <p>{copy.intro}</p>
       </section>
 
-      {error && <div className="error-banner">{error}</div>}
+      {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></>}
       {!location && !error && <p className="loading-copy">{copy.loading}</p>}
       {location && (
         <section className="content-panel location-card">
