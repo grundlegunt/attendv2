@@ -219,15 +219,27 @@ export function LiveRestaurantTab({
       </section>
     );
   }
+  const settlementProcessing = tab.status === "SETTLEMENT_PENDING";
+  const customerPaymentAvailable = ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(tab.status);
+  const controlsDisabled = tipPending || paymentPending || settlementProcessing;
+  const statusCopy = settlementProcessing
+    ? "Your payment is processing. This page will update automatically."
+    : tab.status === "CLOSED"
+      ? "Your tab is paid and closed."
+      : tab.status === "REFUNDED"
+        ? "Your tab has been refunded."
+        : tab.status === "VOIDED"
+          ? "Your tab has been voided."
+          : tab.status === "MANAGER_REVIEW"
+            ? "Your payment needs attention. A manager has been notified."
+            : tab.checkDroppedAt
+              ? "Your check has been dropped. You can pay here or with your server."
+              : "Your tab is still open.";
   return (
     <section className="account-panel">
       <button className="link" onClick={onClose}>Back to showtimes</button>
       <h2>Your live tab</h2>
-      <p>
-        {tab.checkDroppedAt
-          ? "Your check has been dropped. You can pay here or with your server."
-          : "Your tab is still open."}
-      </p>
+      <p>{statusCopy}</p>
       {tab.orders.flatMap((order) =>
         order.items.map((item) => (
           <div key={item.id}>
@@ -252,7 +264,7 @@ export function LiveRestaurantTab({
             <button
               className="secondary"
               key={percent}
-              disabled={tipPending || paymentPending}
+              disabled={controlsDisabled}
               onClick={() => void chooseTip(value)}
             >
               {percent}%
@@ -267,16 +279,16 @@ export function LiveRestaurantTab({
           min="0"
           max="1000000"
           step="1"
-          disabled={tipPending || paymentPending}
+          disabled={controlsDisabled}
           value={customTipCents}
           onChange={(event) => setCustomTipCents(event.target.value)}
         />
       </label>
-      <button className="secondary" disabled={tipPending || paymentPending} onClick={() => void chooseTip(Number(customTipCents))}>Update custom tip</button>
+      <button className="secondary" disabled={controlsDisabled} onClick={() => void chooseTip(Number(customTipCents))}>Update custom tip</button>
       <h3>
         Total ${((tab.totals.totalCents - tab.paidCents) / 100).toFixed(2)}
       </h3>
-      {tab.status !== "CLOSED" && (
+      {customerPaymentAvailable && (
         <button className="primary" disabled={tipPending || paymentPending} onClick={pay}>{tipPending ? "Saving tip…" : paymentPending ? "Processing payment…" : "Pay & close tab"}</button>
       )}
       {tab.receipt && <p>Receipt {tab.receipt.receiptNumber}</p>}
