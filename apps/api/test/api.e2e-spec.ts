@@ -5299,10 +5299,16 @@ describe("Milestone 10 management reporting", () => {
     expect(afterFirstAttempt.payments.map((payment) => payment.status).sort()).toEqual(["REFUNDED", "SUCCEEDED"]);
     const partialReport = await request(app.getHttpServer()).get("/api/v1/reports/revenue?from=2022-01-01T00:00:00.000Z&to=2023-01-01T00:00:00.000Z").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(partialReport.body.totals).toMatchObject({ grossRevenueCents: 1000, refundedCents: 600, fnbRevenueCents: 400, fnbRefundedCents: 600, combinedRevenueCents: 400, fnbOrders: 1 });
-    const recovered = await refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: crypto.randomUUID(), reason: "Manager retry" });
+    const recoveryRequestId = crypto.randomUUID();
+    const recovered = await refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: recoveryRequestId, reason: "Manager retry" });
     expect(recovered.status).toBe("REFUNDED");
     expect(recovered.payments.every((payment) => payment.status === "REFUNDED")).toBe(true);
     expect(await prisma.refund.count({ where: { paymentId: { in: tab.payments.map((payment) => payment.id) }, status: "SUCCEEDED" } })).toBe(2);
+    const replayed = await refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: recoveryRequestId, reason: "Manager retry" });
+    expect(replayed.id).toBe(tab.id);
+    expect(await prisma.refund.count({ where: { paymentId: { in: tab.payments.map((payment) => payment.id) }, status: "SUCCEEDED" } })).toBe(2);
+    await expect(refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: crypto.randomUUID(), reason: "Manager retry" })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: recoveryRequestId, reason: "Changed reason" })).rejects.toMatchObject({ code: "CONFLICT" });
     const finalReport = await request(app.getHttpServer()).get("/api/v1/reports/revenue?from=2022-01-01T00:00:00.000Z&to=2023-01-01T00:00:00.000Z").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(finalReport.body.totals).toMatchObject({ grossRevenueCents: 1000, refundedCents: 1000, fnbRevenueCents: 0, fnbRefundedCents: 1000, combinedRevenueCents: 0, fnbOrders: 0 });
   });
