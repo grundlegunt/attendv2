@@ -4229,6 +4229,10 @@ describe("Milestone 6 server POS and menus", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({})
       .expect(201);
+    await prisma.restaurantOrder.update({
+      where: { id: order.body.id },
+      data: { status: "SENT", sentAt: new Date() },
+    });
     await prisma.restaurantTab.update({
       where: { id: source.body.id },
       data: { status: "READY_TO_CLOSE", checkDroppedAt: new Date() },
