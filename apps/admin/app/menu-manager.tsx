@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 interface Menu {
@@ -106,10 +106,31 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [itemQuery, setItemQuery] = useState("");
   const [itemCategoryFilter, setItemCategoryFilter] = useState("");
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
+  const refreshSequence = useRef(0);
+  const lastLoadedMenu = useRef<Menu | null>(null);
+  const emptyResponseRetries = useRef(0);
 
   const refresh = useCallback(() => {
+    const requestSequence = ++refreshSequence.current;
     apiFetch<Menu>("/restaurant-menu/admin", { accessToken })
       .then((response) => {
+        if (requestSequence !== refreshSequence.current) return;
+        const responseItemCount = response.categories.reduce(
+          (count, category) => count + category.items.length,
+          0,
+        );
+        const previousItemCount = lastLoadedMenu.current?.categories.reduce(
+          (count, category) => count + category.items.length,
+          0,
+        ) ?? 0;
+        if (previousItemCount > 0 && responseItemCount === 0) {
+          emptyResponseRetries.current += 1;
+          setMessage("Menu data temporarily returned empty. Keeping the last loaded menu and retrying.");
+          window.setTimeout(refresh, Math.min(1_000 * emptyResponseRetries.current, 5_000));
+          return;
+        }
+        emptyResponseRetries.current = 0;
+        lastLoadedMenu.current = response;
         setMenu(response);
         setCategoryId((value) =>
           response.categories.some((category) => category.id === value && category.active)
@@ -136,13 +157,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             "",
         );
       })
-      .catch((error) =>
+      .catch((error) => {
+        if (requestSequence !== refreshSequence.current) return;
         setMessage(
           error instanceof ApiRequestError
             ? error.body.message
             : "Menu could not load.",
-        ),
-      );
+        );
+      });
   }, [accessToken]);
 
   useEffect(refresh, [refresh]);
