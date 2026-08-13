@@ -52,6 +52,7 @@ export function LiveRestaurantTab({
   const refreshRequestRef = useRef(0);
   const tabIdentityRef = useRef(0);
   const tipHydratedRef = useRef(false);
+  const paymentAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   async function refresh() {
     if (refreshPendingRef.current || tipPendingRef.current || paymentPendingRef.current) return;
@@ -92,6 +93,7 @@ export function LiveRestaurantTab({
     setRefreshError("");
     setTipError("");
     tipHydratedRef.current = false;
+    paymentAttemptRef.current = null;
     tipPendingRef.current = false;
     paymentPendingRef.current = false;
     setTipPending(false);
@@ -155,6 +157,17 @@ export function LiveRestaurantTab({
     }
     paymentPendingRef.current = true;
     const tabIdentity = tabIdentityRef.current;
+    const paymentFingerprint = JSON.stringify({
+      tabId: tab.id,
+      tipCents,
+      paymentMethodReferenceId: tab.activePaymentMethod.id,
+    });
+    if (paymentAttemptRef.current?.fingerprint !== paymentFingerprint) {
+      paymentAttemptRef.current = {
+        fingerprint: paymentFingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     refreshRequestRef.current += 1;
     refreshPendingRef.current = false;
     setPaymentPending(true);
@@ -167,7 +180,7 @@ export function LiveRestaurantTab({
         {
           method: "POST",
           body: JSON.stringify({
-            requestId: crypto.randomUUID(),
+            requestId: paymentAttemptRef.current.requestId,
             tipCents,
             paymentMethodReferenceId: tab.activePaymentMethod.id,
           }),
@@ -179,10 +192,12 @@ export function LiveRestaurantTab({
           ? "Paid. Your receipt is ready."
           : "Payment needs attention. Your server has been notified.",
       );
+      if (result.status === "CLOSED") paymentAttemptRef.current = null;
       paymentPendingRef.current = false;
       await refresh();
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
+      if (error instanceof ApiRequestError) paymentAttemptRef.current = null;
       setMessage(
         error instanceof ApiRequestError
           ? error.body.message
