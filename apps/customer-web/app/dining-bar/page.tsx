@@ -28,7 +28,7 @@ function MenuItemCard({ item }: { item: PublicMenuItem }) {
 
 export default function DiningBarPage() {
   const { dining } = useCinemaContent();
-  const { menu, error } = usePublicDiningMenu();
+  const { menu, error, retry } = usePublicDiningMenu();
   const [filter, setFilter] = useState<MenuFilter>("FULL");
 
   const categories = useMemo(() => menu?.categories
@@ -45,7 +45,7 @@ export default function DiningBarPage() {
 
     <section className="public-menu" aria-labelledby="menu-heading">
       <div className="section-heading-row"><div><span className="eyebrow">FOOD &amp; DRINK</span><h2 id="menu-heading">The menu</h2></div><div className="menu-filters" role="group" aria-label="Filter menu"><button className={filter === "FULL" ? "active" : ""} onClick={() => setFilter("FULL")}>Full</button><button className={filter === "VEGAN" ? "active" : ""} onClick={() => setFilter("VEGAN")}>Vegan</button><button className={filter === "GLUTEN_FREE" ? "active" : ""} onClick={() => setFilter("GLUTEN_FREE")}>Gluten-Free</button></div></div>
-      {error && <div className="error-banner">{error}</div>}
+      {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={retry}>Try again</button></>}
       {!menu && !error && <p className="loading-copy">Loading the menu…</p>}
       {menu && categories.length === 0 && <p className="secondary-copy">No menu items match this filter.</p>}
       {categories.map((category) => <section className="menu-category" key={category.id}><h3>{category.name}</h3><div className="public-menu-grid">{category.items.map((item) => <MenuItemCard item={item} key={item.id} />)}</div></section>)}
