@@ -87,13 +87,28 @@ export class WorkforceService {
     });
   }
 
-  async endBreak(input: PinInput) {
+  async endBreak(input: PinInput & { requestId: string }) {
     const employee = await this.verifyPin(input);
-    const shift = await this.requireActiveShift(employee.id, input.locationId);
-    if (!shift.breakStartAt || shift.breakEndAt) throw AppError.conflict("No break is active.");
-    const updated = await prisma.shift.update({ where: { id: shift.id }, data: { breakEndAt: new Date() } });
-    await this.audit(prisma, employee.id, input.locationId, "shift.break_ended", shift.id, shift, updated);
-    return updated;
+    return prisma.$transaction(async (tx) => {
+      const active = await this.requireActiveShift(employee.id, input.locationId);
+      await tx.$queryRaw`SELECT "id" FROM "shifts" WHERE "id" = ${active.id} FOR UPDATE`;
+      const shift = await tx.shift.findUniqueOrThrow({ where: { id: active.id } });
+      if (!shift.breakStartAt || shift.breakEndAt) {
+        const completed = await tx.auditEvent.findFirst({
+          where: { locationId: input.locationId, action: "shift.break_ended", entityType: "Shift", entityId: shift.id },
+          orderBy: { occurredAt: "desc" },
+          select: { afterState: true },
+        });
+        const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+          ? completed.afterState as Record<string, unknown>
+          : undefined;
+        if (receipt?.requestId === input.requestId) return shift;
+        throw AppError.conflict("No break is active.");
+      }
+      const updated = await tx.shift.update({ where: { id: shift.id }, data: { breakEndAt: new Date() } });
+      await this.audit(tx, employee.id, input.locationId, "shift.break_ended", shift.id, shift, { ...updated, requestId: input.requestId });
+      return updated;
+    });
   }
 
   async clockOut(input: PinInput) {
