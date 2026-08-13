@@ -4962,11 +4962,19 @@ describe("Milestone 9 box office and workforce", () => {
 
     await request(app.getHttpServer()).post(`/api/v1/box-office/tickets/${sale.body.tickets[0].id}/reprint`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({}).expect(201);
+    const refundRequestId = crypto.randomUUID();
+    const refundPayload = { requestId: refundRequestId, reason: "E2E full refund", cashDrawerId: drawer.body.id };
     const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), reason: "E2E full refund", cashDrawerId: drawer.body.id }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(refundPayload).expect(201);
     expect(refunded.body.status).toBe("REFUNDED");
     expect(refunded.body.tickets[0].status).toBe("REFUNDED");
+    const replayed = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(refundPayload).expect(201);
+    expect(replayed.body.id).toBe(refunded.body.id);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ ...refundPayload, reason: "Changed reason" }).expect(409);
     expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
+    expect(await prisma.refund.count({ where: { idempotencyKey: `box-office-refund:${refundRequestId}` } })).toBe(1);
     const history = await request(app.getHttpServer()).get(`/api/v1/management/refunds/history?query=${encodeURIComponent(sale.body.orderNumber)}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(history.body.ticketOrders.map((order: { id: string }) => order.id)).toContain(sale.body.id);

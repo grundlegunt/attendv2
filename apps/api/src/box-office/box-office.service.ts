@@ -365,12 +365,25 @@ export class BoxOfficeService {
   }
 
   async refundOrder(input: { orderId: string; locationId: string; employeeId: string; requestId: string; reason: string; cashDrawerId?: string }) {
-    const order = await prisma.ticketOrder.findFirst({ where: { id: input.orderId, locationId: input.locationId, status: { in: ["PAID", "EXCHANGED"] } }, include: { payment: true, cashTransactions: true, location: { include: { organization: true } } } });
+    const order = await prisma.ticketOrder.findFirst({ where: { id: input.orderId, locationId: input.locationId }, include: { payment: true, cashTransactions: true, location: { include: { organization: true } } } });
     if (!order) throw AppError.notFound("Refundable ticket order was not found.");
     const cashPaid = order.cashTransactions.filter((entry) => entry.type === "SALE").reduce((sum, entry) => sum + entry.amountCents, 0);
-    const cardPaid = order.payment?.status === "SUCCEEDED" ? order.payment.amountCents : 0;
+    const cardPaid = order.payment && ["SUCCEEDED", "REFUNDED"].includes(order.payment.status) ? order.payment.amountCents : 0;
     const giftRedemption = await prisma.giftCardTransaction.findFirst({ where: { reference: order.id, type: "REDEMPTION" }, select: { giftCardId: true, amountCents: true } });
     const giftCardPaid = giftRedemption ? -giftRedemption.amountCents : 0;
+    if (order.status === "REFUNDED") {
+      const [cardRefund, cashRefund, giftRefund] = await Promise.all([
+        cardPaid > 0 ? prisma.refund.findUnique({ where: { idempotencyKey: `box-office-refund:${input.requestId}` } }) : null,
+        cashPaid > 0 ? prisma.cashTransaction.findUnique({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` } }) : null,
+        giftRedemption ? prisma.giftCardTransaction.findFirst({ where: { giftCardId: giftRedemption.giftCardId, type: "REFUND", reference: `refund:${order.id}:${input.requestId}` } }) : null,
+      ]);
+      const exactCardReplay = cardPaid === 0 || (cardRefund?.paymentId === order.payment?.id && cardRefund?.amountCents === cardPaid && cardRefund?.reason === input.reason && cardRefund?.scope === "TICKET");
+      const exactCashReplay = cashPaid === 0 || (cashRefund?.ticketOrderId === order.id && cashRefund.cashDrawerId === input.cashDrawerId && cashRefund.amountCents === cashPaid && cashRefund.reason === input.reason && cashRefund.type === "REFUND");
+      const exactGiftReplay = !giftRedemption || giftRefund?.amountCents === giftCardPaid;
+      if (!exactCardReplay || !exactCashReplay || !exactGiftReplay) throw AppError.conflict("The ticket order was already refunded with a different request.");
+      return prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
+    }
+    if (!["PAID", "EXCHANGED"].includes(order.status)) throw AppError.notFound("Refundable ticket order was not found.");
     if (giftRedemption && cardPaid === 0) {
       if (cashPaid > 0 && !input.cashDrawerId) throw AppError.validationFailed("An open cash drawer is required for a cash refund.");
       return prisma.$transaction(async (tx) => {
@@ -380,7 +393,7 @@ export class BoxOfficeService {
         if (!["PAID", "EXCHANGED"].includes(lockedOrder.status)) throw AppError.conflict("Ticket order is no longer refundable.");
         await tx.$queryRaw`SELECT "id" FROM "gift_cards" WHERE "id" = ${giftRedemption.giftCardId} FOR UPDATE`;
         const giftCard = await tx.giftCard.findUniqueOrThrow({ where: { id: giftRedemption.giftCardId } });
-        const reference = `refund:${order.id}`;
+        const reference = `refund:${order.id}:${input.requestId}`;
         const existingRefund = await tx.giftCardTransaction.findFirst({ where: { giftCardId: giftCard.id, type: "REFUND", reference } });
         if (!existingRefund) {
           const balanceAfterCents = giftCard.balanceCents + giftCardPaid;
@@ -422,7 +435,7 @@ export class BoxOfficeService {
       if (giftRedemption) {
         await tx.$queryRaw`SELECT "id" FROM "gift_cards" WHERE "id" = ${giftRedemption.giftCardId} FOR UPDATE`;
         const giftCard = await tx.giftCard.findUniqueOrThrow({ where: { id: giftRedemption.giftCardId } });
-        const reference = `refund:${order.id}`;
+        const reference = `refund:${order.id}:${input.requestId}`;
         const existingGiftRefund = await tx.giftCardTransaction.findFirst({ where: { giftCardId: giftCard.id, type: "REFUND", reference } });
         if (!existingGiftRefund) {
           const balanceAfterCents = giftCard.balanceCents + giftCardPaid;
