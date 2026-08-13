@@ -4829,7 +4829,6 @@ describe("Milestone 9 box office and workforce", () => {
 
   it("records one cash movement when identical register requests arrive concurrently", async () => {
     const { prisma } = await import("@cinema/database");
-    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `MOVEMENT-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
     const idempotencyKey = crypto.randomUUID();
