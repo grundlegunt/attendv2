@@ -132,6 +132,7 @@ describe("PostmarkEmailProvider", () => {
         tipCents: 300,
         totalCents: 2366,
         currency: "USD",
+        items: [{ name: "Old Fashioned", quantity: 2, totalCents: 1700 }],
       }),
     ).resolves.toEqual({ messageId: "message-3" });
 
@@ -143,6 +144,7 @@ describe("PostmarkEmailProvider", () => {
       Subject: "Your Meridian Cinema dining receipt",
     });
     expect(body.HtmlBody).toContain("R-2026-TEST");
+    expect(body.HtmlBody).toContain("2× Old Fashioned — $17.00");
     expect(body.TextBody).toContain("Subtotal: $17.00");
     expect(body.TextBody).toContain("Service charge: $2.00");
     expect(body.TextBody).toContain("Total: $23.66");
@@ -171,6 +173,7 @@ describe("PostmarkEmailProvider", () => {
         tipCents: 300,
         totalCents: 2366,
         currency: "USD",
+        items: [],
       }),
     ).rejects.toThrow("Mailbox unavailable");
   });
