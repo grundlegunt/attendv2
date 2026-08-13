@@ -12,6 +12,7 @@ export function ShiftControls({ employee, pin, onClockOut }: { employee: Authent
   const [statusPending, setStatusPending] = useState(true);
   const [pendingAction, setPendingAction] = useState<"break" | "clock-out" | null>(null);
   const actionPendingRef = useRef(false);
+  const breakStartAttemptRef = useRef<string | null>(null);
   const shiftRequestRef = useRef(0);
   const body = JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin });
   useEffect(() => {
@@ -21,6 +22,7 @@ export function ShiftControls({ employee, pin, onClockOut }: { employee: Authent
     setStatusPending(true);
     setPendingAction(null);
     setMessage(null);
+    breakStartAttemptRef.current = null;
     apiFetch<{shift:Shift|null}>("/shifts/status", { method: "POST", body })
       .then((result) => {
         if (requestId !== shiftRequestRef.current) return;
@@ -42,9 +44,13 @@ export function ShiftControls({ employee, pin, onClockOut }: { employee: Authent
     setPendingAction(actionName);
     setMessage(null);
     try {
-      const updated = await apiFetch<Shift>(path, { method: "POST", body });
+      const actionBody = path.endsWith("break/start")
+        ? JSON.stringify({ locationId: employee.locationId, employeeId: employee.id, pin, requestId: breakStartAttemptRef.current ??= crypto.randomUUID() })
+        : body;
+      const updated = await apiFetch<Shift>(path, { method: "POST", body: actionBody });
       if (requestId !== shiftRequestRef.current) return;
       if (path.endsWith("clock-out")) { onClockOut(); return; }
+      if (path.endsWith("break/start")) breakStartAttemptRef.current = null;
       setShift(updated);
     } catch (error) {
       if (requestId !== shiftRequestRef.current) return;

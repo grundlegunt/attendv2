@@ -4861,7 +4861,10 @@ describe("Milestone 9 box office and workforce", () => {
     const replayedClockIn = await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(201);
     expect(replayedClockIn.body.id).toBe(clockIn.body.id);
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send({ ...body, requestId: crypto.randomUUID() }).expect(409);
-    await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send(body).expect(201);
+    const breakStart = await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send(body).expect(201);
+    const replayedBreakStart = await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send(body).expect(201);
+    expect(replayedBreakStart.body.breakStartAt).toBe(breakStart.body.breakStartAt);
+    await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send({ ...body, requestId: crypto.randomUUID() }).expect(409);
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(409);
     await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send(body).expect(201);
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(201);
