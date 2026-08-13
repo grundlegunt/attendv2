@@ -4150,6 +4150,67 @@ describe("Milestone 6 server POS and menus", () => {
       }),
     ).toBe(1);
   });
+
+  it("never transfers an order onto a tab after that tab settles concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const source = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Transfer settlement source" })
+      .expect(201);
+    const sourceTab = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: source.body.id },
+      select: { locationId: true, primaryCustomerId: true },
+    });
+    const target = await prisma.restaurantTab.create({
+      data: {
+        locationId: sourceTab.locationId,
+        primaryCustomerId: sourceTab.primaryCustomerId,
+        tabType: "WALK_IN",
+        label: "Transfer settlement target",
+        status: "READY_TO_CLOSE",
+        checkDroppedAt: new Date(),
+      },
+    });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${source.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+
+    const [finalized, transferred] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${target.id}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [
+            { type: "CARD_PRESENT", amountCents: 1, readerId: "tmr_transfer_race" },
+          ],
+        }),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/transfer`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ targetTabId: target.id }),
+    ]);
+
+    expect([
+      [201, 404],
+      [400, 201],
+    ]).toContainEqual([finalized.status, transferred.status]);
+    const [finalTarget, finalOrder] = await Promise.all([
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: target.id } }),
+      prisma.restaurantOrder.findUniqueOrThrow({ where: { id: order.body.id } }),
+    ]);
+    if (finalized.status === 201) {
+      expect(finalTarget.status).toBe("CLOSED");
+      expect(finalOrder.restaurantTabId).toBe(source.body.id);
+    } else {
+      expect(finalTarget.status).toBe("READY_TO_CLOSE");
+      expect(finalOrder.restaurantTabId).toBe(target.id);
+    }
+  });
 });
 
 describe("Milestone 7 kitchen and bar fulfillment", () => {
