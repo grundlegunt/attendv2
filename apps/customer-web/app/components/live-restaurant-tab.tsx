@@ -121,7 +121,7 @@ export function LiveRestaurantTab({
     setTipPending(true);
     setTipError("");
     try {
-      await apiFetch(
+      const updatedTab = await apiFetch<LiveTab>(
         guestToken
           ? `/public/restaurant-tabs/${guestToken}/tip`
           : `/customer/restaurant-tabs/${tabId}/tip`,
@@ -131,10 +131,10 @@ export function LiveRestaurantTab({
         },
       );
       if (tabIdentity !== tabIdentityRef.current) return;
+      setTab(updatedTab);
       setTipCents(value);
       setCustomTipCents(String(value));
-      tipPendingRef.current = false;
-      await refresh();
+      setRefreshError("");
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
       setTipError(
