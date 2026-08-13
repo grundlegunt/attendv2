@@ -670,7 +670,7 @@ export class RestaurantSettlementService {
     const paidCents = tab.payments
       .filter((payment) => payment.status === "SUCCEEDED")
       .reduce((sum, payment) => sum + payment.amountCents, 0);
-    const currency = tab.payments[0]?.currency ?? "usd";
+    const currency = (tab.payments[0]?.currency ?? "usd").toLowerCase();
     const baseUrl = loadEnv().CUSTOMER_WEB_URL.replace(/\/$/, "");
 
     try {
