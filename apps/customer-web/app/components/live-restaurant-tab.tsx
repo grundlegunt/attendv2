@@ -52,7 +52,7 @@ export function LiveRestaurantTab({
   const tabIdentityRef = useRef(0);
 
   async function refresh() {
-    if (refreshPendingRef.current) return;
+    if (refreshPendingRef.current || tipPendingRef.current || paymentPendingRef.current) return;
     refreshPendingRef.current = true;
     const requestId = ++refreshRequestRef.current;
     try {
@@ -105,6 +105,8 @@ export function LiveRestaurantTab({
     }
     const tabIdentity = tabIdentityRef.current;
     tipPendingRef.current = true;
+    refreshRequestRef.current += 1;
+    refreshPendingRef.current = false;
     setTipPending(true);
     setTipError("");
     try {
@@ -120,6 +122,7 @@ export function LiveRestaurantTab({
       if (tabIdentity !== tabIdentityRef.current) return;
       setTipCents(value);
       setCustomTipCents(String(value));
+      tipPendingRef.current = false;
       await refresh();
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
@@ -143,6 +146,8 @@ export function LiveRestaurantTab({
     }
     paymentPendingRef.current = true;
     const tabIdentity = tabIdentityRef.current;
+    refreshRequestRef.current += 1;
+    refreshPendingRef.current = false;
     setPaymentPending(true);
     setMessage("");
     try {
@@ -165,6 +170,7 @@ export function LiveRestaurantTab({
           ? "Paid. Your receipt is ready."
           : "Payment needs attention. Your server has been notified.",
       );
+      paymentPendingRef.current = false;
       await refresh();
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
