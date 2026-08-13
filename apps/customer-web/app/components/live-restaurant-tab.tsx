@@ -224,6 +224,7 @@ export function LiveRestaurantTab({
   const settlementProcessing = tab.status === "SETTLEMENT_PENDING";
   const customerPaymentAvailable = ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(tab.status);
   const controlsDisabled = tipPending || paymentPending;
+  const balanceDueCents = Math.max(0, tab.totals.totalCents - tab.paidCents);
   const statusCopy = settlementProcessing
     ? "Your payment is processing. This page will update automatically."
     : tab.status === "CLOSED"
@@ -290,7 +291,7 @@ export function LiveRestaurantTab({
         <button className="secondary" disabled={controlsDisabled} onClick={() => void chooseTip(Number(customTipCents))}>Update custom tip</button>
       </>}
       <h3>
-        Total ${((tab.totals.totalCents - tab.paidCents) / 100).toFixed(2)}
+        Balance due ${(balanceDueCents / 100).toFixed(2)}
       </h3>
       {customerPaymentAvailable && (
         <button className="primary" disabled={tipPending || paymentPending} onClick={pay}>{tipPending ? "Saving tip…" : paymentPending ? "Processing payment…" : "Pay & close tab"}</button>
