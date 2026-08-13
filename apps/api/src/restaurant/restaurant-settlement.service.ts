@@ -6,7 +6,9 @@ import {
   PaymentProvider,
   ProviderPaymentIntentResult,
 } from "@cinema/payments";
+import { EmailProvider } from "@cinema/notifications";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 import { AppError } from "../common/app-error";
 
 type TenderInput = {
@@ -25,6 +27,7 @@ type Actor = {
 export class RestaurantSettlementService {
   constructor(
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
+    @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
 
   async staffTab(tabId: string, locationId: string) {
@@ -557,14 +560,16 @@ export class RestaurantSettlementService {
   }
 
   private async closeIfPaid(tabId: string, actor: Actor) {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${tabId} FOR UPDATE`;
       const tab = await tx.restaurantTab.findUnique({
         where: { id: tabId },
         include: { payments: true, receipt: true },
       });
       if (!tab) throw AppError.notFound("Restaurant tab was not found.");
-      if (tab.status === "CLOSED") return tab;
+      if (tab.status === "CLOSED") {
+        return { tab, notifyPaymentFailure: false };
+      }
       const paid = tab.payments
         .filter((payment) => payment.status === "SUCCEEDED")
         .reduce((sum, payment) => sum + payment.amountCents, 0);
@@ -590,7 +595,10 @@ export class RestaurantSettlementService {
             },
           });
         }
-        return tx.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } });
+        return {
+          tab: await tx.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+          notifyPaymentFailure: hasFailed && tab.status !== "PAYMENT_FAILED",
+        };
       }
       const closedAt = new Date();
       const updated = await tx.restaurantTab.update({
@@ -632,8 +640,63 @@ export class RestaurantSettlementService {
           },
         },
       });
-      return updated;
+      return { tab: updated, notifyPaymentFailure: false };
     });
+    if (result.notifyPaymentFailure) {
+      await this.notifyPaymentFailure(tabId);
+    }
+    return result.tab;
+  }
+
+  private async notifyPaymentFailure(tabId: string) {
+    const tab = await prisma.restaurantTab.findUnique({
+      where: { id: tabId },
+      include: {
+        primaryCustomer: true,
+        location: { include: { organization: true } },
+        payments: true,
+      },
+    });
+    if (!tab?.primaryCustomer?.email || !tab.primaryCustomerId) return;
+
+    const payload = Buffer.from(
+      JSON.stringify({
+        tabId: tab.id,
+        customerId: tab.primaryCustomerId,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      }),
+    ).toString("base64url");
+    const token = `${payload}.${this.signGuestPayload(payload)}`;
+    const paidCents = tab.payments
+      .filter((payment) => payment.status === "SUCCEEDED")
+      .reduce((sum, payment) => sum + payment.amountCents, 0);
+    const currency = (tab.payments[0]?.currency ?? "usd").toLowerCase();
+    const baseUrl = loadEnv().CUSTOMER_WEB_URL.replace(/\/$/, "");
+
+    try {
+      await this.emailProvider.sendRestaurantPaymentFailed({
+        to: tab.primaryCustomer.email,
+        customerName: tab.primaryCustomer.name ?? undefined,
+        theaterName: tab.location.organization.name,
+        tabId: tab.id,
+        amountDueCents: Math.max(0, (tab.totalCents ?? 0) - paidCents),
+        currency,
+        paymentUrl: `${baseUrl}/account?restaurantTab=${encodeURIComponent(token)}`,
+      });
+    } catch (error) {
+      await prisma.auditEvent.create({
+        data: {
+          actorType: "SYSTEM",
+          action: "restaurant_tab.payment_failure_notification_failed",
+          entityType: "RestaurantTab",
+          entityId: tab.id,
+          locationId: tab.locationId,
+          afterState: {
+            message: error instanceof Error ? error.message : "Email delivery failed",
+          },
+        },
+      });
+    }
   }
 
   private async tabView(input: {

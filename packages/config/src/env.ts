@@ -69,6 +69,7 @@ const envSchema = z.object({
   EMAIL_PROVIDER: z.enum(["postmark", "test"]).default("postmark"),
   POSTMARK_SERVER_TOKEN: z.string().optional(),
   EMAIL_FROM: z.string().email().default("receipts@example.com"),
+  CUSTOMER_WEB_URL: z.string().url().default("http://localhost:3000"),
 
   PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
   // Live mode is an explicit production-only opt-in. Test mode remains valid
@@ -150,7 +151,12 @@ let cachedEnv: Env | undefined;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (cachedEnv) return cachedEnv;
 
-  const result = envSchema.safeParse(source);
+  const normalized = {
+    ...source,
+    CUSTOMER_WEB_URL:
+      source.CUSTOMER_WEB_URL ?? source.NEXT_PUBLIC_CUSTOMER_WEB_URL,
+  };
+  const result = envSchema.safeParse(normalized);
   if (!result.success) {
     const issues = result.error.issues
       .map((issue) => `  - ${issue.path.join(".")}: ${issue.message}`)
