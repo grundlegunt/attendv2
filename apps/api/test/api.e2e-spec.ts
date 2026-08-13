@@ -3881,6 +3881,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
         locationId: source.locationId,
         primaryCustomerId: source.primaryCustomerId,
         tabType: "WALK_IN",
+        label: "Customer payment replay fixture",
         status: "OPEN",
         activePaymentMethodId: source.activePaymentMethodId,
         orders: {
