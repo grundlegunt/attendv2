@@ -3999,6 +3999,60 @@ describe("Milestone 6 server POS and menus", () => {
     }
   });
 
+  it("never changes a selected tip after its tab is settled concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: { locationId: true, primaryCustomerId: true },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "WALK_IN",
+        label: "Settle tip race",
+        status: "READY_TO_CLOSE",
+        checkDroppedAt: new Date(),
+      },
+    });
+    const access = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${tab.id}/access-link`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+
+    const [finalized, tipped] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${tab.id}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [{ type: "CARD_PRESENT", amountCents: 1, readerId: "tmr_tip_race" }],
+        }),
+      request(app.getHttpServer())
+        .post(`/api/v1/public/restaurant-tabs/${access.body.token}/tip`)
+        .send({ tipCents: 250 }),
+    ]);
+
+    expect([
+      [201, 404],
+      [201, 201],
+      [400, 200],
+    ]).toContainEqual([finalized.status, tipped.status]);
+    const finalTab = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: tab.id },
+      include: { receipt: true },
+    });
+    if (finalized.status === 201) {
+      expect(finalTab).toMatchObject({ status: "CLOSED", selectedTipCents: 0 });
+      expect(finalTab.receipt).toMatchObject({ tipCents: 0 });
+    } else {
+      expect(finalTab).toMatchObject({ status: "READY_TO_CLOSE", selectedTipCents: 250 });
+      expect(finalTab.receipt).toBeNull();
+    }
+  });
+
   it("sends available lines while preserving an 86'd line in a replacement draft", async () => {
     const { prisma } = await import("@cinema/database");
     const [burger, cocktail] = await Promise.all([

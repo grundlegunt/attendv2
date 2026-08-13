@@ -83,20 +83,21 @@ export class RestaurantSettlementService {
   }
 
   async selectTip(tabId: string, customerId: string, tipCents: number) {
-    const tab = await prisma.restaurantTab.findFirst({
-      where: {
-        id: tabId,
-        primaryCustomerId: customerId,
-        status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"] },
-      },
-    });
-    if (!tab) throw AppError.notFound("Restaurant tab was not found.");
-    await prisma.$transaction([
-      prisma.restaurantTab.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${tabId} FOR UPDATE`;
+      const tab = await tx.restaurantTab.findFirst({
+        where: {
+          id: tabId,
+          primaryCustomerId: customerId,
+          status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"] },
+        },
+      });
+      if (!tab) throw AppError.notFound("Restaurant tab was not found.");
+      await tx.restaurantTab.update({
         where: { id: tab.id },
         data: { selectedTipCents: tipCents },
-      }),
-      prisma.auditEvent.create({
+      });
+      await tx.auditEvent.create({
         data: {
           actorType: "CUSTOMER",
           actorId: customerId,
@@ -106,9 +107,9 @@ export class RestaurantSettlementService {
           locationId: tab.locationId,
           afterState: { tipCents },
         },
-      }),
-    ]);
-    return this.tabView({ tabId: tab.id, customerId });
+      });
+    });
+    return this.tabView({ tabId, customerId });
   }
 
   async checksDue(locationId: string, now = new Date()) {
@@ -399,7 +400,26 @@ export class RestaurantSettlementService {
         _sum: { amountCents: true },
       });
       const remaining = totals.totalCents - (paid._sum.amountCents ?? 0);
-      if (remaining <= 0) return { tab, payments: [], totals, alreadyClosed: false };
+      if (remaining <= 0) {
+        const updatedTab = await tx.restaurantTab.update({
+          where: { id: tab.id },
+          data: {
+            status: "SETTLEMENT_PENDING",
+            selectedTipCents: input.tipCents,
+            ...totals,
+          },
+          include: {
+            location: { include: { organization: true } },
+            orders: { select: { status: true } },
+          },
+        });
+        return {
+          tab: updatedTab,
+          payments: [],
+          totals,
+          alreadyClosed: false,
+        };
+      }
       const tenders = input.tenders.map((tender, index) =>
         input.fillRemainingTender && index === 0
           ? { ...tender, amountCents: remaining }
