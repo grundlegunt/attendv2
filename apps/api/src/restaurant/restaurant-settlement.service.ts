@@ -229,23 +229,27 @@ export class RestaurantSettlementService {
     const totals = await this.calculateTotals(tab.id, input.tipCents);
     const alreadyPaid = await this.succeededPayments(tab.id);
     const remaining = totals.totalCents - alreadyPaid;
-    if (remaining <= 0) return this.closeIfPaid(tab.id, {
-      actorType: "CUSTOMER",
-      actorId: input.customerId,
-    });
-    return this.settle({
-      tabId: tab.id,
-      requestKey: `customer:${input.requestId}`,
-      tipCents: input.tipCents,
-      tenders: [
-        {
-          type: "SAVED_METHOD",
-          amountCents: remaining,
-          paymentMethodReferenceId: input.paymentMethodReferenceId,
-        },
-      ],
-      actor: { actorType: "CUSTOMER", actorId: input.customerId },
-    });
+    if (remaining <= 0) {
+      await this.closeIfPaid(tab.id, {
+        actorType: "CUSTOMER",
+        actorId: input.customerId,
+      });
+    } else {
+      await this.settle({
+        tabId: tab.id,
+        requestKey: `customer:${input.requestId}`,
+        tipCents: input.tipCents,
+        tenders: [
+          {
+            type: "SAVED_METHOD",
+            amountCents: remaining,
+            paymentMethodReferenceId: input.paymentMethodReferenceId,
+          },
+        ],
+        actor: { actorType: "CUSTOMER", actorId: input.customerId },
+      });
+    }
+    return this.tabView({ tabId: tab.id, customerId: input.customerId });
   }
 
   async runFallback(now = new Date()) {
