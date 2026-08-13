@@ -4856,9 +4856,11 @@ describe("Milestone 9 box office and workforce", () => {
   it("clocks staff in by PIN, rejects duplicate punches, records breaks, and clocks out", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
-    const body = { locationId: owner.locationId, employeeId: owner.id, pin: "1234" };
+    const body = { locationId: owner.locationId, employeeId: owner.id, pin: "1234", requestId: crypto.randomUUID() };
     const clockIn = await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(201);
-    await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(409);
+    const replayedClockIn = await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(201);
+    expect(replayedClockIn.body.id).toBe(clockIn.body.id);
+    await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send({ ...body, requestId: crypto.randomUUID() }).expect(409);
     await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send(body).expect(201);
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(409);
     await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send(body).expect(201);
@@ -5269,7 +5271,7 @@ describe("Milestone 9 box office and workforce", () => {
   it("rate limits repeated public workforce PIN attempts", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
-    const body = { locationId: owner.locationId, employeeId: crypto.randomUUID(), pin: "0000" };
+    const body = { locationId: owner.locationId, employeeId: crypto.randomUUID(), pin: "0000", requestId: crypto.randomUUID() };
     for (let attempt = 0; attempt < 10; attempt += 1) {
       await request(app.getHttpServer()).post("/api/v1/shifts/clock-in").send(body).expect(403);
     }

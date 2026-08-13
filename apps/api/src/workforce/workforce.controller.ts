@@ -1,5 +1,5 @@
 import { Body, Controller, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
-import { shiftManagerAdjustmentSchema, shiftPinRequestSchema } from "@cinema/shared";
+import { shiftClockInRequestSchema, shiftManagerAdjustmentSchema, shiftPinRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { WorkforceService } from "./workforce.service";
@@ -21,8 +21,8 @@ export class WorkforceController {
     return this.workforce.status(shiftPinRequestSchema.parse(body));
   }
   @Post("clock-in")
-  clockIn(@Body(new ZodValidationPipe(shiftPinRequestSchema)) body: unknown) {
-    return this.workforce.clockIn(shiftPinRequestSchema.parse(body));
+  clockIn(@Body(new ZodValidationPipe(shiftClockInRequestSchema)) body: unknown) {
+    return this.workforce.clockIn(shiftClockInRequestSchema.parse(body));
   }
   @Post("break/start")
   startBreak(@Body(new ZodValidationPipe(shiftPinRequestSchema)) body: unknown) {

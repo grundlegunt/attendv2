@@ -6,6 +6,10 @@ export const shiftPinRequestSchema = z.object({
   pin: z.string().regex(/^\d{4,8}$/, "PIN must contain 4 to 8 digits."),
 });
 
+export const shiftClockInRequestSchema = shiftPinRequestSchema.extend({
+  requestId: z.string().uuid(),
+});
+
 export const shiftManagerAdjustmentSchema = z.object({
   clockInAt: z.string().datetime().optional(),
   clockOutAt: z.string().datetime().nullable().optional(),
