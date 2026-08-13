@@ -1739,64 +1739,73 @@ export class TicketingService {
         })
       : null;
 
-    return this.prisma.$transaction(async (tx) => {
-      let paymentMethodReferenceId: string | null = null;
-      if (requested && paymentCustomer && paymentMethod) {
-        await tx.paymentMethodReference.updateMany({
-          where: { paymentCustomerId: paymentCustomer.id, isDefault: true },
-          data: { isDefault: false },
-        });
-        const reference = await tx.paymentMethodReference.upsert({
-          where: {
-            paymentCustomerId_provider_providerPaymentMethodId: {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        let paymentMethodReferenceId: string | null = null;
+        if (requested && paymentCustomer && paymentMethod) {
+          await tx.paymentMethodReference.updateMany({
+            where: { paymentCustomerId: paymentCustomer.id, isDefault: true },
+            data: { isDefault: false },
+          });
+          const reference = await tx.paymentMethodReference.upsert({
+            where: {
+              paymentCustomerId_provider_providerPaymentMethodId: {
+                paymentCustomerId: paymentCustomer.id,
+                provider: this.paymentProvider.name,
+                providerPaymentMethodId: paymentMethod.id,
+              },
+            },
+            create: {
               paymentCustomerId: paymentCustomer.id,
               provider: this.paymentProvider.name,
               providerPaymentMethodId: paymentMethod.id,
+              brand: paymentMethod.brand,
+              last4: paymentMethod.last4,
+              expMonth: paymentMethod.expMonth,
+              expYear: paymentMethod.expYear,
+              isDefault: true,
+            },
+            update: {
+              brand: paymentMethod.brand,
+              last4: paymentMethod.last4,
+              expMonth: paymentMethod.expMonth,
+              expYear: paymentMethod.expYear,
+              active: true,
+              isDefault: true,
+            },
+          });
+          paymentMethodReferenceId = reference.id;
+        }
+
+        const granted = requested && paymentMethodReferenceId !== null;
+        await tx.customerConsent.upsert({
+          where: {
+            ticketOrderId_type: {
+              ticketOrderId: order.id,
+              type: "DINING_AUTO_SETTLEMENT",
             },
           },
           create: {
-            paymentCustomerId: paymentCustomer.id,
-            provider: this.paymentProvider.name,
-            providerPaymentMethodId: paymentMethod.id,
-            brand: paymentMethod.brand,
-            last4: paymentMethod.last4,
-            expMonth: paymentMethod.expMonth,
-            expYear: paymentMethod.expYear,
-            isDefault: true,
-          },
-          update: {
-            brand: paymentMethod.brand,
-            last4: paymentMethod.last4,
-            expMonth: paymentMethod.expMonth,
-            expYear: paymentMethod.expYear,
-            active: true,
-            isDefault: true,
-          },
-        });
-        paymentMethodReferenceId = reference.id;
-      }
-
-      const granted = requested && paymentMethodReferenceId !== null;
-      await tx.customerConsent.upsert({
-        where: {
-          ticketOrderId_type: {
-            ticketOrderId: order.id,
+            customerId: order.customerId!,
             type: "DINING_AUTO_SETTLEMENT",
+            granted,
+            termsVersion: DINING_CONSENT_TERMS_VERSION,
+            grantedAt: new Date(),
+            ticketOrderId: order.id,
+            paymentMethodReferenceId,
           },
-        },
-        create: {
-          customerId: order.customerId!,
-          type: "DINING_AUTO_SETTLEMENT",
-          granted,
-          termsVersion: DINING_CONSENT_TERMS_VERSION,
-          grantedAt: new Date(),
-          ticketOrderId: order.id,
-          paymentMethodReferenceId,
-        },
-        update: {},
+          update: {},
+        });
+        return granted ? "AUTHORIZED" : requested ? "UNAVAILABLE" : "DECLINED";
       });
-      return granted ? "AUTHORIZED" : requested ? "UNAVAILABLE" : "DECLINED";
-    });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
+      const concurrent = await this.prisma.customerConsent.findUnique({
+        where: { ticketOrderId_type: { ticketOrderId: order.id, type: "DINING_AUTO_SETTLEMENT" } },
+      });
+      if (!concurrent) throw error;
+      return concurrent.granted ? "AUTHORIZED" : requested ? "UNAVAILABLE" : "DECLINED";
+    }
   }
 
   private presentConfirmation(order: {

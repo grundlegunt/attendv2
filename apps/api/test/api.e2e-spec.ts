@@ -5097,6 +5097,40 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "TicketOrder", entityId: order.id, action: "ticket_order.box_office_compensation_succeeded" } })).toBe(1);
   });
 
+  it("rejects a compensation refund request id reused for a different payment", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const orders = await Promise.all([0, 1].map((index) => prisma.ticketOrder.create({
+      data: {
+        locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(),
+        channel: "BOX_OFFICE", status: "PAYMENT_FAILED", orderNumber: `COMPENSATION-REPLAY-${index}-${crypto.randomUUID()}`,
+        checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1000, feesCents: 0, taxCents: 0, totalCents: 1000,
+        placedByEmployeeId: owner.id,
+        payment: { create: { purpose: "TICKET_ORDER", amountCents: 1000, status: "SUCCEEDED", idempotencyKey: `compensation-payment:${crypto.randomUUID()}`, provider: "test", providerPaymentId: `pi_${crypto.randomUUID()}` } },
+      },
+      include: { payment: true },
+    })));
+    const requestId = crypto.randomUUID();
+    await prisma.refund.create({ data: {
+      paymentId: orders[0].payment!.id, amountCents: 1000, reason: "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED",
+      scope: "TICKET", idempotencyKey: `box-office-finalize-refund:${requestId}`,
+    } });
+
+    const service = app.get(BoxOfficeService) as unknown as { compensateFailedCardOrder(input: Record<string, unknown>): Promise<void> };
+    await expect(service.compensateFailedCardOrder({
+      orderId: orders[1].id, paymentId: orders[1].payment!.id, providerPaymentId: orders[1].payment!.providerPaymentId!,
+      amountCents: 1000, requestId, locationId: owner.locationId, employeeId: owner.id,
+    })).rejects.toMatchObject({
+      status: 409,
+      message: "The checkout request id was already used for a different compensation refund.",
+    });
+
+    expect(await prisma.refund.count({ where: { idempotencyKey: `box-office-finalize-refund:${requestId}` } })).toBe(1);
+    expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: orders[1].id } })).toMatchObject({ status: "PAYMENT_FAILED" });
+  });
+
   it("rate limits repeated public workforce PIN attempts", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
