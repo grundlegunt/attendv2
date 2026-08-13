@@ -1330,6 +1330,14 @@ describe("Milestone 1 cinema configuration", () => {
       expect(purchases).toHaveLength(1);
       expect(purchases[0].payment.attempts).toHaveLength(1);
       expect(createIntent).toHaveBeenCalled();
+
+      await request(app.getHttpServer()).post("/api/v1/gift-card-purchases")
+        .set("Idempotency-Key", idempotencyKey)
+        .send({ ...payload, amountCents: payload.amountCents + 100 })
+        .expect(409, {
+          code: "CONFLICT",
+          message: "The gift card purchase idempotency key was already used with different purchase details.",
+        });
     } finally {
       createIntent.mockRestore();
     }
