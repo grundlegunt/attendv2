@@ -4827,6 +4827,26 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "Shift", entityId: shift.id, action: "shift.manager_adjusted" } })).toBe(1);
   });
 
+  it("records one cash movement when identical register requests arrive concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `MOVEMENT-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+    const idempotencyKey = crypto.randomUUID();
+    const payload = { type: "PAID_IN", amountCents: 2500, reason: "Concurrent paid-in test", idempotencyKey };
+
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer()).post(`/api/v1/box-office/cash-drawers/${drawer.body.id}/movements`).set("Authorization", `Bearer ${ownerAccessToken}`).send(payload),
+      request(app.getHttpServer()).post(`/api/v1/box-office/cash-drawers/${drawer.body.id}/movements`).set("Authorization", `Bearer ${ownerAccessToken}`).send(payload),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.id).toBe(first.body.id);
+    expect(await prisma.cashTransaction.count({ where: { idempotencyKey } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { entityType: "CashTransaction", entityId: first.body.id, action: "cash_drawer.paid_in" } })).toBe(1);
+  });
+
   it("enforces promotion minimum subtotals and redemption limits", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
