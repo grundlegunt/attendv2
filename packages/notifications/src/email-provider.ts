@@ -25,8 +25,21 @@ export interface GiftCardDelivery {
   message?: string | null;
 }
 
+export interface RestaurantPaymentFailedNotice {
+  to: string;
+  customerName?: string | null;
+  theaterName: string;
+  tabId: string;
+  amountDueCents: number;
+  currency: string;
+  paymentUrl: string;
+}
+
 export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
   sendGiftCardDelivery(delivery: GiftCardDelivery): Promise<{ messageId: string }>;
+  sendRestaurantPaymentFailed(
+    notice: RestaurantPaymentFailedNotice,
+  ): Promise<{ messageId: string }>;
 }
