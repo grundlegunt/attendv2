@@ -245,6 +245,9 @@ export class BoxOfficeService {
       create: { paymentId: input.paymentId, amountCents: input.amountCents, reason: "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED", scope: "TICKET", status: "CREATED", idempotencyKey },
       update: {},
     });
+    if (refund.paymentId !== input.paymentId || refund.amountCents !== input.amountCents || refund.reason !== "BOX_OFFICE_INVENTORY_FINALIZATION_FAILED" || refund.scope !== "TICKET") {
+      throw AppError.conflict("The checkout request id was already used for a different compensation refund.");
+    }
     if (!["CREATED", "PROCESSING"].includes(refund.status)) return;
     try {
       const result = await this.paymentProvider.refund({ connectedAccountId: input.connectedAccountId, providerPaymentId: input.providerPaymentId, amountCents: input.amountCents, reason: "requested_by_customer", idempotencyKey: refund.idempotencyKey, metadata: { refundId: refund.id, ticketOrderId: input.orderId } });
