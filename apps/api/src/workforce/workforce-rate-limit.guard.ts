@@ -42,6 +42,10 @@ export class WorkforceRateLimitGuard implements CanActivate, OnModuleDestroy {
     return count;
   }
 
+  resetForTests() {
+    if (process.env.NODE_ENV === "test") this.fallback.clear();
+  }
+
   async onModuleDestroy() {
     if (this.redis && this.redis.status !== "end") await this.redis.quit();
   }

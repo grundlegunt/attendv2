@@ -4866,7 +4866,13 @@ describe("Milestone 9 box office and workforce", () => {
     expect(replayedBreakStart.body.breakStartAt).toBe(breakStart.body.breakStartAt);
     await request(app.getHttpServer()).post("/api/v1/shifts/break/start").send({ ...body, requestId: crypto.randomUUID() }).expect(409);
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(409);
-    await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send(body).expect(201);
+    const breakEndBody = { ...body, requestId: crypto.randomUUID() };
+    const breakEnd = await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send(breakEndBody).expect(201);
+    const replayedBreakEnd = await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send(breakEndBody).expect(201);
+    expect(replayedBreakEnd.body.breakEndAt).toBe(breakEnd.body.breakEndAt);
+    await request(app.getHttpServer()).post("/api/v1/shifts/break/end").send({ ...breakEndBody, requestId: crypto.randomUUID() }).expect(409);
+    const { WorkforceRateLimitGuard } = await import("../src/workforce/workforce-rate-limit.guard");
+    app.get(WorkforceRateLimitGuard).resetForTests();
     await request(app.getHttpServer()).post("/api/v1/shifts/clock-out").send(body).expect(201);
     const shift = await prisma.shift.findUniqueOrThrow({ where: { id: clockIn.body.id } });
     expect(shift.clockOutAt).not.toBeNull();
