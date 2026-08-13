@@ -192,7 +192,7 @@ export function LiveRestaurantTab({
           ? "Paid. Your receipt is ready."
           : "Payment needs attention. Your server has been notified.",
       );
-      if (result.status === "CLOSED") paymentAttemptRef.current = null;
+      if (result.status !== "SETTLEMENT_PENDING") paymentAttemptRef.current = null;
       paymentPendingRef.current = false;
       await refresh();
     } catch (error) {
