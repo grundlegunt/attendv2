@@ -1,10 +1,13 @@
 # Attend — Post-Milestone Edit List
 
-Compiled from direct product feedback given across planning conversations, to work
-through once the current milestone finishes. Two parts: the owner's own list
-(verbatim scope, lightly organized), and a set of items discussed earlier that
-never made it onto that list and haven't been built — added here so nothing gets
-dropped.
+Compiled from direct product feedback given across planning conversations. Two
+parts: the owner's own list (verbatim scope, lightly organized), and a set of items
+discussed earlier that never made it onto that list and haven't been built — added
+here so nothing gets dropped.
+
+**Sequencing: do not start on anything in this doc until Milestone 11 is complete.**
+This is deliberately queued behind it, not parallel work — finish Milestone 11
+first, then come back to this list.
 
 Nothing in this doc has been scoped into engineering tasks yet. Triage it — some of
 these are one-line bug fixes, some are genuinely large features — before starting.
