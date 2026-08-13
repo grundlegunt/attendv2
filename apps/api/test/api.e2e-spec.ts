@@ -3857,6 +3857,83 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     });
   });
 
+  it("replays an exact completed customer tab payment without charging again", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: {
+        locationId: true,
+        primaryCustomerId: true,
+        activePaymentMethodId: true,
+      },
+    });
+    const server = await prisma.employee.findFirstOrThrow({
+      where: { email: `server@${SEED_SUFFIX}` },
+    });
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "WALK_IN",
+        label: "Customer payment replay fixture",
+        status: "OPEN",
+        activePaymentMethodId: source.activePaymentMethodId,
+        orders: {
+          create: {
+            serverEmployeeId: server.id,
+            status: "SENT",
+            placedAt: new Date(),
+            items: {
+              create: {
+                menuItemId: cocktail.id,
+                quantity: 1,
+                unitPriceCentsSnapshot: cocktail.priceCents,
+                selectedModifiers: [],
+                kitchenStationId: cocktail.kitchenStationId,
+                status: "SENT",
+              },
+            },
+          },
+        },
+      },
+    });
+    const settlement = app.get(RestaurantSettlementService);
+    const request = {
+      tabId: tab.id,
+      customerId: source.primaryCustomerId!,
+      requestId: "88000000-0000-0000-0000-000000000002",
+      tipCents: 100,
+      paymentMethodReferenceId: source.activePaymentMethodId!,
+    };
+
+    const paid = await settlement.payCustomer(request);
+    const replayed = await settlement.payCustomer(request);
+
+    expect(paid).toMatchObject({
+      status: "CLOSED",
+      receipt: { receiptNumber: expect.any(String) },
+    });
+    expect(replayed).toMatchObject({
+      status: "CLOSED",
+      receipt: { receiptNumber: paid.receipt!.receiptNumber },
+    });
+    expect(
+      await prisma.payment.count({ where: { restaurantTabId: tab.id } }),
+    ).toBe(1);
+    await expect(
+      settlement.payCustomer({
+        ...request,
+        requestId: "88000000-0000-0000-0000-000000000003",
+      }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
   it("runs fallback once, does not retry a failed card, and surfaces attention", async () => {
     const { prisma } = await import("@cinema/database");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
