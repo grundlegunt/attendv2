@@ -3867,6 +3867,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       select: {
         locationId: true,
         primaryCustomerId: true,
+        primaryCustomer: { select: { email: true } },
         activePaymentMethodId: true,
       },
     });
