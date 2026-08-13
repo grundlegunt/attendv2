@@ -35,11 +35,27 @@ export interface RestaurantPaymentFailedNotice {
   paymentUrl: string;
 }
 
+export interface RestaurantReceiptDelivery {
+  to: string;
+  customerName?: string | null;
+  theaterName: string;
+  receiptNumber: string;
+  subtotalCents: number;
+  taxCents: number;
+  serviceChargeCents: number;
+  tipCents: number;
+  totalCents: number;
+  currency: string;
+}
+
 export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
   sendGiftCardDelivery(delivery: GiftCardDelivery): Promise<{ messageId: string }>;
   sendRestaurantPaymentFailed(
     notice: RestaurantPaymentFailedNotice,
+  ): Promise<{ messageId: string }>;
+  sendRestaurantReceipt(
+    receipt: RestaurantReceiptDelivery,
   ): Promise<{ messageId: string }>;
 }

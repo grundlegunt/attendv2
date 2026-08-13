@@ -568,7 +568,7 @@ export class RestaurantSettlementService {
       });
       if (!tab) throw AppError.notFound("Restaurant tab was not found.");
       if (tab.status === "CLOSED") {
-        return { tab, notifyPaymentFailure: false };
+        return { tab, notifyPaymentFailure: false, notifyReceipt: false };
       }
       const paid = tab.payments
         .filter((payment) => payment.status === "SUCCEEDED")
@@ -598,6 +598,7 @@ export class RestaurantSettlementService {
         return {
           tab: await tx.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
           notifyPaymentFailure: hasFailed && tab.status !== "PAYMENT_FAILED",
+          notifyReceipt: false,
         };
       }
       const closedAt = new Date();
@@ -640,12 +641,56 @@ export class RestaurantSettlementService {
           },
         },
       });
-      return { tab: updated, notifyPaymentFailure: false };
+      return { tab: updated, notifyPaymentFailure: false, notifyReceipt: true };
     });
     if (result.notifyPaymentFailure) {
       await this.notifyPaymentFailure(tabId);
     }
+    if (result.notifyReceipt) {
+      await this.notifyReceipt(tabId);
+    }
     return result.tab;
+  }
+
+  private async notifyReceipt(tabId: string) {
+    const tab = await prisma.restaurantTab.findUnique({
+      where: { id: tabId },
+      include: {
+        primaryCustomer: true,
+        location: { include: { organization: true } },
+        payments: true,
+        receipt: true,
+      },
+    });
+    if (!tab?.primaryCustomer?.email || !tab.receipt) return;
+    const currency = (tab.payments[0]?.currency ?? "usd").toLowerCase();
+    try {
+      await this.emailProvider.sendRestaurantReceipt({
+        to: tab.primaryCustomer.email,
+        customerName: tab.primaryCustomer.name,
+        theaterName: tab.location.organization.name,
+        receiptNumber: tab.receipt.receiptNumber,
+        subtotalCents: tab.receipt.subtotalCents,
+        taxCents: tab.receipt.taxCents,
+        serviceChargeCents: tab.receipt.serviceChargeCents,
+        tipCents: tab.receipt.tipCents,
+        totalCents: tab.receipt.totalCents,
+        currency,
+      });
+    } catch (error) {
+      await prisma.auditEvent.create({
+        data: {
+          actorType: "SYSTEM",
+          action: "restaurant_tab.receipt_notification_failed",
+          entityType: "RestaurantTab",
+          entityId: tab.id,
+          locationId: tab.locationId,
+          afterState: {
+            message: error instanceof Error ? error.message : "Email delivery failed",
+          },
+        },
+      });
+    }
   }
 
   private async notifyPaymentFailure(tabId: string) {

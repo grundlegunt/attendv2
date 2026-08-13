@@ -3,6 +3,7 @@ import {
   EmailProvider,
   GiftCardDelivery,
   RestaurantPaymentFailedNotice,
+  RestaurantReceiptDelivery,
   TicketReceipt,
 } from "./email-provider";
 
@@ -121,6 +122,37 @@ export class PostmarkEmailProvider implements EmailProvider {
       throw new Error(
         `Postmark rejected the restaurant payment notice: ${body.Message ?? response.statusText}`,
       );
+    }
+    return { messageId: body.MessageID };
+  }
+
+  async sendRestaurantReceipt(
+    receipt: RestaurantReceiptDelivery,
+  ): Promise<{ messageId: string }> {
+    const money = (cents: number) => new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: receipt.currency,
+    }).format(cents / 100);
+    const response = await fetch("https://api.postmarkapp.com/email", {
+      method: "POST",
+      signal: AbortSignal.timeout(8_000),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Postmark-Server-Token": this.serverToken,
+      },
+      body: JSON.stringify({
+        From: this.from,
+        To: receipt.to,
+        Subject: `Your ${receipt.theaterName} dining receipt`,
+        HtmlBody: `<p>Hi ${escapeHtml(receipt.customerName?.trim() || "there")},</p><p>Thanks for dining with us. Receipt <strong>${escapeHtml(receipt.receiptNumber)}</strong> is paid.</p><ul><li>Subtotal: ${escapeHtml(money(receipt.subtotalCents))}</li><li>Tax: ${escapeHtml(money(receipt.taxCents))}</li><li>Service charge: ${escapeHtml(money(receipt.serviceChargeCents))}</li><li>Tip: ${escapeHtml(money(receipt.tipCents))}</li></ul><p><strong>Total: ${escapeHtml(money(receipt.totalCents))}</strong></p>`,
+        TextBody: `Receipt ${receipt.receiptNumber} is paid. Subtotal: ${money(receipt.subtotalCents)}. Tax: ${money(receipt.taxCents)}. Service charge: ${money(receipt.serviceChargeCents)}. Tip: ${money(receipt.tipCents)}. Total: ${money(receipt.totalCents)}.`,
+        MessageStream: "outbound",
+      }),
+    });
+    const body = (await response.json()) as { MessageID?: string; Message?: string };
+    if (!response.ok || !body.MessageID) {
+      throw new Error(`Postmark rejected the restaurant receipt: ${body.Message ?? response.statusText}`);
     }
     return { messageId: body.MessageID };
   }
