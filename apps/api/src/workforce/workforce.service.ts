@@ -64,9 +64,12 @@ export class WorkforceService {
   async startBreak(input: PinInput & { requestId: string }) {
     const employee = await this.verifyPin(input);
     return prisma.$transaction(async (tx) => {
-      const active = await this.requireActiveShift(employee.id, input.locationId);
-      await tx.$queryRaw`SELECT "id" FROM "shifts" WHERE "id" = ${active.id} FOR UPDATE`;
-      const shift = await tx.shift.findUniqueOrThrow({ where: { id: active.id } });
+      await tx.$queryRaw`SELECT "id" FROM "employees" WHERE "id" = ${employee.id} FOR UPDATE`;
+      const shift = await tx.shift.findFirst({
+        where: { employeeId: employee.id, locationId: input.locationId, clockOutAt: null },
+        orderBy: { clockInAt: "desc" },
+      });
+      if (!shift) throw AppError.conflict("This employee is not clocked in.");
       if (shift.breakStartAt && !shift.breakEndAt) {
         const completed = await tx.auditEvent.findFirst({
           where: { locationId: input.locationId, action: "shift.break_started", entityType: "Shift", entityId: shift.id },
@@ -90,9 +93,12 @@ export class WorkforceService {
   async endBreak(input: PinInput & { requestId: string }) {
     const employee = await this.verifyPin(input);
     return prisma.$transaction(async (tx) => {
-      const active = await this.requireActiveShift(employee.id, input.locationId);
-      await tx.$queryRaw`SELECT "id" FROM "shifts" WHERE "id" = ${active.id} FOR UPDATE`;
-      const shift = await tx.shift.findUniqueOrThrow({ where: { id: active.id } });
+      await tx.$queryRaw`SELECT "id" FROM "employees" WHERE "id" = ${employee.id} FOR UPDATE`;
+      const shift = await tx.shift.findFirst({
+        where: { employeeId: employee.id, locationId: input.locationId, clockOutAt: null },
+        orderBy: { clockInAt: "desc" },
+      });
+      if (!shift) throw AppError.conflict("This employee is not clocked in.");
       if (!shift.breakStartAt || shift.breakEndAt) {
         const completed = await tx.auditEvent.findFirst({
           where: { locationId: input.locationId, action: "shift.break_ended", entityType: "Shift", entityId: shift.id },
@@ -156,12 +162,6 @@ export class WorkforceService {
 
   private activeShift(employeeId: string, locationId: string) {
     return prisma.shift.findFirst({ where: { employeeId, locationId, clockOutAt: null }, orderBy: { clockInAt: "desc" } });
-  }
-
-  private async requireActiveShift(employeeId: string, locationId: string) {
-    const shift = await this.activeShift(employeeId, locationId);
-    if (!shift) throw AppError.conflict("This employee is not clocked in.");
-    return shift;
   }
 
   private audit(client: { auditEvent: typeof prisma.auditEvent }, actorId: string, locationId: string, action: string, entityId: string, beforeState: unknown, afterState: unknown) {
