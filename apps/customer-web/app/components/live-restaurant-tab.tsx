@@ -173,7 +173,7 @@ export function LiveRestaurantTab({
     setPaymentPending(true);
     setMessage("");
     try {
-      const result = await apiFetch<{ status: string }>(
+      const result = await apiFetch<LiveTab>(
         guestToken
           ? `/public/restaurant-tabs/${guestToken}/pay`
           : `/customer/restaurant-tabs/${tabId}/pay`,
@@ -187,14 +187,14 @@ export function LiveRestaurantTab({
         },
       );
       if (tabIdentity !== tabIdentityRef.current) return;
+      setTab(result);
+      setRefreshError("");
       setMessage(
         result.status === "CLOSED"
           ? "Paid. Your receipt is ready."
           : "Payment needs attention. Your server has been notified.",
       );
       if (result.status !== "SETTLEMENT_PENDING") paymentAttemptRef.current = null;
-      paymentPendingRef.current = false;
-      await refresh();
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
       if (error instanceof ApiRequestError) paymentAttemptRef.current = null;
