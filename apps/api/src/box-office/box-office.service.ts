@@ -481,6 +481,7 @@ export class BoxOfficeService {
   async openDrawer(input: {
     locationId: string;
     employeeId: string;
+    requestId: string;
     registerId: string;
     openingBalanceCents: number;
   }) {
@@ -491,7 +492,20 @@ export class BoxOfficeService {
       const existing = await tx.cashDrawer.findFirst({
         where: { locationId: input.locationId, registerId: input.registerId, status: "OPEN" },
       });
-      if (existing) throw AppError.conflict("This register already has an open cash drawer.");
+      if (existing) {
+        const completed = await tx.auditEvent.findFirst({
+          where: { locationId: input.locationId, action: "cash_drawer.opened", entityType: "CashDrawer", entityId: existing.id },
+          orderBy: { occurredAt: "desc" },
+          select: { afterState: true },
+        });
+        const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+          ? completed.afterState as Record<string, unknown>
+          : undefined;
+        if (receipt?.requestId !== input.requestId || receipt.openingBalanceCents !== input.openingBalanceCents) {
+          throw AppError.conflict("This register already has an open cash drawer.");
+        }
+        return existing;
+      }
       const drawer = await tx.cashDrawer.create({
         data: {
           locationId: input.locationId,
@@ -508,7 +522,7 @@ export class BoxOfficeService {
           action: "cash_drawer.opened",
           entityType: "CashDrawer",
           entityId: drawer.id,
-          afterState: { registerId: drawer.registerId, openingBalanceCents: drawer.openingBalanceCents },
+          afterState: { requestId: input.requestId, registerId: drawer.registerId, openingBalanceCents: drawer.openingBalanceCents },
         },
       });
       return drawer;

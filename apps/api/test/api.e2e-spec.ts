@@ -4878,7 +4878,7 @@ describe("Milestone 9 box office and workforce", () => {
   it("records one cash movement when identical register requests arrive concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `MOVEMENT-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `MOVEMENT-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
     const idempotencyKey = crypto.randomUUID();
     const payload = { type: "PAID_IN", amountCents: 2500, reason: "Concurrent paid-in test", idempotencyKey };
 
@@ -4892,6 +4892,24 @@ describe("Milestone 9 box office and workforce", () => {
     expect(second.body.id).toBe(first.body.id);
     expect(await prisma.cashTransaction.count({ where: { idempotencyKey } })).toBe(1);
     expect(await prisma.auditEvent.count({ where: { entityType: "CashTransaction", entityId: first.body.id, action: "cash_drawer.paid_in" } })).toBe(1);
+  });
+
+  it("replays a completed cash drawer open without creating another drawer", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const registerId = `OPEN-REPLAY-${crypto.randomUUID()}`;
+    const requestId = crypto.randomUUID();
+    const input = { locationId: owner.locationId, employeeId: owner.id, requestId, registerId, openingBalanceCents: 20000 };
+    const boxOffice = app.get(BoxOfficeService);
+
+    const opened = await boxOffice.openDrawer(input);
+    const replayed = await boxOffice.openDrawer(input);
+    expect(replayed.id).toBe(opened.id);
+    expect(await prisma.cashDrawer.count({ where: { locationId: owner.locationId, registerId } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "cash_drawer.opened", entityId: opened.id } })).toBe(1);
+    await expect(boxOffice.openDrawer({ ...input, requestId: crypto.randomUUID() })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(boxOffice.openDrawer({ ...input, openingBalanceCents: 19900 })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
   it("replays a completed cash drawer close without duplicating its audit event", async () => {
@@ -4913,7 +4931,7 @@ describe("Milestone 9 box office and workforce", () => {
 
   it("rejects a cash movement id reused with a different reason", async () => {
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
     const idempotencyKey = crypto.randomUUID();
     const endpoint = `/api/v1/box-office/cash-drawers/${drawer.body.id}/movements`;
     await request(app.getHttpServer()).post(endpoint).set("Authorization", `Bearer ${ownerAccessToken}`)
@@ -4954,7 +4972,7 @@ describe("Milestone 9 box office and workforce", () => {
     });
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: "E2E-BOX", openingBalanceCents: 20000 }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: "E2E-BOX", openingBalanceCents: 20000 }).expect(201);
     const holderKey = `box-office-e2e-${crypto.randomUUID()}`;
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
@@ -5039,7 +5057,7 @@ describe("Milestone 9 box office and workforce", () => {
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `REFUND-REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `REFUND-REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
     const orders = await Promise.all([0, 1].map((index) => prisma.ticketOrder.create({
       data: {
         locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(),
@@ -5074,7 +5092,7 @@ describe("Milestone 9 box office and workforce", () => {
     });
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `RACE-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `RACE-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
     const holderKey = `box-office-race-${crypto.randomUUID()}`;
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
@@ -5119,7 +5137,7 @@ describe("Milestone 9 box office and workforce", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ code: issued.body.code }).expect(201);
     expect(staffBalance.body).toEqual({ codeLast4: issued.body.codeLast4, balanceCents: 100_000, currency: issued.body.currency });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `GIFT-${crypto.randomUUID()}`, openingBalanceCents: 20_000 }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `GIFT-${crypto.randomUUID()}`, openingBalanceCents: 20_000 }).expect(201);
     const holderKey = `gift-card-box-office-${crypto.randomUUID()}`;
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
