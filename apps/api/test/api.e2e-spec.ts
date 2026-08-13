@@ -1878,6 +1878,52 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     ).toBe("SOLD");
   });
 
+  it("still issues tickets when receipt email delivery is unavailable", async () => {
+    const holderKey = `ticket-receipt-outage-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const checkout = await createCheckout(holderKey, hold.holdToken);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const { prisma } = await import("@cinema/database");
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    paymentProvider.setIntentStatus(
+      checkout.payment.providerPaymentId,
+      "SUCCEEDED",
+    );
+    jest
+      .spyOn(emailProvider, "sendTicketReceipt")
+      .mockRejectedValueOnce(new Error("Email provider unavailable"));
+
+    const finalized = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
+      .send({})
+      .expect(201);
+
+    expect(finalized.body).toMatchObject({
+      status: "PAID",
+      receiptDelivery: "FAILED",
+      tickets: [expect.objectContaining({ issuanceToken: expect.any(String) })],
+    });
+    await expect(
+      prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.orderId } }),
+    ).resolves.toMatchObject({
+      status: "PAID",
+      receiptEmailSentAt: null,
+      receiptEmailClaimedAt: null,
+      receiptEmailError: "Email provider unavailable",
+    });
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
+  });
+
   it("recovers a successful payment through a replay-safe webhook", async () => {
     const holderKey = "ticket-webhook-holder-0002";
     const { hold } = await holdAvailableSeat(holderKey);
