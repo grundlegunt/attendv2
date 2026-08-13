@@ -35,7 +35,10 @@ export class GiftCardPurchaseService {
   async create(input: { idempotencyKey: string; locationId: string; amountCents: number; buyerEmail: string; recipientName?: string; recipientEmail: string; message?: string }) {
     if (input.idempotencyKey.length < 16) throw AppError.validationFailed("A valid purchase idempotency key is required.");
     const existing = await prisma.giftCardPurchase.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: { payment: true, location: { include: { organization: true } } } });
-    if (existing) return this.complete(existing);
+    if (existing) {
+      this.assertReplayMatches(existing, input);
+      return this.complete(existing);
+    }
     const location = await prisma.location.findFirst({ where: { id: input.locationId, active: true, organization: { active: true } }, include: { organization: true } });
     if (!location) throw AppError.notFound("Location was not found.");
     let purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>;
@@ -52,8 +55,19 @@ export class GiftCardPurchaseService {
     } catch (error) {
       if (!isUniqueConstraintError(error)) throw error;
       purchase = await this.waitForPurchase(input.idempotencyKey);
+      this.assertReplayMatches(purchase, input);
     }
     return this.complete(purchase);
+  }
+
+  private assertReplayMatches(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, input: { locationId: string; amountCents: number; buyerEmail: string; recipientName?: string; recipientEmail: string; message?: string }) {
+    const matches = purchase.locationId === input.locationId
+      && purchase.amountCents === input.amountCents
+      && purchase.buyerEmail === input.buyerEmail.toLowerCase()
+      && purchase.recipientName === (input.recipientName ?? null)
+      && purchase.recipientEmail === input.recipientEmail.toLowerCase()
+      && purchase.message === (input.message ?? null);
+    if (!matches) throw AppError.conflict("The gift card purchase idempotency key was already used with different purchase details.");
   }
 
   private async complete(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>) {
