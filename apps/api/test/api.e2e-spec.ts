@@ -3904,6 +3904,14 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       },
     });
     const settlement = app.get(RestaurantSettlementService);
+    const { EMAIL_PROVIDER } = await import(
+      "../src/notifications/notifications.module"
+    );
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
+      typeof TestEmailProvider
+    >;
+    const receiptsBefore = emailProvider.sentRestaurantReceipts.length;
     const request = {
       tabId: tab.id,
       customerId: source.primaryCustomerId!,
@@ -3926,6 +3934,14 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     expect(
       await prisma.payment.count({ where: { restaurantTabId: tab.id } }),
     ).toBe(1);
+    const receipts = emailProvider.sentRestaurantReceipts.slice(receiptsBefore);
+    expect(receipts).toHaveLength(1);
+    expect(receipts[0]).toMatchObject({
+      to: source.primaryCustomer!.email,
+      receiptNumber: paid.receipt!.receiptNumber,
+      totalCents: paid.receipt!.totalCents,
+      currency: "usd",
+    });
     await expect(
       settlement.payCustomer({
         ...request,
