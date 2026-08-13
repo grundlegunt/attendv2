@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 
@@ -18,6 +18,7 @@ export default function GiftCardsPage() {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [issued, setIssued] = useState<IssuedGiftCard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const issuanceKey = useRef(crypto.randomUUID());
 
   const load = () => void apiFetch<GiftCard[]>("/management/gift-cards", { accessToken }).then(setCards);
   useEffect(load, [accessToken]);
@@ -26,8 +27,8 @@ export default function GiftCardsPage() {
     event.preventDefault(); setError(null); setIssued(null);
     try {
       const amountCents = Math.round(Number(amount) * 100);
-      const card = await apiFetch<IssuedGiftCard>("/management/gift-cards", { accessToken, method: "POST", body: JSON.stringify({ amountCents, recipientName: recipientName || undefined, recipientEmail: recipientEmail || undefined }) });
-      setIssued(card); setAmount("25.00"); setRecipientName(""); setRecipientEmail(""); load();
+      const card = await apiFetch<IssuedGiftCard>("/management/gift-cards", { accessToken, method: "POST", headers: { "Idempotency-Key": issuanceKey.current }, body: JSON.stringify({ amountCents, recipientName: recipientName || undefined, recipientEmail: recipientEmail || undefined }) });
+      issuanceKey.current = crypto.randomUUID(); setIssued(card); setAmount("25.00"); setRecipientName(""); setRecipientEmail(""); load();
     } catch (requestError) {
       setError(requestError instanceof ApiRequestError ? requestError.body.message : "Gift card could not be issued.");
     }

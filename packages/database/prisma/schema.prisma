@@ -210,6 +210,8 @@ model GiftCard {
   status              GiftCardStatus        @default(ACTIVE)
   issuedByEmployeeId  String?
   issuedByEmployee    Employee?             @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
+  issuanceRequestId   String?                @unique
+  issuanceCodeEncrypted String?
   transactions        GiftCardTransaction[]
   ticketOrders        TicketOrder[]
   purchase            GiftCardPurchase?
