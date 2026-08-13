@@ -4231,7 +4231,7 @@ describe("Milestone 6 server POS and menus", () => {
       .expect(201);
     await prisma.restaurantOrder.update({
       where: { id: order.body.id },
-      data: { status: "SENT", sentAt: new Date() },
+      data: { status: "SENT", placedAt: new Date() },
     });
     await prisma.restaurantTab.update({
       where: { id: source.body.id },
