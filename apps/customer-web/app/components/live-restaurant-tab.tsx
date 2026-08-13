@@ -221,7 +221,7 @@ export function LiveRestaurantTab({
   }
   const settlementProcessing = tab.status === "SETTLEMENT_PENDING";
   const customerPaymentAvailable = ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(tab.status);
-  const controlsDisabled = tipPending || paymentPending || settlementProcessing;
+  const controlsDisabled = tipPending || paymentPending;
   const statusCopy = settlementProcessing
     ? "Your payment is processing. This page will update automatically."
     : tab.status === "CLOSED"
@@ -257,34 +257,36 @@ export function LiveRestaurantTab({
       <p>Subtotal ${(tab.totals.subtotalCents / 100).toFixed(2)}</p>
       <p>Tax ${(tab.totals.taxCents / 100).toFixed(2)}</p>
       <p>Service charge ${(tab.totals.serviceChargeCents / 100).toFixed(2)}</p>
-      <div>
-        {[18, 20, 22].map((percent) => {
-          const value = Math.round((tab.totals.subtotalCents * percent) / 100);
-          return (
-            <button
-              className="secondary"
-              key={percent}
-              disabled={controlsDisabled}
-              onClick={() => void chooseTip(value)}
-            >
-              {percent}%
-            </button>
-          );
-        })}
-      </div>
-      <label className="field">
-        <span>Custom tip (cents)</span>
-        <input
-          type="number"
-          min="0"
-          max="1000000"
-          step="1"
-          disabled={controlsDisabled}
-          value={customTipCents}
-          onChange={(event) => setCustomTipCents(event.target.value)}
-        />
-      </label>
-      <button className="secondary" disabled={controlsDisabled} onClick={() => void chooseTip(Number(customTipCents))}>Update custom tip</button>
+      {customerPaymentAvailable && <>
+        <div>
+          {[18, 20, 22].map((percent) => {
+            const value = Math.round((tab.totals.subtotalCents * percent) / 100);
+            return (
+              <button
+                className="secondary"
+                key={percent}
+                disabled={controlsDisabled}
+                onClick={() => void chooseTip(value)}
+              >
+                {percent}%
+              </button>
+            );
+          })}
+        </div>
+        <label className="field">
+          <span>Custom tip (cents)</span>
+          <input
+            type="number"
+            min="0"
+            max="1000000"
+            step="1"
+            disabled={controlsDisabled}
+            value={customTipCents}
+            onChange={(event) => setCustomTipCents(event.target.value)}
+          />
+        </label>
+        <button className="secondary" disabled={controlsDisabled} onClick={() => void chooseTip(Number(customTipCents))}>Update custom tip</button>
+      </>}
       <h3>
         Total ${((tab.totals.totalCents - tab.paidCents) / 100).toFixed(2)}
       </h3>
