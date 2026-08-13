@@ -5122,7 +5122,10 @@ describe("Milestone 9 box office and workforce", () => {
     await expect(service.compensateFailedCardOrder({
       orderId: orders[1].id, paymentId: orders[1].payment!.id, providerPaymentId: orders[1].payment!.providerPaymentId!,
       amountCents: 1000, requestId, locationId: owner.locationId, employeeId: owner.id,
-    })).rejects.toMatchObject({ statusCode: 409 });
+    })).rejects.toMatchObject({
+      status: 409,
+      message: "The checkout request id was already used for a different compensation refund.",
+    });
 
     expect(await prisma.refund.count({ where: { idempotencyKey: `box-office-finalize-refund:${requestId}` } })).toBe(1);
     expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: orders[1].id } })).toMatchObject({ status: "PAYMENT_FAILED" });
