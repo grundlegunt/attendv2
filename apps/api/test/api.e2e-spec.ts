@@ -1903,6 +1903,66 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     createIntent.mockRestore();
   });
 
+  it("creates one order and payment attempt when identical checkout requests race", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const holderKey = `concurrent-checkout-${crypto.randomUUID()}`;
+    const idempotencyKey = `checkout-${holderKey}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .expect(200);
+    const payload = {
+      holdTokens: [hold.holdToken],
+      holderKey,
+      ticketTypeId: config.body.ticketTypes[0].id,
+      email: `${holderKey}@example.test`,
+      diningAuthorizationRequested: false,
+    };
+    const originalCreateIntent = provider.createPaymentIntent.bind(provider);
+    const createIntent = jest
+      .spyOn(provider, "createPaymentIntent")
+      .mockImplementation(async (args) => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return originalCreateIntent(args);
+      });
+
+    const [first, second] = await Promise.all([
+      request(app.getHttpServer())
+        .post("/api/v1/ticketing/checkouts")
+        .set("Idempotency-Key", idempotencyKey)
+        .send(payload),
+      request(app.getHttpServer())
+        .post("/api/v1/ticketing/checkouts")
+        .set("Idempotency-Key", idempotencyKey)
+        .send(payload),
+    ]);
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.body.orderId).toBe(first.body.orderId);
+    expect(second.body.payment.providerPaymentId).toBe(
+      first.body.payment.providerPaymentId,
+    );
+    expect(createIntent).toHaveBeenCalledTimes(2);
+    const orders = await prisma.ticketOrder.findMany({
+      where: { checkoutIdempotencyKey: idempotencyKey },
+      include: { payment: { include: { attempts: true } } },
+    });
+    expect(orders).toHaveLength(1);
+    expect(orders[0]?.payment?.attempts).toEqual([
+      expect.objectContaining({
+        attemptNumber: 1,
+        providerIntentId: first.body.payment.providerPaymentId,
+      }),
+    ]);
+    createIntent.mockRestore();
+  });
+
   it("issues one ticket after a verified successful payment and is idempotent", async () => {
     const holderKey = "ticket-happy-holder-0001";
     const { seat, hold } = await holdAvailableSeat(holderKey);
