@@ -4846,6 +4846,17 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "CashTransaction", entityId: first.body.id, action: "cash_drawer.paid_in" } })).toBe(1);
   });
 
+  it("rejects a cash movement id reused with a different reason", async () => {
+    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+    const idempotencyKey = crypto.randomUUID();
+    const endpoint = `/api/v1/box-office/cash-drawers/${drawer.body.id}/movements`;
+    await request(app.getHttpServer()).post(endpoint).set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ type: "PAID_OUT", amountCents: 1200, reason: "Courier cash", idempotencyKey }).expect(201);
+    await request(app.getHttpServer()).post(endpoint).set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ type: "PAID_OUT", amountCents: 1200, reason: "Petty cash", idempotencyKey }).expect(409);
+  });
+
   it("enforces promotion minimum subtotals and redemption limits", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
