@@ -1073,7 +1073,10 @@ export class RestaurantService {
         where: {
           id: input.orderId,
           restaurantTabId: existingOrder.restaurantTabId,
-          restaurantTab: { locationId: input.locationId },
+          restaurantTab: {
+            locationId: input.locationId,
+            status: { in: ["PREAUTHORIZED", "OPEN"] },
+          },
         },
         include: { restaurantTab: true },
       });
