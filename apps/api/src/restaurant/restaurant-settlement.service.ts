@@ -220,12 +220,28 @@ export class RestaurantSettlementService {
       where: {
         id: input.tabId,
         primaryCustomerId: input.customerId,
-        status: {
-          in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"],
-        },
       },
     });
-    if (!tab) throw AppError.notFound("Open restaurant tab was not found.");
+    if (!tab) throw AppError.notFound("Restaurant tab was not found.");
+    if (["SETTLEMENT_PENDING", "CLOSED"].includes(tab.status)) {
+      const existing = await prisma.payment.findUnique({
+        where: { idempotencyKey: `customer:${input.requestId}:0` },
+      });
+      if (
+        existing?.restaurantTabId === tab.id &&
+        existing.tipCents === input.tipCents &&
+        existing.paymentMethodReferenceId === input.paymentMethodReferenceId
+      ) {
+        return this.tabView({ tabId: tab.id, customerId: input.customerId });
+      }
+    }
+    if (
+      !["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(
+        tab.status,
+      )
+    ) {
+      throw AppError.conflict("This restaurant tab cannot accept a payment.");
+    }
     const totals = await this.calculateTotals(tab.id, input.tipCents);
     const alreadyPaid = await this.succeededPayments(tab.id);
     const remaining = totals.totalCents - alreadyPaid;
