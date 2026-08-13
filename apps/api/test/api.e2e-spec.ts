@@ -4894,6 +4894,23 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "CashTransaction", entityId: first.body.id, action: "cash_drawer.paid_in" } })).toBe(1);
   });
 
+  it("replays a completed cash drawer close without duplicating its audit event", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const drawer = await prisma.cashDrawer.create({ data: { locationId: owner.locationId, registerId: `CLOSE-REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000, openedByEmployeeId: owner.id } });
+    const requestId = crypto.randomUUID();
+    const input = { drawerId: drawer.id, locationId: owner.locationId, employeeId: owner.id, requestId, closingBalanceCents: 20000 };
+    const boxOffice = app.get(BoxOfficeService);
+
+    const closed = await boxOffice.closeDrawer(input);
+    const replayed = await boxOffice.closeDrawer(input);
+    expect(replayed.id).toBe(closed.id);
+    expect(await prisma.auditEvent.count({ where: { action: "cash_drawer.closed", entityId: drawer.id } })).toBe(1);
+    await expect(boxOffice.closeDrawer({ ...input, requestId: crypto.randomUUID() })).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(boxOffice.closeDrawer({ ...input, closingBalanceCents: 19900 })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
   it("rejects a cash movement id reused with a different reason", async () => {
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ registerId: `REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);

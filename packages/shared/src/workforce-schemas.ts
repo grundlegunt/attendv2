@@ -20,6 +20,7 @@ export const openCashDrawerRequestSchema = z.object({
 });
 
 export const closeCashDrawerRequestSchema = z.object({
+  requestId: z.string().uuid(),
   closingBalanceCents: z.number().int().nonnegative(),
 });
 

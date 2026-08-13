@@ -581,14 +581,28 @@ export class BoxOfficeService {
     }
   }
 
-  async closeDrawer(input: { drawerId: string; locationId: string; employeeId: string; closingBalanceCents: number }) {
+  async closeDrawer(input: { drawerId: string; locationId: string; employeeId: string; requestId: string; closingBalanceCents: number }) {
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.drawerId} FOR UPDATE`;
       const drawer = await tx.cashDrawer.findFirst({
-        where: { id: input.drawerId, locationId: input.locationId, status: "OPEN" },
+        where: { id: input.drawerId, locationId: input.locationId },
         include: { transactions: true },
       });
-      if (!drawer) throw AppError.notFound("Open cash drawer not found.");
+      if (!drawer) throw AppError.notFound("Cash drawer not found.");
+      if (drawer.status === "CLOSED") {
+        const completed = await tx.auditEvent.findFirst({
+          where: { locationId: input.locationId, action: "cash_drawer.closed", entityType: "CashDrawer", entityId: drawer.id },
+          orderBy: { occurredAt: "desc" },
+          select: { afterState: true },
+        });
+        const receipt = completed?.afterState && typeof completed.afterState === "object" && !Array.isArray(completed.afterState)
+          ? completed.afterState as Record<string, unknown>
+          : undefined;
+        if (receipt?.requestId !== input.requestId || receipt.closingBalanceCents !== input.closingBalanceCents) {
+          throw AppError.conflict("This cash drawer was already closed by a different request.");
+        }
+        return drawer;
+      }
       const expectedBalanceCents = drawer.transactions.reduce((total, transaction) => {
         return total + (["SALE", "PAID_IN"].includes(transaction.type) ? transaction.amountCents : -transaction.amountCents);
       }, drawer.openingBalanceCents);
@@ -602,7 +616,7 @@ export class BoxOfficeService {
           actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
           action: "cash_drawer.closed", entityType: "CashDrawer", entityId: drawer.id,
           beforeState: { status: drawer.status },
-          afterState: { status: "CLOSED", expectedBalanceCents, closingBalanceCents: input.closingBalanceCents, varianceCents: input.closingBalanceCents - expectedBalanceCents },
+          afterState: { requestId: input.requestId, status: "CLOSED", expectedBalanceCents, closingBalanceCents: input.closingBalanceCents, varianceCents: input.closingBalanceCents - expectedBalanceCents },
         },
       });
       return closed;
