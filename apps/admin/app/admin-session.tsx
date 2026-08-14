@@ -6,7 +6,7 @@ import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string; refreshToken?: string; expiresInSeconds?: number; supportSession?: boolean };
 type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
-type PublicAdminBranding = { name: string; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
+type PublicAdminBranding = { name: string; logoUrl: string | null; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type AdminSessionValue = Session & { signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
 const AdminSessionContext = createContext<AdminSessionValue | null>(null);
@@ -133,12 +133,21 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--showtime-remove-control": adminUi.removeControlColor, "--showtime-duplicate-control": adminUi.duplicateControlColor,
   } as CSSProperties;
   if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
-  if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={login}>
-    <p className="kicker">ATTEND ADMIN</p><h1>{publicBranding?.name ? `${publicBranding.name} sign in` : "Manager sign in"}</h1>{error && <div className="error-banner">{error}</div>}
-    <label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-    <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-    <button className="primary">Sign in</button>
-  </form></main></div>;
+  if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><section className="login-layout">
+    <div className="login-identity">
+      {publicBranding?.logoUrl ? <img src={publicBranding.logoUrl} alt={`${publicBranding.name} logo`} /> : <div className="login-monogram" aria-hidden="true">A</div>}
+      <p className="kicker">ATTEND ADMIN</p>
+      <h1>{publicBranding?.name ?? "Cinema operations"}</h1>
+      <p>Programming, ticketing, restaurant, staff, and reporting tools in one secure workspace.</p>
+    </div>
+    <form className="panel login-panel" onSubmit={login}>
+      <p className="kicker">MANAGER ACCESS</p><h2>Sign in</h2><p className="login-instruction">Use the staff credentials issued by your manager.</p>{error && <div className="error-banner">{error}</div>}
+      <label>Email<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+      <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+      <button className="primary">Sign in</button>
+      <small className="login-security-note">Authorized staff only · Sessions expire automatically</small>
+    </form>
+  </section></main></div>;
   if (value.employee.mustChangePassword) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={changePassword}>
     <p className="kicker">SECURITY UPDATE REQUIRED</p><h1>Choose a new password</h1><p className="muted">A manager issued a temporary password. Replace it before continuing.</p>{error && <div className="error-banner">{error}</div>}
     <label>Temporary password<input type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label>
