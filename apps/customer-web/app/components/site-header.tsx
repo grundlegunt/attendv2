@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { useCustomerBranding } from "./customer-branding";
+import { useCinemaContent, useCustomerBranding } from "./customer-branding";
 
 const links = [
   { href: "/showtimes", label: "Showtimes" },
@@ -21,6 +21,7 @@ const links = [
 export function SiteHeader() {
   const pathname = usePathname();
   const branding = useCustomerBranding();
+  const content = useCinemaContent();
   const [logoFailed, setLogoFailed] = useState(false);
 
   useEffect(() => setLogoFailed(false), [branding.logoUrl]);
@@ -47,6 +48,9 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          {content.navigation.merchUrl && (
+            <a href={content.navigation.merchUrl} target="_blank" rel="noreferrer">Merch ↗</a>
+          )}
         </nav>
       </div>
     </header>
