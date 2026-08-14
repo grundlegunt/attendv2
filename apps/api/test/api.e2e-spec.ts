@@ -4687,23 +4687,25 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
         label: "Distinct settlement race",
         status: "READY_TO_CLOSE",
         checkDroppedAt: new Date(),
-        orders: {
-          create: {
-            status: "SENT",
-            placedAt: new Date(),
-            items: {
-              create: {
-                menuItemId: cocktail.id,
-                quantity: 1,
-                unitPriceCentsSnapshot: cocktail.priceCents,
-                modifierTotalCents: 0,
-                selectedModifiers: [],
-                status: "SENT",
-                kitchenStationId: cocktail.kitchenStationId,
-              },
-            },
-          },
-        },
+      },
+    });
+    const order = await prisma.restaurantOrder.create({
+      data: {
+        restaurantTabId: tab.id,
+        status: "SENT",
+        placedAt: new Date(),
+      },
+    });
+    await prisma.restaurantOrderItem.create({
+      data: {
+        restaurantOrderId: order.id,
+        menuItemId: cocktail.id,
+        quantity: 1,
+        unitPriceCentsSnapshot: cocktail.priceCents,
+        modifierTotalCents: 0,
+        selectedModifiers: [],
+        status: "SENT",
+        kitchenStationId: cocktail.kitchenStationId,
       },
     });
     const summary = await request(app.getHttpServer())
