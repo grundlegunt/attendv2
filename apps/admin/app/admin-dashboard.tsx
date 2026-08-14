@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { useAdminSession } from "./admin-session";
 import { visibleAdminNavigation } from "./admin-navigation";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
@@ -28,6 +29,10 @@ type AuditEvent = { id: string; action: string; entityType: string; occurredAt: 
 type Settings = { timeClockEnabled: boolean; ticketTaxRateBasisPoints: number };
 type FilmPerformanceRange = "today" | "7d" | "30d";
 type ScheduleDay = "today" | "tomorrow";
+type ShowtimeSeatInventory = {
+  seats: Array<Omit<SeatMapSeat, "state"> & { state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" }>;
+  counts: { available: number; held: number; sold: number; blocked: number };
+};
 
 function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -58,6 +63,68 @@ function scheduleRange(day: ScheduleDay) {
 
 function messageFor(reason: unknown) {
   return reason instanceof ApiRequestError ? reason.body.message : "Some dashboard data could not be loaded.";
+}
+
+function DashboardShowtimeRow({
+  showtime,
+  ticketsSold,
+  salesVisible,
+  accessToken,
+}: {
+  showtime: Bootstrap["showtimes"][number];
+  ticketsSold: number;
+  salesVisible: boolean;
+  accessToken: string | null;
+}) {
+  const [inventory, setInventory] = useState<ShowtimeSeatInventory | null>(null);
+  const [inventoryLoading, setInventoryLoading] = useState(false);
+  const [inventoryError, setInventoryError] = useState(false);
+  const occupancy = showtime.auditorium.capacity
+    ? Math.min(100, Math.round((ticketsSold / showtime.auditorium.capacity) * 100))
+    : 0;
+  const salesClass = !salesVisible
+    ? "sales-normal"
+    : occupancy >= 80
+      ? "selling-fast"
+      : showtime.onSale && occupancy < 20
+        ? "sales-low"
+        : "sales-normal";
+
+  function loadInventory() {
+    if (inventory || inventoryLoading || inventoryError) return;
+    setInventoryLoading(true);
+    apiFetch<ShowtimeSeatInventory>(`/cinema/showtimes/${showtime.id}/seats`, {
+      accessToken: accessToken ?? undefined,
+    })
+      .then(setInventory)
+      .catch(() => setInventoryError(true))
+      .finally(() => setInventoryLoading(false));
+  }
+
+  return (
+    <Link
+      href={`/scheduling?showtimeId=${encodeURIComponent(showtime.id)}`}
+      className={`${salesClass} dashboard-showtime-row`}
+      onMouseEnter={loadInventory}
+      onFocus={loadInventory}
+      aria-label={`Open ${showtime.movie.title} seat map and sales`}
+    >
+      <time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
+      <span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}{salesVisible ? ` · ${ticketsSold}/${showtime.auditorium.capacity} seats` : ` · ${showtime.auditorium.capacity} seats`}</small></span>
+      {salesVisible ? <span className="schedule-occupancy"><i><span style={{ width: `${occupancy}%` }} /></i><b>{occupancy}%</b></span> : <span aria-hidden="true" />}
+      <em>{salesVisible && occupancy >= 80 ? "Selling fast" : salesVisible && showtime.onSale && occupancy < 20 ? "Low sales" : showtime.onSale ? "On sale" : "Draft"}</em>
+      <aside className="dashboard-seat-preview">
+        <header><span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name} · Click for full sales view</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
+        {inventory ? <>
+          <SeatMap
+            seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))}
+            label={`${showtime.movie.title} seat inventory preview`}
+          />
+          <footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer>
+        </> : inventoryError ? <p>Seat map unavailable.</p> : <p>{inventoryLoading ? "Loading live seat map…" : "Hover to load live seat map."}</p>}
+      </aside>
+    </Link>
+  );
 }
 
 export function AdminDashboard() {
@@ -173,10 +240,8 @@ export function AdminDashboard() {
       {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">PROGRAMMING</p><h2 id="today-schedule-heading">Schedule</h2></div><div className="schedule-heading-actions"><div className="dashboard-day-switch" role="group" aria-label="Schedule day"><button type="button" className={scheduleDay === "today" ? "active" : ""} onClick={() => setScheduleDay("today")}>Today</button><button type="button" className={scheduleDay === "tomorrow" ? "active" : ""} onClick={() => setScheduleDay("tomorrow")}>Tomorrow</button></div><Link href="/scheduling">View calendar</Link></div></div>
         <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.slice(0, 8).map((showtime) => {
           const ticketsSold = scheduleSales.get(showtime.id) ?? 0;
-          const occupancy = showtime.auditorium.capacity ? Math.min(100, Math.round((ticketsSold / showtime.auditorium.capacity) * 100)) : 0;
           const salesVisible = canFinancial && scheduleRevenue !== null;
-          const salesClass = !salesVisible ? "sales-normal" : occupancy >= 80 ? "selling-fast" : showtime.onSale && occupancy < 20 ? "sales-low" : "sales-normal";
-          return <Link href={`/scheduling?showtimeId=${encodeURIComponent(showtime.id)}`} className={salesClass} key={showtime.id}><time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time><span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}{salesVisible ? ` · ${ticketsSold}/${showtime.auditorium.capacity} seats` : ` · ${showtime.auditorium.capacity} seats`}</small></span>{salesVisible ? <span className="schedule-occupancy"><i><span style={{ width: `${occupancy}%` }} /></i><b>{occupancy}%</b></span> : <span aria-hidden="true" />}<em>{salesVisible && occupancy >= 80 ? "Selling fast" : salesVisible && showtime.onSale && occupancy < 20 ? "Low sales" : showtime.onSale ? "On sale" : "Draft"}</em></Link>;
+          return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} />;
         })}{!loading && scheduleShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled {scheduleDay}.</p>}</div>
       </section>}
       {canCinema && <section className="panel" aria-labelledby="setup-status-heading"><div className="dashboard-section-heading"><div><p className="kicker">READINESS</p><h2 id="setup-status-heading">Cinema setup</h2></div><Link href="/cinema-setup">Manage</Link></div>
