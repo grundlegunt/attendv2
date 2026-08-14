@@ -3785,6 +3785,56 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     expect(finalSource.status).toBe(combined.status === 201 ? "VOIDED" : "OPEN");
   });
 
+  it("never combines a source tab away after settlement closes it", async () => {
+    const { prisma } = await import("@cinema/database");
+    const target = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Combine source race target" })
+      .expect(201);
+    const source = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Combine source race source" })
+      .expect(201);
+    await prisma.restaurantTab.update({
+      where: { id: source.body.id },
+      data: { checkDroppedAt: new Date() },
+    });
+
+    const [finalized, combined] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${source.body.id}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [
+            {
+              type: "CARD_PRESENT",
+              amountCents: 1,
+              readerId: "tmr_combine_source_race",
+            },
+          ],
+        }),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/${target.body.id}/combine`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ sourceTabId: source.body.id }),
+    ]);
+
+    expect([
+      [201, 404],
+      [409, 201],
+    ]).toContainEqual([finalized.status, combined.status]);
+    const [finalTarget, finalSource] = await Promise.all([
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: target.body.id } }),
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: source.body.id } }),
+    ]);
+    expect(finalTarget.status).toBe("OPEN");
+    expect(finalSource.status).toBe(finalized.status === 201 ? "CLOSED" : "VOIDED");
+  });
+
   it("does not expose a tab summary to staff scoped to another location", async () => {
     const { prisma } = await import("@cinema/database");
     const organization = await prisma.organization.findFirstOrThrow();
