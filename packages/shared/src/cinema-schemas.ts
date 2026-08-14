@@ -408,6 +408,7 @@ export function startOfLocalDay(date: Date, timeZone: string): Date {
 
 export interface NowPlayingMovie {
   id: string;
+  createdAt?: string;
   title: string;
   synopsis: string | null;
   runtimeMinutes: number;

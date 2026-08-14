@@ -16,6 +16,14 @@ export default function ComingSoonPage() {
   const [program, setProgram] = useState<ProgramResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [justAnnounced, setJustAnnounced] = useState(false);
+
+  useEffect(() => {
+    setJustAnnounced(
+      new URLSearchParams(window.location.search).get("view") ===
+        "JUST_ANNOUNCED",
+    );
+  }, []);
 
   useEffect(() => {
     setError(null);
@@ -34,7 +42,7 @@ export default function ComingSoonPage() {
   const movies = useMemo(() => {
     if (!program) return [];
     const today = localDateKey(new Date(), program.location.timezone);
-    return program.movies
+    const upcoming = program.movies
       .filter((movie) => {
         const first = movie.showtimes[0];
         return (
@@ -43,6 +51,12 @@ export default function ComingSoonPage() {
         );
       })
       .sort((left, right) => {
+        if (justAnnounced) {
+          const announcementOrder =
+            new Date(right.createdAt ?? 0).getTime() -
+            new Date(left.createdAt ?? 0).getTime();
+          if (announcementOrder !== 0) return announcementOrder;
+        }
         const leftFirst = Math.min(
           ...left.showtimes.map((showtime) =>
             new Date(showtime.startsAt).getTime(),
@@ -55,19 +69,29 @@ export default function ComingSoonPage() {
         );
         return leftFirst - rightFirst || left.title.localeCompare(right.title);
       });
-  }, [program]);
+
+    return justAnnounced ? upcoming.slice(0, 6) : upcoming;
+  }, [justAnnounced, program]);
 
   return (
     <main className="cinema-shell route-page">
       <section className="route-heading">
-        <span className="eyebrow">{copy.eyebrow}</span>
-        <h1>{copy.title}</h1>
-        <p>{copy.intro}</p>
+        <span className="eyebrow">
+          {justAnnounced ? "NEWLY ADDED" : copy.eyebrow}
+        </span>
+        <h1>{justAnnounced ? "Just Announced" : copy.title}</h1>
+        <p>
+          {justAnnounced
+            ? "The newest films added to our upcoming program."
+            : copy.intro}
+        </p>
       </section>
       {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></>}
       {!program && !error && <p className="loading-copy">{copy.loading}</p>}
       {program && movies.length === 0 && (
-        <p className="loading-copy">{copy.empty}</p>
+        <p className="loading-copy">
+          {justAnnounced ? "No newly announced films yet." : copy.empty}
+        </p>
       )}
       <section className="movie-grid">
         {program &&
