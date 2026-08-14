@@ -214,6 +214,24 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async renameSchedulePlan(actor: RequestActor, id: string, name: string) {
+    const locationId = this.requireLocation(actor);
+    const plan = await prisma.schedulePlan.findFirst({ where: { id, locationId }, select: { id: true, name: true } });
+    if (!plan) throw AppError.notFound("Schedule plan not found.");
+    try {
+      const updated = await prisma.schedulePlan.update({
+        where: { id: plan.id },
+        data: { name },
+        select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true },
+      });
+      await prisma.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.renamed", entityType: "SchedulePlan", entityId: plan.id, locationId, beforeState: { name: plan.name }, afterState: { name: updated.name } } });
+      return updated;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("A schedule plan already uses that name for this week.");
+      throw error;
+    }
+  }
+
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
     const locationId = this.requireLocation(actor);
     const layoutErrors = input.layout
