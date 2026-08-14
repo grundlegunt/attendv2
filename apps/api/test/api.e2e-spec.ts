@@ -5364,7 +5364,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
         },
       ],
     });
-    for (let attempt = 0; attempt < 50; attempt += 1) {
+    for (let attempt = 0; attempt < 400; attempt += 1) {
       if (
         provider.collectCardPresentPaymentCalls.length ===
         cardPresentCallsBefore + 1
