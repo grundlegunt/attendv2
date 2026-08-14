@@ -25,6 +25,7 @@ import { CinemaService } from "./cinema.service";
 
 const giftCardBalanceSchema = z.object({ code: z.string().trim().min(20).max(40) }).strict();
 const createSchedulePlanSchema = z.object({ name: z.string().trim().min(1).max(80), weekStartsAt: z.string().datetime() }).strict();
+const duplicateSchedulePlanSchema = z.object({ name: z.string().trim().min(1).max(80) }).strict();
 
 @Controller("cinema")
 export class CinemaController {
@@ -115,6 +116,13 @@ export class CinemaController {
   @RequirePermissions(Permission.ShowtimeManage)
   createSchedulePlan(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(createSchedulePlanSchema)) body: unknown) {
     return this.cinemaService.createSchedulePlan(actor, createSchedulePlanSchema.parse(body));
+  }
+
+  @Post("schedule-plans/:id/duplicate")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  duplicateSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Body(new ZodValidationPipe(duplicateSchedulePlanSchema)) body: unknown) {
+    return this.cinemaService.duplicateSchedulePlan(actor, id, duplicateSchedulePlanSchema.parse(body).name);
   }
 
   @Delete("schedule-plans/:id")

@@ -197,6 +197,23 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return { deleted: true };
   }
 
+  async duplicateSchedulePlan(actor: RequestActor, id: string, name: string) {
+    const locationId = this.requireLocation(actor);
+    const source = await prisma.schedulePlan.findFirst({ where: { id, locationId } });
+    if (!source) throw AppError.notFound("Schedule plan not found.");
+    try {
+      const plan = await prisma.schedulePlan.create({
+        data: { locationId, name, weekStartsAt: source.weekStartsAt, snapshotJson: source.snapshotJson as Prisma.InputJsonValue },
+        select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true },
+      });
+      await prisma.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.duplicated", entityType: "SchedulePlan", entityId: plan.id, locationId, afterState: { name: plan.name, weekStartsAt: plan.weekStartsAt.toISOString(), sourcePlanId: source.id } } });
+      return plan;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("A schedule plan already uses that name for this week.");
+      throw error;
+    }
+  }
+
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
     const locationId = this.requireLocation(actor);
     const layoutErrors = input.layout
