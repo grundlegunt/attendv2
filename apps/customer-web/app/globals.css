@@ -5,7 +5,7 @@
 }
 .cinema-shell {
   min-height: 100vh;
-  padding: 24px clamp(20px, 5vw, 72px) 72px;
+  padding: 20px clamp(20px, 5vw, 72px) 48px;
   background: radial-gradient(
     circle at top right,
     var(--color-bg-glow),
@@ -99,7 +99,7 @@
   background: var(--color-bg-elevated);
 }
 .program-heading {
-  padding: 64px 0 28px;
+  padding: 44px 0 24px;
 }
 .program-heading h1 {
   font-size: var(--font-size-page-title, clamp(3rem, 8vw, 6.5rem));
@@ -113,7 +113,7 @@
 }
 .route-heading {
   max-width: 760px;
-  padding: 64px 0 34px;
+  padding: 44px 0 28px;
 }
 .route-heading h1 {
   margin: 8px 0 14px;
@@ -151,7 +151,7 @@
 .account-dashboard {
   display: grid;
   gap: 34px;
-  padding-bottom: 64px;
+  padding-bottom: 48px;
 }
 .account-session-bar {
   display: flex;
@@ -282,7 +282,7 @@
   display: grid;
   grid-template-columns: minmax(220px, 0.55fr) 1.45fr;
   gap: 40px;
-  padding: 48px 0 72px;
+  padding: 40px 0 48px;
   border-block: 1px solid var(--color-border);
 }
 .how-it-works h2,
@@ -323,14 +323,14 @@
   line-height: 1.6;
 }
 .public-menu {
-  padding: 72px 0;
+  padding: 48px 0;
 }
 .dining-menu-layout {
   display: grid;
   grid-template-columns: minmax(320px, 0.75fr) minmax(0, 1.25fr);
   gap: clamp(28px, 4vw, 64px);
   align-items: start;
-  padding: 72px 0;
+  padding: 48px 0;
   border-top: 1px solid var(--color-border);
 }
 .dining-menu-layout__specials,
@@ -1078,7 +1078,7 @@
   line-height: 1.7;
 }
 .pairings {
-  padding: 90px 0 30px;
+  padding: 56px 0 24px;
 }
 .pairings h2 {
   margin: 8px 0 28px;
@@ -1115,7 +1115,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
-  padding-bottom: 64px;
+  padding-bottom: 48px;
 }
 .series-card {
   border: 1px solid var(--color-border);
@@ -1162,7 +1162,7 @@
   line-height: 1.45;
 }
 .series-detail {
-  padding-bottom: 64px;
+  padding-bottom: 48px;
   border: 1px solid var(--color-border);
   background: var(--color-bg-elevated);
 }
