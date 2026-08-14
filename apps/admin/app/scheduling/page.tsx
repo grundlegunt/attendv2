@@ -65,6 +65,11 @@ interface SchedulePlanShowtime {
   presentation: Showtime["presentation"];
   format: string | null;
 }
+interface SchedulePlanValidation {
+  valid: boolean;
+  showtimeCount: number;
+  issues: Array<{ index: number; message: string }>;
+}
 
 function dateTimeInputValue(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
@@ -127,6 +132,8 @@ export default function AdminPage() {
   const [planShowtimePriceTierId, setPlanShowtimePriceTierId] = useState("");
   const [planShowtimeStartsAt, setPlanShowtimeStartsAt] = useState("");
   const [planShowtimePresentation, setPlanShowtimePresentation] = useState<Showtime["presentation"]>("STANDARD");
+  const [planValidation, setPlanValidation] = useState<SchedulePlanValidation | null>(null);
+  const [validatingPlan, setValidatingPlan] = useState(false);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -270,9 +277,27 @@ export default function AdminPage() {
     }
   }
 
+  async function validateSchedulePlan(plan: SchedulePlan) {
+    setError(null);
+    setPlanValidation(null);
+    setValidatingPlan(true);
+    try {
+      const validation = await apiFetch<SchedulePlanValidation>(`/cinema/schedule-plans/${plan.id}/validate`, {
+        accessToken: token ?? undefined,
+        method: "POST",
+      });
+      setPlanValidation(validation);
+    } catch (reason) {
+      showError(reason);
+    } finally {
+      setValidatingPlan(false);
+    }
+  }
+
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
   const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
   const selectedPlan = schedulePlans.find((plan) => plan.id === selectedPlanId) ?? null;
+  useEffect(() => { setPlanValidation(null); }, [selectedPlanId, selectedPlan?.snapshotJson]);
   const selectedPlanRows = useMemo(() => {
     if (!selectedPlan || !data) return [];
     const rows = selectedPlan.snapshotJson.map((showtime) => ({
@@ -662,8 +687,9 @@ export default function AdminPage() {
         <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
       </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
       {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
-        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><div className="schedule-plan-preview-status"><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span>{selectedPlanRows.some((row) => row.hasConflict) && <strong>{selectedPlanRows.filter((row) => row.hasConflict).length} conflicting showtimes</strong>}</div></div>
+        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><div className="schedule-plan-preview-status"><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span>{selectedPlanRows.some((row) => row.hasConflict) && <strong>{selectedPlanRows.filter((row) => row.hasConflict).length} conflicting showtimes</strong>}<button type="button" className="secondary" disabled={validatingPlan} onClick={() => void validateSchedulePlan(selectedPlan)}>{validatingPlan ? "Checking…" : "Check plan"}</button></div></div>
         <p className="schedule-plan-preview-note">Editing this saved copy cannot change the published schedule or customer ticket availability.</p>
+        {planValidation && <div className={planValidation.valid ? "plan-validation-success" : "plan-validation-error"}>{planValidation.valid ? `Ready for publishing: all ${planValidation.showtimeCount} saved showtimes passed the server safety check.` : <><strong>This plan is not ready to publish.</strong><ul>{planValidation.issues.map((issue, index) => <li key={`${issue.index}-${index}`}>Showing {issue.index + 1}: {issue.message}</li>)}</ul></>}</div>}
         {data && <form className="schedule-plan-add" onSubmit={(event) => void addSchedulePlanShowtime(event, selectedPlan)}>
           <label>Film<select required value={planShowtimeMovieId || data.location.organization.movies[0]?.id || ""} onChange={(event) => setPlanShowtimeMovieId(event.target.value)}>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title}</option>)}</select></label>
           <label>Auditorium<select required value={planShowtimeAuditoriumId || data.location.auditoriums[0]?.id || ""} onChange={(event) => setPlanShowtimeAuditoriumId(event.target.value)}>{data.location.auditoriums.map((auditorium) => <option key={auditorium.id} value={auditorium.id}>{auditorium.name}</option>)}</select></label>

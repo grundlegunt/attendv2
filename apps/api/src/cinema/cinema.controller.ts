@@ -120,6 +120,13 @@ export class CinemaController {
     return this.cinemaService.createSchedulePlan(actor, createSchedulePlanSchema.parse(body));
   }
 
+  @Post("schedule-plans/:id/validate")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  validateSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.validateSchedulePlan(actor, id);
+  }
+
   @Post("schedule-plans/:id/duplicate")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)

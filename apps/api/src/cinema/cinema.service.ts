@@ -11,6 +11,7 @@ import {
   duplicateShowtimeDayRequestSchema,
   moveShowtimeGroupRequestSchema,
   showtimePresentationSchema,
+  showtimeWindowsOverlap,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
@@ -36,6 +37,7 @@ type DuplicateShowtimeDayInput = ReturnType<typeof duplicateShowtimeDayRequestSc
 type MovieUpdateInput = ReturnType<typeof updateMovieRequestSchema.parse>;
 type ShowtimeUpdateInput = ReturnType<typeof updateShowtimeRequestSchema.parse>;
 type MoveShowtimeGroupInput = ReturnType<typeof moveShowtimeGroupRequestSchema.parse>;
+type SchedulePlanShowtimeInput = ShowtimeInput & { priceTierId?: string };
 
 const DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS = 10_000;
 const DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS = 60_000;
@@ -184,6 +186,69 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("A schedule plan already uses that name for this week.");
       throw error;
     }
+  }
+
+  async validateSchedulePlan(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    const plan = await prisma.schedulePlan.findFirst({ where: { id, locationId } });
+    if (!plan) throw AppError.notFound("Schedule plan not found.");
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      include: {
+        auditoriums: { where: { active: true }, select: { id: true } },
+        organization: { select: {
+          movies: { where: { active: true }, select: { id: true, title: true, runtimeMinutes: true } },
+          priceTiers: { where: { active: true }, select: { id: true } },
+          filmSeries: { where: { active: true }, select: { id: true } },
+        } },
+      },
+    });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const issues: Array<{ index: number; message: string }> = [];
+    const rawSnapshot = Array.isArray(plan.snapshotJson) ? plan.snapshotJson : [];
+    const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
+    const auditoriumIds = new Set(location.auditoriums.map((auditorium) => auditorium.id));
+    const movies = new Map(location.organization.movies.map((movie) => [movie.id, movie]));
+    const priceTierIds = new Set(location.organization.priceTiers.map((tier) => tier.id));
+    const filmSeriesIds = new Set(location.organization.filmSeries.map((series) => series.id));
+    const showtimes: Array<SchedulePlanShowtimeInput & { index: number; startsAtDate: Date; roomReadyAt: Date }> = [];
+
+    rawSnapshot.forEach((raw, index) => {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        issues.push({ index, message: "Saved showing data is invalid." });
+        return;
+      }
+      const normalized = { ...raw } as Record<string, unknown>;
+      if (normalized.priceTierId === null) delete normalized.priceTierId;
+      const parsed = createShowtimeRequestSchema.safeParse(normalized);
+      if (!parsed.success) {
+        issues.push({ index, message: "Saved showing data is incomplete or invalid." });
+        return;
+      }
+      const startsAtDate = new Date(parsed.data.startsAt);
+      if (startsAtDate < plan.weekStartsAt || startsAtDate >= weekEndsAt) issues.push({ index, message: "Showing falls outside the plan week." });
+      const movie = movies.get(parsed.data.movieId);
+      if (!movie) issues.push({ index, message: "Film is no longer available." });
+      if (!auditoriumIds.has(parsed.data.auditoriumId)) issues.push({ index, message: "Auditorium is no longer available." });
+      if (parsed.data.priceTierId && !priceTierIds.has(parsed.data.priceTierId)) issues.push({ index, message: "Ticket tier is no longer available." });
+      if (parsed.data.filmSeriesId && !filmSeriesIds.has(parsed.data.filmSeriesId)) issues.push({ index, message: "Film series is no longer available." });
+      if (!movie || !auditoriumIds.has(parsed.data.auditoriumId)) return;
+      const roomReadyAt = new Date(startsAtDate.getTime() + (location.preShowBufferMinutes + movie.runtimeMinutes + Math.max(this.minimumCinemaCleaningMinutes, location.cleaningBufferMinutes)) * 60_000);
+      showtimes.push({ ...parsed.data, index, startsAtDate, roomReadyAt });
+    });
+
+    for (let left = 0; left < showtimes.length; left += 1) {
+      for (let right = left + 1; right < showtimes.length; right += 1) {
+        const first = showtimes[left]!, second = showtimes[right]!;
+        if (first.auditoriumId !== second.auditoriumId) continue;
+        if (!showtimeWindowsOverlap({ startsAt: first.startsAtDate, roomReadyAt: first.roomReadyAt }, { startsAt: second.startsAtDate, roomReadyAt: second.roomReadyAt })) continue;
+        issues.push({ index: first.index, message: `Conflicts with saved showing ${second.index + 1}.` });
+        issues.push({ index: second.index, message: `Conflicts with saved showing ${first.index + 1}.` });
+      }
+    }
+
+    return { valid: issues.length === 0, showtimeCount: rawSnapshot.length, issues };
   }
 
   async deleteSchedulePlan(actor: RequestActor, id: string) {
