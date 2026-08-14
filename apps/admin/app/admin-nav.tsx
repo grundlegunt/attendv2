@@ -13,7 +13,6 @@ export function AdminNav() {
   const groups = useMemo(() => visibleAdminNavigation(employee.permissions), [employee.permissions]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
 
   useEffect(() => { setMobileOpen(false); }, [pathname]);
   useEffect(() => { setSidebarCollapsed(window.localStorage.getItem("attend-admin-sidebar") === "collapsed"); }, []);
@@ -24,10 +23,6 @@ export function AdminNav() {
       window.localStorage.setItem("attend-admin-sidebar", next ? "collapsed" : "expanded");
       return next;
     });
-  }
-
-  function toggleGroup(label: string) {
-    setCollapsedGroups((current) => current.includes(label) ? current.filter((item) => item !== label) : [...current, label]);
   }
 
   return <>
@@ -43,20 +38,37 @@ export function AdminNav() {
       {sidebarCollapsed && <button type="button" className="admin-sidebar-rail-button" onClick={toggleSidebar}><span aria-hidden="true">☰</span><span className="sr-only">Expand navigation</span></button>}
       <nav className="admin-nav" aria-label="Admin sections">
         {groups.map((group) => {
-          const expanded = !collapsedGroups.includes(group.label);
-          const groupId = `admin-group-${group.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-          return <section className="admin-nav-group" key={group.label}>
-            <button type="button" className="admin-nav-disclosure" aria-expanded={expanded} aria-controls={groupId} onClick={() => toggleGroup(group.label)}>
-              <span>{group.label}</span><span aria-hidden="true">{expanded ? "−" : "+"}</span>
-            </button>
-            {expanded && <div id={groupId} className="admin-nav-links">{group.items.map((item) => {
+          const landing = group.items[0]!;
+          const groupActive = group.items.some((item) => isAdminItemActive(pathname, item.href));
+          return <section className={`admin-nav-group ${groupActive ? "active" : ""}`} key={group.label}>
+            <Link className="admin-nav-category" href={landing.href}>
+              <span>{group.label}</span><span aria-hidden="true">›</span>
+            </Link>
+            <div className="admin-nav-flyout" aria-label={`${group.label} pages`}><strong>{group.label}</strong>{group.items.map((item) => {
               const active = isAdminItemActive(pathname, item.href);
               return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>{item.label}</Link>;
-            })}</div>}
+            })}</div>
           </section>;
         })}
       </nav>
       <div className="admin-sidebar-account"><a className="admin-customer-site-link" href={CUSTOMER_WEB_URL} target="_blank" rel="noreferrer">View customer site <span aria-hidden="true">↗</span></a><span>Signed in as</span><strong>{employee.name}</strong><button type="button" className="secondary" onClick={signOut}>Sign out</button></div>
     </aside>
   </>;
+}
+
+export function AdminCategoryTabs() {
+  const pathname = usePathname();
+  const { employee } = useAdminSession();
+  const groups = useMemo(() => visibleAdminNavigation(employee.permissions), [employee.permissions]);
+  const activeGroup = groups.find((group) => group.items.some((item) => isAdminItemActive(pathname, item.href)));
+
+  if (!activeGroup || activeGroup.items.length < 2) return null;
+
+  return <nav className="admin-category-tabs" aria-label={`${activeGroup.label} pages`}>
+    <strong>{activeGroup.label}</strong>
+    <div>{activeGroup.items.map((item) => {
+      const active = isAdminItemActive(pathname, item.href);
+      return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>{item.label}</Link>;
+    })}</div>
+  </nav>;
 }

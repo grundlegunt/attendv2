@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import "@cinema/ui/theme.css";
 import "./globals.css";
-import { AdminNav } from "./admin-nav";
+import { AdminCategoryTabs, AdminNav } from "./admin-nav";
 import { AdminSessionProvider } from "./admin-session";
 
 export const metadata = {
@@ -12,7 +12,7 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-theme="pos">
-      <body><AdminSessionProvider><div className="admin-app-layout"><AdminNav /><div className="admin-content">{children}</div></div></AdminSessionProvider></body>
+      <body><AdminSessionProvider><div className="admin-app-layout"><AdminNav /><div className="admin-content"><AdminCategoryTabs />{children}</div></div></AdminSessionProvider></body>
     </html>
   );
 }
