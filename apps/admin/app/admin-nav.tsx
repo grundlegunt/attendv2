@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAdminSession } from "./admin-session";
 import { isAdminItemActive, visibleAdminNavigation } from "./admin-navigation";
+import { CUSTOMER_WEB_URL } from "./lib/customer-site";
 
 export function AdminNav() {
   const pathname = usePathname();
@@ -55,7 +56,7 @@ export function AdminNav() {
           </section>;
         })}
       </nav>
-      <div className="admin-sidebar-account"><span>Signed in as</span><strong>{employee.name}</strong><button type="button" className="secondary" onClick={signOut}>Sign out</button></div>
+      <div className="admin-sidebar-account"><a className="admin-customer-site-link" href={CUSTOMER_WEB_URL} target="_blank" rel="noreferrer">View customer site <span aria-hidden="true">↗</span></a><span>Signed in as</span><strong>{employee.name}</strong><button type="button" className="secondary" onClick={signOut}>Sign out</button></div>
     </aside>
   </>;
 }

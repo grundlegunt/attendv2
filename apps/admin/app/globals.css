@@ -652,7 +652,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .admin-nav a.active { border: 0; background: color-mix(in srgb, var(--color-accent) 12%, transparent); color: var(--color-accent); }
 .admin-nav a.active::before { background: var(--color-accent); }
 .admin-sidebar-account { display: grid; gap: 5px; padding: 14px 16px; border-top: 1px solid var(--color-border); }
+.admin-customer-site-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--color-border); color: var(--color-accent); font-size: .82rem; font-weight: 700; text-decoration: none; }
+.admin-customer-site-link:hover, .admin-customer-site-link:focus-visible { color: var(--color-text-primary); outline: 0; }
 .admin-sidebar-account span { color: var(--color-text-secondary); font-size: .68rem; text-transform: uppercase; letter-spacing: .08em; }
+.admin-sidebar-account .admin-customer-site-link span { color: currentColor; font-size: .9rem; letter-spacing: 0; }
 .admin-sidebar-account strong { overflow: hidden; margin-bottom: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-sidebar-account .secondary { width: 100%; }
 .admin-sidebar-backdrop { display: none; }
