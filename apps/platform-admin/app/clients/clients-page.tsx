@@ -783,6 +783,46 @@ export default function AttendMaster() {
     }
   }
 
+  async function duplicateAuditorium(location: LocationDetail, auditorium: LocationDetail["auditoriums"][number]) {
+    if (!session || !organization) return;
+    const name = window.prompt(`Name the copy of ${auditorium.name}:`, `${auditorium.name} copy`)?.trim();
+    if (!name) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request(`/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}/duplicate`, { method: "POST", body: JSON.stringify({ name }) }, session.accessToken);
+      const [updated, refreshed] = await Promise.all([
+        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<Overview>("/platform/overview", undefined, session.accessToken),
+      ]);
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not duplicate the auditorium.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deactivateAuditorium(location: LocationDetail, auditorium: LocationDetail["auditoriums"][number]) {
+    if (!session || !organization || !window.confirm(`Deactivate ${auditorium.name}? This is blocked while future showtimes still use the room.`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request(`/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}`, { method: "DELETE" }, session.accessToken);
+      const [updated, refreshed] = await Promise.all([
+        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<Overview>("/platform/overview", undefined, session.accessToken),
+      ]);
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not deactivate the auditorium.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const locations =
     overview?.organizations.flatMap((item) => item.locations) ?? [];
   const filteredOrganizations = useMemo(() => {
@@ -1487,6 +1527,12 @@ export default function AttendMaster() {
                               </div>
                             </>}
                           </dl>
+                          {session.user.role !== "VIEWER" && auditorium.active && (
+                            <div className="auditorium-card-actions">
+                              <button type="button" className="quiet" disabled={saving} onClick={() => duplicateAuditorium(location, auditorium)}>Duplicate</button>
+                              <button type="button" className="danger" disabled={saving} onClick={() => deactivateAuditorium(location, auditorium)}>Deactivate</button>
+                            </div>
+                          )}
                         </article>
                       ))}
                       {location.auditoriums.length === 0 && <p className="muted">No auditoriums have been configured for this cinema.</p>}

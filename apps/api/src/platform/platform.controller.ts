@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
 import { z } from "zod";
@@ -62,6 +62,10 @@ const cinemaManagerCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   email: z.string().trim().email().max(254),
   password: z.string().min(12).max(200),
+}).strict();
+
+const auditoriumDuplicateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
 }).strict();
 
 const platformUserCreateSchema = z.object({
@@ -201,6 +205,20 @@ export class PlatformController {
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   createAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(createAuditoriumRequestSchema)) body: unknown) {
     return this.platform.createAuditorium({ actorId: actor.sub, organizationId, locationId, ...createAuditoriumRequestSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId/duplicate")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  duplicateAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Param("auditoriumId") auditoriumId: string, @Body(new ZodValidationPipe(auditoriumDuplicateSchema)) body: unknown) {
+    return this.platform.duplicateAuditorium({ actorId: actor.sub, organizationId, locationId, auditoriumId, ...auditoriumDuplicateSchema.parse(body) });
+  }
+
+  @Delete("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  deactivateAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Param("auditoriumId") auditoriumId: string) {
+    return this.platform.deactivateAuditorium({ actorId: actor.sub, organizationId, locationId, auditoriumId });
   }
 
   @Patch("organizations/:organizationId/locations/:locationId/branding/draft")
