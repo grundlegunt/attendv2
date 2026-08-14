@@ -388,6 +388,13 @@ export class RestaurantSettlementService {
       });
       if (!tab) throw AppError.notFound("Restaurant tab was not found.");
       if (tab.status === "CLOSED") return { tab, payments: [], alreadyClosed: true };
+      if (
+        !["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(
+          tab.status,
+        )
+      ) {
+        throw AppError.conflict("This restaurant tab cannot accept a payment.");
+      }
       if (tab.orders.some((order) => order.status === "DRAFT")) {
         throw AppError.conflict("Send or remove every draft order before settlement.");
       }
