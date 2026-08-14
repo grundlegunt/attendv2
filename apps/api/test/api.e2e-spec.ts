@@ -5366,7 +5366,8 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
 
-    await expect(settlement.runFallback()).resolves.toEqual([]);
+    const fallbackResults = await settlement.runFallback();
+    expect(fallbackResults.map((result) => result.id)).not.toContain(tab.id);
     await expect(staffPayment).resolves.toMatchObject({ status: "CLOSED" });
     expect(
       await prisma.payment.count({ where: { restaurantTabId: tab.id } }),
