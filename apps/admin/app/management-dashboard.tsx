@@ -170,6 +170,15 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-revenue.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
 
+  async function exportDistributorBoxOffice() {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
+      (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
+    const response = await fetch(`${apiUrl}/reports/distributor-box-office.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) { setError("The distributor box-office report could not be created."); return; }
+    const url = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-distributor-box-office.csv"; anchor.click(); URL.revokeObjectURL(url);
+  }
+
   return <section className="management-stack">
     <div className="panel management-heading">
       <div><p className="kicker">MANAGEMENT</p><h2>{section === "reports" ? "Reports & finance" : section === "labor" ? "Labor" : section === "branding" ? "Branding" : section === "location" ? "Location" : section === "promotions" ? "Promotions" : "Audit log"}</h2></div>
@@ -179,7 +188,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
     {revenue && <section className="panel"><p className="kicker">FINANCE</p><h2>Revenue overview</h2>
       <div className="stats"><div><strong>{money(revenue.totals.grossRevenueCents)}</strong><span>Gross revenue</span></div><div><strong>{money(revenue.totals.refundedCents)}</strong><span>Refunds</span></div><div><strong>{money(revenue.totals.combinedRevenueCents)}</strong><span>Net revenue</span></div><div><strong>{revenue.totals.ticketsSold}</strong><span>Tickets sold</span></div><div><strong>{money(revenue.totals.ticketRevenueCents)}</strong><span>Ticket face value</span></div><div><strong>{money(revenue.totals.ticketFeesCents)}</strong><span>Ticket fees</span></div><div><strong>{money(revenue.totals.ticketTaxCents)}</strong><span>Ticket tax</span></div><div><strong>{money(revenue.totals.ticketCollectedCents)}</strong><span>Ticket total collected</span></div><div><strong>{money(revenue.totals.averageFnbSpendPerOrderCents)}</strong><span>Average F&amp;B per order</span></div><div><strong>{money(revenue.totals.averageFnbSpendPerSeatCents)}</strong><span>Average F&amp;B per occupied seat</span></div></div>
-      <button className="primary report-export" onClick={() => void exportRevenue()}>Export revenue CSV</button>
+      <div className="report-export-actions"><button className="primary report-export" onClick={() => void exportRevenue()}>Export revenue CSV</button><button className="secondary report-export" onClick={() => void exportDistributorBoxOffice()}>Export distributor box office</button></div>
       <h3>By movie</h3><div className="management-table"><div className="table-row table-head"><span>Movie</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.movies.map((row) => <div className="table-row" key={row.movieId}><strong>{row.title}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
       <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
     </section>}

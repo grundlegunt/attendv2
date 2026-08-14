@@ -129,6 +129,24 @@ export class ReportingService {
     ].join("\n");
   }
 
+  distributorBoxOfficeCsv(report: Awaited<ReturnType<ReportingService["revenue"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    return [
+      row(["Distributor box office report"]),
+      row(["Report from", report.range.from.toISOString()]),
+      row(["Report to", report.range.to.toISOString()]),
+      "",
+      row(["Film summary"]),
+      row(["Film", "Paid admissions", "Ticket face value (cents)"]),
+      ...report.movies.map((movie) => row([movie.title, movie.ticketsSold, movie.ticketRevenueCents])),
+      "",
+      row(["Showtime detail"]),
+      row(["Film", "Showtime", "Paid admissions", "Ticket face value (cents)"]),
+      ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents])),
+    ].join("\n");
+  }
+
   laborCsv(rows: Awaited<ReturnType<ReportingService["labor"]>>["rows"]) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     return ["Employee,Roles,Clock in,Clock out,Break minutes,Worked minutes", ...rows.map((row) => [row.employeeName, row.roles.join("; "), row.clockInAt.toISOString(), row.clockOutAt?.toISOString() ?? "", row.breakMinutes, row.workedMinutes].map(quote).join(","))].join("\n");
