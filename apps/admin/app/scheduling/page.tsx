@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { SeatMapLayout } from "@cinema/shared";
+import { showtimeWindowsOverlap, type SeatMapLayout } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
@@ -275,12 +275,23 @@ export default function AdminPage() {
   const selectedPlan = schedulePlans.find((plan) => plan.id === selectedPlanId) ?? null;
   const selectedPlanRows = useMemo(() => {
     if (!selectedPlan || !data) return [];
-    return selectedPlan.snapshotJson.map((showtime) => ({
+    const rows = selectedPlan.snapshotJson.map((showtime) => ({
       ...showtime,
       movie: data.location.organization.movies.find((movie) => movie.id === showtime.movieId),
       auditorium: data.location.auditoriums.find((auditorium) => auditorium.id === showtime.auditoriumId),
       matchesLive: data.showtimes.some((live) => live.movie.id === showtime.movieId && live.auditorium.id === showtime.auditoriumId && live.startsAt === showtime.startsAt && live.onSale === showtime.onSale),
     }));
+    return rows.map((row, index) => {
+      const startsAt = new Date(row.startsAt);
+      const roomReadyAt = new Date(startsAt.getTime() + (data.location.preShowBufferMinutes + (row.movie?.runtimeMinutes ?? 90) + Math.max(15, data.location.cleaningBufferMinutes)) * 60_000);
+      const hasConflict = rows.some((candidate, candidateIndex) => {
+        if (candidateIndex === index || candidate.auditoriumId !== row.auditoriumId) return false;
+        const candidateStartsAt = new Date(candidate.startsAt);
+        const candidateRoomReadyAt = new Date(candidateStartsAt.getTime() + (data.location.preShowBufferMinutes + (candidate.movie?.runtimeMinutes ?? 90) + Math.max(15, data.location.cleaningBufferMinutes)) * 60_000);
+        return showtimeWindowsOverlap({ startsAt, roomReadyAt }, { startsAt: candidateStartsAt, roomReadyAt: candidateRoomReadyAt });
+      });
+      return { ...row, hasConflict };
+    });
   }, [data, selectedPlan]);
 
   async function createMovie(event: FormEvent) {
@@ -651,7 +662,7 @@ export default function AdminPage() {
         <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
       </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
       {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
-        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span></div>
+        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><div className="schedule-plan-preview-status"><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span>{selectedPlanRows.some((row) => row.hasConflict) && <strong>{selectedPlanRows.filter((row) => row.hasConflict).length} conflicting showtimes</strong>}</div></div>
         <p className="schedule-plan-preview-note">Editing this saved copy cannot change the published schedule or customer ticket availability.</p>
         {data && <form className="schedule-plan-add" onSubmit={(event) => void addSchedulePlanShowtime(event, selectedPlan)}>
           <label>Film<select required value={planShowtimeMovieId || data.location.organization.movies[0]?.id || ""} onChange={(event) => setPlanShowtimeMovieId(event.target.value)}>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title}</option>)}</select></label>
@@ -664,7 +675,7 @@ export default function AdminPage() {
         {selectedPlanRows.length > 0 ? <div className="schedule-plan-preview-list">{selectedPlanRows.map((showtime, index) => <article key={`${showtime.startsAt}-${showtime.auditoriumId}-${index}`}>
           <time dateTime={showtime.startsAt}>{new Date(showtime.startsAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>
           <div><strong>{showtime.movie?.title ?? "Unavailable film"}</strong><span>{showtime.auditorium?.name ?? "Unavailable auditorium"} · {showtime.presentation.replaceAll("_", " ").toLocaleLowerCase()}</span></div>
-          <span className={showtime.matchesLive ? "plan-match" : "plan-difference"}>{showtime.matchesLive ? "Matches live" : "Different from live"}</span>
+          <span className={showtime.hasConflict ? "plan-conflict" : showtime.matchesLive ? "plan-match" : "plan-difference"}>{showtime.hasConflict ? "Schedule conflict" : showtime.matchesLive ? "Matches live" : "Different from live"}</span>
           <button type="button" className="secondary" onClick={() => void changeSchedulePlanShowtime(selectedPlan, index, showtime, showtime.movie?.title ?? "this showing")}>Change time</button>
           <button type="button" className="secondary destructive-outline" onClick={() => void removeSchedulePlanShowtime(selectedPlan, index, showtime.movie?.title ?? "this showing")}>Remove</button>
         </article>)}</div> : <p className="schedule-plan-empty">This saved plan contains no showtimes.</p>}

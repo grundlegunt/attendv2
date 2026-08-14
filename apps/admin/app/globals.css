@@ -97,6 +97,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .schedule-plan-preview-heading { display: flex; justify-content: space-between; gap: 18px; align-items: center; padding: 20px 24px 4px; }
 .schedule-plan-preview-heading h3 { margin: 3px 0 0; font-size: 1.45rem; }
 .schedule-plan-preview-heading > span { color: var(--color-text-secondary); font-size: .78rem; font-weight: 800; }
+.schedule-plan-preview-status { text-align: right; }
+.schedule-plan-preview-status span, .schedule-plan-preview-status strong { display: block; font-size: .78rem; font-weight: 800; }
+.schedule-plan-preview-status span { color: var(--color-text-secondary); }
+.schedule-plan-preview-status strong, .plan-conflict { margin-top: 4px; color: #f07575; }
 .schedule-plan-preview-note { margin: 0; padding: 0 24px 16px; color: var(--color-text-secondary); font-size: .76rem; }
 .schedule-plan-add { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)) auto; gap: 10px; align-items: end; padding: 0 24px 20px; }
 .schedule-plan-add label { min-width: 0; }
