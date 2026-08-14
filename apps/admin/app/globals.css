@@ -1,7 +1,17 @@
 .admin-theme-root { min-height: 100vh; background: var(--color-bg); color: var(--color-text-primary); font-family: var(--admin-font-family, Inter, ui-sans-serif, system-ui, sans-serif); --seat-available-border: color-mix(in srgb, var(--color-text-secondary) 58%, transparent); --seat-selected: var(--color-accent); --seat-selected-border: var(--color-accent); --seat-unavailable: color-mix(in srgb, var(--color-text-secondary) 34%, var(--color-bg-elevated)); --seat-unavailable-border: transparent; }
 .admin-shell { min-height: 100vh; padding: 32px; background: var(--color-bg); }
-.login-shell { display: grid; place-items: center; }
-.login-panel { width: min(100%, 480px); }
+.login-shell { display: grid; place-items: center; background: radial-gradient(circle at 18% 24%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 38%), var(--color-bg); }
+.login-layout { display: grid; grid-template-columns: minmax(300px, .9fr) minmax(360px, 480px); width: min(100%, 1040px); min-height: 590px; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg-elevated); box-shadow: 0 30px 90px rgba(0, 0, 0, .26); }
+.login-identity { display: grid; align-content: end; padding: clamp(34px, 6vw, 72px); background: linear-gradient(160deg, color-mix(in srgb, var(--color-accent) 24%, var(--color-bg)), var(--color-bg)); }
+.login-identity img { align-self: start; max-width: min(100%, 260px); max-height: 110px; margin-bottom: auto; object-fit: contain; object-position: left center; }
+.login-monogram { align-self: start; width: 72px; height: 72px; margin-bottom: auto; display: grid; place-items: center; border: 2px solid var(--color-accent); color: var(--color-accent); font: 700 2.2rem Georgia, serif; }
+.login-identity h1 { margin: 8px 0 18px; font-size: clamp(2.5rem, 5vw, 4.8rem); line-height: .95; }
+.login-identity > p:last-child { max-width: 430px; margin-bottom: 0; color: var(--color-text-secondary); line-height: 1.6; }
+.login-panel { align-self: center; width: 100%; padding: clamp(30px, 5vw, 54px); border: 0; border-left: 1px solid var(--color-border); }
+.login-panel h2 { margin: 5px 0 10px; font-size: clamp(2rem, 4vw, 3rem); }
+.login-instruction { margin-bottom: 30px; color: var(--color-text-secondary); }
+.login-security-note { display: block; margin-top: 20px; color: var(--color-text-secondary); text-align: center; }
+@media (max-width: 760px) { .login-shell { padding: 18px; } .login-layout { grid-template-columns: 1fr; min-height: 0; } .login-identity { min-height: 250px; padding: 32px; } .login-identity img, .login-monogram { margin-bottom: 36px; } .login-panel { border-left: 0; border-top: 1px solid var(--color-border); } }
 header { display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 24px; border-bottom: 2px solid var(--color-border); }
 h1, h2, p { margin-top: 0; }
 h1 { font-size: clamp(2rem, 4vw, 3.5rem); }

@@ -1088,6 +1088,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return {
       locationId: location.id,
       name: location.name,
+      logoUrl: location.customerLogoUrl,
       accentColor: location.adminAccentColor,
       accentMutedColor: location.adminAccentMutedColor,
       backgroundColor: location.adminBackgroundColor,
