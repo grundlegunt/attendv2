@@ -604,6 +604,10 @@ describe("Attend platform authentication boundary", () => {
     const created = await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums`).set("Authorization", `Bearer ${accessToken}`).send(payload).expect(201);
     expect(created.body).toEqual(expect.objectContaining({ name: payload.name, capacity: 2, seatMap: expect.objectContaining({ name: payload.seatMapName, seats: expect.arrayContaining([expect.objectContaining({ label: "A1" }), expect.objectContaining({ label: "A2", type: "ADA" })]) }) }));
 
+    const duplicated = await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums/${created.body.id}/duplicate`).set("Authorization", `Bearer ${accessToken}`).send({ name: "Master Preview Room copy" }).expect(201);
+    expect(duplicated.body).toEqual(expect.objectContaining({ name: "Master Preview Room copy", capacity: 2, seatMap: expect.objectContaining({ seats: expect.arrayContaining([expect.objectContaining({ label: "A1" }), expect.objectContaining({ label: "A2", type: "ADA" })]) }) }));
+    await request(app.getHttpServer()).delete(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums/${duplicated.body.id}`).set("Authorization", `Bearer ${accessToken}`).expect(200).expect(({ body }) => expect(body.active).toBe(false));
+
     await request(app.getHttpServer()).post(`/api/v1/platform/organizations/00000000-0000-0000-0000-000000000000/locations/${locationId}/auditoriums`).set("Authorization", `Bearer ${accessToken}`).send({ ...payload, name: "Wrong tenant" }).expect(404);
     await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums`).set("Authorization", `Bearer ${accessToken}`).send({ ...payload, name: "Invalid room", seats: [{ ...payload.seats[0], label: "A1" }, { ...payload.seats[1], label: "A1" }] }).expect(400);
   });

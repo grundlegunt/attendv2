@@ -408,6 +408,55 @@ export class PlatformService {
     }
   }
 
+  async duplicateAuditorium(input: { actorId: string; organizationId: string; locationId: string; auditoriumId: string; name: string }) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const source = await tx.auditorium.findFirst({
+          where: { id: input.auditoriumId, locationId: input.locationId, active: true, location: { organizationId: input.organizationId } },
+          include: { seatMap: { include: { seats: { where: { active: true } } } } },
+        });
+        if (!source?.seatMap) throw AppError.notFound("Auditorium seat map not found.");
+        const copy = await tx.auditorium.create({
+          data: {
+            locationId: input.locationId,
+            name: input.name,
+            capacity: source.capacity,
+            seatMap: { create: {
+              name: `${input.name} layout`, version: 1,
+              layoutJson: source.seatMap.layoutJson ?? undefined,
+              revisions: { create: { version: 1, layoutJson: source.seatMap.layoutJson ?? undefined } },
+              seats: { create: source.seatMap.seats.map((seat) => ({
+                label: seat.label, rowLabel: seat.rowLabel, number: seat.number, x: seat.x, y: seat.y,
+                type: seat.type, tableGroupId: seat.tableGroupId, tablePosition: seat.tablePosition,
+                levelKey: seat.levelKey, sectionKey: seat.sectionKey,
+              })) },
+            } },
+          },
+          include: { seatMap: { include: { seats: true } } },
+        });
+        await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_duplicated", entityType: "Auditorium", entityId: copy.id, afterState: { organizationId: input.organizationId, sourceAuditoriumId: source.id, name: copy.name, capacity: copy.capacity } }, tx);
+        return copy;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("An auditorium with that name already exists.");
+      throw error;
+    }
+  }
+
+  async deactivateAuditorium(input: { actorId: string; organizationId: string; locationId: string; auditoriumId: string }) {
+    return prisma.$transaction(async (tx) => {
+      const auditorium = await tx.auditorium.findFirst({
+        where: { id: input.auditoriumId, locationId: input.locationId, active: true, location: { organizationId: input.organizationId } },
+      });
+      if (!auditorium) throw AppError.notFound("Auditorium not found.");
+      const futureShowtimes = await tx.showtime.count({ where: { auditoriumId: input.auditoriumId, startsAt: { gte: new Date() } } });
+      if (futureShowtimes) throw AppError.conflict(`Remove or move ${futureShowtimes} future showtime${futureShowtimes === 1 ? "" : "s"} before deactivating this auditorium.`);
+      const deactivated = await tx.auditorium.update({ where: { id: auditorium.id }, data: { active: false } });
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_deactivated", entityType: "Auditorium", entityId: auditorium.id, beforeState: { organizationId: input.organizationId, active: true, name: auditorium.name, capacity: auditorium.capacity }, afterState: { active: false } }, tx);
+      return deactivated;
+    });
+  }
+
   async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; businessTypeLabel?: string | null; timezone?: string; ticketFeeMinor?: number; active?: boolean }) {
     await prisma.$transaction(async (tx) => {
       const before = await tx.organization.findUnique({ where: { id: input.organizationId } });
