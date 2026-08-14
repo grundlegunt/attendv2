@@ -19,6 +19,8 @@ interface Movie {
   rating?: string | null;
   posterUrl?: string | null;
   detailPosterUrl?: string | null;
+  posterPosition?: "TOP" | "CENTER" | "BOTTOM";
+  detailPosterPosition?: "TOP" | "CENTER" | "BOTTOM";
   diningSpecialArtworkUrl?: string | null;
   diningSpecialTitle?: string | null;
   director?: string | null; starring?: string | null; trailerUrl?: string | null; releaseYear?: number | null;
@@ -62,6 +64,8 @@ export default function AdminPage() {
   const [movieRating, setMovieRating] = useState("");
   const [moviePosterUrl, setMoviePosterUrl] = useState("");
   const [movieDetailPosterUrl, setMovieDetailPosterUrl] = useState("");
+  const [moviePosterPosition, setMoviePosterPosition] = useState<"TOP" | "CENTER" | "BOTTOM">("CENTER");
+  const [movieDetailPosterPosition, setMovieDetailPosterPosition] = useState<"TOP" | "CENTER" | "BOTTOM">("CENTER");
   const [movieDiningSpecialArtworkUrl, setMovieDiningSpecialArtworkUrl] = useState("");
   const [movieDiningSpecialTitle, setMovieDiningSpecialTitle] = useState("");
   const [movieDirector, setMovieDirector] = useState("");
@@ -114,6 +118,8 @@ export default function AdminPage() {
           rating: movieRating.trim() || null,
           posterUrl: moviePosterUrl.trim() || null,
           detailPosterUrl: movieDetailPosterUrl.trim() || null,
+          posterPosition: moviePosterPosition,
+          detailPosterPosition: movieDetailPosterPosition,
           diningSpecialArtworkUrl: movieDiningSpecialArtworkUrl.trim() || null,
           diningSpecialTitle: movieDiningSpecialTitle.trim() || null,
           director: movieDirector.trim() || null,
@@ -128,6 +134,8 @@ export default function AdminPage() {
       setMovieRating("");
       setMoviePosterUrl("");
       setMovieDetailPosterUrl("");
+      setMoviePosterPosition("CENTER");
+      setMovieDetailPosterPosition("CENTER");
       setMovieDiningSpecialArtworkUrl("");
       setMovieDiningSpecialTitle("");
       setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
@@ -380,6 +388,8 @@ export default function AdminPage() {
     setMovieRating(movie?.rating ?? "");
     setMoviePosterUrl(movie?.posterUrl ?? "");
     setMovieDetailPosterUrl(movie?.detailPosterUrl ?? "");
+    setMoviePosterPosition(movie?.posterPosition ?? "CENTER");
+    setMovieDetailPosterPosition(movie?.detailPosterPosition ?? "CENTER");
     setMovieDiningSpecialArtworkUrl(movie?.diningSpecialArtworkUrl ?? "");
     setMovieDiningSpecialTitle(movie?.diningSpecialTitle ?? "");
     setMovieDirector(movie?.director ?? "");
@@ -490,12 +500,14 @@ export default function AdminPage() {
         <label>Runtime in minutes<input type="number" min="1" max="600" value={runtime} onChange={(event) => setRuntime(Number(event.target.value))} /></label>
         <label>Rating<input value={movieRating} onChange={(event) => setMovieRating(event.target.value)} placeholder="PG, PG-13, R…" /></label>
         <label>Showtimes artwork URL<input type="text" value={moviePosterUrl} onChange={(event) => setMoviePosterUrl(event.target.value)} placeholder="Landscape image used on film cards" /></label>
+        <label>Showtimes artwork framing<select value={moviePosterPosition} onChange={(event) => setMoviePosterPosition(event.target.value as typeof moviePosterPosition)}><option value="TOP">Top</option><option value="CENTER">Center</option><option value="BOTTOM">Bottom</option></select></label>
         <label>Movie detail poster URL<input type="text" value={movieDetailPosterUrl} onChange={(event) => setMovieDetailPosterUrl(event.target.value)} placeholder="Vertical one-sheet used on the film page" /></label>
+        <label>Detail poster framing<select value={movieDetailPosterPosition} onChange={(event) => setMovieDetailPosterPosition(event.target.value as typeof movieDetailPosterPosition)}><option value="TOP">Top</option><option value="CENTER">Center</option><option value="BOTTOM">Bottom</option></select></label>
         <label>Dining special artwork URL<input type="text" value={movieDiningSpecialArtworkUrl} onChange={(event) => setMovieDiningSpecialArtworkUrl(event.target.value)} placeholder="Single photo showing the paired food and drink" /></label>
         <label>Dining special headline<input maxLength={120} value={movieDiningSpecialTitle} onChange={(event) => setMovieDiningSpecialTitle(event.target.value)} placeholder="Optional short promotional name shown over the photo" /></label>
         {(moviePosterUrl || movieDetailPosterUrl || movieDiningSpecialArtworkUrl) && <div className="movie-artwork-previews" aria-label="Film artwork previews">
-          {moviePosterUrl && <figure><img src={moviePosterUrl} alt="" /><figcaption>Showtimes card</figcaption></figure>}
-          {movieDetailPosterUrl && <figure className="movie-artwork-preview--poster"><img src={movieDetailPosterUrl} alt="" /><figcaption>Movie detail poster</figcaption></figure>}
+          {moviePosterUrl && <figure><img src={moviePosterUrl} alt="" style={{ objectPosition: moviePosterPosition.toLowerCase() }} /><figcaption>Showtimes card</figcaption></figure>}
+          {movieDetailPosterUrl && <figure className="movie-artwork-preview--poster"><img src={movieDetailPosterUrl} alt="" style={{ objectPosition: movieDetailPosterPosition.toLowerCase() }} /><figcaption>Movie detail poster</figcaption></figure>}
           {movieDiningSpecialArtworkUrl && <figure><div className="movie-special-card-preview"><img src={movieDiningSpecialArtworkUrl} alt="" /><div><strong>{diningSpecialPreviewTitle}</strong><span>{movieTitle || "Movie title"}</span></div></div><figcaption>Dining special · combined food &amp; drink</figcaption></figure>}
         </div>}
         <label>Director<input value={movieDirector} onChange={(event) => setMovieDirector(event.target.value)} /></label>
