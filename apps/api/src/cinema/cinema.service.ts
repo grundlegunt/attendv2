@@ -248,7 +248,78 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    return { valid: issues.length === 0, showtimeCount: rawSnapshot.length, issues };
+    return { valid: issues.length === 0, showtimeCount: rawSnapshot.length, issues, expectedUpdatedAt: plan.updatedAt.toISOString() };
+  }
+
+  async publishSchedulePlan(actor: RequestActor, id: string, expectedUpdatedAtValue: string) {
+    const locationId = this.requireLocation(actor);
+    const validation = await this.validateSchedulePlan(actor, id);
+    if (!validation.valid) throw AppError.conflict("Resolve every saved-plan issue before publishing.", { issues: validation.issues });
+    const expectedUpdatedAt = new Date(expectedUpdatedAtValue);
+    if (validation.expectedUpdatedAt !== expectedUpdatedAt.toISOString()) throw AppError.conflict("This plan changed after it was checked. Check it again before publishing.");
+
+    return prisma.$transaction(async (tx) => {
+      const plan = await tx.schedulePlan.findFirst({ where: { id, locationId, updatedAt: expectedUpdatedAt } });
+      if (!plan) throw AppError.conflict("This plan changed after it was checked. Check it again before publishing.");
+      if (plan.weekStartsAt <= new Date()) throw AppError.conflict("Only a future schedule week can be published from a saved plan.");
+      const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true, timezone: true, preShowBufferMinutes: true, cleaningBufferMinutes: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      const snapshot = plan.snapshotJson as Array<Record<string, unknown>>;
+      const parsed = snapshot.map((raw) => {
+        const normalized = { ...raw };
+        if (normalized.priceTierId === null) delete normalized.priceTierId;
+        return createShowtimeRequestSchema.parse(normalized);
+      });
+      const auditoriumIds = [...new Set(parsed.map((showtime) => showtime.auditoriumId))].sort();
+      for (const auditoriumId of auditoriumIds) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
+
+      const movies = new Map((await tx.movie.findMany({ where: { id: { in: parsed.map((showtime) => showtime.movieId) }, organizationId: location.organizationId, active: true } })).map((movie) => [movie.id, movie]));
+      const desired = [];
+      for (const showtime of parsed) {
+        const movie = movies.get(showtime.movieId);
+        if (!movie) throw AppError.conflict("A film in this plan is no longer available. Check the plan again.");
+        const startsAt = new Date(showtime.startsAt);
+        const priceTier = await this.resolvePriceTier(tx, location.organizationId, location.timezone, startsAt, showtime.priceTierId);
+        const featureStartsAt = new Date(startsAt.getTime() + location.preShowBufferMinutes * 60_000);
+        const endsAt = new Date(featureStartsAt.getTime() + movie.runtimeMinutes * 60_000);
+        const roomReadyAt = new Date(endsAt.getTime() + Math.max(this.minimumCinemaCleaningMinutes, location.cleaningBufferMinutes) * 60_000);
+        desired.push({ ...showtime, priceTierId: priceTier.id, startsAt, featureStartsAt, endsAt, roomReadyAt });
+      }
+
+      const live = await tx.showtime.findMany({ where: { auditorium: { locationId }, startsAt: { gte: plan.weekStartsAt, lt: weekEndsAt } } });
+      const key = (showtime: { movieId: string; auditoriumId: string; priceTierId: string; startsAt: Date; onSale: boolean; filmSeriesId: string | null; presentation: string; format: string | null }) => JSON.stringify([showtime.movieId, showtime.auditoriumId, showtime.priceTierId, showtime.startsAt.toISOString(), showtime.onSale, showtime.filmSeriesId, showtime.presentation, showtime.format]);
+      const desiredKeys = new Set(desired.map((showtime) => key({ ...showtime, filmSeriesId: showtime.filmSeriesId ?? null, format: showtime.format ?? null })));
+      const liveKeys = new Set(live.map(key));
+      const remove = live.filter((showtime) => !desiredKeys.has(key(showtime)));
+      const create = desired.filter((showtime) => !liveKeys.has(key({ ...showtime, filmSeriesId: showtime.filmSeriesId ?? null, format: showtime.format ?? null })));
+      const removeIds = remove.map((showtime) => showtime.id);
+      if (removeIds.length) {
+        const now = new Date();
+        const [tickets, restaurantTabs, restaurantOrders, activeSeatHolds] = await Promise.all([
+          tx.ticket.count({ where: { showtimeSeat: { showtimeId: { in: removeIds } } } }),
+          tx.restaurantTab.count({ where: { showtimeId: { in: removeIds } } }),
+          tx.restaurantOrder.count({ where: { showtimeSeat: { showtimeId: { in: removeIds } } } }),
+          tx.seatHold.count({ where: { showtimeSeat: { showtimeId: { in: removeIds } }, releasedAt: null, expiresAt: { gt: now } } }),
+        ]);
+        if (tickets || restaurantTabs || restaurantOrders || activeSeatHolds) throw AppError.conflict("Publishing would replace a live showing with tickets, restaurant activity, or active seat holds. Resolve those records first.", { tickets, restaurantTabs, restaurantOrders, activeSeatHolds });
+        await tx.showtime.deleteMany({ where: { id: { in: removeIds } } });
+      }
+
+      for (const showtime of create) {
+        const created = await tx.showtime.create({ data: {
+          movieId: showtime.movieId, auditoriumId: showtime.auditoriumId, priceTierId: showtime.priceTierId,
+          startsAt: showtime.startsAt, featureStartsAt: showtime.featureStartsAt, endsAt: showtime.endsAt, roomReadyAt: showtime.roomReadyAt,
+          onSale: showtime.onSale, filmSeriesId: showtime.filmSeriesId ?? null, presentation: showtime.presentation, format: showtime.format ?? null,
+        } });
+        const seats = await tx.seat.findMany({ where: { seatMap: { auditoriumId: showtime.auditoriumId }, active: true }, select: { id: true } });
+        if (!seats.length) throw AppError.conflict("An auditorium in this plan no longer has an active seat layout. Check the plan again.");
+        await tx.showtimeSeat.createMany({ data: seats.map((seat) => ({ showtimeId: created.id, seatId: seat.id })) });
+      }
+      await tx.schedulePlan.update({ where: { id: plan.id }, data: { snapshotJson: plan.snapshotJson as Prisma.InputJsonValue } });
+      await tx.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.published", entityType: "SchedulePlan", entityId: plan.id, locationId, afterState: { name: plan.name, weekStartsAt: plan.weekStartsAt.toISOString(), preservedCount: live.length - remove.length, createdCount: create.length, removedCount: remove.length } } });
+      return { published: true, preservedCount: live.length - remove.length, createdCount: create.length, removedCount: remove.length };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async deleteSchedulePlan(actor: RequestActor, id: string) {

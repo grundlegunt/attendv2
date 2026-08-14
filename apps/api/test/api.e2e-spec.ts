@@ -104,6 +104,41 @@ afterAll(async () => {
   await testDb?.stop();
 });
 
+describe("Saved schedule plan publishing", () => {
+  it("requires a fresh validation and atomically publishes a future plan", async () => {
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const bootstrap = await request(app.getHttpServer()).get("/api/v1/cinema/admin/bootstrap").set(auth).expect(200);
+    const movie = bootstrap.body.location.organization.movies[0];
+    const auditorium = bootstrap.body.location.auditoriums[0];
+    const priceTier = bootstrap.body.location.organization.priceTiers[0];
+    const weekStartsAt = "2035-01-01T00:00:00.000Z";
+    const startsAt = "2035-01-02T18:00:00.000Z";
+    const createdPlan = await request(app.getHttpServer()).post("/api/v1/cinema/schedule-plans").set(auth).send({ name: `Publish test ${Date.now()}`, weekStartsAt }).expect(201);
+    const planId = createdPlan.body.id as string;
+    await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/showtimes`).set(auth).send({
+      movieId: movie.id, auditoriumId: auditorium.id, priceTierId: priceTier.id, startsAt,
+      onSale: false, presentation: "STANDARD", filmSeriesId: null, format: null,
+    }).expect(201);
+
+    const firstCheck = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
+    expect(firstCheck.body).toEqual(expect.objectContaining({ valid: true, showtimeCount: 1, expectedUpdatedAt: expect.any(String) }));
+    await request(app.getHttpServer()).patch(`/api/v1/cinema/schedule-plans/${planId}`).set(auth).send({ name: `Renamed publish test ${Date.now()}` }).expect(200);
+    await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/publish`).set(auth).send({ expectedUpdatedAt: firstCheck.body.expectedUpdatedAt }).expect(409);
+
+    const freshCheck = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
+    const published = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/publish`).set(auth).send({ expectedUpdatedAt: freshCheck.body.expectedUpdatedAt }).expect(201);
+    expect(published.body).toEqual({ published: true, preservedCount: 0, createdCount: 1, removedCount: 0 });
+    const refreshed = await request(app.getHttpServer()).get("/api/v1/cinema/admin/bootstrap").set(auth).expect(200);
+    const live = refreshed.body.showtimes.find((showtime: { startsAt: string }) => showtime.startsAt === startsAt);
+    expect(live).toEqual(expect.objectContaining({ onSale: false, movie: expect.objectContaining({ id: movie.id }), auditorium: expect.objectContaining({ id: auditorium.id }) }));
+
+    await request(app.getHttpServer()).delete(`/api/v1/cinema/showtimes/${live.id}`).set(auth).expect(200);
+    await request(app.getHttpServer()).delete(`/api/v1/cinema/schedule-plans/${planId}`).set(auth).expect(200);
+  });
+});
+
 describe("GET /api/v1/health", () => {
   it("reports ok status and a connected database", async () => {
     const res = await request(app.getHttpServer()).get("/api/v1/health");

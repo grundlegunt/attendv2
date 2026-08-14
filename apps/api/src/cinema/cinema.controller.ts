@@ -28,6 +28,7 @@ const createSchedulePlanSchema = z.object({ name: z.string().trim().min(1).max(8
 const duplicateSchedulePlanSchema = z.object({ name: z.string().trim().min(1).max(80) }).strict();
 const renameSchedulePlanSchema = duplicateSchedulePlanSchema;
 const updateSchedulePlanShowtimeSchema = z.object({ startsAt: z.string().datetime() }).strict();
+const publishSchedulePlanSchema = z.object({ expectedUpdatedAt: z.string().datetime() }).strict();
 
 @Controller("cinema")
 export class CinemaController {
@@ -125,6 +126,13 @@ export class CinemaController {
   @RequirePermissions(Permission.ShowtimeManage)
   validateSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
     return this.cinemaService.validateSchedulePlan(actor, id);
+  }
+
+  @Post("schedule-plans/:id/publish")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  publishSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Body(new ZodValidationPipe(publishSchedulePlanSchema)) body: unknown) {
+    return this.cinemaService.publishSchedulePlan(actor, id, publishSchedulePlanSchema.parse(body).expectedUpdatedAt);
   }
 
   @Post("schedule-plans/:id/duplicate")
