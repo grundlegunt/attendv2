@@ -72,7 +72,7 @@ export default function FilmSeriesDetailPage() {
               <section className="series-film" key={movie.id}>
                 <Link className="series-poster" href={`/movie/${movie.id}`}>
                   {movie.detailPosterUrl || movie.posterUrl
-                    ? <img src={movie.detailPosterUrl ?? movie.posterUrl!} alt={`${movie.title} poster`} />
+                    ? <img src={movie.detailPosterUrl ?? movie.posterUrl!} alt={`${movie.title} poster`} style={{ objectPosition: (movie.detailPosterUrl ? movie.detailPosterPosition : movie.posterPosition).toLowerCase() }} />
                     : <span>{movie.title}</span>}
                 </Link>
                 <div>

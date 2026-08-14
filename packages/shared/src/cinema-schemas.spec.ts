@@ -65,6 +65,8 @@ describe("cinema programming requests", () => {
       rating: "R",
       posterUrl: "https://images.example.com/matrix.jpg",
       detailPosterUrl: "/posters/matrix-one-sheet.jpg",
+      posterPosition: "BOTTOM",
+      detailPosterPosition: "TOP",
       diningSpecialArtworkUrl: "/specials/matrix-paired-menu.jpg",
       diningSpecialTitle: "There Is No Spoonful",
       director: "Lana Wachowski, Lilly Wachowski",
@@ -75,16 +77,22 @@ describe("cinema programming requests", () => {
     });
     expect(parsed.posterUrl).toContain("images.example.com");
     expect(parsed.detailPosterUrl).toBe("/posters/matrix-one-sheet.jpg");
+    expect(parsed.posterPosition).toBe("BOTTOM");
+    expect(parsed.detailPosterPosition).toBe("TOP");
     expect(parsed.diningSpecialArtworkUrl).toBe("/specials/matrix-paired-menu.jpg");
     expect(parsed.diningSpecialTitle).toBe("There Is No Spoonful");
     expect(parsed.releaseYear).toBe(1999);
     expect(parsed.pairingMenuItemIds).toHaveLength(1);
 
-    expect(createMovieRequestSchema.parse({
+    const defaults = createMovieRequestSchema.parse({
       title: "The Matrix",
       runtimeMinutes: 136,
       posterUrl: "/posters/matrix.jpg",
-    }).posterUrl).toBe("/posters/matrix.jpg");
+    });
+    expect(defaults.posterUrl).toBe("/posters/matrix.jpg");
+    expect(defaults.posterPosition).toBe("CENTER");
+    expect(defaults.detailPosterPosition).toBe("CENTER");
+    expect(() => createMovieRequestSchema.parse({ title: "The Matrix", runtimeMinutes: 136, posterPosition: "LEFT" })).toThrow();
   });
 
   it("stores a managed film-series assignment and presentation on a new showtime", () => {

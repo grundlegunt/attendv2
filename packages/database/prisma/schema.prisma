@@ -377,6 +377,12 @@ model Seat {
   @@map("seats")
 }
 
+enum MovieArtworkPosition {
+  TOP
+  CENTER
+  BOTTOM
+}
+
 model Movie {
   id             String       @id @default(uuid())
   organizationId String
@@ -388,6 +394,8 @@ model Movie {
   rating                  String?
   posterUrl               String?
   detailPosterUrl         String?
+  posterPosition          MovieArtworkPosition @default(CENTER)
+  detailPosterPosition    MovieArtworkPosition @default(CENTER)
   diningSpecialArtworkUrl String?
   diningSpecialTitle      String?
   director                String?

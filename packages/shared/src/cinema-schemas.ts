@@ -188,6 +188,8 @@ export const createMovieRequestSchema = z.object({
     z.string().trim().url("Detail poster URL must be a valid URL."),
     z.string().trim().regex(/^\/(?!\/)/, "Detail poster path must begin with a single slash."),
   ]).nullable().optional(),
+  posterPosition: z.enum(["TOP", "CENTER", "BOTTOM"]).default("CENTER"),
+  detailPosterPosition: z.enum(["TOP", "CENTER", "BOTTOM"]).default("CENTER"),
   diningSpecialArtworkUrl: z.union([
     z.string().trim().url("Dining special artwork URL must be a valid URL."),
     z.string().trim().regex(/^\/(?!\/)/, "Dining special artwork path must begin with a single slash."),
@@ -411,6 +413,8 @@ export interface NowPlayingMovie {
   rating: string | null;
   posterUrl: string | null;
   detailPosterUrl: string | null;
+  posterPosition: "TOP" | "CENTER" | "BOTTOM";
+  detailPosterPosition: "TOP" | "CENTER" | "BOTTOM";
   director: string | null;
   starring: string | null;
   trailerUrl: string | null;

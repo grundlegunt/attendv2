@@ -40,7 +40,7 @@ export function MovieTile({
     <article className="program-tile">
       <div className="program-tile__image">
         <Link className="program-tile__artwork" href={`/movie/${movie.id}`} aria-label={`View ${movie.title}`}>
-          {movie.posterUrl && <img src={movie.posterUrl} alt="" />}
+          {movie.posterUrl && <img src={movie.posterUrl} alt="" style={{ objectPosition: movie.posterPosition.toLowerCase() }} />}
         </Link>
         <div className="program-tile__badges">
           {series.map((entry) => (
