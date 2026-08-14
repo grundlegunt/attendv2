@@ -128,6 +128,13 @@ interface OrganizationDetail {
       autoSettleGraceMinutes: number;
       timeClockEnabled: boolean;
     };
+    auditoriums: Array<{
+      id: string;
+      name: string;
+      capacity: number;
+      active: boolean;
+      seatMap: { id: string; name: string; version: number; activeSeats: number; accessibleSeats: number; companionSeats: number } | null;
+    }>;
     configuration: {
       auditoriums: number;
       employees: number;
@@ -1303,6 +1310,32 @@ export default function AttendMaster() {
                       </dl>
                     </section>
                   </div>
+                  <section className="auditorium-overview">
+                    <div className="auditorium-overview-heading">
+                      <div><p className="eyebrow">VENUE LAYOUTS</p><h3>Auditoriums &amp; seat maps</h3></div>
+                      <p className="muted">Authoritative cinema layouts, scoped to {location.name}.</p>
+                    </div>
+                    <div className="auditorium-overview-grid">
+                      {location.auditoriums.map((auditorium) => (
+                        <article key={auditorium.id}>
+                          <div className="auditorium-card-heading">
+                            <strong>{auditorium.name}</strong>
+                            <span className={`status ${auditorium.active ? "good" : ""}`}>{auditorium.active ? "Active" : "Inactive"}</span>
+                          </div>
+                          <dl>
+                            <div><dt>Configured capacity</dt><dd>{auditorium.capacity}</dd></div>
+                            <div><dt>Seat map</dt><dd>{auditorium.seatMap?.name ?? "Not configured"}</dd></div>
+                            {auditorium.seatMap && <>
+                              <div><dt>Active seats</dt><dd>{auditorium.seatMap.activeSeats}</dd></div>
+                              <div><dt>Accessible / companion</dt><dd>{auditorium.seatMap.accessibleSeats} / {auditorium.seatMap.companionSeats}</dd></div>
+                              <div><dt>Layout version</dt><dd>v{auditorium.seatMap.version}</dd></div>
+                            </>}
+                          </dl>
+                        </article>
+                      ))}
+                      {location.auditoriums.length === 0 && <p className="muted">No auditoriums have been configured for this cinema.</p>}
+                    </div>
+                  </section>
                   {cinemaManagerDraft?.locationId === location.id && (
                     <form
                       className="editor location-editor"

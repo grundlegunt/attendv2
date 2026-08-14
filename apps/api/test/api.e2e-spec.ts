@@ -520,6 +520,10 @@ describe("Attend platform authentication boundary", () => {
         branding: expect.any(Object),
         adminBranding: expect.any(Object),
         operations: expect.objectContaining({ cleaningBufferMinutes: expect.any(Number) }),
+        auditoriums: expect.arrayContaining([expect.objectContaining({
+          id: expect.any(String), name: expect.any(String), capacity: expect.any(Number), active: expect.any(Boolean),
+          seatMap: expect.objectContaining({ id: expect.any(String), name: expect.any(String), version: expect.any(Number), activeSeats: expect.any(Number), accessibleSeats: expect.any(Number), companionSeats: expect.any(Number) }),
+        })]),
         configuration: expect.objectContaining({ activeMovies: expect.any(Number), activeFilmSeries: expect.any(Number) }),
       })]),
     }));

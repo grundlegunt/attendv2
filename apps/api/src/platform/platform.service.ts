@@ -299,8 +299,12 @@ export class PlatformService {
         onboardingStatus: organization.connectOnboardingStatus,
       },
       locations: await Promise.all(organization.locations.map(async (location) => {
-        const [auditoriums, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries] = await Promise.all([
-          prisma.auditorium.count({ where: { locationId: location.id, active: true } }),
+        const [locationAuditoriums, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries] = await Promise.all([
+          prisma.auditorium.findMany({
+            where: { locationId: location.id },
+            orderBy: [{ active: "desc" }, { name: "asc" }],
+            select: { id: true, name: true, capacity: true, active: true, seatMap: { select: { id: true, name: true, version: true, seats: { select: { active: true, type: true } } } } },
+          }),
           prisma.employee.count({ where: { locationId: location.id, active: true, deletedAt: null } }),
           prisma.menuItem.count({ where: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } }),
           prisma.showtime.count({ where: { auditorium: { locationId: location.id }, onSale: true, startsAt: { gte: new Date() } } }),
@@ -349,7 +353,21 @@ export class PlatformService {
             autoSettleGraceMinutes: location.autoSettleGraceMinutes,
             timeClockEnabled: location.timeClockEnabled,
           },
-          configuration: { auditoriums, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries },
+          auditoriums: locationAuditoriums.map((auditorium) => ({
+            id: auditorium.id,
+            name: auditorium.name,
+            capacity: auditorium.capacity,
+            active: auditorium.active,
+            seatMap: auditorium.seatMap ? {
+              id: auditorium.seatMap.id,
+              name: auditorium.seatMap.name,
+              version: auditorium.seatMap.version,
+              activeSeats: auditorium.seatMap.seats.filter((seat) => seat.active).length,
+              accessibleSeats: auditorium.seatMap.seats.filter((seat) => seat.active && seat.type === "ADA").length,
+              companionSeats: auditorium.seatMap.seats.filter((seat) => seat.active && seat.type === "COMPANION").length,
+            } : null,
+          })),
+          configuration: { auditoriums: locationAuditoriums.filter((auditorium) => auditorium.active).length, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries },
         };
       })),
     };
