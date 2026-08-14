@@ -3685,6 +3685,60 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     expect(restored.body.seats).toHaveLength(2);
   });
 
+  it("never splits a seat from a tab after settlement closes it", async () => {
+    const { prisma } = await import("@cinema/database");
+    const orderId = await purchaseSeats("m5-split-settlement-race", 2, true);
+    const opened = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/seat-linked")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ ticketOrderId: orderId, mode: "SHARED" })
+      .expect(201);
+    const tabId = opened.body[0].id as string;
+    const showtimeSeatId = opened.body[0].seats[0].showtimeSeatId as string;
+    await prisma.restaurantTab.update({
+      where: { id: tabId },
+      data: { checkDroppedAt: new Date() },
+    });
+
+    const [finalized, split] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${tabId}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [
+            { type: "CARD_PRESENT", amountCents: 1, readerId: "tmr_split_race" },
+          ],
+        }),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/${tabId}/split`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ showtimeSeatId }),
+    ]);
+
+    expect([
+      [201, 201],
+      [201, 404],
+    ]).toContainEqual([finalized.status, split.status]);
+    const finalSource = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: tabId },
+      include: { seats: true },
+    });
+    expect(finalSource.status).toBe("CLOSED");
+    expect(finalSource.seats).toHaveLength(split.status === 201 ? 1 : 2);
+    if (split.status === 201) {
+      const finalTarget = await prisma.restaurantTab.findUniqueOrThrow({
+        where: { id: split.body.targetTabId },
+        include: { seats: true },
+      });
+      expect(finalTarget).toMatchObject({ status: "OPEN", autoSettleAuthorized: false });
+      expect(finalTarget.seats).toEqual([
+        expect.objectContaining({ showtimeSeatId }),
+      ]);
+    }
+  });
+
   it("never combines a tab into another tab after settlement closes it", async () => {
     const { prisma } = await import("@cinema/database");
     const target = await request(app.getHttpServer())
