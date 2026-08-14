@@ -53,7 +53,17 @@ interface SchedulePlan {
   name: string;
   weekStartsAt: string;
   createdAt: string;
-  snapshotJson: unknown[];
+  snapshotJson: SchedulePlanShowtime[];
+}
+interface SchedulePlanShowtime {
+  movieId: string;
+  auditoriumId: string;
+  priceTierId: string | null;
+  startsAt: string;
+  onSale: boolean;
+  filmSeriesId: string | null;
+  presentation: Showtime["presentation"];
+  format: string | null;
 }
 
 function dateTimeInputValue(date: Date) {
@@ -111,6 +121,7 @@ export default function AdminPage() {
   const [planName, setPlanName] = useState("");
   const [planWeek, setPlanWeek] = useState(currentWeekStart);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -161,6 +172,16 @@ export default function AdminPage() {
 
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
   const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
+  const selectedPlan = schedulePlans.find((plan) => plan.id === selectedPlanId) ?? null;
+  const selectedPlanRows = useMemo(() => {
+    if (!selectedPlan || !data) return [];
+    return selectedPlan.snapshotJson.map((showtime) => ({
+      ...showtime,
+      movie: data.location.organization.movies.find((movie) => movie.id === showtime.movieId),
+      auditorium: data.location.auditoriums.find((auditorium) => auditorium.id === showtime.auditoriumId),
+      matchesLive: data.showtimes.some((live) => live.movie.id === showtime.movieId && live.auditorium.id === showtime.auditoriumId && live.startsAt === showtime.startsAt && live.onSale === showtime.onSale),
+    }));
+  }, [data, selectedPlan]);
 
   async function createMovie(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -524,8 +545,18 @@ export default function AdminPage() {
       {schedulePlans.length > 0 ? <div className="schedule-plan-list">{schedulePlans.map((plan) => <article key={plan.id}>
         <div><strong>{plan.name}</strong><span>Week of {new Date(plan.weekStartsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</span></div>
         <span>{Array.isArray(plan.snapshotJson) ? plan.snapshotJson.length : 0} showtimes saved</span>
+        <button type="button" className="secondary" onClick={() => setSelectedPlanId((current) => current === plan.id ? null : plan.id)}>{selectedPlanId === plan.id ? "Close preview" : "Preview"}</button>
         <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
       </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
+      {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
+        <div className="schedule-plan-preview-heading"><div><p className="kicker">READ-ONLY PREVIEW</p><h3>{selectedPlan.name}</h3></div><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span></div>
+        <p className="schedule-plan-preview-note">This preview cannot change the published schedule or customer ticket availability.</p>
+        {selectedPlanRows.length > 0 ? <div className="schedule-plan-preview-list">{selectedPlanRows.map((showtime, index) => <article key={`${showtime.startsAt}-${showtime.auditoriumId}-${index}`}>
+          <time dateTime={showtime.startsAt}>{new Date(showtime.startsAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>
+          <div><strong>{showtime.movie?.title ?? "Unavailable film"}</strong><span>{showtime.auditorium?.name ?? "Unavailable auditorium"} · {showtime.presentation.replaceAll("_", " ").toLocaleLowerCase()}</span></div>
+          <span className={showtime.matchesLive ? "plan-match" : "plan-difference"}>{showtime.matchesLive ? "Matches live" : "Different from live"}</span>
+        </article>)}</div> : <p className="schedule-plan-empty">This saved plan contains no showtimes.</p>}
+      </section>}
     </section>
 
     {data && <div className={`schedule-with-inspector ${showtimeEditorOpen ? "inspector-open" : ""}`}><SchedulingCalendar
