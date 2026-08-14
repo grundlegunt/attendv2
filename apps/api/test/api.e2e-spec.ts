@@ -3952,6 +3952,61 @@ describe("Milestone 6 server POS and menus", () => {
     }
   });
 
+  it("never sends a draft order after its tab settles concurrently", async () => {
+    const { prisma } = await import("@cinema/database");
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Settle send race" })
+      .expect(201);
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ menuItemId: cocktail.id, quantity: 1, modifierIds: [] })
+      .expect(201);
+    await prisma.restaurantTab.update({
+      where: { id: tab.body.id },
+      data: { status: "READY_TO_CLOSE", checkDroppedAt: new Date() },
+    });
+
+    const [finalized, sent] = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${tab.body.id}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [
+            { type: "CARD_PRESENT", amountCents: 1, readerId: "tmr_send_race" },
+          ],
+        }),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({}),
+    ]);
+
+    expect([
+      [201, 201],
+      [400, 201],
+      [409, 201],
+    ]).toContainEqual([finalized.status, sent.status]);
+    const [finalTab, finalOrder] = await Promise.all([
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.body.id } }),
+      prisma.restaurantOrder.findUniqueOrThrow({ where: { id: order.body.id } }),
+    ]);
+    expect(finalOrder.status).toBe("SENT");
+    expect(finalTab.status).toBe(finalized.status === 201 ? "CLOSED" : "READY_TO_CLOSE");
+  });
+
   it("never creates a draft order after its tab is settled concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const tab = await request(app.getHttpServer())
