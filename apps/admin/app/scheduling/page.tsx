@@ -187,6 +187,22 @@ export default function AdminPage() {
     }
   }
 
+  async function renameSchedulePlan(plan: SchedulePlan) {
+    const name = window.prompt("Rename this schedule plan:", plan.name)?.trim();
+    if (!name || name === plan.name) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<SchedulePlan>(`/cinema/schedule-plans/${plan.id}`, {
+        accessToken: token ?? undefined,
+        method: "PATCH",
+        body: JSON.stringify({ name }),
+      });
+      setSchedulePlans((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
   const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
   const selectedPlan = schedulePlans.find((plan) => plan.id === selectedPlanId) ?? null;
@@ -564,6 +580,7 @@ export default function AdminPage() {
         <span>{Array.isArray(plan.snapshotJson) ? plan.snapshotJson.length : 0} showtimes saved</span>
         <button type="button" className="secondary" onClick={() => setSelectedPlanId((current) => current === plan.id ? null : plan.id)}>{selectedPlanId === plan.id ? "Close preview" : "Preview"}</button>
         <button type="button" className="secondary" onClick={() => void duplicateSchedulePlan(plan)}>Duplicate</button>
+        <button type="button" className="secondary" onClick={() => void renameSchedulePlan(plan)}>Rename</button>
         <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
       </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
       {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
