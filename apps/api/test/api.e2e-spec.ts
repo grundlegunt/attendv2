@@ -4671,6 +4671,74 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
 });
 
 describe("Milestone 8 restaurant settlement and tipping", () => {
+  it("allows only one distinct settlement request to collect a tab", async () => {
+    const { prisma } = await import("@cinema/database");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: { locationId: true },
+    });
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const owner = await prisma.employee.findUniqueOrThrow({
+      where: { email: `owner@${SEED_SUFFIX}` },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        tabType: "WALK_IN",
+        label: "Distinct settlement race",
+        status: "READY_TO_CLOSE",
+        checkDroppedAt: new Date(),
+      },
+    });
+    const order = await prisma.restaurantOrder.create({
+      data: {
+        restaurantTabId: tab.id,
+        serverEmployeeId: owner.id,
+        status: "SENT",
+        placedAt: new Date(),
+      },
+    });
+    await prisma.restaurantOrderItem.create({
+      data: {
+        restaurantOrderId: order.id,
+        menuItemId: cocktail.id,
+        quantity: 1,
+        unitPriceCentsSnapshot: cocktail.priceCents,
+        modifierTotalCents: 0,
+        selectedModifiers: [],
+        status: "SENT",
+        kitchenStationId: cocktail.kitchenStationId,
+      },
+    });
+    const totalCents = cocktail.priceCents;
+    const finalize = (readerId: string) =>
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-settlement/tabs/${tab.id}/finalize`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({
+          requestId: crypto.randomUUID(),
+          tipCents: 0,
+          tenders: [{ type: "CARD_PRESENT", amountCents: totalCents, readerId }],
+        });
+
+    const [first, second] = await Promise.all([
+      finalize("tmr_delayed_settlement_race_first"),
+      finalize("tmr_delayed_settlement_race_second"),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([201, 409]);
+    expect(
+      await prisma.payment.count({
+        where: { restaurantTabId: tab.id, status: "SUCCEEDED" },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).toMatchObject({ status: "CLOSED", totalCents });
+  });
+
   it("drops the check, permits one final order, and closes with split tender", async () => {
     const { prisma } = await import("@cinema/database");
     const settlementTab = await prisma.restaurantTab.findUniqueOrThrow({
