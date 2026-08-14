@@ -116,6 +116,9 @@ export class TestPaymentProvider implements PaymentProvider {
     args: ChargeSavedPaymentMethodArgs,
   ): Promise<ProviderPaymentIntentResult> {
     this.chargeSavedPaymentMethodCalls.push(args);
+    if (args.providerPaymentMethodId.includes("delayed")) {
+      await new Promise((resolve) => setTimeout(resolve, 75));
+    }
     const status: ProviderPaymentStatus = args.providerPaymentMethodId.includes("declined")
       ? "FAILED"
       : "SUCCEEDED";
