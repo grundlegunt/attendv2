@@ -5237,6 +5237,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       },
     });
     const settlement = app.get(RestaurantSettlementService);
+    const tabView = await settlement.staffTab(tab.id, source.locationId);
 
     const staffPayment = settlement.finalizeStaff({
       tabId: tab.id,
@@ -5247,7 +5248,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       tenders: [
         {
           type: "CARD_PRESENT",
-          amountCents: cocktail.priceCents,
+          amountCents: tabView.totals.totalCents,
           readerId: "tmr_delayed_customer_during_staff_race",
         },
       ],
