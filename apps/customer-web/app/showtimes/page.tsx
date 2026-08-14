@@ -31,8 +31,20 @@ export default function ShowtimesPage() {
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [openCaptionsOnly, setOpenCaptionsOnly] = useState(false);
 
-  const programMovies = useMemo(() => program?.movies ?? [], [program]);
+  useEffect(() => {
+    setOpenCaptionsOnly(new URLSearchParams(window.location.search).get("presentation") === "OPEN_CAPTIONS");
+  }, []);
+
+  const programMovies = useMemo(() => (program?.movies ?? [])
+    .map((movie) => ({
+      ...movie,
+      showtimes: openCaptionsOnly
+        ? movie.showtimes.filter((showtime) => showtime.presentation === "OPEN_CAPTIONS")
+        : movie.showtimes,
+    }))
+    .filter((movie) => movie.showtimes.length > 0), [openCaptionsOnly, program]);
 
   const availableDates = useMemo(
     () =>
@@ -115,8 +127,8 @@ export default function ShowtimesPage() {
   return (
     <main className="cinema-shell route-page">
       <section className="route-heading">
-        <span className="eyebrow">{copy.eyebrow}</span>
-        <h1>{copy.title}</h1>
+        <span className="eyebrow">{openCaptionsOnly ? "ACCESSIBLE SCREENINGS" : copy.eyebrow}</span>
+        <h1>{openCaptionsOnly ? "Open Caption Showtimes" : copy.title}</h1>
         {program && <p>{copy.intro}</p>}
       </section>
 

@@ -33,6 +33,10 @@ export function MovieTile({
     showtimes.flatMap((showtime) => showtime.filmSeries ? [[showtime.filmSeries.id, showtime.filmSeries] as const] : []),
   ).values());
   const formats = Array.from(new Set(showtimes.map((showtime) => showtime.format).filter(Boolean)));
+  const presentations = Array.from(new Set(showtimes
+    .map((showtime) => showtime.presentation)
+    .filter((presentation) => presentation !== "STANDARD")))
+    .map((presentation) => presentation === "OPEN_CAPTIONS" ? "Open Captions" : presentation.replaceAll("_", " "));
   const firstShowtime = showtimes.reduce<PublicShowtime | undefined>((earliest, showtime) =>
     !earliest || new Date(showtime.startsAt) < new Date(earliest.startsAt) ? showtime : earliest, undefined);
 
@@ -49,6 +53,7 @@ export function MovieTile({
             </Link>
           ))}
           {formats.map((format) => <span key={format}>{format}</span>)}
+          {presentations.map((presentation) => <span key={presentation}>{presentation}</span>)}
         </div>
         <h2 className="program-tile__title"><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
       </div>
