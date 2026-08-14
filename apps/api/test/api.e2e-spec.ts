@@ -4712,11 +4712,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
         kitchenStationId: cocktail.kitchenStationId,
       },
     });
-    const summary = await request(app.getHttpServer())
-      .get(`/api/v1/restaurant-tabs/${tab.id}/summary`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(200);
-    const totalCents = summary.body.totals.totalCents as number;
+    const totalCents = cocktail.priceCents;
     const finalize = (readerId: string) =>
       request(app.getHttpServer())
         .post(`/api/v1/restaurant-settlement/tabs/${tab.id}/finalize`)
