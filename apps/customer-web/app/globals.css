@@ -967,6 +967,29 @@
   margin: 3px 0;
   font-size: 1rem;
 }
+.program-tile__showtimes .program-tile__showtime-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+}
+.program-tile__presentation {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 25px;
+  padding: 2px 5px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: #050505;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 950;
+  letter-spacing: 0.04em;
+  line-height: 1.25;
+  text-decoration: none;
+  text-transform: uppercase;
+}
 .program-tile__showtimes .past {
   opacity: 0.38;
   cursor: not-allowed;
