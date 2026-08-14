@@ -232,6 +232,25 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async removeSchedulePlanShowtime(actor: RequestActor, id: string, index: number) {
+    const locationId = this.requireLocation(actor);
+    const plan = await prisma.schedulePlan.findFirst({ where: { id, locationId } });
+    if (!plan) throw AppError.notFound("Schedule plan not found.");
+    const snapshot = Array.isArray(plan.snapshotJson) ? [...plan.snapshotJson] : [];
+    if (!Number.isInteger(index) || index < 0 || index >= snapshot.length) throw AppError.validationFailed("Saved showtime not found in this plan.");
+    const [removed] = snapshot.splice(index, 1);
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.schedulePlan.update({
+        where: { id: plan.id },
+        data: { snapshotJson: snapshot as Prisma.InputJsonValue },
+        select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true },
+      });
+      await tx.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.showtime_removed", entityType: "SchedulePlan", entityId: plan.id, locationId, beforeState: { showtime: removed as Prisma.InputJsonValue, showtimeIndex: index }, afterState: { showtimeCount: snapshot.length } } });
+      return saved;
+    });
+    return updated;
+  }
+
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
     const locationId = this.requireLocation(actor);
     const layoutErrors = input.layout

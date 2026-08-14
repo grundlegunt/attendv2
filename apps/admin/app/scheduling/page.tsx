@@ -203,6 +203,20 @@ export default function AdminPage() {
     }
   }
 
+  async function removeSchedulePlanShowtime(plan: SchedulePlan, index: number, title: string) {
+    if (!window.confirm(`Remove ${title} from “${plan.name}”? The live showing will not be changed.`)) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<SchedulePlan>(`/cinema/schedule-plans/${plan.id}/showtimes/${index}`, {
+        accessToken: token ?? undefined,
+        method: "DELETE",
+      });
+      setSchedulePlans((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
   const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
   const selectedPlan = schedulePlans.find((plan) => plan.id === selectedPlanId) ?? null;
@@ -584,12 +598,13 @@ export default function AdminPage() {
         <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
       </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
       {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
-        <div className="schedule-plan-preview-heading"><div><p className="kicker">READ-ONLY PREVIEW</p><h3>{selectedPlan.name}</h3></div><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span></div>
-        <p className="schedule-plan-preview-note">This preview cannot change the published schedule or customer ticket availability.</p>
+        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span></div>
+        <p className="schedule-plan-preview-note">Editing this saved copy cannot change the published schedule or customer ticket availability.</p>
         {selectedPlanRows.length > 0 ? <div className="schedule-plan-preview-list">{selectedPlanRows.map((showtime, index) => <article key={`${showtime.startsAt}-${showtime.auditoriumId}-${index}`}>
           <time dateTime={showtime.startsAt}>{new Date(showtime.startsAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>
           <div><strong>{showtime.movie?.title ?? "Unavailable film"}</strong><span>{showtime.auditorium?.name ?? "Unavailable auditorium"} · {showtime.presentation.replaceAll("_", " ").toLocaleLowerCase()}</span></div>
           <span className={showtime.matchesLive ? "plan-match" : "plan-difference"}>{showtime.matchesLive ? "Matches live" : "Different from live"}</span>
+          <button type="button" className="secondary destructive-outline" onClick={() => void removeSchedulePlanShowtime(selectedPlan, index, showtime.movie?.title ?? "this showing")}>Remove</button>
         </article>)}</div> : <p className="schedule-plan-empty">This saved plan contains no showtimes.</p>}
       </section>}
     </section>
