@@ -8,6 +8,7 @@ import { useCinemaContent, useCustomerBranding } from "./customer-branding";
 const links = [
   { href: "/showtimes", label: "Showtimes" },
   { href: "/coming-soon", label: "Coming Soon" },
+  { href: "/coming-soon?view=JUST_ANNOUNCED", label: "Just Announced" },
   { href: "/film-series", label: "Film Series" },
   { href: "/showtimes?presentation=OPEN_CAPTIONS", label: "Open Captions" },
   { href: "/dining-bar", label: "Dining & Bar" },
