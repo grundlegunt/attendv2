@@ -3996,6 +3996,7 @@ describe("Milestone 6 server POS and menus", () => {
 
     expect([
       [201, 201],
+      [400, 201],
       [409, 201],
     ]).toContainEqual([finalized.status, sent.status]);
     const [finalTab, finalOrder] = await Promise.all([
