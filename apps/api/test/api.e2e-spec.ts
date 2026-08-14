@@ -5341,6 +5341,13 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       data: { endsAt: new Date(Date.now() - 10 * 60_000) },
     });
     const settlement = app.get(RestaurantSettlementService);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const cardPresentCallsBefore =
+      provider.collectCardPresentPaymentCalls.length;
     const tabView = await settlement.staffTab(tab.id, source.locationId);
 
     const staffPayment = settlement.finalizeStaff({
@@ -5358,13 +5365,20 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       ],
     });
     for (let attempt = 0; attempt < 50; attempt += 1) {
-      const current = await prisma.restaurantTab.findUniqueOrThrow({
-        where: { id: tab.id },
-        select: { status: true },
-      });
-      if (current.status === "SETTLEMENT_PENDING") break;
+      if (
+        provider.collectCardPresentPaymentCalls.length ===
+        cardPresentCallsBefore + 1
+      ) {
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
+    expect(provider.collectCardPresentPaymentCalls).toHaveLength(
+      cardPresentCallsBefore + 1,
+    );
+    await expect(
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).resolves.toMatchObject({ status: "SETTLEMENT_PENDING" });
 
     const fallbackResults = await settlement.runFallback();
     expect(fallbackResults.map((result) => result.id)).not.toContain(tab.id);
