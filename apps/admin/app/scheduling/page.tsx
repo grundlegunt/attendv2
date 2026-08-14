@@ -5,6 +5,7 @@ import type { SeatMapLayout } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
+import { captureShowtimeMoves, type ShowtimeMoveSnapshot } from "../schedule-undo";
 import { useAdminSession, useAdminUi } from "../admin-session";
 
 interface Auditorium {
@@ -89,6 +90,8 @@ export default function AdminPage() {
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const [seatInventory, setSeatInventory] = useState<ShowtimeSeatInventory | null>(null);
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(null);
+  const [undoMoves, setUndoMoves] = useState<ShowtimeMoveSnapshot[] | null>(null);
+  const [undoingMove, setUndoingMove] = useState(false);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -360,6 +363,7 @@ export default function AdminPage() {
           onSale: showtime.onSale,
         }),
       });
+      setUndoMoves(captureShowtimeMoves([showtime]));
       await refresh();
     } catch (reason) {
       showError(reason);
@@ -374,9 +378,38 @@ export default function AdminPage() {
         method: "PATCH",
         body: JSON.stringify({ moves: moves.map(({ showtime, auditoriumId, startsAt }) => ({ showtimeId: showtime.id, auditoriumId, startsAt: startsAt.toISOString() })) }),
       });
+      setUndoMoves(captureShowtimeMoves(moves.map(({ showtime }) => showtime)));
       await refresh();
     } catch (reason) {
       showError(reason);
+    }
+  }
+
+  async function undoLastMove() {
+    if (!undoMoves?.length || undoingMove) return;
+    setError(null);
+    setUndoingMove(true);
+    try {
+      if (undoMoves.length === 1) {
+        const move = undoMoves[0]!;
+        await apiFetch(`/cinema/showtimes/${move.showtimeId}`, {
+          accessToken: token ?? undefined,
+          method: "PATCH",
+          body: JSON.stringify({ auditoriumId: move.auditoriumId, startsAt: move.startsAt }),
+        });
+      } else {
+        await apiFetch("/cinema/showtimes/group", {
+          accessToken: token ?? undefined,
+          method: "PATCH",
+          body: JSON.stringify({ moves: undoMoves }),
+        });
+      }
+      setUndoMoves(null);
+      await refresh();
+    } catch (reason) {
+      showError(reason);
+    } finally {
+      setUndoingMove(false);
     }
   }
 
@@ -427,6 +460,9 @@ export default function AdminPage() {
       onRemoveShowtime={quickRemoveShowtime}
       onMove={moveShowtime}
       onMoveMany={moveManyShowtimes}
+      canUndoMove={Boolean(undoMoves?.length)}
+      undoingMove={undoingMove}
+      onUndoMove={undoLastMove}
       onAddMovie={() => openMovieEditor()}
       onEditMovie={openMovieEditor}
       onArchiveMovie={archiveMovie}

@@ -61,6 +61,9 @@ interface SchedulingCalendarProps {
   onRemoveShowtime: (showtime: CalendarShowtime) => Promise<void>;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onMoveMany: (moves: Array<{ showtime: CalendarShowtime; auditoriumId: string; startsAt: Date }>) => Promise<void>;
+  canUndoMove: boolean;
+  undoingMove: boolean;
+  onUndoMove: () => Promise<void>;
   onAddMovie: () => void;
   onEditMovie: (movie: ScheduleMovie) => void;
   onArchiveMovie: (movie: ScheduleMovie) => Promise<void>;
@@ -120,6 +123,9 @@ export function SchedulingCalendar({
   onRemoveShowtime,
   onMove,
   onMoveMany,
+  canUndoMove,
+  undoingMove,
+  onUndoMove,
   onAddMovie,
   onEditMovie,
   onArchiveMovie,
@@ -451,6 +457,9 @@ export function SchedulingCalendar({
           setDuplicateError(null);
           setDuplicateOpen(true);
         }}>{labels.duplicateDay}</button>
+        <button type="button" className="undo-schedule-move-button" disabled={!canUndoMove || undoingMove} onClick={() => void onUndoMove()}>
+          {undoingMove ? "Undoing…" : "Undo last move"}
+        </button>
       </div>
       <div className="date-controls">
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
