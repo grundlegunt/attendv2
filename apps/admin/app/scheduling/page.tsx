@@ -217,6 +217,27 @@ export default function AdminPage() {
     }
   }
 
+  async function changeSchedulePlanShowtime(plan: SchedulePlan, index: number, showtime: SchedulePlanShowtime, title: string) {
+    const value = window.prompt(`Change the saved time for ${title}:`, dateTimeInputValue(new Date(showtime.startsAt)))?.trim();
+    if (!value) return;
+    const startsAt = new Date(value);
+    if (Number.isNaN(startsAt.getTime())) {
+      setError("Enter a valid date and time.");
+      return;
+    }
+    setError(null);
+    try {
+      const updated = await apiFetch<SchedulePlan>(`/cinema/schedule-plans/${plan.id}/showtimes/${index}`, {
+        accessToken: token ?? undefined,
+        method: "PATCH",
+        body: JSON.stringify({ startsAt: startsAt.toISOString() }),
+      });
+      setSchedulePlans((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
   const linkedShowtimeId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("showtimeId");
   const selectedPlan = schedulePlans.find((plan) => plan.id === selectedPlanId) ?? null;
@@ -604,6 +625,7 @@ export default function AdminPage() {
           <time dateTime={showtime.startsAt}>{new Date(showtime.startsAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>
           <div><strong>{showtime.movie?.title ?? "Unavailable film"}</strong><span>{showtime.auditorium?.name ?? "Unavailable auditorium"} · {showtime.presentation.replaceAll("_", " ").toLocaleLowerCase()}</span></div>
           <span className={showtime.matchesLive ? "plan-match" : "plan-difference"}>{showtime.matchesLive ? "Matches live" : "Different from live"}</span>
+          <button type="button" className="secondary" onClick={() => void changeSchedulePlanShowtime(selectedPlan, index, showtime, showtime.movie?.title ?? "this showing")}>Change time</button>
           <button type="button" className="secondary destructive-outline" onClick={() => void removeSchedulePlanShowtime(selectedPlan, index, showtime.movie?.title ?? "this showing")}>Remove</button>
         </article>)}</div> : <p className="schedule-plan-empty">This saved plan contains no showtimes.</p>}
       </section>}

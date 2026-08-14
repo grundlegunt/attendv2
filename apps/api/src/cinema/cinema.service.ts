@@ -251,6 +251,30 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return updated;
   }
 
+  async updateSchedulePlanShowtime(actor: RequestActor, id: string, index: number, startsAtValue: string) {
+    const locationId = this.requireLocation(actor);
+    const plan = await prisma.schedulePlan.findFirst({ where: { id, locationId } });
+    if (!plan) throw AppError.notFound("Schedule plan not found.");
+    const snapshot = Array.isArray(plan.snapshotJson) ? [...plan.snapshotJson] : [];
+    if (!Number.isInteger(index) || index < 0 || index >= snapshot.length) throw AppError.validationFailed("Saved showtime not found in this plan.");
+    const startsAt = new Date(startsAtValue);
+    const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
+    if (startsAt < plan.weekStartsAt || startsAt >= weekEndsAt) throw AppError.validationFailed("The showing must stay within this plan's week.");
+    const existing = snapshot[index];
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) throw AppError.validationFailed("The saved showtime is invalid.");
+    const changed = { ...existing, startsAt: startsAt.toISOString() };
+    snapshot[index] = changed;
+    return prisma.$transaction(async (tx) => {
+      const saved = await tx.schedulePlan.update({
+        where: { id: plan.id },
+        data: { snapshotJson: snapshot as Prisma.InputJsonValue },
+        select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true },
+      });
+      await tx.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.showtime_updated", entityType: "SchedulePlan", entityId: plan.id, locationId, beforeState: { showtime: existing as Prisma.InputJsonValue, showtimeIndex: index }, afterState: { showtime: changed as Prisma.InputJsonValue, showtimeIndex: index } } });
+      return saved;
+    });
+  }
+
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
     const locationId = this.requireLocation(actor);
     const layoutErrors = input.layout
