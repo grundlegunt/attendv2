@@ -103,6 +103,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .schedule-plan-preview-status strong, .plan-conflict { margin-top: 4px; color: #f07575; }
 .plan-validation-success, .plan-validation-error { margin: 12px 0; padding: 12px 14px; border: 1px solid currentColor; }
 .plan-validation-success { color: #4ade80; }
+.plan-validation-success { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.plan-validation-success button { flex: 0 0 auto; }
 .plan-validation-error { color: #f07575; }
 .plan-validation-error ul { margin: 8px 0 0; padding-left: 20px; }
 .schedule-plan-preview-note { margin: 0; padding: 0 24px 16px; color: var(--color-text-secondary); font-size: .76rem; }
