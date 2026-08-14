@@ -74,6 +74,13 @@ export function RestaurantPos({
   const [menuError, setMenuError] = useState<string | null>(null);
   const [refreshError, setRefreshError] = useState<string | null>(null);
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
+  const [activeCategoryId, setActiveCategoryId] = useState("");
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [draftItems, setDraftItems] = useState<Array<{
+    menuItemId: string;
+    name: string;
+    priceCents: number;
+  }>>([]);
   const [blockedItems, setBlockedItems] = useState<Array<{ id: string; name: string }>>([]);
   const [liveTab, setLiveTab] = useState<LiveTabSummary | null>(null);
   const [settlement, setSettlement] = useState<SettlementTab | null>(null);
@@ -140,6 +147,11 @@ export function RestaurantPos({
         .then((nextMenu) => {
           if (requestId !== menuRequestRef.current) return;
           setMenu(nextMenu);
+          setActiveCategoryId((current) =>
+            nextMenu.categories.some((category) => category.id === current)
+              ? current
+              : (nextMenu.categories[0]?.id ?? ""),
+          );
           const validSelections = new Map<string, Set<string>>();
           nextMenu.categories.forEach((category) => category.items.forEach((item) =>
             item.modifierGroups.forEach((group) => validSelections.set(
@@ -179,6 +191,8 @@ export function RestaurantPos({
     tabActionRequestRef.current += 1;
     settlementAttemptRef.current = null;
     setOrderId("");
+    setDraftItems([]);
+    setExpandedItemId(null);
     setBlockedItems([]);
     setModifierSelections({});
     setGuestAccessToken("");
@@ -298,6 +312,7 @@ export function RestaurantPos({
       });
       if (requestId !== tabActionRequestRef.current) return;
       setOrderId(order.id);
+      setDraftItems([]);
       setBlockedItems([]);
       setModifierSelections({});
       setMessage("Order started. Add items, then send.");
@@ -343,6 +358,11 @@ export function RestaurantPos({
       setModifierSelections((current) => Object.fromEntries(
         Object.entries(current).filter(([key]) => !key.startsWith(`${item.id}:`)),
       ));
+      setDraftItems((current) => [
+        ...current,
+        { menuItemId: item.id, name: item.name, priceCents: item.priceCents },
+      ]);
+      setExpandedItemId(null);
       setMessage(`${item.name} added.`);
     } catch (error) {
       if (requestId === tabActionRequestRef.current) showError(error);
@@ -407,6 +427,7 @@ export function RestaurantPos({
       });
       if (requestId !== tabActionRequestRef.current) return;
       setOrderId(result.rejectedDraft?.orderId ?? "");
+      setDraftItems([]);
       setBlockedItems(result.rejectedDraft?.items ?? []);
       setMessage(
         result.rejectedDraft
@@ -593,9 +614,14 @@ export function RestaurantPos({
   const settlementPending = isPending(`finalize:${tabId}`);
   const restaurantActionPending = pendingActions.length > 0;
   const checkActionBlocked = Boolean(orderId) || pendingActions.length > 0;
+  const activeCategory =
+    menu?.categories.find((category) => category.id === activeCategoryId) ??
+    menu?.categories[0] ??
+    null;
+  const draftSubtotalCents = draftItems.reduce((total, item) => total + item.priceCents, 0);
 
   return (
-    <section className="scanner-panel">
+    <section className="scanner-panel restaurant-pos">
       <h2>Server POS</h2>
       {seatLabel && <p><strong>Seat {seatLabel}</strong></p>}
       <p>Open a walk-in tab, or paste an existing seat-linked tab ID.</p>
@@ -770,62 +796,127 @@ export function RestaurantPos({
           </button>
         </div>
       ))}
-      {menu?.categories.map((category) => (
-        <div key={category.id}>
-          <h3>{category.name}</h3>
-          {category.items.map((item) => (
-            <div className="scan-result" key={item.id}>
-              <strong>
-                {item.name} · ${(item.priceCents / 100).toFixed(2)}
-              </strong>
-              <p>{item.description} · routes to {item.kitchenStation.name}</p>
-              {item.modifierGroups.map((group) => (
-                <fieldset key={group.id}>
-                  <legend>{group.name}{group.required ? " · required" : ""}</legend>
-                  {group.modifiers.map((modifier) => {
-                    const selected = (modifierSelections[`${item.id}:${group.id}`] ?? [])
-                      .includes(modifier.id);
-                    return (
-                      <label key={modifier.id}>
-                        <input
-                          type={group.selectionType === "SINGLE" ? "radio" : "checkbox"}
-                          name={`${item.id}:${group.id}`}
-                          checked={selected}
-                          disabled={restaurantActionPending}
-                          onChange={(event) =>
-                            chooseModifier(item.id, group, modifier.id, event.target.checked)
-                          }
-                        />
-                        {modifier.name}
-                      </label>
-                    );
-                  })}
-                </fieldset>
-              ))}
-              <button
-                className="secondary"
-                type="button"
-                disabled={item.is86d || !orderId || restaurantActionPending}
-                onClick={() => addItem(item)}
-              >
-                {isPending(`add-item:${orderId}:${item.id}`)
-                  ? "Adding…"
-                  : item.is86d
-                    ? "86’d"
-                    : "Add item"}
-              </button>
+      <div className="restaurant-workspace">
+        <div className="restaurant-menu-browser">
+          <div className="restaurant-menu-heading">
+            <div>
+              <span className="eyebrow">Menu</span>
+              <h3>{activeCategory?.name ?? "No menu available"}</h3>
             </div>
-          ))}
+            <span>{activeCategory?.items.length ?? 0} items</span>
+          </div>
+          <div className="restaurant-item-grid">
+            {activeCategory?.items.map((item) => {
+              const expanded = expandedItemId === item.id;
+              return (
+                <article
+                  className={`restaurant-item-tile${expanded ? " expanded" : ""}${item.is86d ? " unavailable" : ""}`}
+                  key={item.id}
+                >
+                  <button
+                    className="restaurant-item-trigger"
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-controls={`restaurant-item-${item.id}`}
+                    onClick={() => setExpandedItemId(expanded ? null : item.id)}
+                  >
+                    <strong>{item.name}</strong>
+                    <span>${(item.priceCents / 100).toFixed(2)}</span>
+                    {item.is86d && <small>86’d</small>}
+                  </button>
+                  {expanded && (
+                    <div className="restaurant-item-options" id={`restaurant-item-${item.id}`}>
+                      {item.description && <p>{item.description}</p>}
+                      <small>Routes to {item.kitchenStation.name}</small>
+                      {item.modifierGroups.map((group) => (
+                        <fieldset key={group.id}>
+                          <legend>{group.name}{group.required ? " · required" : ""}</legend>
+                          {group.modifiers.map((modifier) => {
+                            const selected = (modifierSelections[`${item.id}:${group.id}`] ?? [])
+                              .includes(modifier.id);
+                            return (
+                              <label key={modifier.id}>
+                                <input
+                                  type={group.selectionType === "SINGLE" ? "radio" : "checkbox"}
+                                  name={`${item.id}:${group.id}`}
+                                  checked={selected}
+                                  disabled={restaurantActionPending}
+                                  onChange={(event) =>
+                                    chooseModifier(item.id, group, modifier.id, event.target.checked)
+                                  }
+                                />
+                                {modifier.name}
+                              </label>
+                            );
+                          })}
+                        </fieldset>
+                      ))}
+                      <button
+                        className="secondary"
+                        type="button"
+                        disabled={item.is86d || !orderId || restaurantActionPending}
+                        onClick={() => addItem(item)}
+                      >
+                        {isPending(`add-item:${orderId}:${item.id}`)
+                          ? "Adding…"
+                          : item.is86d
+                            ? "86’d"
+                            : "Add item"}
+                      </button>
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+          <div className="restaurant-category-tabs" role="tablist" aria-label="Menu categories">
+            {menu?.categories.map((category) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={category.id === activeCategory?.id}
+                className={category.id === activeCategory?.id ? "active" : ""}
+                key={category.id}
+                onClick={() => {
+                  setActiveCategoryId(category.id);
+                  setExpandedItemId(null);
+                }}
+              >
+                {category.name}
+              </button>
+            ))}
+          </div>
         </div>
-      ))}
-      <button
-        className="primary"
-        type="button"
-        disabled={!orderId || restaurantActionPending}
-        onClick={sendOrder}
-      >
-        {isPending(`send:${orderId}`) ? "Sending order…" : "Send order"}
-      </button>
+        <aside className="restaurant-check-sidebar" aria-label="Current check">
+          <span className="eyebrow">Current check</span>
+          <h3>{orderId ? "Draft order" : "Start an order"}</h3>
+          {seatLabel && <p>Seat {seatLabel}</p>}
+          {draftItems.length ? (
+            <ul className="restaurant-draft-items">
+              {draftItems.map((item, index) => (
+                <li key={`${item.menuItemId}-${index}`}>
+                  <span>{item.name}</span>
+                  <strong>${(item.priceCents / 100).toFixed(2)}</strong>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No items added yet.</p>
+          )}
+          <div className="restaurant-draft-total">
+            <span>Draft subtotal</span>
+            <strong>${(draftSubtotalCents / 100).toFixed(2)}</strong>
+          </div>
+          <button
+            className="primary"
+            type="button"
+            disabled={!orderId || restaurantActionPending}
+            onClick={sendOrder}
+          >
+            {isPending(`send:${orderId}`) ? "Sending order…" : "Send order"}
+          </button>
+        </aside>
+      </div>
     </section>
   );
 }
