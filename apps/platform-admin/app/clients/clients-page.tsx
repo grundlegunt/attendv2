@@ -133,7 +133,15 @@ interface OrganizationDetail {
       name: string;
       capacity: number;
       active: boolean;
-      seatMap: { id: string; name: string; version: number; activeSeats: number; accessibleSeats: number; companionSeats: number } | null;
+      seatMap: {
+        id: string;
+        name: string;
+        version: number;
+        activeSeats: number;
+        accessibleSeats: number;
+        companionSeats: number;
+        seats: Array<{ id: string; label: string; x: number; y: number; active: boolean; type: "STANDARD" | "ADA" | "COMPANION" }>;
+      } | null;
     }>;
     configuration: {
       auditoriums: number;
@@ -1329,6 +1337,24 @@ export default function AttendMaster() {
                               <div><dt>Active seats</dt><dd>{auditorium.seatMap.activeSeats}</dd></div>
                               <div><dt>Accessible / companion</dt><dd>{auditorium.seatMap.accessibleSeats} / {auditorium.seatMap.companionSeats}</dd></div>
                               <div><dt>Layout version</dt><dd>v{auditorium.seatMap.version}</dd></div>
+                              <div
+                                className="master-seat-preview"
+                                role="img"
+                                aria-label={`${auditorium.name} read-only seat map`}
+                                style={{
+                                  gridTemplateColumns: `repeat(${Math.max(1, ...auditorium.seatMap.seats.map((seat) => seat.x + 1))}, minmax(12px, 1fr))`,
+                                  gridTemplateRows: `repeat(${Math.max(1, ...auditorium.seatMap.seats.map((seat) => seat.y + 1))}, 18px)`,
+                                }}
+                              >
+                                {auditorium.seatMap.seats.map((seat) => (
+                                  <i
+                                    key={seat.id}
+                                    className={`${seat.active ? "" : "inactive"} ${seat.type.toLowerCase()}`}
+                                    style={{ gridColumn: seat.x + 1, gridRow: seat.y + 1 }}
+                                    title={`${seat.label} · ${seat.type.toLowerCase()}${seat.active ? "" : " · inactive"}`}
+                                  />
+                                ))}
+                              </div>
                             </>}
                           </dl>
                         </article>
