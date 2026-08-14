@@ -1855,6 +1855,32 @@ export default function AttendMaster() {
                         Font families and sizes apply consistently across every
                         customer page, including Showtimes and Coming Soon.
                       </p>
+                      <h4>Navigation</h4>
+                      <div className="form-grid">
+                        <label>
+                          Merchandise shop URL
+                          <input
+                            type="url"
+                            placeholder="https://shop.example.com"
+                            value={contentDraft.values.navigation.merchUrl ?? ""}
+                            onChange={(event) =>
+                              setContentDraft({
+                                ...contentDraft,
+                                values: {
+                                  ...contentDraft.values,
+                                  navigation: {
+                                    ...contentDraft.values.navigation,
+                                    merchUrl: event.target.value.trim() || null,
+                                  },
+                                },
+                              })
+                            }
+                          />
+                        </label>
+                      </div>
+                      <p className="form-note">
+                        When set, Merch appears in customer navigation and opens the hosted shop in a new tab.
+                      </p>
                       <h4>Showtimes page</h4>
                       <div className="form-grid">
                         <label>

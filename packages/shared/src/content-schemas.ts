@@ -10,6 +10,10 @@ const imageUrl = z
     (value) => value.startsWith("/") || /^https?:\/\//i.test(value),
     "Use an HTTP(S) URL or a site-relative path.",
   );
+const externalUrl = z.string().trim().url().max(2000).refine(
+  (value) => /^https?:\/\//i.test(value),
+  "Use an HTTP(S) URL.",
+);
 
 export const cinemaContentSchema = z
   .object({
@@ -22,6 +26,12 @@ export const cinemaContentSchema = z
         bodySize: z.enum(["COMPACT", "STANDARD", "LARGE"]).default("STANDARD"),
       })
       .strict(),
+    navigation: z
+      .object({
+        merchUrl: externalUrl.nullable(),
+      })
+      .strict()
+      .default({ merchUrl: null }),
     showtimes: z
       .object({
         eyebrow: text(80),
@@ -176,6 +186,9 @@ export const cinemaContentDefaults: CinemaContent = {
     bodyFont: "SANS",
     headingSize: "STANDARD",
     bodySize: "STANDARD",
+  },
+  navigation: {
+    merchUrl: null,
   },
   showtimes: {
     eyebrow: "NOW PLAYING",

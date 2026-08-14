@@ -9,4 +9,16 @@ describe("cinema content", () => {
     expect(() => cinemaContentSchema.parse({ ...cinemaContentDefaults, afterglow: { ...cinemaContentDefaults.afterglow, imageUrl: "javascript:alert(1)" } })).toThrow();
     expect(() => cinemaContentSchema.parse({ ...cinemaContentDefaults, customHtml: "<script />" })).toThrow();
   });
+
+  it("supports an optional hosted merchandise shop", () => {
+    const content = cinemaContentSchema.parse({
+      ...cinemaContentDefaults,
+      navigation: { merchUrl: "https://shop.example.com/meridian" },
+    });
+    expect(content.navigation.merchUrl).toBe("https://shop.example.com/meridian");
+    expect(() => cinemaContentSchema.parse({
+      ...cinemaContentDefaults,
+      navigation: { merchUrl: "javascript:alert(1)" },
+    })).toThrow();
+  });
 });
