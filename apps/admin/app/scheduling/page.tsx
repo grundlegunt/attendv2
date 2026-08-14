@@ -122,6 +122,11 @@ export default function AdminPage() {
   const [planWeek, setPlanWeek] = useState(currentWeekStart);
   const [savingPlan, setSavingPlan] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
+  const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
+  const [planShowtimePriceTierId, setPlanShowtimePriceTierId] = useState("");
+  const [planShowtimeStartsAt, setPlanShowtimeStartsAt] = useState("");
+  const [planShowtimePresentation, setPlanShowtimePresentation] = useState<Showtime["presentation"]>("STANDARD");
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -233,6 +238,33 @@ export default function AdminPage() {
         body: JSON.stringify({ startsAt: startsAt.toISOString() }),
       });
       setSchedulePlans((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
+    } catch (reason) {
+      showError(reason);
+    }
+  }
+
+  async function addSchedulePlanShowtime(event: FormEvent, plan: SchedulePlan) {
+    event.preventDefault();
+    if (!data || !planShowtimeStartsAt) return;
+    setError(null);
+    try {
+      const updated = await apiFetch<SchedulePlan>(`/cinema/schedule-plans/${plan.id}/showtimes`, {
+        accessToken: token ?? undefined,
+        method: "POST",
+        body: JSON.stringify({
+          movieId: planShowtimeMovieId || data.location.organization.movies[0]?.id,
+          auditoriumId: planShowtimeAuditoriumId || data.location.auditoriums[0]?.id,
+          priceTierId: planShowtimePriceTierId || data.location.organization.priceTiers[0]?.id,
+          startsAt: new Date(planShowtimeStartsAt).toISOString(),
+          onSale: false,
+          presentation: planShowtimePresentation,
+          filmSeriesId: null,
+          format: null,
+        }),
+      });
+      setSchedulePlans((current) => current.map((candidate) => candidate.id === updated.id ? updated : candidate));
+      setPlanShowtimeStartsAt("");
+      setPlanShowtimePresentation("STANDARD");
     } catch (reason) {
       showError(reason);
     }
@@ -621,6 +653,14 @@ export default function AdminPage() {
       {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
         <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span></div>
         <p className="schedule-plan-preview-note">Editing this saved copy cannot change the published schedule or customer ticket availability.</p>
+        {data && <form className="schedule-plan-add" onSubmit={(event) => void addSchedulePlanShowtime(event, selectedPlan)}>
+          <label>Film<select required value={planShowtimeMovieId || data.location.organization.movies[0]?.id || ""} onChange={(event) => setPlanShowtimeMovieId(event.target.value)}>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title}</option>)}</select></label>
+          <label>Auditorium<select required value={planShowtimeAuditoriumId || data.location.auditoriums[0]?.id || ""} onChange={(event) => setPlanShowtimeAuditoriumId(event.target.value)}>{data.location.auditoriums.map((auditorium) => <option key={auditorium.id} value={auditorium.id}>{auditorium.name}</option>)}</select></label>
+          <label>Ticket tier<select required value={planShowtimePriceTierId || data.location.organization.priceTiers[0]?.id || ""} onChange={(event) => setPlanShowtimePriceTierId(event.target.value)}>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name}</option>)}</select></label>
+          <label>Date & time<input required type="datetime-local" value={planShowtimeStartsAt} onChange={(event) => setPlanShowtimeStartsAt(event.target.value)} /></label>
+          <label>Presentation<select value={planShowtimePresentation} onChange={(event) => setPlanShowtimePresentation(event.target.value as Showtime["presentation"])}><option value="STANDARD">Standard</option><option value="OPEN_CAPTIONS">Open captions</option><option value="Q_AND_A">Q&amp;A</option><option value="SPECIAL_GUEST">Special guest</option></select></label>
+          <button className="secondary">Add to saved plan</button>
+        </form>}
         {selectedPlanRows.length > 0 ? <div className="schedule-plan-preview-list">{selectedPlanRows.map((showtime, index) => <article key={`${showtime.startsAt}-${showtime.auditoriumId}-${index}`}>
           <time dateTime={showtime.startsAt}>{new Date(showtime.startsAt).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</time>
           <div><strong>{showtime.movie?.title ?? "Unavailable film"}</strong><span>{showtime.auditorium?.name ?? "Unavailable auditorium"} · {showtime.presentation.replaceAll("_", " ").toLocaleLowerCase()}</span></div>

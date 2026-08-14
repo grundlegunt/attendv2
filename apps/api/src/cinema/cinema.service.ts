@@ -214,6 +214,34 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async addSchedulePlanShowtime(actor: RequestActor, id: string, input: ShowtimeInput) {
+    const locationId = this.requireLocation(actor);
+    const [plan, location] = await Promise.all([
+      prisma.schedulePlan.findFirst({ where: { id, locationId } }),
+      prisma.location.findUnique({ where: { id: locationId }, select: { organizationId: true } }),
+    ]);
+    if (!plan || !location) throw AppError.notFound("Schedule plan not found.");
+    const startsAt = new Date(input.startsAt);
+    const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
+    if (startsAt < plan.weekStartsAt || startsAt >= weekEndsAt) throw AppError.validationFailed("The showing must stay within this plan's week.");
+    const [movie, auditorium, priceTier, filmSeries] = await Promise.all([
+      prisma.movie.findFirst({ where: { id: input.movieId, organizationId: location.organizationId, active: true }, select: { id: true } }),
+      prisma.auditorium.findFirst({ where: { id: input.auditoriumId, locationId, active: true }, select: { id: true } }),
+      input.priceTierId ? prisma.priceTier.findFirst({ where: { id: input.priceTierId, organizationId: location.organizationId, active: true }, select: { id: true } }) : Promise.resolve(null),
+      input.filmSeriesId ? prisma.filmSeries.findFirst({ where: { id: input.filmSeriesId, organizationId: location.organizationId, active: true }, select: { id: true } }) : Promise.resolve(null),
+    ]);
+    if (!movie || !auditorium || (input.priceTierId && !priceTier) || (input.filmSeriesId && !filmSeries)) throw AppError.validationFailed("The saved showing contains an unavailable film, auditorium, price tier, or series.");
+    const snapshot = Array.isArray(plan.snapshotJson) ? [...plan.snapshotJson] : [];
+    const showtime = { movieId: input.movieId, auditoriumId: input.auditoriumId, priceTierId: input.priceTierId ?? null, startsAt: startsAt.toISOString(), onSale: input.onSale, filmSeriesId: input.filmSeriesId ?? null, presentation: input.presentation, format: input.format ?? null };
+    snapshot.push(showtime);
+    snapshot.sort((left, right) => String((left as { startsAt?: unknown }).startsAt ?? "").localeCompare(String((right as { startsAt?: unknown }).startsAt ?? "")));
+    return prisma.$transaction(async (tx) => {
+      const saved = await tx.schedulePlan.update({ where: { id: plan.id }, data: { snapshotJson: snapshot as Prisma.InputJsonValue }, select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true } });
+      await tx.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.showtime_added", entityType: "SchedulePlan", entityId: plan.id, locationId, afterState: { showtime, showtimeCount: snapshot.length } } });
+      return saved;
+    });
+  }
+
   async renameSchedulePlan(actor: RequestActor, id: string, name: string) {
     const locationId = this.requireLocation(actor);
     const plan = await prisma.schedulePlan.findFirst({ where: { id, locationId }, select: { id: true, name: true } });

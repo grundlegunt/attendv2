@@ -98,6 +98,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .schedule-plan-preview-heading h3 { margin: 3px 0 0; font-size: 1.45rem; }
 .schedule-plan-preview-heading > span { color: var(--color-text-secondary); font-size: .78rem; font-weight: 800; }
 .schedule-plan-preview-note { margin: 0; padding: 0 24px 16px; color: var(--color-text-secondary); font-size: .76rem; }
+.schedule-plan-add { display: grid; grid-template-columns: repeat(5, minmax(130px, 1fr)) auto; gap: 10px; align-items: end; padding: 0 24px 20px; }
+.schedule-plan-add label { min-width: 0; }
 .schedule-plan-preview-list { border-top: 1px solid var(--color-border); }
 .schedule-plan-preview-list article { display: grid; grid-template-columns: 190px minmax(220px, 1fr) auto auto auto; gap: 18px; align-items: center; padding: 12px 24px; border-bottom: 1px solid var(--color-border); }
 .schedule-plan-preview-list article:last-child { border-bottom: 0; }
@@ -424,7 +426,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .builder-actions .secondary { min-width: 180px; }
 .compliance-note { margin: 16px 0 0; font-size: .72rem; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 900px) { .schedule-plan-heading, .schedule-plan-heading form { grid-template-columns: 1fr; } .schedule-plan-list article { grid-template-columns: 1fr auto auto; } .schedule-plan-list article > span { grid-column: 1; } .schedule-plan-preview-list article { grid-template-columns: 1fr auto; } .schedule-plan-preview-list time { grid-column: 1 / -1; } }
+@media (max-width: 900px) { .schedule-plan-heading, .schedule-plan-heading form, .schedule-plan-add { grid-template-columns: 1fr; } .schedule-plan-list article { grid-template-columns: 1fr auto auto; } .schedule-plan-list article > span { grid-column: 1; } .schedule-plan-preview-list article { grid-template-columns: 1fr auto; } .schedule-plan-preview-list time { grid-column: 1 / -1; } }
 @media (max-width: 1100px) {
   .schedule-with-inspector, .schedule-with-inspector.inspector-open { grid-template-columns: 1fr; }
   .schedule-inspector { min-height: 0; border-left: 0; }
