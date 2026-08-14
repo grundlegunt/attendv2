@@ -127,6 +127,13 @@ export class CinemaController {
     return this.cinemaService.duplicateSchedulePlan(actor, id, duplicateSchedulePlanSchema.parse(body).name);
   }
 
+  @Post("schedule-plans/:id/showtimes")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  addSchedulePlanShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Body(new ZodValidationPipe(createShowtimeRequestSchema)) body: unknown) {
+    return this.cinemaService.addSchedulePlanShowtime(actor, id, createShowtimeRequestSchema.parse(body));
+  }
+
   @Patch("schedule-plans/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
