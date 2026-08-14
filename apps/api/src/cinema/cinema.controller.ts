@@ -133,6 +133,13 @@ export class CinemaController {
     return this.cinemaService.renameSchedulePlan(actor, id, renameSchedulePlanSchema.parse(body).name);
   }
 
+  @Delete("schedule-plans/:id/showtimes/:index")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  removeSchedulePlanShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Param("index") index: string) {
+    return this.cinemaService.removeSchedulePlanShowtime(actor, id, Number(index));
+  }
+
   @Delete("schedule-plans/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
