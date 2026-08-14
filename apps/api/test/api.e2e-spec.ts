@@ -4680,6 +4680,9 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const cocktail = await prisma.menuItem.findFirstOrThrow({
       where: { name: "Old Fashioned" },
     });
+    const owner = await prisma.employee.findUniqueOrThrow({
+      where: { email: `owner@${SEED_SUFFIX}` },
+    });
     const tab = await prisma.restaurantTab.create({
       data: {
         locationId: source.locationId,
@@ -4692,6 +4695,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const order = await prisma.restaurantOrder.create({
       data: {
         restaurantTabId: tab.id,
+        serverEmployeeId: owner.id,
         status: "SENT",
         placedAt: new Date(),
       },
