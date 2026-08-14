@@ -631,6 +631,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           starring: input.starring ?? null,
           trailerUrl: input.trailerUrl ?? null,
           releaseYear: input.releaseYear ?? null,
+          distributorName: input.distributorName ?? null,
+          distributorTerms: input.distributorTerms as Prisma.InputJsonValue,
           pairings: {
             create: input.pairingMenuItemIds.map((menuItemId, sortOrder) => ({ menuItemId, sortOrder })),
           },
@@ -651,6 +653,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             diningSpecialTitle: movie.diningSpecialTitle,
             director: movie.director, starring: movie.starring,
             trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
+            distributorName: movie.distributorName, distributorTerms: movie.distributorTerms,
             pairingMenuItemIds: input.pairingMenuItemIds,
           },
         },
@@ -730,12 +733,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (!location) throw AppError.notFound("Location not found.");
       const existing = await tx.movie.findFirst({ where: { id, organizationId: location.organizationId, active: true } });
       if (!existing) throw AppError.notFound("Movie not found.");
-      const { pairingMenuItemIds, ...movieFields } = input;
+      const { pairingMenuItemIds, distributorTerms, ...movieFields } = input;
       if (pairingMenuItemIds) await this.validatePairingMenuItems(tx, locationId, pairingMenuItemIds);
       const movie = await tx.movie.update({
         where: { id },
         data: {
           ...movieFields,
+          ...(distributorTerms ? { distributorTerms: distributorTerms as Prisma.InputJsonValue } : {}),
           ...(pairingMenuItemIds ? {
             pairings: {
               deleteMany: {},
@@ -757,6 +761,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           posterPosition: existing.posterPosition, detailPosterPosition: existing.detailPosterPosition,
           diningSpecialArtworkUrl: existing.diningSpecialArtworkUrl, diningSpecialTitle: existing.diningSpecialTitle, director: existing.director,
           starring: existing.starring, trailerUrl: existing.trailerUrl, releaseYear: existing.releaseYear,
+          distributorName: existing.distributorName, distributorTerms: existing.distributorTerms,
         },
         afterState: {
           title: movie.title, synopsis: movie.synopsis, runtimeMinutes: movie.runtimeMinutes,
@@ -764,6 +769,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           posterPosition: movie.posterPosition, detailPosterPosition: movie.detailPosterPosition,
           diningSpecialArtworkUrl: movie.diningSpecialArtworkUrl, diningSpecialTitle: movie.diningSpecialTitle, director: movie.director,
           starring: movie.starring, trailerUrl: movie.trailerUrl, releaseYear: movie.releaseYear,
+          distributorName: movie.distributorName, distributorTerms: movie.distributorTerms,
           ...(pairingMenuItemIds ? { pairingMenuItemIds } : {}),
         },
       } });

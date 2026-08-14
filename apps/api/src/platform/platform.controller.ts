@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
+import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, platformLoginRequestSchema, updateAuditoriumLayoutRequestSchema } from "@cinema/shared";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
@@ -205,6 +205,20 @@ export class PlatformController {
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   createAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(createAuditoriumRequestSchema)) body: unknown) {
     return this.platform.createAuditorium({ actorId: actor.sub, organizationId, locationId, ...createAuditoriumRequestSchema.parse(body) });
+  }
+
+  @Patch("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  updateAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Param("auditoriumId") auditoriumId: string, @Body(new ZodValidationPipe(updateAuditoriumLayoutRequestSchema)) body: unknown) {
+    return this.platform.updateAuditorium({ actorId: actor.sub, organizationId, locationId, auditoriumId, ...updateAuditoriumLayoutRequestSchema.parse(body) });
+  }
+
+  @Delete("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  deleteAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Param("auditoriumId") auditoriumId: string) {
+    return this.platform.deleteAuditorium({ actorId: actor.sub, organizationId, locationId, auditoriumId });
   }
 
   @Post("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId/duplicate")

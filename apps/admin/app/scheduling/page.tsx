@@ -25,6 +25,8 @@ interface Movie {
   diningSpecialArtworkUrl?: string | null;
   diningSpecialTitle?: string | null;
   director?: string | null; starring?: string | null; trailerUrl?: string | null; releaseYear?: number | null;
+  distributorName?: string | null;
+  distributorTerms?: Array<{ startWeek: number; endWeek: number | null; distributorShareBasisPoints: number }> | null;
   pairings?: Array<{ menuItemId: string; sortOrder: number }>;
 }
 interface PriceTier { id: string; name: string; ticketPriceMinor: number; feeMinor: number; currency: string; }
@@ -104,6 +106,8 @@ export default function AdminPage() {
   const [movieStarring, setMovieStarring] = useState("");
   const [movieTrailerUrl, setMovieTrailerUrl] = useState("");
   const [movieReleaseYear, setMovieReleaseYear] = useState<number | "">("");
+  const [movieDistributorName, setMovieDistributorName] = useState("");
+  const [movieDistributorTerms, setMovieDistributorTerms] = useState<Array<{ startWeek: number; endWeek: number | null; distributorShareBasisPoints: number }>>([]);
   const [pairingMenuItemIds, setPairingMenuItemIds] = useState<string[]>([]);
   const [pairingMenuSearch, setPairingMenuSearch] = useState("");
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
@@ -362,6 +366,8 @@ export default function AdminPage() {
           starring: movieStarring.trim() || null,
           trailerUrl: movieTrailerUrl.trim() || null,
           releaseYear: movieReleaseYear === "" ? null : movieReleaseYear,
+          distributorName: movieDistributorName.trim() || null,
+          distributorTerms: movieDistributorTerms,
           pairingMenuItemIds,
         }),
       });
@@ -375,6 +381,7 @@ export default function AdminPage() {
       setMovieDiningSpecialArtworkUrl("");
       setMovieDiningSpecialTitle("");
       setMovieDirector(""); setMovieStarring(""); setMovieTrailerUrl(""); setMovieReleaseYear(""); setPairingMenuItemIds([]);
+      setMovieDistributorName(""); setMovieDistributorTerms([]);
       setPairingMenuSearch("");
       setEditingMovieId(null);
       setMovieEditorOpen(false);
@@ -695,6 +702,8 @@ export default function AdminPage() {
     setMovieStarring(movie?.starring ?? "");
     setMovieTrailerUrl(movie?.trailerUrl ?? "");
     setMovieReleaseYear(movie?.releaseYear ?? "");
+    setMovieDistributorName(movie?.distributorName ?? "");
+    setMovieDistributorTerms(Array.isArray(movie?.distributorTerms) ? movie.distributorTerms : []);
     setPairingMenuItemIds(movie?.pairings?.map((pairing) => pairing.menuItemId) ?? []);
     setPairingMenuSearch("");
     setMovieEditorOpen(true);
@@ -855,6 +864,17 @@ export default function AdminPage() {
         <label>Starring<input value={movieStarring} onChange={(event) => setMovieStarring(event.target.value)} placeholder="Comma-separated cast" /></label>
         <label>Trailer URL<input type="url" value={movieTrailerUrl} onChange={(event) => setMovieTrailerUrl(event.target.value)} placeholder="https://…" /></label>
         <label>Release year<input type="number" min="1888" max="2200" value={movieReleaseYear} onChange={(event) => setMovieReleaseYear(event.target.value ? Number(event.target.value) : "")} /></label>
+        <fieldset className="pairing-picker"><legend>Distributor deal</legend>
+          <label>Distributor<input value={movieDistributorName} onChange={(event) => setMovieDistributorName(event.target.value)} placeholder="Distributor or booking contact" /></label>
+          <p>Record the distributor's percentage of box-office revenue by engagement week.</p>
+          {movieDistributorTerms.map((term, index) => <div className="pairing-picker__controls" key={`${index}-${term.startWeek}`}>
+            <label>From week<input type="number" min="1" max="520" value={term.startWeek} onChange={(event) => setMovieDistributorTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, startWeek: Number(event.target.value) } : item))} /></label>
+            <label>Through week<input type="number" min="1" max="520" value={term.endWeek ?? ""} placeholder="Ongoing" onChange={(event) => setMovieDistributorTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, endWeek: event.target.value ? Number(event.target.value) : null } : item))} /></label>
+            <label>Distributor share %<input type="number" min="0" max="100" step="0.01" value={term.distributorShareBasisPoints / 100} onChange={(event) => setMovieDistributorTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, distributorShareBasisPoints: Math.round(Number(event.target.value) * 100) } : item))} /></label>
+            <button type="button" onClick={() => setMovieDistributorTerms((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</button>
+          </div>)}
+          <button type="button" onClick={() => setMovieDistributorTerms((current) => [...current, { startWeek: (current.at(-1)?.endWeek ?? current.at(-1)?.startWeek ?? 0) + 1, endWeek: null, distributorShareBasisPoints: 5000 }])}>+ Add deal period</button>
+        </fieldset>
         <label>Synopsis<textarea rows={6} value={movieSynopsis} onChange={(event) => setMovieSynopsis(event.target.value)} placeholder="Short customer-facing film description" /></label>
         <fieldset className="pairing-picker"><legend>Paired food &amp; drink</legend><div className="pairing-picker__heading"><p>Choose the menu items featured with this film.</p><span>{pairingMenuItemIds.length} selected</span></div>
           <div className="pairing-picker__controls"><input type="search" value={pairingMenuSearch} onChange={(event) => setPairingMenuSearch(event.target.value)} placeholder="Search food, drinks, or categories" aria-label="Search paired menu items" />{pairingMenuItemIds.length > 0 && <button type="button" onClick={() => setPairingMenuItemIds([])}>Clear</button>}</div>

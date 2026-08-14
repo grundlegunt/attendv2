@@ -142,7 +142,21 @@ interface OrganizationDetail {
         activeSeats: number;
         accessibleSeats: number;
         companionSeats: number;
-        seats: Array<{ id: string; label: string; x: number; y: number; active: boolean; type: "STANDARD" | "ADA" | "COMPANION" }>;
+        layout: SeatMapLayout | null;
+        seats: Array<{
+          id: string;
+          label: string;
+          rowLabel: string;
+          number: number;
+          x: number;
+          y: number;
+          active: boolean;
+          type: "STANDARD" | "ADA" | "COMPANION";
+          tableGroupId?: string | null;
+          tablePosition?: "LEFT" | "RIGHT" | null;
+          levelKey?: string | null;
+          sectionKey?: string | null;
+        }>;
       } | null;
     }>;
     configuration: {
@@ -178,12 +192,15 @@ type CinemaManagerDraft = {
   password: string;
 };
 type AuditoriumDraft = {
+  id?: string;
   locationId: string;
   name: string;
   rows: number;
   seatsPerRow: number;
   centerAisle: boolean;
   accessiblePairs: number;
+  sourceSeats?: SeatInput[];
+  sourceLayout?: SeatMapLayout;
 };
 type LocationDetail = OrganizationDetail["locations"][number];
 type LocationDraft = {
@@ -718,6 +735,7 @@ export default function AttendMaster() {
   }
 
   function auditoriumSeats(draft: AuditoriumDraft): SeatInput[] {
+    if (draft.sourceSeats) return draft.sourceSeats;
     return Array.from({ length: draft.rows }, (_, rowIndex) => {
       const rowLabel = String.fromCharCode(65 + rowIndex);
       return Array.from({ length: draft.seatsPerRow }, (_, seatIndex) => {
@@ -738,6 +756,7 @@ export default function AttendMaster() {
   }
 
   function auditoriumLayout(draft: AuditoriumDraft): SeatMapLayout {
+    if (draft.sourceLayout) return draft.sourceLayout;
     const aisleX = Math.ceil(draft.seatsPerRow / 2);
     return {
       mode: "BASIC",
@@ -750,16 +769,16 @@ export default function AttendMaster() {
     };
   }
 
-  async function createAuditorium(event: FormEvent) {
+  async function saveAuditorium(event: FormEvent) {
     event.preventDefault();
     if (!session || !organization || !auditoriumDraft) return;
     setSaving(true);
     setError(null);
     try {
       await request(
-        `/platform/organizations/${organization.id}/locations/${auditoriumDraft.locationId}/auditoriums`,
+        `/platform/organizations/${organization.id}/locations/${auditoriumDraft.locationId}/auditoriums${auditoriumDraft.id ? `/${auditoriumDraft.id}` : ""}`,
         {
-          method: "POST",
+          method: auditoriumDraft.id ? "PATCH" : "POST",
           body: JSON.stringify({
             name: auditoriumDraft.name,
             seatMapName: `${auditoriumDraft.name} layout`,
@@ -777,10 +796,24 @@ export default function AttendMaster() {
       setOverview(refreshed);
       setAuditoriumDraft(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not create the auditorium.");
+      setError(reason instanceof Error ? reason.message : "Could not save the auditorium.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function deleteAuditorium(locationId: string, auditoriumId: string, name: string) {
+    if (!session || !organization || !window.confirm(`Permanently delete ${name}? This is only allowed when it has no showtime history.`)) return;
+    setSaving(true); setError(null);
+    try {
+      await request(`/platform/organizations/${organization.id}/locations/${locationId}/auditoriums/${auditoriumId}`, { method: "DELETE" }, session.accessToken);
+      const [updated, refreshed] = await Promise.all([
+        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<Overview>("/platform/overview", undefined, session.accessToken),
+      ]);
+      setOrganization(updated); setOverview(refreshed);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete the auditorium."); }
+    finally { setSaving(false); }
   }
 
   async function duplicateAuditorium(location: LocationDetail, auditorium: LocationDetail["auditoriums"][number]) {
@@ -1453,24 +1486,24 @@ export default function AttendMaster() {
                       </div>
                     </div>
                     {auditoriumDraft?.locationId === location.id && (
-                      <form className="master-auditorium-builder" onSubmit={createAuditorium}>
+                      <form className="master-auditorium-builder" onSubmit={saveAuditorium}>
                         <div className="editor-heading">
                           <div>
                             <p className="eyebrow">LAYOUT DESIGNER</p>
-                            <h3>Create an auditorium</h3>
+                            <h3>{auditoriumDraft.id ? "Edit auditorium" : "Create an auditorium"}</h3>
                             <p className="muted">Build a standard room quickly. Existing cinema-admin layout controls remain available for advanced edits.</p>
                           </div>
                           <button type="button" className="quiet" onClick={() => setAuditoriumDraft(null)}>Cancel</button>
                         </div>
                         <div className="auditorium-builder-fields">
                           <label>Theater name<input required maxLength={80} value={auditoriumDraft.name} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, name: event.target.value })} /></label>
-                          <label>Rows<input type="number" min={1} max={20} value={auditoriumDraft.rows} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, rows: Math.max(1, Math.min(20, Number(event.target.value))) })} /></label>
+                          <label>Rows<input type="number" min={1} max={20} value={auditoriumDraft.rows} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, rows: Math.max(1, Math.min(20, Number(event.target.value))), sourceSeats: undefined, sourceLayout: undefined })} /></label>
                           <label>Seats per row<input type="number" min={2} max={25} value={auditoriumDraft.seatsPerRow} onChange={(event) => {
                             const seatsPerRow = Math.max(2, Math.min(25, Number(event.target.value)));
-                            setAuditoriumDraft({ ...auditoriumDraft, seatsPerRow, accessiblePairs: Math.min(auditoriumDraft.accessiblePairs, Math.floor(seatsPerRow / 2)) });
+                            setAuditoriumDraft({ ...auditoriumDraft, seatsPerRow, accessiblePairs: Math.min(auditoriumDraft.accessiblePairs, Math.floor(seatsPerRow / 2)), sourceSeats: undefined, sourceLayout: undefined });
                           }} /></label>
-                          <label>Accessible pairs<input type="number" min={0} max={Math.floor(auditoriumDraft.seatsPerRow / 2)} value={auditoriumDraft.accessiblePairs} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, accessiblePairs: Math.max(0, Math.min(Math.floor(auditoriumDraft.seatsPerRow / 2), Number(event.target.value))) })} /></label>
-                          <label className="check"><input type="checkbox" checked={auditoriumDraft.centerAisle} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, centerAisle: event.target.checked })} /> Center aisle</label>
+                          <label>Accessible pairs<input type="number" min={0} max={Math.floor(auditoriumDraft.seatsPerRow / 2)} value={auditoriumDraft.accessiblePairs} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, accessiblePairs: Math.max(0, Math.min(Math.floor(auditoriumDraft.seatsPerRow / 2), Number(event.target.value))), sourceSeats: undefined, sourceLayout: undefined })} /></label>
+                          <label className="check"><input type="checkbox" checked={auditoriumDraft.centerAisle} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, centerAisle: event.target.checked, sourceSeats: undefined, sourceLayout: undefined })} /> Center aisle</label>
                         </div>
                         <div
                           className="master-seat-preview master-builder-preview"
@@ -1486,9 +1519,9 @@ export default function AttendMaster() {
                           ))}
                         </div>
                         <div className="master-builder-summary">
-                          <span><b>{auditoriumDraft.rows * auditoriumDraft.seatsPerRow}</b> admission positions</span>
+                          <span><b>{auditoriumSeats(auditoriumDraft).length}</b> admission positions</span>
                           <span><b>{auditoriumDraft.accessiblePairs}</b> accessible pairs</span>
-                          <button disabled={saving}>{saving ? "Creating…" : "Create auditorium"}</button>
+                          <button disabled={saving}>{saving ? "Saving…" : auditoriumDraft.id ? "Save auditorium" : "Create auditorium"}</button>
                         </div>
                         <p className="form-note">Attend models the layout supplied by the operator. It does not certify ADA, fire, egress, or building-code compliance.</p>
                       </form>
@@ -1500,6 +1533,25 @@ export default function AttendMaster() {
                             <strong>{auditorium.name}</strong>
                             <span className={`status ${auditorium.active ? "good" : ""}`}>{auditorium.active ? "Active" : "Inactive"}</span>
                           </div>
+                          {session.user.role !== "VIEWER" && <div className="auditorium-overview-actions">
+                            <button type="button" onClick={() => {
+                              const activeSeats = auditorium.seatMap?.seats.filter((seat) => seat.active) ?? [];
+                              const rows = Math.max(1, ...activeSeats.map((seat) => seat.y + 1));
+                              const seatsPerRow = Math.max(2, Math.ceil(activeSeats.length / rows));
+                              setAuditoriumDraft({
+                                id: auditorium.id,
+                                locationId: location.id,
+                                name: auditorium.name,
+                                rows,
+                                seatsPerRow,
+                                centerAisle: false,
+                                accessiblePairs: auditorium.seatMap?.accessibleSeats ?? 0,
+                                sourceLayout: auditorium.seatMap?.layout ?? undefined,
+                                sourceSeats: activeSeats.map(({ id: _id, active: _active, ...seat }) => seat),
+                              });
+                            }}>Edit</button>
+                            <button type="button" disabled={saving} onClick={() => void deleteAuditorium(location.id, auditorium.id, auditorium.name)}>Delete</button>
+                          </div>}
                           <dl>
                             <div><dt>Configured capacity</dt><dd>{auditorium.capacity}</dd></div>
                             <div><dt>Seat map</dt><dd>{auditorium.seatMap?.name ?? "Not configured"}</dd></div>

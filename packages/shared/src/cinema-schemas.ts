@@ -199,6 +199,23 @@ export const createMovieRequestSchema = z.object({
   starring: z.string().trim().max(1000).nullable().optional(),
   trailerUrl: z.string().trim().url("Trailer URL must be a valid URL.").nullable().optional(),
   releaseYear: z.number().int().min(1888).max(2200).nullable().optional(),
+  distributorName: z.string().trim().max(200).nullable().optional(),
+  distributorTerms: z.array(z.object({
+    startWeek: z.number().int().min(1).max(520),
+    endWeek: z.number().int().min(1).max(520).nullable(),
+    distributorShareBasisPoints: z.number().int().min(0).max(10000),
+  })).max(24).default([]).superRefine((terms, context) => {
+    const ordered = [...terms].sort((a, b) => a.startWeek - b.startWeek);
+    ordered.forEach((term, index) => {
+      if (term.endWeek !== null && term.endWeek < term.startWeek) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: [index, "endWeek"], message: "End week cannot be before start week." });
+      }
+      const previous = ordered[index - 1];
+      if (previous && (previous.endWeek === null || previous.endWeek >= term.startWeek)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: [index, "startWeek"], message: "Distributor deal periods cannot overlap." });
+      }
+    });
+  }),
   pairingMenuItemIds: z.array(z.string().uuid()).max(20).default([]),
 });
 
