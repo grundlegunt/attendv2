@@ -303,7 +303,7 @@ export class PlatformService {
           prisma.auditorium.findMany({
             where: { locationId: location.id },
             orderBy: [{ active: "desc" }, { name: "asc" }],
-            select: { id: true, name: true, capacity: true, active: true, seatMap: { select: { id: true, name: true, version: true, seats: { select: { active: true, type: true } } } } },
+            select: { id: true, name: true, capacity: true, active: true, seatMap: { select: { id: true, name: true, version: true, seats: { orderBy: [{ y: "asc" }, { x: "asc" }], select: { id: true, label: true, x: true, y: true, active: true, type: true } } } } },
           }),
           prisma.employee.count({ where: { locationId: location.id, active: true, deletedAt: null } }),
           prisma.menuItem.count({ where: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } }),
@@ -365,6 +365,7 @@ export class PlatformService {
               activeSeats: auditorium.seatMap.seats.filter((seat) => seat.active).length,
               accessibleSeats: auditorium.seatMap.seats.filter((seat) => seat.active && seat.type === "ADA").length,
               companionSeats: auditorium.seatMap.seats.filter((seat) => seat.active && seat.type === "COMPANION").length,
+              seats: auditorium.seatMap.seats,
             } : null,
           })),
           configuration: { auditoriums: locationAuditoriums.filter((auditorium) => auditorium.active).length, employees, menuItems, upcomingShowtimes, activeMovies, activeFilmSeries },
