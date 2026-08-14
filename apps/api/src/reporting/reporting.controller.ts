@@ -30,6 +30,15 @@ export class ReportingController {
     response.send(this.reporting.revenueCsv(report));
   }
 
+  @Get("distributor-box-office.csv")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  async distributorBoxOfficeCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
+    const report = await this.reporting.revenue(this.location(actor), this.range(from, to));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="attend-distributor-box-office.csv"');
+    response.send(this.reporting.distributorBoxOfficeCsv(report));
+  }
+
   @Get("labor")
   labor(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
     return this.reporting.labor(this.location(actor), this.range(from, to));
