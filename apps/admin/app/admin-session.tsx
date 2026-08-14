@@ -115,8 +115,10 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     if (!session.supportSession) void apiFetch("/auth/staff/logout", { accessToken: session.accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY); setSession(null);
   } } : null, [session]);
-  const branding = value?.employee.adminBranding ?? publicBranding;
-  const adminUi = publicBranding?.ui ?? adminUiDefaults;
+  // Keep the unauthenticated surface recognizably Attend. Client colors and UI
+  // customization apply only after the staff member has established a session.
+  const branding = value ? (value.employee.adminBranding ?? publicBranding) : null;
+  const adminUi = value ? (publicBranding?.ui ?? adminUiDefaults) : adminUiDefaults;
   const fontFamilies: Record<AdminUiConfig["fontFamily"], string> = { SYSTEM: "Inter, ui-sans-serif, system-ui, sans-serif", SERIF: "Georgia, 'Times New Roman', serif", MODERN: "'Avenir Next', 'Helvetica Neue', Arial, sans-serif", MONO: "'SFMono-Regular', Consolas, monospace" };
   const theme = {
     "--color-accent": branding?.accentColor ?? adminBrandingDefaults.accentColor,
