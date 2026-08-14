@@ -11,7 +11,7 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" data-theme="cinematic">
+    <html lang="en" data-theme="cinematic" data-branding-status="loading">
       <body>
         <CustomerBrandingProvider>
           <SiteHeader />

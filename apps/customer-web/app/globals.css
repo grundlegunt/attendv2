@@ -3,6 +3,9 @@
   --color-accent: #fe2c54;
   --color-accent-muted: #a91d39;
 }
+html[data-branding-status="loading"] body {
+  visibility: hidden;
+}
 .cinema-shell {
   min-height: 100vh;
   padding: 20px clamp(20px, 5vw, 72px) 48px;
