@@ -934,6 +934,33 @@ describe("Milestone 1 cinema configuration", () => {
     expect(showtime.priceTier.id).toBeTruthy();
   });
 
+  it("keeps complete past schedule days available to Admin", async () => {
+    const { prisma } = await import("@cinema/database");
+    const reference = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
+    const historical = await prisma.showtime.create({
+      data: {
+        movieId,
+        auditoriumId,
+        priceTierId: reference.priceTierId,
+        startsAt: new Date("2029-12-20T18:00:00.000Z"),
+        featureStartsAt: new Date("2029-12-20T18:30:00.000Z"),
+        endsAt: new Date("2029-12-20T20:30:00.000Z"),
+        roomReadyAt: new Date("2029-12-20T20:45:00.000Z"),
+        onSale: false,
+      },
+    });
+
+    try {
+      const res = await request(app.getHttpServer())
+        .get("/api/v1/cinema/admin/bootstrap")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .expect(200);
+      expect(res.body.showtimes.some((item: { id: string }) => item.id === historical.id)).toBe(true);
+    } finally {
+      await prisma.showtime.delete({ where: { id: historical.id } });
+    }
+  });
+
   it("lists active film series with their explicitly assigned future showtimes", async () => {
     const series = await request(app.getHttpServer())
       .post("/api/v1/cinema/film-series")
