@@ -188,7 +188,7 @@ export default function ShowtimesPage() {
               <p className="loading-copy">{copy.emptyDate}</p>
             )}
 
-          <section className="movie-grid">
+          <section className="movie-grid showtimes-movie-grid">
             {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
               key={movie.id}
               movie={movie}
