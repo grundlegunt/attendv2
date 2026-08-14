@@ -426,20 +426,7 @@ export class PlatformService {
         seats: { create: input.seats.map((seat) => ({ ...seat, label: seat.label.toUpperCase(), rowLabel: seat.rowLabel.toUpperCase(), layoutVersion: nextVersion, tableGroupId: seat.tableGroupId ?? null, tablePosition: seat.tablePosition ?? null, levelKey: seat.levelKey ?? null, sectionKey: seat.sectionKey ?? null })) },
       } });
       const updated = await tx.auditorium.update({ where: { id: auditorium.id }, data: { name: input.name ?? auditorium.name, capacity: input.seats.length }, include: { seatMap: { include: { seats: { where: { active: true }, orderBy: [{ y: "asc" }, { x: "asc" }] } } } } });
-      const future = await tx.showtime.findMany({ where: { auditoriumId: auditorium.id, startsAt: { gte: new Date() } }, select: { id: true } });
-      let synchronizedShowtimes = 0;
-      for (const showtime of future) {
-        const [tickets, orders, holds, tabs] = await Promise.all([
-          tx.ticket.count({ where: { showtimeSeat: { showtimeId: showtime.id } } }), tx.restaurantOrder.count({ where: { showtimeSeat: { showtimeId: showtime.id } } }),
-          tx.seatHold.count({ where: { showtimeSeat: { showtimeId: showtime.id }, releasedAt: null, expiresAt: { gt: new Date() } } }), tx.restaurantTabSeat.count({ where: { showtimeSeat: { showtimeId: showtime.id } } }),
-        ]);
-        if (tickets || orders || holds || tabs) continue;
-        await tx.seatHold.deleteMany({ where: { showtimeSeat: { showtimeId: showtime.id } } });
-        await tx.showtimeSeat.deleteMany({ where: { showtimeId: showtime.id } });
-        await tx.showtimeSeat.createMany({ data: updated.seatMap!.seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })) });
-        synchronizedShowtimes += 1;
-      }
-      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_updated", entityType: "Auditorium", entityId: auditorium.id, beforeState: { name: auditorium.name, capacity: auditorium.capacity, version: auditorium.seatMap.version }, afterState: { name: updated.name, capacity: updated.capacity, version: nextVersion, synchronizedShowtimes } }, tx);
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_updated", entityType: "Auditorium", entityId: auditorium.id, beforeState: { name: auditorium.name, capacity: auditorium.capacity, version: auditorium.seatMap.version }, afterState: { name: updated.name, capacity: updated.capacity, version: nextVersion } }, tx);
       return updated;
       });
     } catch (error) {
@@ -456,7 +443,7 @@ export class PlatformService {
       if (showtimes) throw AppError.conflict("This auditorium has showtime or sales history and cannot be permanently deleted. Deactivate it in cinema Admin to preserve reporting records.");
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_deleted", entityType: "Auditorium", entityId: auditorium.id, beforeState: { name: auditorium.name, capacity: auditorium.capacity } }, tx);
       await tx.auditorium.delete({ where: { id: auditorium.id } });
-      return { deleted: true, id: auditorium.id };
+      return { deleted: true, id: auditorium.id, active: false };
     });
   }
 
