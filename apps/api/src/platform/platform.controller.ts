@@ -1,6 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
+import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, platformLoginRequestSchema } from "@cinema/shared";
 import { z } from "zod";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
@@ -194,6 +194,13 @@ export class PlatformController {
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   updateLocation(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(locationUpdateSchema)) body: unknown) {
     return this.platform.updateLocation({ actorId: actor.sub, organizationId, locationId, ...locationUpdateSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/locations/:locationId/auditoriums")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  createAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Body(new ZodValidationPipe(createAuditoriumRequestSchema)) body: unknown) {
+    return this.platform.createAuditorium({ actorId: actor.sub, organizationId, locationId, ...createAuditoriumRequestSchema.parse(body) });
   }
 
   @Patch("organizations/:organizationId/locations/:locationId/branding/draft")

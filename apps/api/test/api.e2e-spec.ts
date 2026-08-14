@@ -41,6 +41,12 @@ async function loginOwner() {
     .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
 }
 
+async function loginPlatformOwner() {
+  return request(app.getHttpServer())
+    .post("/api/v1/platform/auth/login")
+    .send({ email: "platform@attend.test", password: SEED_PASSWORD });
+}
+
 function setCookieHeaders(response: { headers: Record<string, unknown> }): string[] {
   const value = response.headers["set-cookie"];
   return Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
@@ -576,6 +582,30 @@ describe("Attend platform authentication boundary", () => {
         timezone: "America/New_York",
       })],
     }));
+  });
+
+  it("lets an Attend operator create a validated auditorium for a client location", async () => {
+    const platformLogin = await loginPlatformOwner();
+    expect(platformLogin.status).toBe(200);
+    const accessToken = platformLogin.body.accessToken as string;
+    const overview = await request(app.getHttpServer()).get("/api/v1/platform/overview").set("Authorization", `Bearer ${accessToken}`).expect(200);
+    const organization = overview.body.organizations.find((candidate: { name: string }) => candidate.name === "Meridian Cinema Co.");
+    const locationId = organization.locations[0].id as string;
+    const payload = {
+      name: "Master Preview Room",
+      seatMapName: "Master Preview Layout",
+      seats: [
+        { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD" },
+        { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "ADA" },
+      ],
+    };
+
+    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums`).send(payload).expect(401);
+    const created = await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums`).set("Authorization", `Bearer ${accessToken}`).send(payload).expect(201);
+    expect(created.body).toEqual(expect.objectContaining({ name: payload.name, capacity: 2, seatMap: expect.objectContaining({ name: payload.seatMapName, seats: expect.arrayContaining([expect.objectContaining({ label: "A1" }), expect.objectContaining({ label: "A2", type: "ADA" })]) }) }));
+
+    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/00000000-0000-0000-0000-000000000000/locations/${locationId}/auditoriums`).set("Authorization", `Bearer ${accessToken}`).send({ ...payload, name: "Wrong tenant" }).expect(404);
+    await request(app.getHttpServer()).post(`/api/v1/platform/organizations/${organization.id}/locations/${locationId}/auditoriums`).set("Authorization", `Bearer ${accessToken}`).send({ ...payload, name: "Invalid room", seats: [{ ...payload.seats[0], label: "A1" }, { ...payload.seats[1], label: "A1" }] }).expect(400);
   });
 
   it("lets an Attend operator provision a non-MFA cinema manager for an isolated location", async () => {
