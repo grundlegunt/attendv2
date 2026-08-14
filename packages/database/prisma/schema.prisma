@@ -153,8 +153,24 @@ model Location {
   issuedGiftCards       GiftCard[]
   giftCardTransactions  GiftCardTransaction[]
   giftCardPurchases     GiftCardPurchase[]
+  schedulePlans         SchedulePlan[]
 
   @@map("locations")
+}
+
+model SchedulePlan {
+  id           String   @id @default(uuid())
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  name         String
+  weekStartsAt DateTime
+  snapshotJson Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([locationId, weekStartsAt, name])
+  @@index([locationId, weekStartsAt])
+  @@map("schedule_plans")
 }
 
 model PrivateEventInquiry {

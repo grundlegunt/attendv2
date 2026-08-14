@@ -82,6 +82,17 @@ button.secondary { min-height: 42px; padding: 8px 14px; border: 1px solid var(--
 form button.secondary { width: 100%; margin-top: 10px; }
 .seat-map { margin: 20px 0; max-height: 430px; }
 .schedule { margin-top: 20px; }
+.schedule-plan-panel { margin: 24px 0; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.schedule-plan-heading { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(420px, 1.2fr); gap: 24px; align-items: end; padding: 22px 24px; }
+.schedule-plan-heading h2 { margin: 4px 0 6px; }
+.schedule-plan-heading p:last-child { margin: 0; color: var(--color-text-secondary); }
+.schedule-plan-heading form { display: grid; grid-template-columns: minmax(180px, 1fr) 160px auto; gap: 12px; align-items: end; }
+.schedule-plan-list { border-top: 1px solid var(--color-border); }
+.schedule-plan-list article { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; gap: 18px; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--color-border); }
+.schedule-plan-list article:last-child { border-bottom: 0; }
+.schedule-plan-list strong, .schedule-plan-list span { display: block; }
+.schedule-plan-list span, .schedule-plan-empty { color: var(--color-text-secondary); font-size: .78rem; }
+.schedule-plan-empty { margin: 0; padding: 0 24px 22px; }
 .schedule > p { color: var(--color-text-secondary); }
 .schedule-list { display: grid; gap: 10px; }
 .schedule-list article { display: grid; grid-template-columns: minmax(180px, 1.4fr) minmax(140px, 1fr) auto auto auto; gap: 16px; align-items: center; padding: 16px; border: 1px solid var(--color-border); }
@@ -399,6 +410,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .builder-actions .secondary { min-width: 180px; }
 .compliance-note { margin: 16px 0 0; font-size: .72rem; }
 @media (max-width: 900px) { .stats { grid-template-columns: 1fr 1fr; } .admin-grid { grid-template-columns: 1fr; } .schedule-list article { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 900px) { .schedule-plan-heading, .schedule-plan-heading form { grid-template-columns: 1fr; } .schedule-plan-list article { grid-template-columns: 1fr auto; } .schedule-plan-list article > span { grid-column: 1; } }
 @media (max-width: 1100px) {
   .schedule-with-inspector, .schedule-with-inspector.inspector-open { grid-template-columns: 1fr; }
   .schedule-inspector { min-height: 0; border-left: 0; }

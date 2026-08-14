@@ -155,6 +155,48 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return { location, showtimes, archivedMovies };
   }
 
+  async schedulePlans(actor: RequestActor) {
+    return prisma.schedulePlan.findMany({
+      where: { locationId: this.requireLocation(actor) },
+      select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true },
+      orderBy: [{ weekStartsAt: "desc" }, { createdAt: "desc" }],
+    });
+  }
+
+  async createSchedulePlan(actor: RequestActor, input: { name: string; weekStartsAt: string }) {
+    const locationId = this.requireLocation(actor);
+    const weekStartsAt = new Date(input.weekStartsAt);
+    const weekEndsAt = new Date(weekStartsAt.getTime() + 7 * 86_400_000);
+    const showtimes = await prisma.showtime.findMany({
+      where: { auditorium: { locationId }, startsAt: { gte: weekStartsAt, lt: weekEndsAt } },
+      select: { movieId: true, auditoriumId: true, priceTierId: true, startsAt: true, onSale: true, filmSeriesId: true, presentation: true, format: true },
+      orderBy: { startsAt: "asc" },
+    });
+    const snapshot = showtimes.map((showtime) => ({ ...showtime, startsAt: showtime.startsAt.toISOString() }));
+    try {
+      const plan = await prisma.schedulePlan.create({
+        data: { locationId, name: input.name, weekStartsAt, snapshotJson: snapshot },
+        select: { id: true, name: true, weekStartsAt: true, createdAt: true, snapshotJson: true },
+      });
+      await prisma.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.created", entityType: "SchedulePlan", entityId: plan.id, locationId, afterState: { name: plan.name, weekStartsAt: plan.weekStartsAt.toISOString(), showtimeCount: showtimes.length } } });
+      return plan;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("A schedule plan already uses that name for this week.");
+      throw error;
+    }
+  }
+
+  async deleteSchedulePlan(actor: RequestActor, id: string) {
+    const locationId = this.requireLocation(actor);
+    const plan = await prisma.schedulePlan.findFirst({ where: { id, locationId }, select: { id: true, name: true, weekStartsAt: true } });
+    if (!plan) throw AppError.notFound("Schedule plan not found.");
+    await prisma.$transaction([
+      prisma.schedulePlan.delete({ where: { id: plan.id } }),
+      prisma.auditEvent.create({ data: { actorType: AuditActorType.EMPLOYEE, actorId: actor.sub, action: "schedule_plan.deleted", entityType: "SchedulePlan", entityId: plan.id, locationId, beforeState: { name: plan.name, weekStartsAt: plan.weekStartsAt.toISOString() } } }),
+    ]);
+    return { deleted: true };
+  }
+
   async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
     const locationId = this.requireLocation(actor);
     const layoutErrors = input.layout
