@@ -195,7 +195,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     const location = await prisma.location.findUnique({
       where: { id: locationId },
       include: {
-        auditoriums: { where: { active: true }, select: { id: true } },
+        auditoriums: { where: { active: true }, select: { id: true, seatMap: { select: { seats: { where: { active: true }, select: { id: true }, take: 1 } } } } },
         organization: { select: {
           movies: { where: { active: true }, select: { id: true, title: true, runtimeMinutes: true } },
           priceTiers: { where: { active: true }, select: { id: true } },
@@ -209,6 +209,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     const rawSnapshot = Array.isArray(plan.snapshotJson) ? plan.snapshotJson : [];
     const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
     const auditoriumIds = new Set(location.auditoriums.map((auditorium) => auditorium.id));
+    const sellableAuditoriumIds = new Set(location.auditoriums.filter((auditorium) => auditorium.seatMap?.seats.length).map((auditorium) => auditorium.id));
     const movies = new Map(location.organization.movies.map((movie) => [movie.id, movie]));
     const priceTierIds = new Set(location.organization.priceTiers.map((tier) => tier.id));
     const filmSeriesIds = new Set(location.organization.filmSeries.map((series) => series.id));
@@ -231,6 +232,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       const movie = movies.get(parsed.data.movieId);
       if (!movie) issues.push({ index, message: "Film is no longer available." });
       if (!auditoriumIds.has(parsed.data.auditoriumId)) issues.push({ index, message: "Auditorium is no longer available." });
+      else if (!sellableAuditoriumIds.has(parsed.data.auditoriumId)) issues.push({ index, message: "Auditorium has no active seat layout." });
       if (parsed.data.priceTierId && !priceTierIds.has(parsed.data.priceTierId)) issues.push({ index, message: "Ticket tier is no longer available." });
       if (parsed.data.filmSeriesId && !filmSeriesIds.has(parsed.data.filmSeriesId)) issues.push({ index, message: "Film series is no longer available." });
       if (!movie || !auditoriumIds.has(parsed.data.auditoriumId)) return;

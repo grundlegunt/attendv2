@@ -137,6 +137,62 @@ describe("Saved schedule plan publishing", () => {
     await request(app.getHttpServer()).delete(`/api/v1/cinema/showtimes/${live.id}`).set(auth).expect(200);
     await request(app.getHttpServer()).delete(`/api/v1/cinema/schedule-plans/${planId}`).set(auth).expect(200);
   });
+
+  it("rejects a plan when its auditorium has no active seat layout", async () => {
+    const { prisma } = await import("@cinema/database");
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const bootstrap = await request(app.getHttpServer()).get("/api/v1/cinema/admin/bootstrap").set(auth).expect(200);
+    const movie = bootstrap.body.location.organization.movies[0];
+    const auditorium = bootstrap.body.location.auditoriums[0];
+    const priceTier = bootstrap.body.location.organization.priceTiers[0];
+    const createdPlan = await request(app.getHttpServer()).post("/api/v1/cinema/schedule-plans").set(auth).send({
+      name: `Seat layout validation ${Date.now()}`,
+      weekStartsAt: "2035-02-05T00:00:00.000Z",
+    }).expect(201);
+    const planId = createdPlan.body.id as string;
+    await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/showtimes`).set(auth).send({
+      movieId: movie.id,
+      auditoriumId: auditorium.id,
+      priceTierId: priceTier.id,
+      startsAt: "2035-02-06T18:00:00.000Z",
+      onSale: false,
+      presentation: "STANDARD",
+      filmSeriesId: null,
+      format: null,
+    }).expect(201);
+
+    const seats = await prisma.seat.findMany({
+      where: { seatMap: { auditoriumId: auditorium.id } },
+      select: { id: true, active: true },
+    });
+    expect(seats.length).toBeGreaterThan(0);
+
+    try {
+      await prisma.seat.updateMany({
+        where: { id: { in: seats.map((seat) => seat.id) } },
+        data: { active: false },
+      });
+      const validation = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
+      expect(validation.body).toEqual(expect.objectContaining({
+        valid: false,
+        issues: expect.arrayContaining([
+          expect.objectContaining({ message: "Auditorium has no active seat layout." }),
+        ]),
+      }));
+    } finally {
+      const originallyActive = seats.filter((seat) => seat.active).map((seat) => seat.id);
+      const originallyInactive = seats.filter((seat) => !seat.active).map((seat) => seat.id);
+      if (originallyActive.length) {
+        await prisma.seat.updateMany({ where: { id: { in: originallyActive } }, data: { active: true } });
+      }
+      if (originallyInactive.length) {
+        await prisma.seat.updateMany({ where: { id: { in: originallyInactive } }, data: { active: false } });
+      }
+      await request(app.getHttpServer()).delete(`/api/v1/cinema/schedule-plans/${planId}`).set(auth).expect(200);
+    }
+  });
 });
 
 describe("GET /api/v1/health", () => {
