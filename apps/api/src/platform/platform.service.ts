@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, PlatformUserRole, Prisma, prisma } from "@cinema/database";
 import { DEFAULT_ROLE_PERMISSIONS, hashPassword, InvalidTokenError, Permission, RoleKey, signTokenPair, TokenPair, verifyPassword, verifyRefreshToken } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, PlatformLoginRequest, validateAdvancedSeatLayout, validateSeatLayout } from "@cinema/shared";
+import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, PlatformLoginRequest, updateAuditoriumLayoutRequestSchema, validateAdvancedSeatLayout, validateSeatLayout } from "@cinema/shared";
 import { z } from "zod";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
@@ -17,6 +17,7 @@ const platformBrandingDraftSchema = customerBrandingSchema.omit({ name: true })
   .strict();
 type PlatformBrandingDraft = z.infer<typeof platformBrandingDraftSchema>;
 type PlatformAuditoriumInput = z.infer<typeof createAuditoriumRequestSchema>;
+type PlatformAuditoriumUpdateInput = z.infer<typeof updateAuditoriumLayoutRequestSchema>;
 
 @Injectable()
 export class PlatformService {
@@ -304,7 +305,7 @@ export class PlatformService {
           prisma.auditorium.findMany({
             where: { locationId: location.id },
             orderBy: [{ active: "desc" }, { name: "asc" }],
-            select: { id: true, name: true, capacity: true, active: true, seatMap: { select: { id: true, name: true, version: true, seats: { orderBy: [{ y: "asc" }, { x: "asc" }], select: { id: true, label: true, x: true, y: true, active: true, type: true } } } } },
+            select: { id: true, name: true, capacity: true, active: true, seatMap: { select: { id: true, name: true, version: true, layoutJson: true, seats: { orderBy: [{ y: "asc" }, { x: "asc" }], select: { id: true, label: true, rowLabel: true, number: true, x: true, y: true, active: true, type: true, tableGroupId: true, tablePosition: true, levelKey: true, sectionKey: true } } } } },
           }),
           prisma.employee.count({ where: { locationId: location.id, active: true, deletedAt: null } }),
           prisma.menuItem.count({ where: { active: true, is86d: false, menuCategory: { locationId: location.id, active: true } } }),
@@ -363,6 +364,7 @@ export class PlatformService {
               id: auditorium.seatMap.id,
               name: auditorium.seatMap.name,
               version: auditorium.seatMap.version,
+              layout: auditorium.seatMap.layoutJson,
               activeSeats: auditorium.seatMap.seats.filter((seat) => seat.active).length,
               accessibleSeats: auditorium.seatMap.seats.filter((seat) => seat.active && seat.type === "ADA").length,
               companionSeats: auditorium.seatMap.seats.filter((seat) => seat.active && seat.type === "COMPANION").length,
@@ -406,6 +408,56 @@ export class PlatformService {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("An auditorium or seat already uses that name, label, or coordinate.");
       throw error;
     }
+  }
+
+  async updateAuditorium(input: PlatformAuditoriumUpdateInput & { actorId: string; organizationId: string; locationId: string; auditoriumId: string }) {
+    const layoutErrors = validateAdvancedSeatLayout(input.seats, input.layout);
+    if (layoutErrors.length) throw AppError.validationFailed("The seat layout is invalid.", { errors: layoutErrors });
+    try {
+      return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.auditoriumId}))`;
+      const auditorium = await tx.auditorium.findFirst({ where: { id: input.auditoriumId, locationId: input.locationId, location: { organizationId: input.organizationId } }, include: { seatMap: true } });
+      if (!auditorium?.seatMap) throw AppError.notFound("Auditorium seat map not found.");
+      const nextVersion = auditorium.seatMap.version + 1;
+      await tx.seat.updateMany({ where: { seatMapId: auditorium.seatMap.id, active: true }, data: { active: false } });
+      await tx.seatMap.update({ where: { id: auditorium.seatMap.id }, data: {
+        name: input.seatMapName ?? auditorium.seatMap.name, version: nextVersion, layoutJson: input.layout as Prisma.InputJsonValue,
+        revisions: { create: { version: nextVersion, layoutJson: input.layout as Prisma.InputJsonValue } },
+        seats: { create: input.seats.map((seat) => ({ ...seat, label: seat.label.toUpperCase(), rowLabel: seat.rowLabel.toUpperCase(), layoutVersion: nextVersion, tableGroupId: seat.tableGroupId ?? null, tablePosition: seat.tablePosition ?? null, levelKey: seat.levelKey ?? null, sectionKey: seat.sectionKey ?? null })) },
+      } });
+      const updated = await tx.auditorium.update({ where: { id: auditorium.id }, data: { name: input.name ?? auditorium.name, capacity: input.seats.length }, include: { seatMap: { include: { seats: { where: { active: true }, orderBy: [{ y: "asc" }, { x: "asc" }] } } } } });
+      const future = await tx.showtime.findMany({ where: { auditoriumId: auditorium.id, startsAt: { gte: new Date() } }, select: { id: true } });
+      let synchronizedShowtimes = 0;
+      for (const showtime of future) {
+        const [tickets, orders, holds, tabs] = await Promise.all([
+          tx.ticket.count({ where: { showtimeSeat: { showtimeId: showtime.id } } }), tx.restaurantOrder.count({ where: { showtimeSeat: { showtimeId: showtime.id } } }),
+          tx.seatHold.count({ where: { showtimeSeat: { showtimeId: showtime.id }, releasedAt: null, expiresAt: { gt: new Date() } } }), tx.restaurantTabSeat.count({ where: { showtimeSeat: { showtimeId: showtime.id } } }),
+        ]);
+        if (tickets || orders || holds || tabs) continue;
+        await tx.seatHold.deleteMany({ where: { showtimeSeat: { showtimeId: showtime.id } } });
+        await tx.showtimeSeat.deleteMany({ where: { showtimeId: showtime.id } });
+        await tx.showtimeSeat.createMany({ data: updated.seatMap!.seats.map((seat) => ({ showtimeId: showtime.id, seatId: seat.id })) });
+        synchronizedShowtimes += 1;
+      }
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_updated", entityType: "Auditorium", entityId: auditorium.id, beforeState: { name: auditorium.name, capacity: auditorium.capacity, version: auditorium.seatMap.version }, afterState: { name: updated.name, capacity: updated.capacity, version: nextVersion, synchronizedShowtimes } }, tx);
+      return updated;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("An auditorium or seat already uses that name, label, or coordinate.");
+      throw error;
+    }
+  }
+
+  async deleteAuditorium(input: { actorId: string; organizationId: string; locationId: string; auditoriumId: string }) {
+    return prisma.$transaction(async (tx) => {
+      const auditorium = await tx.auditorium.findFirst({ where: { id: input.auditoriumId, locationId: input.locationId, location: { organizationId: input.organizationId } } });
+      if (!auditorium) throw AppError.notFound("Auditorium not found.");
+      const showtimes = await tx.showtime.count({ where: { auditoriumId: auditorium.id } });
+      if (showtimes) throw AppError.conflict("This auditorium has showtime or sales history and cannot be permanently deleted. Deactivate it in cinema Admin to preserve reporting records.");
+      await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_deleted", entityType: "Auditorium", entityId: auditorium.id, beforeState: { name: auditorium.name, capacity: auditorium.capacity } }, tx);
+      await tx.auditorium.delete({ where: { id: auditorium.id } });
+      return { deleted: true, id: auditorium.id };
+    });
   }
 
   async duplicateAuditorium(input: { actorId: string; organizationId: string; locationId: string; auditoriumId: string; name: string }) {

@@ -95,6 +95,32 @@ describe("cinema programming requests", () => {
     expect(() => createMovieRequestSchema.parse({ title: "The Matrix", runtimeMinutes: 136, posterPosition: "LEFT" })).toThrow();
   });
 
+  it("accepts tiered distributor deal terms", () => {
+    const parsed = createMovieRequestSchema.parse({
+      title: "Tony",
+      runtimeMinutes: 137,
+      distributorName: "Example Distribution",
+      distributorTerms: [
+        { startWeek: 1, endWeek: 1, distributorShareBasisPoints: 6000 },
+        { startWeek: 2, endWeek: null, distributorShareBasisPoints: 5000 },
+      ],
+    });
+
+    expect(parsed.distributorName).toBe("Example Distribution");
+    expect(parsed.distributorTerms?.[0]?.distributorShareBasisPoints).toBe(6000);
+  });
+
+  it("rejects overlapping distributor deal periods", () => {
+    expect(() => createMovieRequestSchema.parse({
+      title: "Tony",
+      runtimeMinutes: 137,
+      distributorTerms: [
+        { startWeek: 1, endWeek: 2, distributorShareBasisPoints: 6000 },
+        { startWeek: 2, endWeek: null, distributorShareBasisPoints: 5000 },
+      ],
+    })).toThrow();
+  });
+
   it("stores a managed film-series assignment and presentation on a new showtime", () => {
     const filmSeriesId = "10000000-0000-4000-8000-000000000004";
     const parsed = createShowtimeRequestSchema.parse({
