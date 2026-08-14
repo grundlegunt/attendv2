@@ -69,6 +69,7 @@ export class PlatformService {
         id: organization.id,
         name: organization.name,
         legalName: organization.legalName,
+        businessTypeLabel: organization.businessTypeLabel,
         timezone: organization.timezone,
         active: organization.active,
         payments: {
@@ -250,12 +251,13 @@ export class PlatformService {
     return { id: target.id, passwordReset: true };
   }
 
-  async createOrganization(input: { actorId: string; name: string; legalName?: string | null; timezone: string; location: { name: string; address?: string | null; timezone: string } }) {
+  async createOrganization(input: { actorId: string; name: string; legalName?: string | null; businessTypeLabel?: string | null; timezone: string; location: { name: string; address?: string | null; timezone: string } }) {
     const organizationId = await prisma.$transaction(async (tx) => {
       const organization = await tx.organization.create({
         data: {
           name: input.name,
           legalName: input.legalName,
+          businessTypeLabel: input.businessTypeLabel,
           timezone: input.timezone,
           locations: { create: { name: input.location.name, address: input.location.address, timezone: input.location.timezone } },
         },
@@ -269,7 +271,7 @@ export class PlatformService {
         action: "platform.organization_created",
         entityType: "Organization",
         entityId: organization.id,
-        afterState: { name: organization.name, legalName: organization.legalName, timezone: organization.timezone, initialLocationId: location?.id },
+        afterState: { name: organization.name, legalName: organization.legalName, businessTypeLabel: organization.businessTypeLabel, timezone: organization.timezone, initialLocationId: location?.id },
       }, tx);
       return organization.id;
     });
@@ -287,6 +289,7 @@ export class PlatformService {
       id: organization.id,
       name: organization.name,
       legalName: organization.legalName,
+      businessTypeLabel: organization.businessTypeLabel,
       timezone: organization.timezone,
       active: organization.active,
       ticketFeeMinor: organization.ticketFeeMinor,
@@ -352,12 +355,12 @@ export class PlatformService {
     };
   }
 
-  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; timezone?: string; ticketFeeMinor?: number; active?: boolean }) {
+  async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; businessTypeLabel?: string | null; timezone?: string; ticketFeeMinor?: number; active?: boolean }) {
     await prisma.$transaction(async (tx) => {
       const before = await tx.organization.findUnique({ where: { id: input.organizationId } });
       if (!before) throw AppError.notFound("Cinema organization not found.");
       const updated = await tx.organization.update({ where: { id: input.organizationId }, data: {
-        name: input.name, legalName: input.legalName, timezone: input.timezone, ticketFeeMinor: input.ticketFeeMinor, active: input.active,
+        name: input.name, legalName: input.legalName, businessTypeLabel: input.businessTypeLabel, timezone: input.timezone, ticketFeeMinor: input.ticketFeeMinor, active: input.active,
       } });
       if (input.active === false && before.active) {
         await tx.staffAuthAccount.updateMany({
@@ -366,7 +369,7 @@ export class PlatformService {
         });
       }
       if (input.ticketFeeMinor !== undefined) await tx.priceTier.updateMany({ where: { organizationId: input.organizationId }, data: { feeMinor: input.ticketFeeMinor } });
-      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, timezone: organization.timezone, active: organization.active, onboardingStatus: organization.connectOnboardingStatus, ticketFeeMinor: organization.ticketFeeMinor });
+      const state = (organization: typeof updated) => ({ name: organization.name, legalName: organization.legalName, businessTypeLabel: organization.businessTypeLabel, timezone: organization.timezone, active: organization.active, onboardingStatus: organization.connectOnboardingStatus, ticketFeeMinor: organization.ticketFeeMinor });
       await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, action: "platform.organization_updated", entityType: "Organization", entityId: updated.id, beforeState: state(before), afterState: state(updated) }, tx);
     });
     return this.organization(input.organizationId);

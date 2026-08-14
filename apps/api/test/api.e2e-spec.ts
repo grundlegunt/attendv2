@@ -461,6 +461,7 @@ describe("Attend platform authentication boundary", () => {
       .send({
         name: "Bluebird Cinema Co.",
         legalName: "Bluebird Cinema Co. LLC",
+        businessTypeLabel: "Independent cinema",
         timezone: "America/New_York",
         location: {
           name: "Bluebird Cinema",
@@ -473,6 +474,7 @@ describe("Attend platform authentication boundary", () => {
     expect(created.body).toEqual(expect.objectContaining({
       name: "Bluebird Cinema Co.",
       legalName: "Bluebird Cinema Co. LLC",
+      businessTypeLabel: "Independent cinema",
       locations: [expect.objectContaining({
         name: "Bluebird Cinema",
         address: "100 Main Street, Richmond, VA",
@@ -529,10 +531,11 @@ describe("Attend platform authentication boundary", () => {
     const organization = await request(app.getHttpServer())
       .patch(`/api/v1/platform/organizations/${organizationId}`)
       .set("Authorization", `Bearer ${platformAccessToken}`)
-      .send({ legalName: "Meridian Cinema Co. LLC" })
+      .send({ legalName: "Meridian Cinema Co. LLC", businessTypeLabel: "Dine-in cinema" })
       .expect(200);
     expect(organization.body).toEqual(expect.objectContaining({
       legalName: "Meridian Cinema Co. LLC",
+      businessTypeLabel: "Dine-in cinema",
     }));
 
     const location = await request(app.getHttpServer())

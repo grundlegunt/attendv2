@@ -57,6 +57,7 @@ interface OrganizationOverview {
   id: string;
   name: string;
   legalName: string | null;
+  businessTypeLabel: string | null;
   timezone: string;
   active: boolean;
   payments: { connected: boolean; onboardingStatus: string };
@@ -79,6 +80,7 @@ interface OrganizationDetail {
   id: string;
   name: string;
   legalName: string | null;
+  businessTypeLabel: string | null;
   timezone: string;
   active: boolean;
   ticketFeeMinor: number;
@@ -139,12 +141,14 @@ interface OrganizationDetail {
 type OrganizationDraft = {
   name: string;
   legalName: string;
+  businessTypeLabel: string;
   timezone: string;
   ticketFee: string;
 };
 type OrganizationCreateDraft = {
   name: string;
   legalName: string;
+  businessTypeLabel: string;
   timezone: string;
   locationName: string;
   address: string;
@@ -317,6 +321,7 @@ export default function AttendMaster() {
     setOrganizationDraft({
       name: detail.name,
       legalName: detail.legalName ?? "",
+      businessTypeLabel: detail.businessTypeLabel ?? "",
       timezone: detail.timezone,
       ticketFee: (detail.ticketFeeMinor / 100).toFixed(2),
     });
@@ -326,6 +331,7 @@ export default function AttendMaster() {
     setOrganizationCreateDraft({
       name: "",
       legalName: "",
+      businessTypeLabel: "Cinema",
       timezone: "America/Chicago",
       locationName: "",
       address: "",
@@ -347,6 +353,7 @@ export default function AttendMaster() {
           body: JSON.stringify({
             name: values.name,
             legalName: values.legalName || null,
+            businessTypeLabel: values.businessTypeLabel || null,
             timezone: values.timezone,
             location: {
               name: values.locationName,
@@ -419,6 +426,7 @@ export default function AttendMaster() {
           body: JSON.stringify({
             ...draft,
             legalName: draft.legalName || null,
+            businessTypeLabel: draft.businessTypeLabel || null,
             ticketFeeMinor: Math.round(Number(ticketFee) * 100),
           }),
         },
@@ -690,6 +698,7 @@ export default function AttendMaster() {
       const matchesQuery = !normalizedQuery || [
         item.name,
         item.legalName ?? "",
+        item.businessTypeLabel ?? "",
         item.timezone,
         ...item.locations.flatMap((location) => [location.name, location.address ?? "", location.timezone]),
       ].some((value) => value.toLowerCase().includes(normalizedQuery));
@@ -828,6 +837,19 @@ export default function AttendMaster() {
               />
             </label>
             <label>
+              Business type label
+              <input
+                placeholder="Cinema, concert venue, festival…"
+                value={organizationCreateDraft.businessTypeLabel}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    businessTypeLabel: event.target.value,
+                  })
+                }
+              />
+            </label>
+            <label>
               Organization timezone
               <input
                 required
@@ -905,7 +927,7 @@ export default function AttendMaster() {
                     {organization.active ? "Active client" : "Suspended client"}
                   </span>
                   <p className="muted">
-                    {organization.legalName ?? "Legal name not configured"} ·
+                    {organization.businessTypeLabel ?? "Business type not classified"} · {organization.legalName ?? "Legal name not configured"} ·
                     Client since{" "}
                     {new Date(organization.createdAt).toLocaleDateString()}
                   </p>
@@ -980,6 +1002,19 @@ export default function AttendMaster() {
                           setOrganizationDraft({
                             ...organizationDraft,
                             legalName: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Business type label
+                      <input
+                        placeholder="Cinema, concert venue, festival…"
+                        value={organizationDraft.businessTypeLabel}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            businessTypeLabel: event.target.value,
                           })
                         }
                       />
@@ -2661,7 +2696,7 @@ export default function AttendMaster() {
                     <p className="eyebrow">ORGANIZATION</p>
                     <h2>{organizationItem.name}</h2>
                     <p className="muted">
-                      {organizationItem.legalName ?? organizationItem.timezone}
+                      {organizationItem.businessTypeLabel ?? "Unclassified"} · {organizationItem.legalName ?? organizationItem.timezone}
                     </p>
                   </div>
                   <div className="org-actions">

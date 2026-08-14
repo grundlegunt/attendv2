@@ -24,6 +24,7 @@ model Organization {
   id                       String                  @id @default(uuid())
   name                     String
   legalName                String?
+  businessTypeLabel        String?
   timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
