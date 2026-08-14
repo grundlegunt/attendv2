@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { NowPlayingMovie } from "@cinema/shared";
+import { showtimeDateStrip, type NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SeatPicker } from "../components/seat-picker";
 import { localDateKey, MovieTile } from "../components/movie-tile";
@@ -47,17 +47,6 @@ export default function ShowtimesPage() {
       ).sort(),
     [program, programMovies],
   );
-  const visibleDates = useMemo(() => {
-    if (!program) return [];
-    const todayKey = localDateKey(new Date(), program.location.timezone);
-    const today = new Date(`${todayKey}T12:00:00`);
-
-    return Array.from({ length: 3 }, (_, offset) => {
-      const date = new Date(today);
-      date.setDate(today.getDate() + offset);
-      return localDateKey(date, program.location.timezone);
-    });
-  }, [program]);
   const activeDate = useMemo(() => {
     if (selectedDate) return selectedDate;
     if (!program) return availableDates[0] ?? null;
@@ -68,6 +57,14 @@ export default function ShowtimesPage() {
           availableDates[0] ??
           null);
   }, [availableDates, program, selectedDate]);
+  const todayKey = useMemo(
+    () => program ? localDateKey(new Date(), program.location.timezone) : null,
+    [program],
+  );
+  const visibleDates = useMemo(
+    () => todayKey ? showtimeDateStrip(todayKey, activeDate) : [],
+    [activeDate, todayKey],
+  );
 
   const moviesForActiveDate = useMemo(() => {
     if (!program || !activeDate) return [];
@@ -125,7 +122,7 @@ export default function ShowtimesPage() {
 
       {!selectedShowtimeId && visibleDates.length > 0 && (
         <nav className="date-bar" aria-label="Showtime dates">
-          {visibleDates.map((dateKey, index) => {
+          {visibleDates.map((dateKey) => {
             const date = new Date(`${dateKey}T12:00:00`);
             return (
               <button
@@ -134,7 +131,7 @@ export default function ShowtimesPage() {
                 onClick={() => setSelectedDate(dateKey)}
               >
                 <span>
-                  {index === 0
+                  {dateKey === todayKey
                     ? "Today"
                     : date.toLocaleDateString([], { weekday: "long" })}
                 </span>
