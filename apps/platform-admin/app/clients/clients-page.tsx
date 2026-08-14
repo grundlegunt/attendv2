@@ -5,6 +5,8 @@ import {
   adminUiDefaults,
   type AdminUiConfig,
   type CinemaContent,
+  type SeatInput,
+  type SeatMapLayout,
 } from "@cinema/shared";
 import Link from "next/link";
 import { AdminUiEditor } from "../admin-ui-editor";
@@ -175,6 +177,14 @@ type CinemaManagerDraft = {
   email: string;
   password: string;
 };
+type AuditoriumDraft = {
+  locationId: string;
+  name: string;
+  rows: number;
+  seatsPerRow: number;
+  centerAisle: boolean;
+  accessiblePairs: number;
+};
 type LocationDetail = OrganizationDetail["locations"][number];
 type LocationDraft = {
   name: string;
@@ -234,6 +244,8 @@ export default function AttendMaster() {
   } | null>(null);
   const [cinemaManagerDraft, setCinemaManagerDraft] =
     useState<CinemaManagerDraft | null>(null);
+  const [auditoriumDraft, setAuditoriumDraft] =
+    useState<AuditoriumDraft | null>(null);
   const [saving, setSaving] = useState(false);
   const [clientQuery, setClientQuery] = useState("");
   const [paymentFilter, setPaymentFilter] = useState("ALL");
@@ -700,6 +712,72 @@ export default function AttendMaster() {
           ? reason.message
           : "Could not create the cinema manager.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function auditoriumSeats(draft: AuditoriumDraft): SeatInput[] {
+    return Array.from({ length: draft.rows }, (_, rowIndex) => {
+      const rowLabel = String.fromCharCode(65 + rowIndex);
+      return Array.from({ length: draft.seatsPerRow }, (_, seatIndex) => {
+        const number = seatIndex + 1;
+        const accessibleIndex = rowIndex === draft.rows - 1 ? seatIndex : -1;
+        const isAccessiblePosition = accessibleIndex >= 0 && accessibleIndex < draft.accessiblePairs * 2;
+        return {
+          label: `${rowLabel}${number}`,
+          rowLabel,
+          number,
+          x: seatIndex + (draft.centerAisle && seatIndex >= Math.ceil(draft.seatsPerRow / 2) ? 1 : 0),
+          y: rowIndex,
+          type: isAccessiblePosition ? (accessibleIndex % 2 === 0 ? "ADA" : "COMPANION") : "STANDARD",
+          levelKey: "main",
+        } satisfies SeatInput;
+      });
+    }).flat();
+  }
+
+  function auditoriumLayout(draft: AuditoriumDraft): SeatMapLayout {
+    const aisleX = Math.ceil(draft.seatsPerRow / 2);
+    return {
+      mode: "BASIC",
+      canvas: { width: draft.seatsPerRow + (draft.centerAisle ? 1 : 0), height: draft.rows },
+      screenPosition: "TOP",
+      seatingStyle: "SINGLE",
+      levels: [{ id: "main", name: "Main floor", sortOrder: 0, elevationLabel: "Floor" }],
+      sections: [],
+      elements: draft.centerAisle ? [{ id: "center-aisle", type: "AISLE", levelId: "main", x: aisleX, y: 0, width: 1, height: draft.rows, label: "Center aisle", orientation: "VERTICAL" }] : [],
+    };
+  }
+
+  async function createAuditorium(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !auditoriumDraft) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request(
+        `/platform/organizations/${organization.id}/locations/${auditoriumDraft.locationId}/auditoriums`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: auditoriumDraft.name,
+            seatMapName: `${auditoriumDraft.name} layout`,
+            seats: auditoriumSeats(auditoriumDraft),
+            layout: auditoriumLayout(auditoriumDraft),
+          }),
+        },
+        session.accessToken,
+      );
+      const [updated, refreshed] = await Promise.all([
+        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<Overview>("/platform/overview", undefined, session.accessToken),
+      ]);
+      setOrganization(updated);
+      setOverview(refreshed);
+      setAuditoriumDraft(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not create the auditorium.");
     } finally {
       setSaving(false);
     }
@@ -1321,8 +1399,60 @@ export default function AttendMaster() {
                   <section className="auditorium-overview">
                     <div className="auditorium-overview-heading">
                       <div><p className="eyebrow">VENUE LAYOUTS</p><h3>Auditoriums &amp; seat maps</h3></div>
-                      <p className="muted">Authoritative cinema layouts, scoped to {location.name}.</p>
+                      <div className="auditorium-overview-actions">
+                        <p className="muted">Authoritative cinema layouts, scoped to {location.name}.</p>
+                        {session.user.role !== "VIEWER" && auditoriumDraft?.locationId !== location.id && (
+                          <button
+                            type="button"
+                            className="quiet"
+                            onClick={() => setAuditoriumDraft({ locationId: location.id, name: `Theater ${location.auditoriums.length + 1}`, rows: 8, seatsPerRow: 12, centerAisle: true, accessiblePairs: 1 })}
+                          >
+                            + Add auditorium
+                          </button>
+                        )}
+                      </div>
                     </div>
+                    {auditoriumDraft?.locationId === location.id && (
+                      <form className="master-auditorium-builder" onSubmit={createAuditorium}>
+                        <div className="editor-heading">
+                          <div>
+                            <p className="eyebrow">LAYOUT DESIGNER</p>
+                            <h3>Create an auditorium</h3>
+                            <p className="muted">Build a standard room quickly. Existing cinema-admin layout controls remain available for advanced edits.</p>
+                          </div>
+                          <button type="button" className="quiet" onClick={() => setAuditoriumDraft(null)}>Cancel</button>
+                        </div>
+                        <div className="auditorium-builder-fields">
+                          <label>Theater name<input required maxLength={80} value={auditoriumDraft.name} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, name: event.target.value })} /></label>
+                          <label>Rows<input type="number" min={1} max={20} value={auditoriumDraft.rows} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, rows: Math.max(1, Math.min(20, Number(event.target.value))) })} /></label>
+                          <label>Seats per row<input type="number" min={2} max={25} value={auditoriumDraft.seatsPerRow} onChange={(event) => {
+                            const seatsPerRow = Math.max(2, Math.min(25, Number(event.target.value)));
+                            setAuditoriumDraft({ ...auditoriumDraft, seatsPerRow, accessiblePairs: Math.min(auditoriumDraft.accessiblePairs, Math.floor(seatsPerRow / 2)) });
+                          }} /></label>
+                          <label>Accessible pairs<input type="number" min={0} max={Math.floor(auditoriumDraft.seatsPerRow / 2)} value={auditoriumDraft.accessiblePairs} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, accessiblePairs: Math.max(0, Math.min(Math.floor(auditoriumDraft.seatsPerRow / 2), Number(event.target.value))) })} /></label>
+                          <label className="check"><input type="checkbox" checked={auditoriumDraft.centerAisle} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, centerAisle: event.target.checked })} /> Center aisle</label>
+                        </div>
+                        <div
+                          className="master-seat-preview master-builder-preview"
+                          role="img"
+                          aria-label={`${auditoriumDraft.name} seat map preview`}
+                          style={{
+                            gridTemplateColumns: `repeat(${auditoriumLayout(auditoriumDraft).canvas.width}, minmax(12px, 1fr))`,
+                            gridTemplateRows: `repeat(${auditoriumDraft.rows}, 20px)`,
+                          }}
+                        >
+                          {auditoriumSeats(auditoriumDraft).map((seat) => (
+                            <i key={seat.label} className={seat.type.toLowerCase()} style={{ gridColumn: seat.x + 1, gridRow: seat.y + 1 }} title={`${seat.label} · ${seat.type.toLowerCase()}`} />
+                          ))}
+                        </div>
+                        <div className="master-builder-summary">
+                          <span><b>{auditoriumDraft.rows * auditoriumDraft.seatsPerRow}</b> admission positions</span>
+                          <span><b>{auditoriumDraft.accessiblePairs}</b> accessible pairs</span>
+                          <button disabled={saving}>{saving ? "Creating…" : "Create auditorium"}</button>
+                        </div>
+                        <p className="form-note">Attend models the layout supplied by the operator. It does not certify ADA, fire, egress, or building-code compliance.</p>
+                      </form>
+                    )}
                     <div className="auditorium-overview-grid">
                       {location.auditoriums.map((auditorium) => (
                         <article key={auditorium.id}>
