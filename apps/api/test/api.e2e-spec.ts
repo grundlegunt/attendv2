@@ -5011,6 +5011,91 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
+  it("allows only one distinct customer payment request to collect a tab", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: {
+        locationId: true,
+        primaryCustomerId: true,
+        activePaymentMethodId: true,
+      },
+    });
+    const server = await prisma.employee.findFirstOrThrow({
+      where: { email: `server@${SEED_SUFFIX}` },
+    });
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "WALK_IN",
+        label: "Distinct customer payment race fixture",
+        status: "OPEN",
+        activePaymentMethodId: source.activePaymentMethodId,
+        orders: {
+          create: {
+            serverEmployeeId: server.id,
+            status: "SENT",
+            placedAt: new Date(),
+            items: {
+              create: {
+                menuItemId: cocktail.id,
+                quantity: 1,
+                unitPriceCentsSnapshot: cocktail.priceCents,
+                selectedModifiers: [],
+                kitchenStationId: cocktail.kitchenStationId,
+                status: "SENT",
+              },
+            },
+          },
+        },
+      },
+    });
+    const settlement = app.get(RestaurantSettlementService);
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const chargesBefore = provider.chargeSavedPaymentMethodCalls.length;
+    const pay = (requestId: string) =>
+      settlement.payCustomer({
+        tabId: tab.id,
+        customerId: source.primaryCustomerId!,
+        requestId,
+        tipCents: 0,
+        paymentMethodReferenceId: source.activePaymentMethodId!,
+      });
+
+    const results = await Promise.allSettled([
+      pay("88000000-0000-0000-0000-000000000005"),
+      pay("88000000-0000-0000-0000-000000000006"),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual([
+      "fulfilled",
+      "rejected",
+    ]);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: { code: "CONFLICT" },
+    });
+    expect(provider.chargeSavedPaymentMethodCalls).toHaveLength(chargesBefore + 1);
+    expect(
+      await prisma.payment.count({
+        where: { restaurantTabId: tab.id, status: "SUCCEEDED" },
+      }),
+    ).toBe(1);
+    await expect(
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).resolves.toMatchObject({ status: "CLOSED" });
+  });
+
   it("keeps a restaurant tab closed and audits a failed receipt email", async () => {
     const { prisma } = await import("@cinema/database");
     const { RestaurantSettlementService } = await import(
