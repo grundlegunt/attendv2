@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { SeatMapLayout } from "@cinema/shared";
-import type { SeatMapSeat } from "@cinema/ui";
+import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
 import { useAdminSession, useAdminUi } from "../admin-session";
@@ -31,6 +31,10 @@ interface Showtime {
   filmSeries: FilmSeries | null; presentation: "STANDARD" | "OPEN_CAPTIONS" | "Q_AND_A" | "SPECIAL_GUEST";
   format?: string | null;
   movie: Movie; auditorium: Auditorium; priceTier: PriceTier;
+}
+interface ShowtimeSeatInventory {
+  seats: Array<Omit<SeatMapSeat, "state"> & { state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" }>;
+  counts: { available: number; held: number; sold: number; blocked: number };
 }
 interface Bootstrap {
   location: {
@@ -79,6 +83,8 @@ export default function AdminPage() {
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
+  const [seatInventory, setSeatInventory] = useState<ShowtimeSeatInventory | null>(null);
+  const [seatInventoryError, setSeatInventoryError] = useState<string | null>(null);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -204,6 +210,21 @@ export default function AdminPage() {
     setShowtimeFormat(showtime.format ?? "");
     setShowtimeEditorOpen(true);
   }
+
+  useEffect(() => {
+    if (!showtimeEditorOpen || !editingShowtimeId) {
+      setSeatInventory(null);
+      setSeatInventoryError(null);
+      return;
+    }
+    let canceled = false;
+    setSeatInventory(null);
+    setSeatInventoryError(null);
+    apiFetch<ShowtimeSeatInventory>(`/cinema/showtimes/${editingShowtimeId}/seats`)
+      .then((inventory) => { if (!canceled) setSeatInventory(inventory); })
+      .catch(() => { if (!canceled) setSeatInventoryError("Seat inventory could not be loaded."); });
+    return () => { canceled = true; };
+  }, [editingShowtimeId, showtimeEditorOpen]);
 
   useEffect(() => {
     if (!data || !linkedShowtimeId || linkedShowtimeHandled) return;
@@ -425,6 +446,19 @@ export default function AdminPage() {
             <button type="button" className="film-details-button" onClick={() => openMovieEditor(selectedMovie)}>Edit film details &amp; poster URL</button>
           </div>
         </div>}
+        {editingShowtimeId && <section className="showtime-seat-inventory" aria-label="Showtime seat inventory">
+          <div className="showtime-seat-inventory-heading"><strong>Seat inventory</strong>{seatInventory && <span>{seatInventory.counts.sold}/{seatInventory.seats.length} sold</span>}</div>
+          {seatInventory ? <>
+            <div className="seat-inventory-counts">
+              <span><b>{seatInventory.counts.available}</b> available</span>
+              <span><b>{seatInventory.counts.sold}</b> sold</span>
+              <span><b>{seatInventory.counts.held}</b> held</span>
+              <span><b>{seatInventory.counts.blocked}</b> blocked</span>
+            </div>
+            <SeatMap seats={seatInventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))} label="Read-only showtime seat inventory" />
+            <p className="sold-seat-labels"><strong>Purchased seats</strong><span>{seatInventory.seats.filter((seat) => seat.state === "SOLD").map((seat) => seat.label).join(", ") || "None"}</span></p>
+          </> : seatInventoryError ? <p className="inline-error">{seatInventoryError}</p> : <p className="seat-inventory-loading">Loading seat inventory…</p>}
+        </section>}
         </div>
         <div className="showtime-inspector-fields">
         <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
