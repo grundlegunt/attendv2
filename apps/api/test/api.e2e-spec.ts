@@ -5314,6 +5314,106 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     ).toBe(1);
   });
 
+  it("allows only one concurrent fallback worker to collect an overdue tab", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      include: {
+        activePaymentMethod: { include: { paymentCustomer: true } },
+        showtime: true,
+      },
+    });
+    const delayedMethod = await prisma.paymentMethodReference.create({
+      data: {
+        paymentCustomerId: source.activePaymentMethod!.paymentCustomerId,
+        provider: "test",
+        providerPaymentMethodId: "pm_delayed_fallback_race",
+        brand: "visa",
+        last4: "0003",
+        expMonth: 12,
+        expYear: 2035,
+      },
+    });
+    const server = await prisma.employee.findFirstOrThrow({
+      where: { email: `server@${SEED_SUFFIX}` },
+    });
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "SEAT_LINKED",
+        showtimeId: source.showtimeId,
+        status: "PREAUTHORIZED",
+        autoSettleAuthorized: true,
+        activePaymentMethodId: delayedMethod.id,
+        orders: {
+          create: {
+            serverEmployeeId: server.id,
+            status: "SENT",
+            placedAt: new Date(),
+            items: {
+              create: {
+                menuItemId: cocktail.id,
+                quantity: 1,
+                unitPriceCentsSnapshot: cocktail.priceCents,
+                selectedModifiers: [],
+                kitchenStationId: cocktail.kitchenStationId,
+                status: "SENT",
+              },
+            },
+          },
+        },
+      },
+    });
+    await prisma.restaurantTab.updateMany({
+      where: {
+        showtimeId: source.showtimeId,
+        id: { not: tab.id },
+        status: { in: ["PREAUTHORIZED", "OPEN"] },
+      },
+      data: { autoSettleAuthorized: false },
+    });
+    await prisma.showtime.update({
+      where: { id: source.showtimeId! },
+      data: { endsAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    const settlement = app.get(RestaurantSettlementService);
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    const chargesBefore = provider.chargeSavedPaymentMethodCalls.length;
+
+    const results = await Promise.allSettled([
+      settlement.runFallback(),
+      settlement.runFallback(),
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual([
+      "fulfilled",
+      "rejected",
+    ]);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({
+      reason: { code: "CONFLICT" },
+    });
+    expect(provider.chargeSavedPaymentMethodCalls).toHaveLength(chargesBefore + 1);
+    expect(
+      await prisma.payment.count({
+        where: { restaurantTabId: tab.id, status: "SUCCEEDED" },
+      }),
+    ).toBe(1);
+    await expect(
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).resolves.toMatchObject({ status: "CLOSED" });
+  });
+
   it("reconciles a processing restaurant payment and closes the paid tab", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
