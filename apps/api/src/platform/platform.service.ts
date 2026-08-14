@@ -2,7 +2,7 @@ import { Inject, Injectable } from "@nestjs/common";
 import { ConnectOnboardingStatus, PlatformUserRole, Prisma, prisma } from "@cinema/database";
 import { DEFAULT_ROLE_PERMISSIONS, hashPassword, InvalidTokenError, Permission, RoleKey, signTokenPair, TokenPair, verifyPassword, verifyRefreshToken } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
-import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, customerBrandingSchema, PlatformLoginRequest } from "@cinema/shared";
+import { adminBrandingDefaults, adminBrandingSchema, AdminUiConfig, adminUiConfigSchema, adminUiDefaults, CinemaContent, cinemaContentDefaults, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, PlatformLoginRequest, validateAdvancedSeatLayout, validateSeatLayout } from "@cinema/shared";
 import { z } from "zod";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
@@ -16,6 +16,7 @@ const platformBrandingDraftSchema = customerBrandingSchema.omit({ name: true })
   .extend({ adminUi: adminUiConfigSchema })
   .strict();
 type PlatformBrandingDraft = z.infer<typeof platformBrandingDraftSchema>;
+type PlatformAuditoriumInput = z.infer<typeof createAuditoriumRequestSchema>;
 
 @Injectable()
 export class PlatformService {
@@ -372,6 +373,39 @@ export class PlatformService {
         };
       })),
     };
+  }
+
+  async createAuditorium(input: PlatformAuditoriumInput & { actorId: string; organizationId: string; locationId: string }) {
+    const location = await prisma.location.findFirst({ where: { id: input.locationId, organizationId: input.organizationId }, select: { id: true } });
+    if (!location) throw AppError.notFound("Cinema location not found.");
+    const layoutErrors = input.layout ? validateAdvancedSeatLayout(input.seats, input.layout) : validateSeatLayout(input.seats);
+    if (layoutErrors.length) throw AppError.validationFailed("The seat layout is invalid.", { errors: layoutErrors });
+
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const auditorium = await tx.auditorium.create({
+          data: {
+            locationId: input.locationId,
+            name: input.name,
+            capacity: input.seats.length,
+            seatMap: {
+              create: {
+                name: input.seatMapName,
+                layoutJson: input.layout as Prisma.InputJsonValue | undefined,
+                revisions: { create: { version: 1, layoutJson: input.layout as Prisma.InputJsonValue | undefined } },
+                seats: { create: input.seats.map((seat) => ({ ...seat, label: seat.label.toUpperCase(), rowLabel: seat.rowLabel.toUpperCase(), tableGroupId: seat.tableGroupId ?? null, tablePosition: seat.tablePosition ?? null, levelKey: seat.levelKey ?? null, sectionKey: seat.sectionKey ?? null })) },
+              },
+            },
+          },
+          include: { seatMap: { include: { seats: true } } },
+        });
+        await this.audit.record({ actorType: "PLATFORM", actorId: input.actorId, locationId: input.locationId, action: "platform.auditorium_created", entityType: "Auditorium", entityId: auditorium.id, afterState: { organizationId: input.organizationId, name: auditorium.name, capacity: auditorium.capacity } }, tx);
+        return auditorium;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("An auditorium or seat already uses that name, label, or coordinate.");
+      throw error;
+    }
   }
 
   async updateOrganization(input: { actorId: string; organizationId: string; name?: string; legalName?: string | null; businessTypeLabel?: string | null; timezone?: string; ticketFeeMinor?: number; active?: boolean }) {
