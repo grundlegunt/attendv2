@@ -5348,6 +5348,11 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     >;
     const cardPresentCallsBefore =
       provider.collectCardPresentPaymentCalls.length;
+    await settlement.dropCheck({
+      tabId: tab.id,
+      locationId: source.locationId,
+      employeeId: owner.id,
+    });
     const tabView = await settlement.staffTab(tab.id, source.locationId);
 
     const staffPayment = settlement.finalizeStaff({
