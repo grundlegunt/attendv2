@@ -5,7 +5,7 @@ import type { SeatMapLayout } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
-import { captureShowtimeMoves, type ShowtimeMoveSnapshot } from "../schedule-undo";
+import { applyShowtimeMoves, captureShowtimeMoves, type ShowtimeMoveSnapshot } from "../schedule-undo";
 import { useAdminSession, useAdminUi } from "../admin-session";
 
 interface Auditorium {
@@ -350,8 +350,18 @@ export default function AdminPage() {
     return value.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
+  function applyLocalMoves(moves: ShowtimeMoveSnapshot[]) {
+    setData((current) => current ? {
+      ...current,
+      showtimes: applyShowtimeMoves(current.showtimes, current.location.auditoriums, moves),
+    } : current);
+  }
+
   async function moveShowtime(showtime: CalendarShowtime, nextAuditoriumId: string, nextStartsAt: Date) {
     setError(null);
+    const rollback = captureShowtimeMoves([showtime]);
+    const move = [{ showtimeId: showtime.id, auditoriumId: nextAuditoriumId, startsAt: nextStartsAt.toISOString() }];
+    applyLocalMoves(move);
     try {
       await apiFetch(`/cinema/showtimes/${showtime.id}`, {
         accessToken: token ?? undefined,
@@ -363,24 +373,27 @@ export default function AdminPage() {
           onSale: showtime.onSale,
         }),
       });
-      setUndoMoves(captureShowtimeMoves([showtime]));
-      await refresh();
+      setUndoMoves(rollback);
     } catch (reason) {
+      applyLocalMoves(rollback);
       showError(reason);
     }
   }
 
   async function moveManyShowtimes(moves: Array<{ showtime: CalendarShowtime; auditoriumId: string; startsAt: Date }>) {
     setError(null);
+    const rollback = captureShowtimeMoves(moves.map(({ showtime }) => showtime));
+    const requestedMoves = moves.map(({ showtime, auditoriumId, startsAt }) => ({ showtimeId: showtime.id, auditoriumId, startsAt: startsAt.toISOString() }));
+    applyLocalMoves(requestedMoves);
     try {
       await apiFetch("/cinema/showtimes/group", {
         accessToken: token ?? undefined,
         method: "PATCH",
-        body: JSON.stringify({ moves: moves.map(({ showtime, auditoriumId, startsAt }) => ({ showtimeId: showtime.id, auditoriumId, startsAt: startsAt.toISOString() })) }),
+        body: JSON.stringify({ moves: requestedMoves }),
       });
-      setUndoMoves(captureShowtimeMoves(moves.map(({ showtime }) => showtime)));
-      await refresh();
+      setUndoMoves(rollback);
     } catch (reason) {
+      applyLocalMoves(rollback);
       showError(reason);
     }
   }
@@ -389,6 +402,8 @@ export default function AdminPage() {
     if (!undoMoves?.length || undoingMove) return;
     setError(null);
     setUndoingMove(true);
+    const rollback = captureShowtimeMoves((data?.showtimes ?? []).filter((showtime) => undoMoves.some((move) => move.showtimeId === showtime.id)));
+    applyLocalMoves(undoMoves);
     try {
       if (undoMoves.length === 1) {
         const move = undoMoves[0]!;
@@ -405,8 +420,8 @@ export default function AdminPage() {
         });
       }
       setUndoMoves(null);
-      await refresh();
     } catch (reason) {
+      applyLocalMoves(rollback);
       showError(reason);
     } finally {
       setUndoingMove(false);
