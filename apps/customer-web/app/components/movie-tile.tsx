@@ -14,6 +14,19 @@ export function localDateKey(value: string | Date, timeZone: string) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
+function presentationBadge(presentation: PublicShowtime["presentation"]) {
+  switch (presentation) {
+    case "OPEN_CAPTIONS":
+      return { shortLabel: "OC", label: "Open captions" };
+    case "Q_AND_A":
+      return { shortLabel: "Q&A", label: "Q and A" };
+    case "SPECIAL_GUEST":
+      return { shortLabel: "Guest", label: "Special guest" };
+    default:
+      return null;
+  }
+}
+
 export function MovieTile({
   movie,
   showtimes,
@@ -33,10 +46,6 @@ export function MovieTile({
     showtimes.flatMap((showtime) => showtime.filmSeries ? [[showtime.filmSeries.id, showtime.filmSeries] as const] : []),
   ).values());
   const formats = Array.from(new Set(showtimes.map((showtime) => showtime.format).filter(Boolean)));
-  const presentations = Array.from(new Set(showtimes
-    .map((showtime) => showtime.presentation)
-    .filter((presentation) => presentation !== "STANDARD")))
-    .map((presentation) => presentation === "OPEN_CAPTIONS" ? "Open Captions" : presentation.replaceAll("_", " "));
   const firstShowtime = showtimes.reduce<PublicShowtime | undefined>((earliest, showtime) =>
     !earliest || new Date(showtime.startsAt) < new Date(earliest.startsAt) ? showtime : earliest, undefined);
 
@@ -53,7 +62,6 @@ export function MovieTile({
             </Link>
           ))}
           {formats.map((format) => <span key={format}>{format}</span>)}
-          {presentations.map((presentation) => <span key={presentation}>{presentation}</span>)}
         </div>
         <h2 className="program-tile__title"><Link href={`/movie/${movie.id}`}>{movie.title}</Link></h2>
       </div>
@@ -63,6 +71,7 @@ export function MovieTile({
       </Link> : <div className="program-tile__showtimes">
         {showtimes.map((showtime) => {
           const isPast = new Date(showtime.startsAt).getTime() <= Date.now();
+          const presentation = presentationBadge(showtime.presentation);
           return (
             <button
               key={showtime.id}
@@ -72,7 +81,12 @@ export function MovieTile({
               onClick={() => onSelectShowtime?.(showtime.id)}
             >
               {includeDate && <span>{new Intl.DateTimeFormat("en-US", { timeZone, month: "short", day: "numeric" }).format(new Date(showtime.startsAt))}</span>}
-              <strong>{new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(showtime.startsAt))}</strong>
+              <span className="program-tile__showtime-time">
+                <strong>{new Intl.DateTimeFormat("en-US", { timeZone, hour: "numeric", minute: "2-digit" }).format(new Date(showtime.startsAt))}</strong>
+                {presentation && <abbr className="program-tile__presentation" title={presentation.label} aria-label={presentation.label}>
+                  {presentation.shortLabel}
+                </abbr>}
+              </span>
               <small>{showtime.auditorium.name}{showtime.format ? ` · ${showtime.format}` : ""}</small>
             </button>
           );
