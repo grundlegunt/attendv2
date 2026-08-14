@@ -344,6 +344,7 @@ export function showtimeWindowsOverlap(a: ShowtimeWindow, b: ShowtimeWindow): bo
 export interface PublicShowtime {
   id: string;
   startsAt: string;
+  presentation: ShowtimePresentation;
   auditorium: { id: string; name: string; capacity: number };
   priceTier: { name: string; ticketPriceMinor: number; feeMinor: number; currency: string };
   filmSeries: { id: string; name: string } | null;

@@ -1149,6 +1149,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           select: {
             id: true,
             startsAt: true,
+            presentation: true,
             format: true,
             filmSeries: { select: { id: true, name: true } },
             auditorium: { select: { id: true, name: true, capacity: true } },
@@ -1269,6 +1270,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           select: {
             id: true,
             startsAt: true,
+            presentation: true,
             format: true,
             filmSeries: { select: { id: true, name: true } },
             auditorium: { select: { id: true, name: true, capacity: true } },

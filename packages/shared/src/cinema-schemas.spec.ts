@@ -246,6 +246,7 @@ function screening(id: string, startsAt: string, auditoriumId = "room-1"): Publi
   return {
     id,
     startsAt,
+    presentation: "STANDARD",
     auditorium: { id: auditoriumId, name: "Theater 1", capacity: 60 },
     priceTier: { name: "Standard", ticketPriceMinor: 1700, feeMinor: 200, currency: "USD" },
     filmSeries: null,
