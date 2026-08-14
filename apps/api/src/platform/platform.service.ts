@@ -593,15 +593,19 @@ export class PlatformService {
         role = await tx.role.create({
           data: { organizationId: input.organizationId, key: RoleKey.CinemaManager, name: "Cinema Manager" },
         });
-        const permissionKeys = DEFAULT_ROLE_PERMISSIONS[RoleKey.CinemaManager];
-        const permissions = await tx.permission.findMany({ where: { key: { in: permissionKeys } } });
-        if (permissions.length !== permissionKeys.length) {
-          throw AppError.conflict("The Cinema Manager permission catalog is incomplete. Run the database seed before creating this account.");
-        }
-        await tx.rolePermission.createMany({
-          data: permissions.map((permission) => ({ roleId: role!.id, permissionId: permission.id })),
-        });
       }
+      // Existing clients can predate newly introduced manager permissions. Add any
+      // missing defaults whenever Master provisions a manager, while preserving
+      // permissions the cinema has deliberately added to the role.
+      const permissionKeys = DEFAULT_ROLE_PERMISSIONS[RoleKey.CinemaManager];
+      const permissions = await tx.permission.findMany({ where: { key: { in: permissionKeys } } });
+      if (permissions.length !== permissionKeys.length) {
+        throw AppError.conflict("The Cinema Manager permission catalog is incomplete. Run the database seed before creating this account.");
+      }
+      await tx.rolePermission.createMany({
+        data: permissions.map((permission) => ({ roleId: role.id, permissionId: permission.id })),
+        skipDuplicates: true,
+      });
       const employee = await tx.employee.create({
         data: {
           locationId: input.locationId,

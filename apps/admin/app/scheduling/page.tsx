@@ -86,7 +86,7 @@ function currentWeekStart() {
 }
 
 export default function AdminPage() {
-  const { employee, accessToken: token } = useAdminSession();
+  const { employee, accessToken: token, supportSession } = useAdminSession();
   const adminUi = useAdminUi();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -478,6 +478,24 @@ export default function AdminPage() {
   }, [data, linkedShowtimeHandled, linkedShowtimeId]);
 
   function createShowtimeAt(auditorium: string, date: Date, selectedMovieId?: string) {
+    if (!data) return;
+    if (supportSession) {
+      setError("Attend Support view is read only. Sign in as a cinema manager to add a showing.");
+      return;
+    }
+    if (!data.location.organization.movies.length) {
+      setError("Add an active film to the film library before scheduling a showing.");
+      return;
+    }
+    const selectedAuditorium = data.location.auditoriums.find((room) => room.id === auditorium);
+    if (!selectedAuditorium?.capacity) {
+      setError("This auditorium needs an active seat layout before it can be scheduled.");
+      return;
+    }
+    if (!data.location.organization.priceTiers.length) {
+      setError("Add an admission price under Reports & Finance before scheduling a showing.");
+      return;
+    }
     const local = new Date(date);
     setEditingShowtimeId(null);
     setMovieId(selectedMovieId ?? "");
