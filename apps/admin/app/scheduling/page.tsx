@@ -48,10 +48,25 @@ interface Bootstrap {
   showtimes: Showtime[];
   archivedMovies: Movie[];
 }
+interface SchedulePlan {
+  id: string;
+  name: string;
+  weekStartsAt: string;
+  createdAt: string;
+  snapshotJson: unknown[];
+}
 
 function dateTimeInputValue(date: Date) {
   const pad = (value: number) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function currentWeekStart() {
+  const date = new Date();
+  const day = date.getDay();
+  date.setDate(date.getDate() - ((day + 6) % 7));
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString().slice(0, 10);
 }
 
 export default function AdminPage() {
@@ -92,11 +107,19 @@ export default function AdminPage() {
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(null);
   const [undoMoves, setUndoMoves] = useState<ShowtimeMoveSnapshot[] | null>(null);
   const [undoingMove, setUndoingMove] = useState(false);
+  const [schedulePlans, setSchedulePlans] = useState<SchedulePlan[]>([]);
+  const [planName, setPlanName] = useState("");
+  const [planWeek, setPlanWeek] = useState(currentWeekStart);
+  const [savingPlan, setSavingPlan] = useState(false);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
-    const response = await apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken });
+    const [response, plans] = await Promise.all([
+      apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken }),
+      apiFetch<SchedulePlan[]>("/cinema/schedule-plans", { accessToken }),
+    ]);
     setData(response);
+    setSchedulePlans(plans);
     setMovieId((current) => current || response.location.organization.movies[0]?.id || "");
     setAuditoriumId((current) => current || response.location.auditoriums[0]?.id || "");
   }
@@ -104,6 +127,36 @@ export default function AdminPage() {
   useEffect(() => { refresh().catch(showError); }, [token]);
   function showError(reason: unknown) {
     setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
+  }
+
+  async function saveSchedulePlan(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setSavingPlan(true);
+    try {
+      await apiFetch("/cinema/schedule-plans", {
+        accessToken: token ?? undefined,
+        method: "POST",
+        body: JSON.stringify({ name: planName.trim(), weekStartsAt: new Date(`${planWeek}T00:00:00`).toISOString() }),
+      });
+      setPlanName("");
+      await refresh();
+    } catch (reason) {
+      showError(reason);
+    } finally {
+      setSavingPlan(false);
+    }
+  }
+
+  async function deleteSchedulePlan(plan: SchedulePlan) {
+    if (!window.confirm(`Delete the saved schedule plan “${plan.name}”? The live schedule will not change.`)) return;
+    setError(null);
+    try {
+      await apiFetch(`/cinema/schedule-plans/${plan.id}`, { accessToken: token ?? undefined, method: "DELETE" });
+      setSchedulePlans((current) => current.filter((candidate) => candidate.id !== plan.id));
+    } catch (reason) {
+      showError(reason);
+    }
   }
 
   const linkedMovieId = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("movieId");
@@ -457,6 +510,22 @@ export default function AdminPage() {
       <div><strong>{data?.location.organization.movies.length ?? 0}</strong><span>Movies</span></div>
       <div><strong>{data?.showtimes.length ?? 0}</strong><span>Showtimes</span></div>
       <div><strong>30 + 15</strong><span>Pre-show + cleaning</span></div>
+    </section>
+
+    <section className="schedule-plan-panel" aria-labelledby="schedule-plans-heading">
+      <div className="schedule-plan-heading">
+        <div><p className="kicker">SCHEDULE PLANS</p><h2 id="schedule-plans-heading">Save a weekly version</h2><p>Capture an alternate plan without changing the live customer schedule.</p></div>
+        <form onSubmit={saveSchedulePlan}>
+          <label>Plan name<input required maxLength={80} value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Opening week · Plan A" /></label>
+          <label>Week of<input required type="date" value={planWeek} onChange={(event) => setPlanWeek(event.target.value)} /></label>
+          <button className="primary" disabled={savingPlan}>{savingPlan ? "Saving…" : "Save current week"}</button>
+        </form>
+      </div>
+      {schedulePlans.length > 0 ? <div className="schedule-plan-list">{schedulePlans.map((plan) => <article key={plan.id}>
+        <div><strong>{plan.name}</strong><span>Week of {new Date(plan.weekStartsAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</span></div>
+        <span>{Array.isArray(plan.snapshotJson) ? plan.snapshotJson.length : 0} showtimes saved</span>
+        <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
+      </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
     </section>
 
     {data && <div className={`schedule-with-inspector ${showtimeEditorOpen ? "inspector-open" : ""}`}><SchedulingCalendar
