@@ -836,7 +836,7 @@ export class RestaurantService {
                 .map((seat) => seat.showtimeSeat.seat.label),
               showtimeId: order.restaurantTab.showtimeId,
               showtimeStartsAt: order.restaurantTab.showtime?.startsAt,
-              serverName: order.serverEmployee.name,
+              serverName: order.serverEmployee?.name ?? "Order ahead",
               items: { connect: itemIds.map((id) => ({ id })) },
             },
           }),

@@ -665,6 +665,11 @@ enum RestaurantOrderStatus {
   CANCELED
 }
 
+enum RestaurantOrderSource {
+  STAFF
+  ONLINE_ORDER_AHEAD
+}
+
 enum RestaurantOrderItemStatus {
   DRAFT
   SENT
@@ -771,6 +776,7 @@ model TicketOrder {
   payment          Payment?
   consents         CustomerConsent[]
   cashTransactions CashTransaction[]
+  restaurantOrders RestaurantOrder[]
 
   @@index([locationId, createdAt])
   @@index([customerId, createdAt])
@@ -1259,6 +1265,10 @@ model RestaurantTab {
   taxCents                 Int?
   serviceChargeCents       Int?
   totalCents               Int?
+  // Amount already collected through a combined ticket + dining payment.
+  // This remains separate from staff-entered tab payments so settlement can
+  // subtract it without representing a second processor charge.
+  prepaidCents             Int                       @default(0)
   openedAt                 DateTime                  @default(now())
   closedAt                 DateTime?
   createdAt                DateTime                  @default(now())
@@ -1450,8 +1460,11 @@ model RestaurantOrder {
   restaurantTab    RestaurantTab         @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
   showtimeSeatId   String?
   showtimeSeat     ShowtimeSeat?         @relation(fields: [showtimeSeatId], references: [id], onDelete: Restrict)
-  serverEmployeeId String
-  serverEmployee   Employee              @relation(fields: [serverEmployeeId], references: [id], onDelete: Restrict)
+  serverEmployeeId String?
+  serverEmployee   Employee?             @relation(fields: [serverEmployeeId], references: [id], onDelete: Restrict)
+  source           RestaurantOrderSource @default(STAFF)
+  ticketOrderId    String?
+  ticketOrder      TicketOrder?          @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
   status           RestaurantOrderStatus @default(DRAFT)
   placedAt         DateTime?
   createdAt        DateTime              @default(now())
@@ -1463,6 +1476,7 @@ model RestaurantOrder {
   @@index([restaurantTabId, status])
   @@index([showtimeSeatId, status])
   @@index([serverEmployeeId, createdAt])
+  @@index([ticketOrderId, createdAt])
   @@map("restaurant_orders")
 }
 
