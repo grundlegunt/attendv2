@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { AdminUiConfig } from "@cinema/shared";
+import type { AdminUiConfig, AuditoriumSeatingMode } from "@cinema/shared";
 
 import { downloadScheduleWorkbook } from "./schedule-export";
 
@@ -9,6 +9,11 @@ export interface ScheduleAuditorium {
   id: string;
   name: string;
   capacity: number;
+  seatingMode: AuditoriumSeatingMode;
+}
+
+function auditoriumCapacityLabel(auditorium: ScheduleAuditorium) {
+  return `${auditorium.capacity} ${auditorium.seatingMode === "GENERAL_ADMISSION" ? "admissions" : "seats"}`;
 }
 
 export interface ScheduleMovie {
@@ -502,7 +507,7 @@ export function SchedulingCalendar({
         {auditoriums.map((auditorium) => {
           const roomShowtimes = visibleShowtimes.filter((showtime) => showtime.auditorium.id === auditorium.id);
           return <div className="calendar-row" key={auditorium.id}>
-            <div className="room-label"><strong>{auditorium.name}</strong><span>{auditorium.capacity} seats</span></div>
+            <div className="room-label"><strong>{auditorium.name}</strong><span>{auditoriumCapacityLabel(auditorium)}</span></div>
             <div
               className={`room-timeline ${draggingKey ? "drag-target" : ""}`}
               onClick={(event) => {

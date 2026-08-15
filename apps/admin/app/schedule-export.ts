@@ -86,7 +86,8 @@ export async function downloadScheduleWorkbook({
     const scheduleHeaderRow = 5;
     sheet.getCell(scheduleHeaderRow, 1).value = "Time";
     auditoriums.forEach((auditorium, index) => {
-      sheet.getCell(scheduleHeaderRow, index + 2).value = `${auditorium.name} (${auditorium.capacity} seats)`;
+      const capacityUnit = auditorium.seatingMode === "GENERAL_ADMISSION" ? "admissions" : "seats";
+      sheet.getCell(scheduleHeaderRow, index + 2).value = `${auditorium.name} (${auditorium.capacity} ${capacityUnit})`;
     });
     for (let column = 1; column <= lastColumn; column += 1) {
       const cell = sheet.getCell(scheduleHeaderRow, column);

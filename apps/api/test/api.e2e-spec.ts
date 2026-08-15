@@ -184,7 +184,7 @@ describe("Saved schedule plan publishing", () => {
       expect(validation.body).toEqual(expect.objectContaining({
         valid: false,
         issues: expect.arrayContaining([
-          expect.objectContaining({ message: "Auditorium has no active seat layout." }),
+          expect.objectContaining({ message: "Auditorium has no sellable ticket inventory." }),
         ]),
       }));
     } finally {
