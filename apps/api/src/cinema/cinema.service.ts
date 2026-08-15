@@ -108,6 +108,55 @@ function zonedDate(
 
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
+  private async sellableSeatIds(
+    tx: Prisma.TransactionClient,
+    auditorium: {
+      id: string;
+      name: string;
+      capacity: number;
+      seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+    },
+  ) {
+    if (auditorium.seatingMode === "GENERAL_ADMISSION") {
+      const seatMap = await tx.seatMap.upsert({
+        where: { auditoriumId: auditorium.id },
+        create: {
+          auditoriumId: auditorium.id,
+          name: `${auditorium.name} general admission inventory`,
+        },
+        update: {},
+        select: { id: true },
+      });
+      const existingCount = await tx.seat.count({
+        where: { seatMapId: seatMap.id },
+      });
+      await tx.seat.createMany({
+        data: Array.from(
+          { length: Math.max(0, auditorium.capacity - existingCount) },
+          (_, index) => ({
+            seatMapId: seatMap.id,
+            label: `GA${existingCount + index + 1}`,
+            rowLabel: "GA",
+            number: existingCount + index + 1,
+            x: existingCount + index,
+            y: 0,
+          }),
+        ),
+        skipDuplicates: true,
+      });
+      return tx.seat.findMany({
+        where: { seatMapId: seatMap.id },
+        select: { id: true },
+        orderBy: [{ number: "asc" }, { createdAt: "asc" }],
+        take: auditorium.capacity,
+      });
+    }
+    return tx.seat.findMany({
+      where: { seatMap: { auditoriumId: auditorium.id }, active: true },
+      select: { id: true },
+      orderBy: { number: "asc" },
+    });
+  }
   async giftCardBalance(locationId: string | undefined, code: string) {
     const location = locationId
       ? await prisma.location.findFirst({
@@ -584,6 +633,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         ].sort();
         for (const auditoriumId of auditoriumIds)
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
+        const auditoriums = new Map(
+          (
+            await tx.auditorium.findMany({
+              where: { id: { in: auditoriumIds }, locationId, active: true },
+            })
+          ).map((auditorium) => [auditorium.id, auditorium]),
+        );
 
         const movies = new Map(
           (
@@ -730,13 +786,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               format: showtime.format ?? null,
             },
           });
-          const seats = await tx.seat.findMany({
-            where: {
-              seatMap: { auditoriumId: showtime.auditoriumId },
-              active: true,
-            },
-            select: { id: true },
-          });
+          const auditorium = auditoriums.get(showtime.auditoriumId);
+          if (!auditorium)
+            throw AppError.conflict(
+              "An auditorium in this plan is no longer available. Check the plan again.",
+            );
+          const seats = await this.sellableSeatIds(tx, auditorium);
           if (!seats.length)
             throw AppError.conflict(
               "An auditorium in this plan no longer has an active seat layout. Check the plan again.",
@@ -1977,10 +2032,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             filmSeries: true,
           },
         });
-        const seats = await tx.seat.findMany({
-          where: { seatMap: { auditoriumId: auditorium.id }, active: true },
-          select: { id: true },
-        });
+        const seats = await this.sellableSeatIds(tx, auditorium);
         await tx.showtimeSeat.createMany({
           data: seats.map((seat) => ({
             showtimeId: showtime.id,
@@ -2136,13 +2188,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             });
             let seats = seatsByAuditorium.get(source.auditoriumId);
             if (!seats) {
-              seats = await tx.seat.findMany({
-                where: {
-                  seatMap: { auditoriumId: source.auditoriumId },
-                  active: true,
-                },
-                select: { id: true },
-              });
+              seats = await this.sellableSeatIds(tx, source.auditorium);
               seatsByAuditorium.set(source.auditoriumId, seats);
             }
             await tx.showtimeSeat.createMany({
@@ -2309,10 +2355,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             );
           }
           await tx.showtimeSeat.deleteMany({ where: { showtimeId: id } });
-          const seats = await tx.seat.findMany({
-            where: { seatMap: { auditoriumId }, active: true },
-            select: { id: true },
-          });
+          const seats = await this.sellableSeatIds(tx, auditorium);
           await tx.showtimeSeat.createMany({
             data: seats.map((seat) => ({ showtimeId: id, seatId: seat.id })),
           });
@@ -2515,13 +2558,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             await tx.showtimeSeat.deleteMany({
               where: { showtimeId: move.showtime.id },
             });
-            const seats = await tx.seat.findMany({
-              where: {
-                seatMap: { auditoriumId: move.auditorium.id },
-                active: true,
-              },
-              select: { id: true },
-            });
+            const seats = await this.sellableSeatIds(tx, move.auditorium);
             await tx.showtimeSeat.createMany({
               data: seats.map((seat) => ({
                 showtimeId: move.showtime.id,
@@ -3156,6 +3193,25 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
   async seatAvailability(showtimeId: string, holderKey?: string) {
     const now = new Date();
+    let generalAdmissionSeatIds: string[] | undefined;
+    await prisma.$transaction(async (tx) => {
+      const showtime = await tx.showtime.findFirst({
+        where: { id: showtimeId, onSale: true },
+        include: { auditorium: true },
+      });
+      if (!showtime) return;
+      if (showtime.auditorium.seatingMode !== "GENERAL_ADMISSION") return;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${showtime.auditoriumId}))`;
+      const seats = await this.sellableSeatIds(tx, showtime.auditorium);
+      generalAdmissionSeatIds = seats.map((seat) => seat.id);
+      await tx.showtimeSeat.createMany({
+        data: seats.map((seat) => ({
+          showtimeId,
+          seatId: seat.id,
+        })),
+        skipDuplicates: true,
+      });
+    });
     await prisma.seatHold.updateMany({
       where: {
         releasedAt: null,
@@ -3171,6 +3227,9 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         auditorium: true,
         priceTier: true,
         showtimeSeats: {
+          where: generalAdmissionSeatIds
+            ? { seatId: { in: generalAdmissionSeatIds } }
+            : undefined,
           include: {
             seat: true,
             holds: {
@@ -3230,6 +3289,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           id: showtime.auditorium.id,
           name: showtime.auditorium.name,
           capacity: showtime.auditorium.capacity,
+          seatingMode: showtime.auditorium.seatingMode,
         },
         priceTier: {
           ticketPriceMinor: showtime.priceTier.ticketPriceMinor,

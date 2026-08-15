@@ -1422,6 +1422,41 @@ button.link {
   color: var(--color-accent);
   font-size: 1.5rem;
 }
+.ga-ticket-picker {
+  max-width: 560px;
+  margin: clamp(36px, 8vw, 96px) auto;
+  padding: clamp(28px, 5vw, 52px);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-elevated);
+  text-align: center;
+}
+.ga-ticket-picker h3 {
+  margin: 8px 0;
+  font: clamp(2rem, 5vw, 3.5rem) var(--font-family-display);
+}
+.ga-ticket-picker p {
+  color: var(--color-text-secondary);
+}
+.ga-ticket-picker__quantity {
+  display: grid;
+  grid-template-columns: 64px minmax(80px, 1fr) 64px;
+  align-items: center;
+  max-width: 280px;
+  margin: 28px auto 0;
+  border: 1px solid var(--color-border);
+}
+.ga-ticket-picker__quantity button {
+  min-height: 64px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font-size: 2rem;
+  cursor: pointer;
+}
+.ga-ticket-picker__quantity button:first-child { border-right: 1px solid var(--color-border); }
+.ga-ticket-picker__quantity button:last-child { border-left: 1px solid var(--color-border); }
+.ga-ticket-picker__quantity button:disabled { cursor: not-allowed; opacity: .35; }
+.ga-ticket-picker__quantity strong { font-size: 2rem; }
 .seat-picker__summary {
   position: sticky;
   bottom: 16px;
