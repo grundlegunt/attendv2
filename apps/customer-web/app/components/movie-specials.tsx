@@ -23,12 +23,17 @@ export function MovieSpecials({ specials, showtimes = false }: { specials: Publi
 
   return <section className="movie-specials">
     <span className="eyebrow">ONLY AT THIS SHOW</span><h2>Movie Specials</h2>
-    <div className="specials-grid">{specials.map((special) => <article key={special.movieId}>
-      {special.posterUrl && <img src={special.posterUrl} alt="" />}
-      <div>
+    <div className="specials-grid">{specials.map((special) => <article className="dining-special" key={special.movieId}>
+      <div className="dining-special__heading">
+        <span className="eyebrow">FEATURED WITH</span>
         <h3>{special.movieTitle}</h3>
-        {special.items.map((item) => <div className="special-line" key={item.id}><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span><b>${(item.priceCents / 100).toFixed(2)}</b></div>)}
         <Link href={`/movie/${special.movieId}`}>View movie</Link>
+      </div>
+      <div className="dining-special__items">
+        {special.items.map((item) => <div className="dining-special-item" key={item.id}>
+          {(item.imageUrl || special.artworkUrl) && <img src={item.imageUrl || special.artworkUrl!} alt="" />}
+          <div className="special-line"><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span><b>${(item.priceCents / 100).toFixed(2)}</b></div>
+        </div>)}
       </div>
     </article>)}</div>
   </section>;
