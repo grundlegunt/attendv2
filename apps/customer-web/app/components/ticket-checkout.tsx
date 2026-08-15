@@ -11,6 +11,36 @@ import { QRCodeSVG } from "qrcode.react";
 interface CheckoutConfig {
   currency: string;
   ticketTypes: Array<{ id: string; name: string }>;
+  orderAhead: {
+    available: boolean;
+    categories: Array<{
+      id: string;
+      name: string;
+      items: Array<{
+        id: string;
+        name: string;
+        description: string | null;
+        imageUrl: string | null;
+        priceCents: number;
+        chargeCategory: "FOOD" | "BEVERAGE" | "ALCOHOL";
+        isVegan: boolean;
+        isGlutenFree: boolean;
+        modifierGroups: Array<{
+          id: string;
+          name: string;
+          selectionType: "SINGLE" | "MULTIPLE";
+          required: boolean;
+          minSelections: number;
+          maxSelections: number | null;
+          modifiers: Array<{
+            id: string;
+            name: string;
+            priceDeltaCents: number;
+          }>;
+        }>;
+      }>;
+    }>;
+  };
   payment: {
     ready: boolean;
     publishableKey: string | null;

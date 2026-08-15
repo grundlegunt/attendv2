@@ -50,6 +50,49 @@ export class TicketingService {
                     select: { id: true, name: true },
                     orderBy: { name: "asc" },
                   },
+                  menuCategories: {
+                    where: { active: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      items: {
+                        where: { active: true, is86d: false },
+                        select: {
+                          id: true,
+                          name: true,
+                          description: true,
+                          imageUrl: true,
+                          priceCents: true,
+                          chargeCategory: true,
+                          isVegan: true,
+                          isGlutenFree: true,
+                          modifierGroups: {
+                            where: { active: true },
+                            select: {
+                              id: true,
+                              name: true,
+                              selectionType: true,
+                              required: true,
+                              minSelections: true,
+                              maxSelections: true,
+                              modifiers: {
+                                where: { active: true },
+                                select: {
+                                  id: true,
+                                  name: true,
+                                  priceDeltaCents: true,
+                                },
+                                orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                              },
+                            },
+                            orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                          },
+                        },
+                        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                      },
+                    },
+                    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+                  },
                 },
               },
             },
@@ -64,6 +107,14 @@ export class TicketingService {
           locationId: showtime.auditorium.location.id,
           currency: showtime.auditorium.location.currency,
           ticketTypes: showtime.auditorium.location.ticketTypes,
+          orderAhead: {
+            available: showtime.auditorium.location.menuCategories.some(
+              (category) => category.items.length > 0,
+            ),
+            categories: showtime.auditorium.location.menuCategories.filter(
+              (category) => category.items.length > 0,
+            ),
+          },
           payment: {
             ready: Boolean(
               env.PAYMENT_PROVIDER === "stripe" &&
