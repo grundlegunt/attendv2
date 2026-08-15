@@ -6,6 +6,7 @@ const { describe, it } = require("node:test");
 const ts = require("typescript");
 
 const navigationPath = resolve(__dirname, "../app/admin-navigation.ts");
+const adminSessionSource = readFileSync(resolve(__dirname, "../app/admin-session.tsx"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -18,6 +19,18 @@ navigationModule._compile(compiled.outputText, navigationPath);
 const { adminNavigation, isAdminItemActive, visibleAdminNavigation } = navigationModule.exports;
 
 describe("admin navigation", () => {
+  it("keeps the signed-out identity fixed to Attend instead of client branding", () => {
+    const signedOutStart = adminSessionSource.indexOf("if (!value)");
+    const passwordChangeStart = adminSessionSource.indexOf("if (value.employee.mustChangePassword)");
+    const signedOutMarkup = adminSessionSource.slice(signedOutStart, passwordChangeStart);
+
+    assert.match(signedOutMarkup, /login-monogram/);
+    assert.match(signedOutMarkup, /ATTEND ADMIN/);
+    assert.match(signedOutMarkup, /<h1>Cinema operations<\/h1>/);
+    assert.doesNotMatch(signedOutMarkup, /publicBranding\?\.logoUrl/);
+    assert.doesNotMatch(signedOutMarkup, /publicBranding\?\.name/);
+  });
+
   it("keeps Dashboard first and active only at the admin root", () => {
     assert.deepEqual(adminNavigation[0]?.items[0], { href: "/", label: "Dashboard", permissions: [] });
     assert.equal(isAdminItemActive("/", "/"), true);
