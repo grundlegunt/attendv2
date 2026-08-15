@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { CUSTOMER_WEB_URL } from "./lib/customer-site";
 
 interface Menu {
   stations: Array<{ id: string; name: string; displayType: string; active: boolean }>;
@@ -614,8 +615,10 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         </form>
       </section>
       <section className="panel schedule">
-        <p className="kicker">RESTAURANT</p>
-        <h2>Menu management</h2>
+        <div className="management-heading">
+          <div><p className="kicker">RESTAURANT</p><h2>Menu management</h2></div>
+          <a className="secondary button-link" href={`${CUSTOMER_WEB_URL}/dining-bar`} target="_blank" rel="noreferrer">Preview customer Dining page</a>
+        </div>
         <p>
           Create items, route them to a kitchen station, and keep pricing and
           availability current.

@@ -16,7 +16,7 @@ function matchesFilter(item: PublicMenuItem, filter: MenuFilter) {
 }
 
 function MenuItemCard({ item }: { item: PublicMenuItem }) {
-  return <article className="public-menu-item">
+  return <article className={`public-menu-item${item.imageUrl ? " public-menu-item--with-image" : ""}`}>
     {item.imageUrl && <img src={item.imageUrl} alt="" />}
     <div>
       <div className="public-menu-item__heading"><h3>{item.name}</h3><strong>${(item.priceCents / 100).toFixed(2)}</strong></div>
@@ -55,7 +55,9 @@ export default function DiningBarPage() {
         {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={retry}>Try again</button></>}
         {!menu && !error && <p className="loading-copy">Loading the menu…</p>}
         {menu && categories.length === 0 && <p className="secondary-copy">No menu items match this filter.</p>}
-        {categories.map((category) => <section className="menu-category" key={category.id}><h3>{category.name}</h3><div className="public-menu-grid">{category.items.map((item) => <MenuItemCard item={item} key={item.id} />)}</div></section>)}
+        <div className="public-menu-sheet">
+          {categories.map((category) => <section className="menu-category" key={category.id}><h3>{category.name}</h3><div className="public-menu-grid">{category.items.map((item) => <MenuItemCard item={item} key={item.id} />)}</div></section>)}
+        </div>
       </section>
     </div>
 
