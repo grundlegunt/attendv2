@@ -185,6 +185,13 @@ export class PlatformController {
     return this.platform.updateOrganization({ actorId: actor.sub, organizationId, ...organizationUpdateSchema.parse(body) });
   }
 
+  @Delete("organizations/:organizationId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  deleteOrganization(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string) {
+    return this.platform.deleteOrganization({ actorId: actor.sub, organizationId });
+  }
+
   @Post("organizations/:organizationId/connect/onboarding-link")
   @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)

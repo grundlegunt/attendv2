@@ -543,6 +543,32 @@ export default function AttendMaster() {
     }
   }
 
+  async function deleteOrganization() {
+    if (!session || !organization || organization.active) return;
+    const confirmation = window.prompt(
+      `Permanently delete ${organization.name}? This only succeeds for empty test clients. Type the exact client name to continue.`,
+    );
+    if (confirmation !== organization.name) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request<{ deleted: true }>(
+        `/platform/organizations/${organization.id}`,
+        { method: "DELETE" },
+        session.accessToken,
+      );
+      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      setOverview(refreshed);
+      setSelectedOrganizationId(null);
+      setOrganization(null);
+      setOrganizationDraft(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not delete client.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function startConnectOnboarding(organizationId = organization?.id) {
     if (!session || !organizationId) return;
     setSaving(true);
@@ -1158,6 +1184,13 @@ export default function AttendMaster() {
                     onClick={() => void setOrganizationActive(!organization.active)}
                   >
                     {organization.active ? "Suspend client" : "Reactivate client"}
+                  </button>}
+                  {session.user.role !== "VIEWER" && !organization.active && <button
+                    className="danger"
+                    disabled={saving}
+                    onClick={() => void deleteOrganization()}
+                  >
+                    Delete empty client
                   </button>}
                 </div>
               </div>
