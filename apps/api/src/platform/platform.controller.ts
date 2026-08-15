@@ -1,7 +1,8 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, platformLoginRequestSchema, updateAuditoriumLayoutRequestSchema } from "@cinema/shared";
 import { z } from "zod";
+import type { Response } from "express";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -119,6 +120,15 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   revenue(@Query("from") from?: string, @Query("to") to?: string) {
     return this.platform.revenue({ from, to });
+  }
+
+  @Get("revenue.csv")
+  @UseGuards(PlatformAuthGuard)
+  async revenueCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string) {
+    const report = await this.platform.revenue({ from, to });
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="attend-master-revenue.csv"');
+    response.send(this.platform.revenueCsv(report));
   }
 
   @Get("audit-events")

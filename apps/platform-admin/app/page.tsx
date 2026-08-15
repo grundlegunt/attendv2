@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { platformRequest, readPlatformSession } from "./platform-session";
+import { platformDownload, platformRequest, readPlatformSession } from "./platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -59,7 +59,7 @@ const revenueRanges = [
   { days: 365, label: "Last year" },
 ] as const;
 
-function revenueRange(days: number) { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`; }
+function revenueRange(days: number, format: "json" | "csv" = "json") { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue${format === "csv" ? ".csv" : ""}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`; }
 
 export default function PlatformDashboard() {
   const [session, setSession] = useState<Session | null>(null);
@@ -89,6 +89,19 @@ export default function PlatformDashboard() {
     setRevenueDays(days); setRevenueLoading(true); setError(null);
     try { setRevenue(await request<RevenueReport>(revenueRange(days), undefined, session.accessToken)); }
     catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load platform revenue."); }
+    finally { setRevenueLoading(false); }
+  }
+
+  async function downloadRevenue() {
+    if (!session) return;
+    setRevenueLoading(true); setError(null);
+    try {
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, revenueRange(revenueDays, "csv"), session.accessToken);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `attend-master-revenue-${revenueDays}-day.csv`; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not export platform revenue."); }
     finally { setRevenueLoading(false); }
   }
 
@@ -173,7 +186,7 @@ export default function PlatformDashboard() {
         <article className={metrics.attentionClients.length ? "attention" : ""}><span>Needs attention</span><strong>{metrics.attentionClients.length}</strong><small>incomplete payment setup</small></article>
       </section>
       <section className="dashboard-panel platform-revenue">
-        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}</div></div>
+        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="revenue-actions"><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}</div><button className="quiet" disabled={revenueLoading || !revenue} onClick={() => void downloadRevenue()}>Export CSV</button></div></div>
         {!revenue && <p className="muted">Loading revenue rollup…</p>}
         {revenue && <><div className="revenue-breakdown"><article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article><article><span>Attend ticket-fee revenue</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article><article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article><article><span>Ticket total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article><article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article><article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article><article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article></div><div className="client-revenue-list"><div><strong>Client</strong><span>Tickets sold</span><span>Ticket collected</span><span>F&amp;B</span><span>Combined net</span></div>{revenue.clients.map((client) => <Link key={client.id} href={`/clients?organizationId=${encodeURIComponent(client.id)}`}><strong>{client.name}</strong><span>{client.ticketsSold.toLocaleString()}</span><span>{money(client.ticketCollectedCents)}</span><span>{money(client.fnbRevenueCents)}</span><span>{money(client.combinedRevenueCents)}</span></Link>)}</div></>}
       </section>

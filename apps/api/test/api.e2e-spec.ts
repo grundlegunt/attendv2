@@ -433,6 +433,10 @@ describe("Attend platform authentication boundary", () => {
     expect(res.body.totals).toEqual(expect.objectContaining({ ticketRevenueCents: expect.any(Number), ticketFeesCents: expect.any(Number), ticketTaxCents: expect.any(Number), ticketCollectedCents: expect.any(Number), fnbRevenueCents: expect.any(Number), refundedCents: expect.any(Number) }));
     expect(res.body.totals.ticketRevenueCents + res.body.totals.ticketFeesCents + res.body.totals.ticketTaxCents).toBe(res.body.totals.ticketCollectedCents);
     expect(res.body.clients).toEqual(expect.arrayContaining([expect.objectContaining({ name: "Meridian Cinema Co.", ticketRevenueCents: expect.any(Number) })]));
+    const csv = await request(app.getHttpServer()).get(`/api/v1/platform/revenue.csv?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`).set("Authorization", `Bearer ${platformAccessToken}`).expect(200).expect("Content-Type", /text\/csv/);
+    expect(csv.text).toContain('"Client","Locations","Tickets sold"');
+    expect(csv.text).toContain('"TOTAL"');
+    expect(csv.text).toContain('"Meridian Cinema Co."');
     await request(app.getHttpServer()).get("/api/v1/platform/revenue?from=not-a-date").set("Authorization", `Bearer ${platformAccessToken}`).expect(400);
   });
 

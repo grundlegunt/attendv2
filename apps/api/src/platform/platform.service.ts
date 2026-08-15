@@ -127,6 +127,18 @@ export class PlatformService {
     return { generatedAt: new Date().toISOString(), range: { from: from.toISOString(), to: to.toISOString() }, totals, clients };
   }
 
+  revenueCsv(report: Awaited<ReturnType<PlatformService["revenue"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const columns = ["Client", "Locations", "Tickets sold", "Ticket face value (cents)", "Attend ticket-fee revenue (cents)", "Ticket tax (cents)", "Ticket total collected (cents)", "F&B revenue (cents)", "Combined net (cents)", "Refunds (cents)", "F&B orders"];
+    const values = (client: typeof report.clients[number] | (typeof report.totals & { name: string; locations: number })) => [client.name, client.locations, client.ticketsSold, client.ticketRevenueCents, client.ticketFeesCents, client.ticketTaxCents, client.ticketCollectedCents, client.fnbRevenueCents, client.combinedRevenueCents, client.refundedCents, client.fnbOrders];
+    return [
+      row(["Report from", report.range.from]), row(["Report to", report.range.to]), "", row(columns),
+      row(values({ name: "TOTAL", locations: report.clients.reduce((sum, client) => sum + client.locations, 0), ...report.totals })),
+      ...report.clients.map((client) => row(values(client))),
+    ].join("\n");
+  }
+
   async auditEvents(input: { limit?: string; offset?: string; organizationId?: string; action?: string; actorId?: string; from?: string; to?: string }) {
     const take = Math.max(1, Math.min(Number(input.limit) || 100, 200));
     const skip = Math.max(0, Math.min(Number(input.offset) || 0, 10_000));
