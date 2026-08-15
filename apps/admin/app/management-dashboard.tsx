@@ -21,7 +21,7 @@ type PromotionDraft = { code: string; name: string; type: PromotionType; value: 
 type Promotion = { id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalTicketFaceValueCents: number; totalCollectedCents: number; totalDiscountCents: number };
 type CustomerRecencySegment = { inactiveSince: string; total: number; preview: Array<{ id: string; name: string; email: string; lastPurchaseAt: string; lastOrderNumber: string; lastOrderTotalCents: number }> };
 type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
-type Settings = BrandingSettings & OperatingSettings & { id: string; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
+type Settings = BrandingSettings & OperatingSettings & { id: string; merchUrl: string | null; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -41,6 +41,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [auditHasMore, setAuditHasMore] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [merchUrl, setMerchUrl] = useState("");
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
@@ -71,6 +72,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
       setRevenue(nextRevenue); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
+      if (section === "branding" && nextSettings) setMerchUrl(nextSettings.merchUrl ?? "");
       if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
@@ -93,6 +95,15 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       await apiFetch("/management/settings/branding", { accessToken, method: "PATCH", body: JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null }) });
       await refresh();
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved."); throw reason; }
+  }
+
+  async function saveMerch(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    try {
+      await apiFetch("/management/settings/merch", { accessToken, method: "PATCH", body: JSON.stringify({ merchUrl: merchUrl.trim() || null }) });
+      await refresh();
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The merchandise shop link could not be saved."); }
   }
 
   async function createPromotion(event: FormEvent) {
@@ -197,7 +208,16 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       {shiftDraft && <form className="shift-adjustment" onSubmit={(event) => void saveShift(event)}><div className="management-heading"><div><p className="kicker">MANAGER CORRECTION</p><h3>{shiftDraft.employeeName}</h3></div><button type="button" className="secondary" onClick={() => setShiftDraft(null)}>Cancel</button></div><div className="shift-adjustment-grid"><label>Clock in<input type="datetime-local" required value={shiftDraft.clockInAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockInAt: event.target.value })} /></label><label>Clock out<input type="datetime-local" value={shiftDraft.clockOutAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockOutAt: event.target.value })} /></label><label>Break start<input type="datetime-local" value={shiftDraft.breakStartAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakStartAt: event.target.value })} /></label><label>Break end<input type="datetime-local" value={shiftDraft.breakEndAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakEndAt: event.target.value })} /></label></div><label>Correction note<textarea required maxLength={500} value={shiftDraft.notes} onChange={(event) => setShiftDraft({ ...shiftDraft, notes: event.target.value })} placeholder="Why this shift was changed" /></label><button className="primary">Save correction</button></form>}
     </section>}
 
-    {settings && section === "branding" && <BrandingSummary settings={settings} onSave={saveBranding} />}
+    {settings && section === "branding" && <>
+      <BrandingSummary settings={settings} onSave={saveBranding} />
+      <form className="panel location-settings" onSubmit={(event) => void saveMerch(event)}>
+        <p className="kicker">MERCHANDISE</p><h2>External shop</h2>
+        <p>Publish a link to the cinema’s existing merchandise store. Customers will see a Merch link that opens the shop in a new tab.</p>
+        <label>Merchandise shop URL<input type="url" maxLength={2000} value={merchUrl} onChange={(event) => setMerchUrl(event.target.value)} placeholder="https://shop.example.com" /></label>
+        <small>Leave this blank to remove Merch from the customer-site navigation.</small>
+        <button className="primary">Save and publish shop link</button>
+      </form>
+    </>}
     {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>
       <div className="location-settings-grid">
         <label>Cinema name<input required maxLength={120} value={locationDraft.name} onChange={(event) => setLocationDraft({ ...locationDraft, name: event.target.value })} /></label>
