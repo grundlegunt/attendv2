@@ -591,9 +591,6 @@ export function validateAdvancedSeatLayout(
       errors.push(`Seat ${seat.label} references a missing section.`);
     if (seat.x >= layout.canvas.width || seat.y >= layout.canvas.height)
       errors.push(`Seat ${seat.label} is outside the canvas.`);
-    if (seat.x >= layout.canvas.width || seat.y >= layout.canvas.height) {
-      errors.push(`Seat ${seat.label} is outside the canvas.`);
-    }
   }
   for (const element of layout.elements) {
     if (!levelIds.has(element.levelId))

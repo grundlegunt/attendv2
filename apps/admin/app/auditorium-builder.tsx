@@ -7,6 +7,7 @@ import type {
   SeatMapLayout,
 } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
+import { replaceSeatTypeAtCoordinate } from "./auditorium-layout";
 import { apiFetch } from "./lib/api-client";
 
 type Tool =
@@ -428,25 +429,13 @@ export function AuditoriumBuilder({
     if (["STANDARD", "ADA", "COMPANION"].includes(tool)) {
       setSeats((current) =>
         renumberLevelSeats(
-          [
-            ...current.filter(
-              (seat) =>
-                !(
-                  seat.x === x &&
-                  seat.y === y &&
-                  (seat.levelKey ?? "main") === levelId
-                ),
-            ),
-            {
-              label: `NEW-${crypto.randomUUID()}`,
-              rowLabel: "",
-              number: 0,
-              x,
-              y,
-              type: tool as SeatInput["type"],
-              levelKey: levelId,
-            },
-          ],
+          replaceSeatTypeAtCoordinate(
+            current,
+            levelId,
+            x,
+            y,
+            tool as SeatInput["type"],
+          ),
           levelId,
         ),
       );

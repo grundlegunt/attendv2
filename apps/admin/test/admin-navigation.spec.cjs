@@ -18,6 +18,18 @@ navigationModule.paths = module.paths;
 navigationModule._compile(compiled.outputText, navigationPath);
 const { adminNavigation, isAdminItemActive, visibleAdminNavigation } = navigationModule.exports;
 
+const auditoriumLayoutPath = resolve(__dirname, "../app/auditorium-layout.ts");
+const auditoriumLayoutSource = readFileSync(auditoriumLayoutPath, "utf8");
+const auditoriumLayoutCompiled = ts.transpileModule(auditoriumLayoutSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  fileName: auditoriumLayoutPath,
+});
+const auditoriumLayoutModule = new Module(auditoriumLayoutPath, module);
+auditoriumLayoutModule.filename = auditoriumLayoutPath;
+auditoriumLayoutModule.paths = module.paths;
+auditoriumLayoutModule._compile(auditoriumLayoutCompiled.outputText, auditoriumLayoutPath);
+const { replaceSeatTypeAtCoordinate } = auditoriumLayoutModule.exports;
+
 describe("admin navigation", () => {
   it("keeps the signed-out identity fixed to Attend instead of client branding", () => {
     const signedOutStart = adminSessionSource.indexOf("if (!value)");
@@ -64,5 +76,30 @@ describe("admin navigation", () => {
     assert.equal(links.some((item) => item.href === "/gift-cards"), false);
     const managerLinks = visibleAdminNavigation(["payment.refund"]).flatMap((group) => group.items);
     assert.deepEqual(managerLinks.map((item) => item.href), ["/", "/refunds", "/gift-cards"]);
+  });
+});
+
+describe("auditorium layout editing", () => {
+  it("preserves table metadata when an existing seat becomes ADA", () => {
+    const seats = [
+      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "main", tableGroupId: "A-1", tablePosition: "LEFT" },
+      { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD", levelKey: "main", tableGroupId: "A-1", tablePosition: "RIGHT" },
+    ];
+
+    const updated = replaceSeatTypeAtCoordinate(seats, "main", 0, 0, "ADA");
+
+    assert.equal(updated.length, 2);
+    assert.deepEqual(updated[0], { ...seats[0], type: "ADA" });
+    assert.deepEqual(updated[1], seats[1]);
+  });
+
+  it("adds a new sellable position when the grid cell is empty", () => {
+    const updated = replaceSeatTypeAtCoordinate([], "main", 4, 2, "COMPANION");
+
+    assert.equal(updated.length, 1);
+    assert.equal(updated[0].type, "COMPANION");
+    assert.equal(updated[0].levelKey, "main");
+    assert.equal(updated[0].x, 4);
+    assert.equal(updated[0].y, 2);
   });
 });
