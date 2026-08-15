@@ -71,6 +71,11 @@ describe("admin navigation", () => {
     assert.deepEqual(links.map((item) => item.href), ["/", "/menu", "/taxes"]);
   });
 
+  it("shows the expense ledger only with financial reporting permission", () => {
+    const links = visibleAdminNavigation(["reports.view.financial"]).flatMap((group) => group.items);
+    assert.deepEqual(links.map((item) => item.href), ["/", "/reports", "/expenses"]);
+  });
+
   it("does not expose financial operations without payment-refund permission", () => {
     const links = visibleAdminNavigation(["ticket.refund"]).flatMap((group) => group.items);
     assert.deepEqual(links.map((item) => item.href), ["/"]);

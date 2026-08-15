@@ -33,3 +33,18 @@ export async function apiFetch<T>(
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
+
+export async function apiDownload(
+  path: string,
+  init?: RequestInit & { accessToken?: string },
+): Promise<Blob> {
+  const headers = new Headers(init?.headers);
+  if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
+
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({ code: "INTERNAL_ERROR", message: res.statusText }))) as ApiErrorBody;
+    throw new ApiRequestError(res.status, body);
+  }
+  return res.blob();
+}

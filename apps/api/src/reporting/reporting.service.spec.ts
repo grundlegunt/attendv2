@@ -23,3 +23,18 @@ describe("ReportingService distributor box-office export", () => {
     expect(csv).not.toContain("1400");
   });
 });
+
+describe("ReportingService expense export", () => {
+  it("quotes accounting fields and preserves exact cents", () => {
+    const service = new ReportingService();
+    const csv = service.expensesCsv({
+      range: { from: new Date("2026-08-01T00:00:00.000Z"), to: new Date("2026-09-01T00:00:00.000Z") },
+      totals: { totalExpenseCents: 12345, count: 1, byCategory: { FILM_RENTAL: 12345 } },
+      rows: [{ id: "expense-1", locationId: "location-1", category: "FILM_RENTAL", vendor: 'Studio, "One"', description: "Film rental", amountCents: 12345, incurredAt: new Date("2026-08-15T12:00:00.000Z"), notes: "Week one", createdAt: new Date(), updatedAt: new Date() }],
+    });
+
+    expect(csv).toContain('"Studio, ""One"""');
+    expect(csv).toContain('"12345"');
+    expect(csv).toContain('"FILM_RENTAL"');
+  });
+});

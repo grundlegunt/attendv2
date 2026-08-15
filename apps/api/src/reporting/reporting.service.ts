@@ -1,10 +1,33 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@cinema/database";
+import { AppError } from "../common/app-error";
 
 export interface ReportRange { from: Date; to: Date }
 
 @Injectable()
 export class ReportingService {
+  async expenses(locationId: string, range: ReportRange) {
+    const rows = await prisma.expense.findMany({
+      where: { locationId, incurredAt: { gte: range.from, lt: range.to } },
+      orderBy: [{ incurredAt: "desc" }, { createdAt: "desc" }],
+    });
+    const byCategory = rows.reduce<Record<string, number>>((totals, expense) => {
+      totals[expense.category] = (totals[expense.category] ?? 0) + expense.amountCents;
+      return totals;
+    }, {});
+    return { range, totals: { totalExpenseCents: rows.reduce((sum, expense) => sum + expense.amountCents, 0), count: rows.length, byCategory }, rows };
+  }
+
+  createExpense(locationId: string, input: { category: Prisma.ExpenseCreateInput["category"]; vendor?: string; description: string; amountCents: number; incurredAt: Date; notes?: string }) {
+    return prisma.expense.create({ data: { locationId, ...input, vendor: input.vendor || null, notes: input.notes || null } });
+  }
+
+  async deleteExpense(locationId: string, expenseId: string) {
+    const deleted = await prisma.expense.deleteMany({ where: { id: expenseId, locationId } });
+    if (!deleted.count) throw AppError.notFound("Expense entry not found.");
+    return { deleted: true };
+  }
+
   async customerRecency(locationId: string, inactiveSince: Date, limit: number) {
     const completedOrder: Prisma.TicketOrderWhereInput = { locationId, status: { in: ["PAID", "EXCHANGED"] } };
     const where: Prisma.CustomerWhereInput = { ticketOrders: { some: completedOrder, none: { ...completedOrder, createdAt: { gt: inactiveSince } } } };
@@ -150,5 +173,13 @@ export class ReportingService {
   laborCsv(rows: Awaited<ReturnType<ReportingService["labor"]>>["rows"]) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     return ["Employee,Roles,Clock in,Clock out,Break minutes,Worked minutes", ...rows.map((row) => [row.employeeName, row.roles.join("; "), row.clockInAt.toISOString(), row.clockOutAt?.toISOString() ?? "", row.breakMinutes, row.workedMinutes].map(quote).join(","))].join("\n");
+  }
+
+  expensesCsv(report: Awaited<ReturnType<ReportingService["expenses"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    return [
+      ["Date", "Category", "Vendor", "Description", "Amount (cents)", "Notes"].map(quote).join(","),
+      ...report.rows.map((expense) => [expense.incurredAt.toISOString(), expense.category, expense.vendor, expense.description, expense.amountCents, expense.notes].map(quote).join(",")),
+    ].join("\n");
   }
 }

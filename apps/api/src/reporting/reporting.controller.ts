@@ -1,5 +1,6 @@
-import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
+import { z } from "zod";
 import { Permission } from "@cinema/auth";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
@@ -7,7 +8,18 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
+import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { ReportingService } from "./reporting.service";
+
+const expenseCategorySchema = z.enum(["FILM_RENTAL", "FOOD_BEVERAGE", "PAYROLL", "OCCUPANCY", "MARKETING", "EQUIPMENT", "MAINTENANCE", "UTILITIES", "INSURANCE", "OTHER"]);
+const expenseSchema = z.object({
+  category: expenseCategorySchema,
+  vendor: z.string().trim().max(160).optional(),
+  description: z.string().trim().min(1).max(240),
+  amountCents: z.number().int().positive().max(100_000_000),
+  incurredAt: z.coerce.date(),
+  notes: z.string().trim().max(2000).optional(),
+}).strict();
 
 @Controller("reports")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -37,6 +49,33 @@ export class ReportingController {
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="attend-distributor-box-office.csv"');
     response.send(this.reporting.distributorBoxOfficeCsv(report));
+  }
+
+  @Get("expenses")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  expenses(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
+    return this.reporting.expenses(this.location(actor), this.range(from, to));
+  }
+
+  @Get("expenses.csv")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  async expensesCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
+    const report = await this.reporting.expenses(this.location(actor), this.range(from, to));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="attend-expenses.csv"');
+    response.send(this.reporting.expensesCsv(report));
+  }
+
+  @Post("expenses")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  createExpense(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(expenseSchema)) body: unknown) {
+    return this.reporting.createExpense(this.location(actor), expenseSchema.parse(body));
+  }
+
+  @Delete("expenses/:expenseId")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  deleteExpense(@CurrentActor() actor: RequestActor, @Param("expenseId") expenseId: string) {
+    return this.reporting.deleteExpense(this.location(actor), expenseId);
   }
 
   @Get("labor")
