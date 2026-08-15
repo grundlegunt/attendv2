@@ -137,6 +137,7 @@ model Location {
   employees             Employee[]
   employeeRoles         EmployeeRole[]
   auditEvents           AuditEvent[]
+  expenses              Expense[]
   auditoriums           Auditorium[]
   ticketTypes           TicketType[]
   ticketOrders          TicketOrder[]
@@ -156,6 +157,36 @@ model Location {
   schedulePlans         SchedulePlan[]
 
   @@map("locations")
+}
+
+enum ExpenseCategory {
+  FILM_RENTAL
+  FOOD_BEVERAGE
+  PAYROLL
+  OCCUPANCY
+  MARKETING
+  EQUIPMENT
+  MAINTENANCE
+  UTILITIES
+  INSURANCE
+  OTHER
+}
+
+model Expense {
+  id          String          @id @default(uuid())
+  locationId  String
+  location    Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  category    ExpenseCategory
+  vendor      String?
+  description String
+  amountCents Int
+  incurredAt  DateTime
+  notes       String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([locationId, incurredAt])
+  @@map("expenses")
 }
 
 model SchedulePlan {
