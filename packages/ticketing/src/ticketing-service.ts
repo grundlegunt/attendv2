@@ -986,7 +986,13 @@ export class TicketingService {
           kitchenStationId,
           tabLabel: tab.label,
           auditoriumName: firstTicket.showtimeSeat.showtime.auditorium.name,
-          seatLabels: issuedTickets.map((ticket) => ticket.showtimeSeat.seat.label).sort(),
+          seatLabels:
+            firstTicket.showtimeSeat.showtime.auditorium.seatingMode ===
+            "GENERAL_ADMISSION"
+              ? ["General admission"]
+              : issuedTickets
+                  .map((ticket) => ticket.showtimeSeat.seat.label)
+                  .sort(),
           showtimeId: firstTicket.showtimeSeat.showtimeId,
           showtimeStartsAt: firstTicket.showtimeSeat.showtime.startsAt,
           serverName: "Order ahead",
@@ -1877,7 +1883,10 @@ export class TicketingService {
         showtime: {
           startsAt: Date;
           movie: { title: string };
-          auditorium: { name: string };
+          auditorium: {
+            name: string;
+            seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+          };
         };
       };
     }>;
@@ -1917,7 +1926,11 @@ export class TicketingService {
         credential: ticket.qrToken,
         movie: ticket.showtimeSeat.showtime.movie.title,
         auditorium: ticket.showtimeSeat.showtime.auditorium.name,
-        seat: ticket.showtimeSeat.seat.label,
+        seat:
+          ticket.showtimeSeat.showtime.auditorium.seatingMode ===
+          "GENERAL_ADMISSION"
+            ? "General admission"
+            : ticket.showtimeSeat.seat.label,
         startsAt: ticket.showtimeSeat.showtime.startsAt,
       })),
       orderAhead: orderAheadLines.length
@@ -2069,7 +2082,10 @@ export class TicketingService {
         showtime: {
           startsAt: Date;
           movie: { title: string };
-          auditorium: { name: string };
+          auditorium: {
+            name: string;
+            seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+          };
         };
       };
     }>;
@@ -2088,7 +2104,11 @@ export class TicketingService {
       tickets: order.tickets.map((ticket) => ({
         id: ticket.id,
         issuanceToken: ticket.qrToken,
-        seat: ticket.showtimeSeat.seat.label,
+        seat:
+          ticket.showtimeSeat.showtime.auditorium.seatingMode ===
+          "GENERAL_ADMISSION"
+            ? "General admission"
+            : ticket.showtimeSeat.seat.label,
         movie: ticket.showtimeSeat.showtime.movie.title,
         auditorium: ticket.showtimeSeat.showtime.auditorium.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt.toISOString(),

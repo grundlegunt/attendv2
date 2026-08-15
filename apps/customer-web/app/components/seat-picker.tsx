@@ -18,7 +18,12 @@ interface Availability {
     id: string;
     startsAt: string;
     movie: { id: string; title: string };
-    auditorium: { id: string; name: string; capacity: number };
+    auditorium: {
+      id: string;
+      name: string;
+      capacity: number;
+      seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+    };
     priceTier: {
       ticketPriceMinor: number;
       feeMinor: number;
@@ -28,6 +33,12 @@ interface Availability {
   serverTime: string;
   holdDurationSeconds: number;
   seats: AvailabilitySeat[];
+  counts: {
+    available: number;
+    held: number;
+    sold: number;
+    blocked: number;
+  };
 }
 
 function getHolderKey() {
@@ -159,6 +170,53 @@ export function SeatPicker({
     }
   }
 
+  async function changeGeneralAdmissionQuantity(quantity: number) {
+    if (!holderKey || !availability || pendingSeatIdsRef.current.size > 0) return;
+    const target = Math.max(0, Math.min(10, quantity));
+    const current = availability.seats.filter((seat) => seat.heldByMe);
+    const marker = "general-admission";
+    pendingSeatIdsRef.current.add(marker);
+    setPendingSeatIds({ [marker]: true });
+    setError(null);
+    try {
+      if (target < current.length) {
+        await Promise.all(
+          current.slice(target).map((seat) =>
+            apiFetch(`/cinema/showtimes/${showtimeId}/holds/${seat.holdToken!}`, {
+              method: "DELETE",
+              body: JSON.stringify({ holderKey }),
+            }),
+          ),
+        );
+      } else if (target > current.length) {
+        const availableSeatIds = availability.seats
+          .filter((seat) => seat.state === "AVAILABLE" && !seat.heldByMe)
+          .slice(0, target - current.length)
+          .map((seat) => seat.id);
+        if (availableSeatIds.length !== target - current.length) {
+          throw new Error("Not enough general-admission tickets remain.");
+        }
+        await apiFetch(`/cinema/showtimes/${showtimeId}/holds`, {
+          method: "POST",
+          body: JSON.stringify({ holderKey, seatIds: availableSeatIds }),
+        });
+      }
+      await refresh();
+    } catch (requestError) {
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : requestError instanceof Error
+            ? requestError.message
+            : "Ticket quantity could not be updated.",
+      );
+      await refresh();
+    } finally {
+      pendingSeatIdsRef.current.delete(marker);
+      setPendingSeatIds({});
+    }
+  }
+
   async function closeAndRelease() {
     if (closingRef.current || pendingSeatIdsRef.current.size > 0) return;
     closingRef.current = true;
@@ -203,7 +261,11 @@ export function SeatPicker({
         showtimeId={showtimeId}
         holdTokens={mySeats.map((seat) => seat.holdToken!)}
         holderKey={holderKey}
-        seats={mySeats.map((seat) => seat.label)}
+        seats={
+          availability.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
+            ? [`General admission × ${mySeats.length}`]
+            : mySeats.map((seat) => seat.label)
+        }
         movie={availability.showtime.movie.title}
         auditorium={availability.showtime.auditorium.name}
         onBack={() => setCheckoutOpen(false)}
@@ -222,7 +284,11 @@ export function SeatPicker({
           {closing ? "Releasing seats…" : "← All showtimes"}
         </button>
         <div>
-          <span className="eyebrow">SELECT SEATS</span>
+          <span className="eyebrow">
+            {availability?.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
+              ? "SELECT TICKETS"
+              : "SELECT SEATS"}
+          </span>
           <h2>{availability?.showtime.movie.title ?? "Loading seating chart…"}</h2>
           {availability && (
             <p>
@@ -243,7 +309,29 @@ export function SeatPicker({
       </div>
       {error && <div className="error-banner">{error}</div>}
       {!mapSeats && !error && <p className="loading-copy">Loading seat availability…</p>}
-      {mapSeats && (
+      {mapSeats && availability?.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" && (
+        <div className="ga-ticket-picker">
+          <span className="eyebrow">GENERAL ADMISSION</span>
+          <h3>How many tickets?</h3>
+          <p>{availability.counts.available} remaining · maximum 10 per order</p>
+          <div className="ga-ticket-picker__quantity" aria-label="General admission ticket quantity">
+            <button
+              type="button"
+              aria-label="Remove one ticket"
+              disabled={!mySeats.length || Object.keys(pendingSeatIds).length > 0}
+              onClick={() => void changeGeneralAdmissionQuantity(mySeats.length - 1)}
+            >−</button>
+            <strong>{mySeats.length}</strong>
+            <button
+              type="button"
+              aria-label="Add one ticket"
+              disabled={mySeats.length >= 10 || availability.counts.available < 1 || Object.keys(pendingSeatIds).length > 0}
+              onClick={() => void changeGeneralAdmissionQuantity(mySeats.length + 1)}
+            >+</button>
+          </div>
+        </div>
+      )}
+      {mapSeats && availability?.showtime.auditorium.seatingMode !== "GENERAL_ADMISSION" && (
         <SeatMap
           seats={mapSeats}
           label={`${availability?.showtime.movie.title ?? "Showtime"} seating chart`}
@@ -255,8 +343,18 @@ export function SeatPicker({
       )}
       <footer className="seat-picker__summary">
         <div>
-          <span className="eyebrow">YOUR SEATS</span>
-          <strong>{displayedSeats.length ? displayedSeats.map((seat) => seat.label).join(", ") : "None selected"}</strong>
+          <span className="eyebrow">
+            {availability?.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "YOUR TICKETS" : "YOUR SEATS"}
+          </span>
+          <strong>
+            {availability?.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
+              ? mySeats.length
+                ? `${mySeats.length} general admission`
+                : "None selected"
+              : displayedSeats.length
+                ? displayedSeats.map((seat) => seat.label).join(", ")
+                : "None selected"}
+          </strong>
         </div>
         <button
           className="primary"
