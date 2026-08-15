@@ -10,7 +10,11 @@ import {
 } from "@cinema/shared";
 import Link from "next/link";
 import { AdminUiEditor } from "../admin-ui-editor";
-import { platformDownload, platformRequest, readPlatformSession } from "../platform-session";
+import {
+  platformDownload,
+  platformRequest,
+  readPlatformSession,
+} from "../platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -69,9 +73,31 @@ interface Overview {
   generatedAt: string;
   organizations: OrganizationOverview[];
 }
-interface RevenueTotals { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }
-interface RevenueReport { generatedAt: string; range: { from: string; to: string }; totals: RevenueTotals; clients: Array<{ id: string; name: string; locations: number } & RevenueTotals> }
-const revenueRanges = [{ days: 1, label: "Today" }, { days: 7, label: "Last 7 days" }, { days: 30, label: "Last 30 days" }, { days: 365, label: "Last year" }] as const;
+interface RevenueTotals {
+  ticketRevenueCents: number;
+  ticketFeesCents: number;
+  ticketTaxCents: number;
+  ticketCollectedCents: number;
+  fnbRevenueCents: number;
+  combinedRevenueCents: number;
+  refundedCents: number;
+  ticketsSold: number;
+  fnbOrders: number;
+}
+interface RevenueReport {
+  generatedAt: string;
+  range: { from: string; to: string };
+  totals: RevenueTotals;
+  clients: Array<
+    { id: string; name: string; locations: number } & RevenueTotals
+  >;
+}
+const revenueRanges = [
+  { days: 1, label: "Today" },
+  { days: 7, label: "Last 7 days" },
+  { days: 30, label: "Last 30 days" },
+  { days: 365, label: "Last year" },
+] as const;
 type BrandPalette = {
   accentColor: string | null;
   accentMutedColor: string | null;
@@ -137,6 +163,7 @@ interface OrganizationDetail {
       id: string;
       name: string;
       capacity: number;
+      seatingMode: "RESERVED" | "GENERAL_ADMISSION";
       active: boolean;
       seatMap: {
         id: string;
@@ -198,6 +225,8 @@ type AuditoriumDraft = {
   id?: string;
   locationId: string;
   name: string;
+  seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+  capacity: number;
   rows: number;
   seatsPerRow: number;
   centerAisle: boolean;
@@ -234,9 +263,31 @@ type LocationDraft = {
   timeClockEnabled: boolean;
 };
 
-function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
-function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
-function revenuePath(organizationId: string, days: number, format: "json" | "csv" = "json") { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue${format === "csv" ? ".csv" : ""}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&organizationId=${encodeURIComponent(organizationId)}`; }
+function request<T>(
+  path: string,
+  init?: RequestInit,
+  accessToken?: string,
+): Promise<T> {
+  return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken);
+}
+function money(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(cents / 100);
+}
+function revenuePath(
+  organizationId: string,
+  days: number,
+  format: "json" | "csv" = "json",
+) {
+  const to = new Date();
+  const from =
+    days === 1
+      ? new Date(to.getFullYear(), to.getMonth(), to.getDate())
+      : new Date(to.getTime() - days * 86_400_000);
+  return `/platform/revenue${format === "csv" ? ".csv" : ""}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&organizationId=${encodeURIComponent(organizationId)}`;
+}
 
 export default function AttendMaster() {
   const [session, setSession] = useState<Session | null>(null);
@@ -307,8 +358,13 @@ export default function AttendMaster() {
     if (!organizationId) return;
     setSelectedOrganizationId(organizationId);
     if (!connectAction) return;
-    window.history.replaceState({}, "", `${window.location.pathname}?organizationId=${encodeURIComponent(organizationId)}`);
-    if (connectAction === "refresh") void startConnectOnboarding(organizationId);
+    window.history.replaceState(
+      {},
+      "",
+      `${window.location.pathname}?organizationId=${encodeURIComponent(organizationId)}`,
+    );
+    if (connectAction === "refresh")
+      void startConnectOnboarding(organizationId);
     if (connectAction === "return") void refreshConnectStatus(organizationId);
   }, [session]);
 
@@ -330,8 +386,14 @@ export default function AttendMaster() {
         const section = params.get("section");
         if (section !== "content" && section !== "branding") return;
         const locationId = params.get("locationId");
-        const location = nextOrganization.locations.find((item) => item.id === locationId) ?? nextOrganization.locations[0];
-        if (location && section === "content") setContentDraft({ id: location.id, values: structuredClone(location.content.draft) });
+        const location =
+          nextOrganization.locations.find((item) => item.id === locationId) ??
+          nextOrganization.locations[0];
+        if (location && section === "content")
+          setContentDraft({
+            id: location.id,
+            values: structuredClone(location.content.draft),
+          });
         if (location && section === "branding") beginLocationEdit(location);
       })
       .catch((reason: unknown) =>
@@ -345,25 +407,56 @@ export default function AttendMaster() {
   }, [selectedOrganizationId, session]);
 
   useEffect(() => {
-    if (!session || !selectedOrganizationId) { setRevenue(null); return; }
+    if (!session || !selectedOrganizationId) {
+      setRevenue(null);
+      return;
+    }
     setRevenueLoading(true);
-    request<RevenueReport>(revenuePath(selectedOrganizationId, revenueDays), undefined, session.accessToken)
+    request<RevenueReport>(
+      revenuePath(selectedOrganizationId, revenueDays),
+      undefined,
+      session.accessToken,
+    )
       .then(setRevenue)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load client revenue."))
+      .catch((reason: unknown) =>
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : "Could not load client revenue.",
+        ),
+      )
       .finally(() => setRevenueLoading(false));
   }, [selectedOrganizationId, session, revenueDays]);
 
   async function downloadClientRevenue() {
     if (!session || !selectedOrganizationId || !organization) return;
-    setRevenueLoading(true); setError(null);
+    setRevenueLoading(true);
+    setError(null);
     try {
-      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, revenuePath(selectedOrganizationId, revenueDays, "csv"), session.accessToken);
+      const blob = await platformDownload(
+        API_BASE_URL,
+        STORAGE_KEY,
+        revenuePath(selectedOrganizationId, revenueDays, "csv"),
+        session.accessToken,
+      );
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = `${organization.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-revenue-${revenueDays}-day.csv`; anchor.click();
+      anchor.href = url;
+      anchor.download = `${organization.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "")}-revenue-${revenueDays}-day.csv`;
+      anchor.click();
       URL.revokeObjectURL(url);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not export client revenue."); }
-    finally { setRevenueLoading(false); }
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not export client revenue.",
+      );
+    } finally {
+      setRevenueLoading(false);
+    }
   }
 
   async function login(event: FormEvent) {
@@ -468,18 +561,37 @@ export default function AttendMaster() {
         active: location.active,
         logoUrl: draft?.logoUrl ?? location.branding.logoUrl ?? "",
         accentColor: draft?.accentColor ?? location.branding.accentColor ?? "",
-        accentMutedColor: draft?.accentMutedColor ?? location.branding.accentMutedColor ?? "",
-        backgroundColor: draft?.backgroundColor ?? location.branding.backgroundColor ?? "",
-        backgroundGlowColor: draft?.backgroundGlowColor ?? location.branding.backgroundGlowColor ?? "",
-        surfaceColor: draft?.surfaceColor ?? location.branding.surfaceColor ?? "",
+        accentMutedColor:
+          draft?.accentMutedColor ?? location.branding.accentMutedColor ?? "",
+        backgroundColor:
+          draft?.backgroundColor ?? location.branding.backgroundColor ?? "",
+        backgroundGlowColor:
+          draft?.backgroundGlowColor ??
+          location.branding.backgroundGlowColor ??
+          "",
+        surfaceColor:
+          draft?.surfaceColor ?? location.branding.surfaceColor ?? "",
         textColor: draft?.textColor ?? location.branding.textColor ?? "",
-        mutedTextColor: draft?.mutedTextColor ?? location.branding.mutedTextColor ?? "",
-        adminAccentColor: draft?.adminAccentColor ?? location.adminBranding.accentColor ?? "",
-        adminAccentMutedColor: draft?.adminAccentMutedColor ?? location.adminBranding.accentMutedColor ?? "",
-        adminBackgroundColor: draft?.adminBackgroundColor ?? location.adminBranding.backgroundColor ?? "",
-        adminSurfaceColor: draft?.adminSurfaceColor ?? location.adminBranding.surfaceColor ?? "",
-        adminTextColor: draft?.adminTextColor ?? location.adminBranding.textColor ?? "",
-        adminMutedTextColor: draft?.adminMutedTextColor ?? location.adminBranding.mutedTextColor ?? "",
+        mutedTextColor:
+          draft?.mutedTextColor ?? location.branding.mutedTextColor ?? "",
+        adminAccentColor:
+          draft?.adminAccentColor ?? location.adminBranding.accentColor ?? "",
+        adminAccentMutedColor:
+          draft?.adminAccentMutedColor ??
+          location.adminBranding.accentMutedColor ??
+          "",
+        adminBackgroundColor:
+          draft?.adminBackgroundColor ??
+          location.adminBranding.backgroundColor ??
+          "",
+        adminSurfaceColor:
+          draft?.adminSurfaceColor ?? location.adminBranding.surfaceColor ?? "",
+        adminTextColor:
+          draft?.adminTextColor ?? location.adminBranding.textColor ?? "",
+        adminMutedTextColor:
+          draft?.adminMutedTextColor ??
+          location.adminBranding.mutedTextColor ??
+          "",
         adminUi: draft?.adminUi ?? location.adminBranding.ui ?? adminUiDefaults,
         ...location.operations,
       },
@@ -522,9 +634,14 @@ export default function AttendMaster() {
   async function setOrganizationActive(active: boolean) {
     if (!session || !organization) return;
     const action = active ? "reactivate" : "suspend";
-    if (!window.confirm(active
-      ? `Reactivate ${organization.name}? Cinema staff and customers will regain access to active locations.`
-      : `Suspend ${organization.name}? Cinema staff sessions will be revoked and customer access will stop across every location.`)) return;
+    if (
+      !window.confirm(
+        active
+          ? `Reactivate ${organization.name}? Cinema staff and customers will regain access to active locations.`
+          : `Suspend ${organization.name}? Cinema staff sessions will be revoked and customer access will stop across every location.`,
+      )
+    )
+      return;
     setSaving(true);
     setError(null);
     try {
@@ -533,11 +650,19 @@ export default function AttendMaster() {
         { method: "PATCH", body: JSON.stringify({ active }) },
         session.accessToken,
       );
-      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      const refreshed = await request<Overview>(
+        "/platform/overview",
+        undefined,
+        session.accessToken,
+      );
       setOrganization(updated);
       setOverview(refreshed);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : `Could not ${action} organization.`);
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : `Could not ${action} organization.`,
+      );
     } finally {
       setSaving(false);
     }
@@ -557,13 +682,19 @@ export default function AttendMaster() {
         { method: "DELETE" },
         session.accessToken,
       );
-      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      const refreshed = await request<Overview>(
+        "/platform/overview",
+        undefined,
+        session.accessToken,
+      );
       setOverview(refreshed);
       setSelectedOrganizationId(null);
       setOrganization(null);
       setOrganizationDraft(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not delete client.");
+      setError(
+        reason instanceof Error ? reason.message : "Could not delete client.",
+      );
     } finally {
       setSaving(false);
     }
@@ -574,13 +705,24 @@ export default function AttendMaster() {
     setSaving(true);
     setError(null);
     try {
-      const result = await request<{ url: string }>(`/platform/organizations/${organizationId}/connect/onboarding-link`, {
-        method: "POST",
-        body: JSON.stringify({ origin: window.location.origin, returnPath: "/clients" }),
-      }, session.accessToken);
+      const result = await request<{ url: string }>(
+        `/platform/organizations/${organizationId}/connect/onboarding-link`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            origin: window.location.origin,
+            returnPath: "/clients",
+          }),
+        },
+        session.accessToken,
+      );
       window.location.assign(result.url);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not start Stripe onboarding.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not start Stripe onboarding.",
+      );
       setSaving(false);
     }
   }
@@ -590,12 +732,24 @@ export default function AttendMaster() {
     setSaving(true);
     setError(null);
     try {
-      const updated = await request<OrganizationDetail>(`/platform/organizations/${organizationId}/connect/refresh`, { method: "POST" }, session.accessToken);
-      const refreshed = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      const updated = await request<OrganizationDetail>(
+        `/platform/organizations/${organizationId}/connect/refresh`,
+        { method: "POST" },
+        session.accessToken,
+      );
+      const refreshed = await request<Overview>(
+        "/platform/overview",
+        undefined,
+        session.accessToken,
+      );
       setOrganization(updated);
       setOverview(refreshed);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not refresh Stripe onboarding status.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not refresh Stripe onboarding status.",
+      );
     } finally {
       setSaving(false);
     }
@@ -661,7 +815,12 @@ export default function AttendMaster() {
 
   async function publishBranding(location: LocationDetail) {
     if (!session || !organization) return;
-    if (!window.confirm(`Publish the branding draft for ${location.name}? This immediately updates the live customer and cinema-admin experiences.`)) return;
+    if (
+      !window.confirm(
+        `Publish the branding draft for ${location.name}? This immediately updates the live customer and cinema-admin experiences.`,
+      )
+    )
+      return;
     setSaving(true);
     setError(null);
     try {
@@ -672,7 +831,11 @@ export default function AttendMaster() {
       );
       setOrganization(updated);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not publish branding.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not publish branding.",
+      );
     } finally {
       setSaving(false);
     }
@@ -680,10 +843,17 @@ export default function AttendMaster() {
 
   async function openSupportSession(location: LocationDetail) {
     if (!session || !organization) return;
-    if (!window.confirm(`Open ${location.name} in a 15-minute read-only support session? The session is visibly bannered and audited.`)) return;
+    if (
+      !window.confirm(
+        `Open ${location.name} in a 15-minute read-only support session? The session is visibly bannered and audited.`,
+      )
+    )
+      return;
     const supportWindow = window.open("about:blank", "_blank");
     if (!supportWindow) {
-      setError("Your browser blocked the support tab. Allow pop-ups for Attend Master and try again.");
+      setError(
+        "Your browser blocked the support tab. Allow pop-ups for Attend Master and try again.",
+      );
       return;
     }
     supportWindow.opener = null;
@@ -698,7 +868,11 @@ export default function AttendMaster() {
       supportWindow.location.href = `${CINEMA_ADMIN_URL}/#support=${encodeURIComponent(support.accessToken)}`;
     } catch (reason) {
       supportWindow.close();
-      setError(reason instanceof Error ? reason.message : "Could not open read-only support.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not open read-only support.",
+      );
     } finally {
       setSaving(false);
     }
@@ -797,14 +971,23 @@ export default function AttendMaster() {
       return Array.from({ length: draft.seatsPerRow }, (_, seatIndex) => {
         const number = seatIndex + 1;
         const accessibleIndex = rowIndex === draft.rows - 1 ? seatIndex : -1;
-        const isAccessiblePosition = accessibleIndex >= 0 && accessibleIndex < draft.accessiblePairs * 2;
+        const isAccessiblePosition =
+          accessibleIndex >= 0 && accessibleIndex < draft.accessiblePairs * 2;
         return {
           label: `${rowLabel}${number}`,
           rowLabel,
           number,
-          x: seatIndex + (draft.centerAisle && seatIndex >= Math.ceil(draft.seatsPerRow / 2) ? 1 : 0),
+          x:
+            seatIndex +
+            (draft.centerAisle && seatIndex >= Math.ceil(draft.seatsPerRow / 2)
+              ? 1
+              : 0),
           y: rowIndex,
-          type: isAccessiblePosition ? (accessibleIndex % 2 === 0 ? "ADA" : "COMPANION") : "STANDARD",
+          type: isAccessiblePosition
+            ? accessibleIndex % 2 === 0
+              ? "ADA"
+              : "COMPANION"
+            : "STANDARD",
           levelKey: "main",
         } satisfies SeatInput;
       });
@@ -816,12 +999,36 @@ export default function AttendMaster() {
     const aisleX = Math.ceil(draft.seatsPerRow / 2);
     return {
       mode: "BASIC",
-      canvas: { width: draft.seatsPerRow + (draft.centerAisle ? 1 : 0), height: draft.rows },
+      canvas: {
+        width: draft.seatsPerRow + (draft.centerAisle ? 1 : 0),
+        height: draft.rows,
+      },
       screenPosition: "TOP",
       seatingStyle: "SINGLE",
-      levels: [{ id: "main", name: "Main floor", sortOrder: 0, elevationLabel: "Floor" }],
+      levels: [
+        {
+          id: "main",
+          name: "Main floor",
+          sortOrder: 0,
+          elevationLabel: "Floor",
+        },
+      ],
       sections: [],
-      elements: draft.centerAisle ? [{ id: "center-aisle", type: "AISLE", levelId: "main", x: aisleX, y: 0, width: 1, height: draft.rows, label: "Center aisle", orientation: "VERTICAL" }] : [],
+      elements: draft.centerAisle
+        ? [
+            {
+              id: "center-aisle",
+              type: "AISLE",
+              levelId: "main",
+              x: aisleX,
+              y: 0,
+              width: 1,
+              height: draft.rows,
+              label: "Center aisle",
+              orientation: "VERTICAL",
+            },
+          ]
+        : [],
     };
   }
 
@@ -835,78 +1042,162 @@ export default function AttendMaster() {
         `/platform/organizations/${organization.id}/locations/${auditoriumDraft.locationId}/auditoriums${auditoriumDraft.id ? `/${auditoriumDraft.id}` : ""}`,
         {
           method: auditoriumDraft.id ? "PATCH" : "POST",
-          body: JSON.stringify({
-            name: auditoriumDraft.name,
-            seatMapName: `${auditoriumDraft.name} layout`,
-            seats: auditoriumSeats(auditoriumDraft),
-            layout: auditoriumLayout(auditoriumDraft),
-          }),
+          body: JSON.stringify(
+            auditoriumDraft.seatingMode === "GENERAL_ADMISSION"
+              ? {
+                  name: auditoriumDraft.name,
+                  seatingMode: auditoriumDraft.seatingMode,
+                  capacity: auditoriumDraft.capacity,
+                }
+              : {
+                  name: auditoriumDraft.name,
+                  seatingMode: auditoriumDraft.seatingMode,
+                  seatMapName: `${auditoriumDraft.name} layout`,
+                  seats: auditoriumSeats(auditoriumDraft),
+                  layout: auditoriumLayout(auditoriumDraft),
+                },
+          ),
         },
         session.accessToken,
       );
       const [updated, refreshed] = await Promise.all([
-        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<OrganizationDetail>(
+          `/platform/organizations/${organization.id}`,
+          undefined,
+          session.accessToken,
+        ),
         request<Overview>("/platform/overview", undefined, session.accessToken),
       ]);
       setOrganization(updated);
       setOverview(refreshed);
       setAuditoriumDraft(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save the auditorium.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not save the auditorium.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
-  async function deleteAuditorium(locationId: string, auditoriumId: string, name: string) {
-    if (!session || !organization || !window.confirm(`Permanently delete ${name}? This is only allowed when it has no showtime history.`)) return;
-    setSaving(true); setError(null);
+  async function deleteAuditorium(
+    locationId: string,
+    auditoriumId: string,
+    name: string,
+  ) {
+    if (
+      !session ||
+      !organization ||
+      !window.confirm(
+        `Permanently delete ${name}? This is only allowed when it has no showtime history.`,
+      )
+    )
+      return;
+    setSaving(true);
+    setError(null);
     try {
-      await request(`/platform/organizations/${organization.id}/locations/${locationId}/auditoriums/${auditoriumId}`, { method: "DELETE" }, session.accessToken);
+      await request(
+        `/platform/organizations/${organization.id}/locations/${locationId}/auditoriums/${auditoriumId}`,
+        { method: "DELETE" },
+        session.accessToken,
+      );
       const [updated, refreshed] = await Promise.all([
-        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<OrganizationDetail>(
+          `/platform/organizations/${organization.id}`,
+          undefined,
+          session.accessToken,
+        ),
         request<Overview>("/platform/overview", undefined, session.accessToken),
       ]);
-      setOrganization(updated); setOverview(refreshed);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not delete the auditorium."); }
-    finally { setSaving(false); }
+      setOrganization(updated);
+      setOverview(refreshed);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not delete the auditorium.",
+      );
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function duplicateAuditorium(location: LocationDetail, auditorium: LocationDetail["auditoriums"][number]) {
+  async function duplicateAuditorium(
+    location: LocationDetail,
+    auditorium: LocationDetail["auditoriums"][number],
+  ) {
     if (!session || !organization) return;
-    const name = window.prompt(`Name the copy of ${auditorium.name}:`, `${auditorium.name} copy`)?.trim();
+    const name = window
+      .prompt(`Name the copy of ${auditorium.name}:`, `${auditorium.name} copy`)
+      ?.trim();
     if (!name) return;
     setSaving(true);
     setError(null);
     try {
-      await request(`/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}/duplicate`, { method: "POST", body: JSON.stringify({ name }) }, session.accessToken);
+      await request(
+        `/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}/duplicate`,
+        { method: "POST", body: JSON.stringify({ name }) },
+        session.accessToken,
+      );
       const [updated, refreshed] = await Promise.all([
-        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<OrganizationDetail>(
+          `/platform/organizations/${organization.id}`,
+          undefined,
+          session.accessToken,
+        ),
         request<Overview>("/platform/overview", undefined, session.accessToken),
       ]);
       setOrganization(updated);
       setOverview(refreshed);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not duplicate the auditorium.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not duplicate the auditorium.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
-  async function deactivateAuditorium(location: LocationDetail, auditorium: LocationDetail["auditoriums"][number]) {
-    if (!session || !organization || !window.confirm(`Deactivate ${auditorium.name}? This is blocked while future showtimes still use the room.`)) return;
+  async function deactivateAuditorium(
+    location: LocationDetail,
+    auditorium: LocationDetail["auditoriums"][number],
+  ) {
+    if (
+      !session ||
+      !organization ||
+      !window.confirm(
+        `Deactivate ${auditorium.name}? This is blocked while future showtimes still use the room.`,
+      )
+    )
+      return;
     setSaving(true);
     setError(null);
     try {
-      await request(`/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}/deactivate`, { method: "PATCH" }, session.accessToken);
+      await request(
+        `/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}/deactivate`,
+        { method: "PATCH" },
+        session.accessToken,
+      );
       const [updated, refreshed] = await Promise.all([
-        request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
+        request<OrganizationDetail>(
+          `/platform/organizations/${organization.id}`,
+          undefined,
+          session.accessToken,
+        ),
         request<Overview>("/platform/overview", undefined, session.accessToken),
       ]);
       setOrganization(updated);
       setOverview(refreshed);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not deactivate the auditorium.");
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not deactivate the auditorium.",
+      );
     } finally {
       setSaving(false);
     }
@@ -917,25 +1208,49 @@ export default function AttendMaster() {
   const filteredOrganizations = useMemo(() => {
     const normalizedQuery = clientQuery.trim().toLowerCase();
     return (overview?.organizations ?? []).filter((item) => {
-      const matchesQuery = !normalizedQuery || [
-        item.name,
-        item.legalName ?? "",
-        item.businessTypeLabel ?? "",
-        item.timezone,
-        ...item.locations.flatMap((location) => [location.name, location.address ?? "", location.timezone]),
-      ].some((value) => value.toLowerCase().includes(normalizedQuery));
-      const matchesPayment = paymentFilter === "ALL"
-        || (paymentFilter === "COMPLETE" && item.payments.onboardingStatus === "COMPLETE")
-        || (paymentFilter === "INCOMPLETE" && item.payments.onboardingStatus !== "COMPLETE")
-        || item.payments.onboardingStatus === paymentFilter;
-      const matchesLocation = locationFilter === "ALL"
-        || item.locations.some((location) => location.active === (locationFilter === "ACTIVE"));
-      const matchesLocationCount = locationCountFilter === "ALL"
-        || (locationCountFilter === "ONE" && item.locations.length === 1)
-        || (locationCountFilter === "MULTIPLE" && item.locations.length > 1);
-      return matchesQuery && matchesPayment && matchesLocation && matchesLocationCount;
+      const matchesQuery =
+        !normalizedQuery ||
+        [
+          item.name,
+          item.legalName ?? "",
+          item.businessTypeLabel ?? "",
+          item.timezone,
+          ...item.locations.flatMap((location) => [
+            location.name,
+            location.address ?? "",
+            location.timezone,
+          ]),
+        ].some((value) => value.toLowerCase().includes(normalizedQuery));
+      const matchesPayment =
+        paymentFilter === "ALL" ||
+        (paymentFilter === "COMPLETE" &&
+          item.payments.onboardingStatus === "COMPLETE") ||
+        (paymentFilter === "INCOMPLETE" &&
+          item.payments.onboardingStatus !== "COMPLETE") ||
+        item.payments.onboardingStatus === paymentFilter;
+      const matchesLocation =
+        locationFilter === "ALL" ||
+        item.locations.some(
+          (location) => location.active === (locationFilter === "ACTIVE"),
+        );
+      const matchesLocationCount =
+        locationCountFilter === "ALL" ||
+        (locationCountFilter === "ONE" && item.locations.length === 1) ||
+        (locationCountFilter === "MULTIPLE" && item.locations.length > 1);
+      return (
+        matchesQuery &&
+        matchesPayment &&
+        matchesLocation &&
+        matchesLocationCount
+      );
     });
-  }, [clientQuery, locationCountFilter, locationFilter, overview, paymentFilter]);
+  }, [
+    clientQuery,
+    locationCountFilter,
+    locationFilter,
+    overview,
+    paymentFilter,
+  ]);
 
   if (!restored)
     return (
@@ -1001,7 +1316,9 @@ export default function AttendMaster() {
       </header>
       <nav className="platform-nav" aria-label="Attend Master">
         <Link href="/">Dashboard</Link>
-        <Link className="active" href="/clients">Clients</Link>
+        <Link className="active" href="/clients">
+          Clients
+        </Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
         <Link href="/content">Content</Link>
@@ -1145,11 +1462,17 @@ export default function AttendMaster() {
                 <div>
                   <p className="eyebrow">ORGANIZATION</p>
                   <h2>{organization.name}</h2>
-                  <span className={organization.active ? "status good" : "status warning"}>
+                  <span
+                    className={
+                      organization.active ? "status good" : "status warning"
+                    }
+                  >
                     {organization.active ? "Active client" : "Suspended client"}
                   </span>
                   <p className="muted">
-                    {organization.businessTypeLabel ?? "Business type not classified"} · {organization.legalName ?? "Legal name not configured"} ·
+                    {organization.businessTypeLabel ??
+                      "Business type not classified"}{" "}
+                    · {organization.legalName ?? "Legal name not configured"} ·
                     Client since{" "}
                     {new Date(organization.createdAt).toLocaleDateString()}
                   </p>
@@ -1166,32 +1489,54 @@ export default function AttendMaster() {
                       ? `Payments ${organization.payments.onboardingStatus.toLowerCase()}`
                       : `Payments ${organization.payments.onboardingStatus.toLowerCase().replaceAll("_", " ")}`}
                   </span>
-                  {organization.payments.onboardingStatus !== "COMPLETE" && <button className="edit-button" disabled={saving} onClick={() => void startConnectOnboarding()}>
-                    {organization.payments.connected ? "Continue Stripe onboarding" : "Connect Stripe"}
-                  </button>}
-                  {organization.payments.connected && <button className="quiet" disabled={saving} onClick={() => void refreshConnectStatus()}>
-                    Refresh payment status
-                  </button>}
+                  {organization.payments.onboardingStatus !== "COMPLETE" && (
+                    <button
+                      className="edit-button"
+                      disabled={saving}
+                      onClick={() => void startConnectOnboarding()}
+                    >
+                      {organization.payments.connected
+                        ? "Continue Stripe onboarding"
+                        : "Connect Stripe"}
+                    </button>
+                  )}
+                  {organization.payments.connected && (
+                    <button
+                      className="quiet"
+                      disabled={saving}
+                      onClick={() => void refreshConnectStatus()}
+                    >
+                      Refresh payment status
+                    </button>
+                  )}
                   <button
                     className="edit-button"
                     onClick={() => beginOrganizationEdit(organization)}
                   >
                     Edit organization
                   </button>
-                  {session.user.role !== "VIEWER" && <button
-                    className={organization.active ? "quiet" : "edit-button"}
-                    disabled={saving}
-                    onClick={() => void setOrganizationActive(!organization.active)}
-                  >
-                    {organization.active ? "Suspend client" : "Reactivate client"}
-                  </button>}
-                  {session.user.role !== "VIEWER" && !organization.active && <button
-                    className="danger"
-                    disabled={saving}
-                    onClick={() => void deleteOrganization()}
-                  >
-                    Delete empty client
-                  </button>}
+                  {session.user.role !== "VIEWER" && (
+                    <button
+                      className={organization.active ? "quiet" : "edit-button"}
+                      disabled={saving}
+                      onClick={() =>
+                        void setOrganizationActive(!organization.active)
+                      }
+                    >
+                      {organization.active
+                        ? "Suspend client"
+                        : "Reactivate client"}
+                    </button>
+                  )}
+                  {session.user.role !== "VIEWER" && !organization.active && (
+                    <button
+                      className="danger"
+                      disabled={saving}
+                      onClick={() => void deleteOrganization()}
+                    >
+                      Delete empty client
+                    </button>
+                  )}
                 </div>
               </div>
               {organizationDraft && (
@@ -1280,7 +1625,8 @@ export default function AttendMaster() {
                   </div>
                   <p className="form-note">
                     The ticket fee is controlled by Attend and applies to every
-                    ticket group for this client. Payment status is read from Stripe.
+                    ticket group for this client. Payment status is read from
+                    Stripe.
                   </p>
                   <button disabled={saving}>
                     {saving ? "Saving…" : "Save organization"}
@@ -1289,27 +1635,90 @@ export default function AttendMaster() {
               )}
               <section className="dashboard-panel platform-revenue client-financials">
                 <div className="panel-heading">
-                  <div><p className="eyebrow">FINANCIALS</p><h3>Client revenue</h3><p className="muted">Ticket face value, Attend fees, tax, food and beverage, and refunds across this client&apos;s cinemas.</p></div>
+                  <div>
+                    <p className="eyebrow">FINANCIALS</p>
+                    <h3>Client revenue</h3>
+                    <p className="muted">
+                      Ticket face value, Attend fees, tax, food and beverage,
+                      and refunds across this client&apos;s cinemas.
+                    </p>
+                  </div>
                   <div className="revenue-actions">
-                    <div className="range-toggle" aria-label="Client revenue date range">
-                      {revenueRanges.map((range) => <button type="button" key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => setRevenueDays(range.days)}>{range.label}</button>)}
+                    <div
+                      className="range-toggle"
+                      aria-label="Client revenue date range"
+                    >
+                      {revenueRanges.map((range) => (
+                        <button
+                          type="button"
+                          key={range.days}
+                          className={
+                            revenueDays === range.days ? "active" : "quiet"
+                          }
+                          disabled={revenueLoading}
+                          onClick={() => setRevenueDays(range.days)}
+                        >
+                          {range.label}
+                        </button>
+                      ))}
                     </div>
-                    <button type="button" className="quiet" disabled={revenueLoading || !revenue} onClick={() => void downloadClientRevenue()}>Export CSV</button>
+                    <button
+                      type="button"
+                      className="quiet"
+                      disabled={revenueLoading || !revenue}
+                      onClick={() => void downloadClientRevenue()}
+                    >
+                      Export CSV
+                    </button>
                   </div>
                 </div>
                 {!revenue && <p className="muted">Loading client revenue…</p>}
-                {revenue && <>
-                  <div className="revenue-breakdown">
-                    <article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article>
-                    <article><span>Attend fee revenue</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article>
-                    <article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article>
-                    <article><span>Total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article>
-                    <article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article>
-                    <article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article>
-                    <article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article>
-                  </div>
-                  <p className="dashboard-updated">{revenue.totals.ticketsSold.toLocaleString()} tickets sold · {revenue.totals.fnbOrders.toLocaleString()} F&amp;B orders · Updated {new Date(revenue.generatedAt).toLocaleString()}</p>
-                </>}
+                {revenue && (
+                  <>
+                    <div className="revenue-breakdown">
+                      <article>
+                        <span>Ticket face value</span>
+                        <strong>
+                          {money(revenue.totals.ticketRevenueCents)}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Attend fee revenue</span>
+                        <strong>{money(revenue.totals.ticketFeesCents)}</strong>
+                      </article>
+                      <article>
+                        <span>Ticket tax</span>
+                        <strong>{money(revenue.totals.ticketTaxCents)}</strong>
+                      </article>
+                      <article>
+                        <span>Total collected</span>
+                        <strong>
+                          {money(revenue.totals.ticketCollectedCents)}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>F&amp;B revenue</span>
+                        <strong>{money(revenue.totals.fnbRevenueCents)}</strong>
+                      </article>
+                      <article>
+                        <span>Combined net</span>
+                        <strong>
+                          {money(revenue.totals.combinedRevenueCents)}
+                        </strong>
+                      </article>
+                      <article>
+                        <span>Refunds</span>
+                        <strong>{money(revenue.totals.refundedCents)}</strong>
+                      </article>
+                    </div>
+                    <p className="dashboard-updated">
+                      {revenue.totals.ticketsSold.toLocaleString()} tickets sold
+                      · {revenue.totals.fnbOrders.toLocaleString()} F&amp;B
+                      orders · Updated{" "}
+                      {new Date(revenue.generatedAt).toLocaleString()}
+                    </p>
+                  </>
+                )}
               </section>
               {organization.locations.map((location) => (
                 <article className="location-detail" key={location.id}>
@@ -1322,7 +1731,9 @@ export default function AttendMaster() {
                         >
                           {location.active ? "Active" : "Inactive"}
                         </span>
-                        {location.brandingDraft && <span className="status warning">Branding draft</span>}
+                        {location.brandingDraft && (
+                          <span className="status warning">Branding draft</span>
+                        )}
                       </div>
                       <p className="muted">
                         {location.address ?? "Address not configured"} ·{" "}
@@ -1334,15 +1745,19 @@ export default function AttendMaster() {
                         className="edit-button"
                         onClick={() => beginLocationEdit(location)}
                       >
-                        {location.brandingDraft ? "Review cinema draft" : "Edit cinema"}
+                        {location.brandingDraft
+                          ? "Review cinema draft"
+                          : "Edit cinema"}
                       </button>
-                      {location.brandingDraft && <button
-                        className="edit-button"
-                        disabled={saving}
-                        onClick={() => void publishBranding(location)}
-                      >
-                        Publish branding
-                      </button>}
+                      {location.brandingDraft && (
+                        <button
+                          className="edit-button"
+                          disabled={saving}
+                          onClick={() => void publishBranding(location)}
+                        >
+                          Publish branding
+                        </button>
+                      )}
                       <button
                         className="edit-button"
                         onClick={() =>
@@ -1381,13 +1796,17 @@ export default function AttendMaster() {
                       >
                         Open cinema admin ↗
                       </a>
-                      {session.user.role !== "VIEWER" && <button
-                        className="quiet"
-                        disabled={saving || !organization.active || !location.active}
-                        onClick={() => void openSupportSession(location)}
-                      >
-                        Open read-only support ↗
-                      </button>}
+                      {session.user.role !== "VIEWER" && (
+                        <button
+                          className="quiet"
+                          disabled={
+                            saving || !organization.active || !location.active
+                          }
+                          onClick={() => void openSupportSession(location)}
+                        >
+                          Open read-only support ↗
+                        </button>
+                      )}
                       <a
                         href={`${CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(location.id)}`}
                         target="_blank"
@@ -1558,59 +1977,274 @@ export default function AttendMaster() {
                   </div>
                   <section className="auditorium-overview">
                     <div className="auditorium-overview-heading">
-                      <div><p className="eyebrow">VENUE LAYOUTS</p><h3>Auditoriums &amp; seat maps</h3></div>
+                      <div>
+                        <p className="eyebrow">VENUE LAYOUTS</p>
+                        <h3>Auditoriums &amp; seat maps</h3>
+                      </div>
                       <div className="auditorium-overview-actions">
-                        <p className="muted">Authoritative cinema layouts, scoped to {location.name}.</p>
-                        {session.user.role !== "VIEWER" && auditoriumDraft?.locationId !== location.id && (
-                          <button
-                            type="button"
-                            className="quiet"
-                            onClick={() => setAuditoriumDraft({ locationId: location.id, name: `Theater ${location.auditoriums.length + 1}`, rows: 8, seatsPerRow: 12, centerAisle: true, accessiblePairs: 1 })}
-                          >
-                            + Add auditorium
-                          </button>
-                        )}
+                        <p className="muted">
+                          Authoritative cinema layouts, scoped to{" "}
+                          {location.name}.
+                        </p>
+                        {session.user.role !== "VIEWER" &&
+                          auditoriumDraft?.locationId !== location.id && (
+                            <button
+                              type="button"
+                              className="quiet"
+                              onClick={() =>
+                                setAuditoriumDraft({
+                                  locationId: location.id,
+                                  name: `Theater ${location.auditoriums.length + 1}`,
+                                  seatingMode: "RESERVED",
+                                  capacity: 96,
+                                  rows: 8,
+                                  seatsPerRow: 12,
+                                  centerAisle: true,
+                                  accessiblePairs: 1,
+                                })
+                              }
+                            >
+                              + Add auditorium
+                            </button>
+                          )}
                       </div>
                     </div>
                     {auditoriumDraft?.locationId === location.id && (
-                      <form className="master-auditorium-builder" onSubmit={saveAuditorium}>
+                      <form
+                        className="master-auditorium-builder"
+                        onSubmit={saveAuditorium}
+                      >
                         <div className="editor-heading">
                           <div>
                             <p className="eyebrow">LAYOUT DESIGNER</p>
-                            <h3>{auditoriumDraft.id ? "Edit auditorium" : "Create an auditorium"}</h3>
-                            <p className="muted">Build a standard room quickly. Existing cinema-admin layout controls remain available for advanced edits.</p>
+                            <h3>
+                              {auditoriumDraft.id
+                                ? "Edit auditorium"
+                                : "Create an auditorium"}
+                            </h3>
+                            <p className="muted">
+                              Build a standard room quickly. Existing
+                              cinema-admin layout controls remain available for
+                              advanced edits.
+                            </p>
                           </div>
-                          <button type="button" className="quiet" onClick={() => setAuditoriumDraft(null)}>Cancel</button>
+                          <button
+                            type="button"
+                            className="quiet"
+                            onClick={() => setAuditoriumDraft(null)}
+                          >
+                            Cancel
+                          </button>
                         </div>
                         <div className="auditorium-builder-fields">
-                          <label>Theater name<input required maxLength={80} value={auditoriumDraft.name} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, name: event.target.value })} /></label>
-                          <label>Rows<input type="number" min={1} max={20} value={auditoriumDraft.rows} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, rows: Math.max(1, Math.min(20, Number(event.target.value))), sourceSeats: undefined, sourceLayout: undefined })} /></label>
-                          <label>Seats per row<input type="number" min={2} max={25} value={auditoriumDraft.seatsPerRow} onChange={(event) => {
-                            const seatsPerRow = Math.max(2, Math.min(25, Number(event.target.value)));
-                            setAuditoriumDraft({ ...auditoriumDraft, seatsPerRow, accessiblePairs: Math.min(auditoriumDraft.accessiblePairs, Math.floor(seatsPerRow / 2)), sourceSeats: undefined, sourceLayout: undefined });
-                          }} /></label>
-                          <label>Accessible pairs<input type="number" min={0} max={Math.floor(auditoriumDraft.seatsPerRow / 2)} value={auditoriumDraft.accessiblePairs} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, accessiblePairs: Math.max(0, Math.min(Math.floor(auditoriumDraft.seatsPerRow / 2), Number(event.target.value))), sourceSeats: undefined, sourceLayout: undefined })} /></label>
-                          <label className="check"><input type="checkbox" checked={auditoriumDraft.centerAisle} onChange={(event) => setAuditoriumDraft({ ...auditoriumDraft, centerAisle: event.target.checked, sourceSeats: undefined, sourceLayout: undefined })} /> Center aisle</label>
+                          <label>
+                            Theater name
+                            <input
+                              required
+                              maxLength={80}
+                              value={auditoriumDraft.name}
+                              onChange={(event) =>
+                                setAuditoriumDraft({
+                                  ...auditoriumDraft,
+                                  name: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Seating type
+                            <select
+                              value={auditoriumDraft.seatingMode}
+                              onChange={(event) =>
+                                setAuditoriumDraft({
+                                  ...auditoriumDraft,
+                                  seatingMode: event.target
+                                    .value as AuditoriumDraft["seatingMode"],
+                                })
+                              }
+                            >
+                              <option value="RESERVED">Reserved seats</option>
+                              <option value="GENERAL_ADMISSION">
+                                General admission
+                              </option>
+                            </select>
+                          </label>
+                          {auditoriumDraft.seatingMode ===
+                          "GENERAL_ADMISSION" ? (
+                            <label>
+                              Sellable capacity
+                              <input
+                                type="number"
+                                min={1}
+                                max={500}
+                                required
+                                value={auditoriumDraft.capacity}
+                                onChange={(event) =>
+                                  setAuditoriumDraft({
+                                    ...auditoriumDraft,
+                                    capacity: Math.max(
+                                      1,
+                                      Math.min(500, Number(event.target.value)),
+                                    ),
+                                  })
+                                }
+                              />
+                            </label>
+                          ) : (
+                            <>
+                              <label>
+                                Rows
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={20}
+                                  value={auditoriumDraft.rows}
+                                  onChange={(event) =>
+                                    setAuditoriumDraft({
+                                      ...auditoriumDraft,
+                                      rows: Math.max(
+                                        1,
+                                        Math.min(
+                                          20,
+                                          Number(event.target.value),
+                                        ),
+                                      ),
+                                      sourceSeats: undefined,
+                                      sourceLayout: undefined,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label>
+                                Seats per row
+                                <input
+                                  type="number"
+                                  min={2}
+                                  max={25}
+                                  value={auditoriumDraft.seatsPerRow}
+                                  onChange={(event) => {
+                                    const seatsPerRow = Math.max(
+                                      2,
+                                      Math.min(25, Number(event.target.value)),
+                                    );
+                                    setAuditoriumDraft({
+                                      ...auditoriumDraft,
+                                      seatsPerRow,
+                                      accessiblePairs: Math.min(
+                                        auditoriumDraft.accessiblePairs,
+                                        Math.floor(seatsPerRow / 2),
+                                      ),
+                                      sourceSeats: undefined,
+                                      sourceLayout: undefined,
+                                    });
+                                  }}
+                                />
+                              </label>
+                              <label>
+                                Accessible pairs
+                                <input
+                                  type="number"
+                                  min={0}
+                                  max={Math.floor(
+                                    auditoriumDraft.seatsPerRow / 2,
+                                  )}
+                                  value={auditoriumDraft.accessiblePairs}
+                                  onChange={(event) =>
+                                    setAuditoriumDraft({
+                                      ...auditoriumDraft,
+                                      accessiblePairs: Math.max(
+                                        0,
+                                        Math.min(
+                                          Math.floor(
+                                            auditoriumDraft.seatsPerRow / 2,
+                                          ),
+                                          Number(event.target.value),
+                                        ),
+                                      ),
+                                      sourceSeats: undefined,
+                                      sourceLayout: undefined,
+                                    })
+                                  }
+                                />
+                              </label>
+                              <label className="check">
+                                <input
+                                  type="checkbox"
+                                  checked={auditoriumDraft.centerAisle}
+                                  onChange={(event) =>
+                                    setAuditoriumDraft({
+                                      ...auditoriumDraft,
+                                      centerAisle: event.target.checked,
+                                      sourceSeats: undefined,
+                                      sourceLayout: undefined,
+                                    })
+                                  }
+                                />{" "}
+                                Center aisle
+                              </label>
+                            </>
+                          )}
                         </div>
-                        <div
-                          className="master-seat-preview master-builder-preview"
-                          role="img"
-                          aria-label={`${auditoriumDraft.name} seat map preview`}
-                          style={{
-                            gridTemplateColumns: `repeat(${auditoriumLayout(auditoriumDraft).canvas.width}, minmax(12px, 1fr))`,
-                            gridTemplateRows: `repeat(${auditoriumDraft.rows}, 20px)`,
-                          }}
-                        >
-                          {auditoriumSeats(auditoriumDraft).map((seat) => (
-                            <i key={seat.label} className={seat.type.toLowerCase()} style={{ gridColumn: seat.x + 1, gridRow: seat.y + 1 }} title={`${seat.label} · ${seat.type.toLowerCase()}`} />
-                          ))}
-                        </div>
+                        {auditoriumDraft.seatingMode === "RESERVED" ? (
+                          <>
+                            <div
+                              className="master-seat-preview master-builder-preview"
+                              role="img"
+                              aria-label={`${auditoriumDraft.name} seat map preview`}
+                              style={{
+                                gridTemplateColumns: `repeat(${auditoriumLayout(auditoriumDraft).canvas.width}, minmax(12px, 1fr))`,
+                                gridTemplateRows: `repeat(${auditoriumDraft.rows}, 20px)`,
+                              }}
+                            >
+                              {auditoriumSeats(auditoriumDraft).map((seat) => (
+                                <i
+                                  key={seat.label}
+                                  className={seat.type.toLowerCase()}
+                                  style={{
+                                    gridColumn: seat.x + 1,
+                                    gridRow: seat.y + 1,
+                                  }}
+                                  title={`${seat.label} · ${seat.type.toLowerCase()}`}
+                                />
+                              ))}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="form-note">
+                            General-admission customers choose a quantity rather
+                            than individual seats. This capacity is enforced
+                            separately for each showtime.
+                          </p>
+                        )}
                         <div className="master-builder-summary">
-                          <span><b>{auditoriumSeats(auditoriumDraft).length}</b> admission positions</span>
-                          <span><b>{auditoriumDraft.accessiblePairs}</b> accessible pairs</span>
-                          <button disabled={saving}>{saving ? "Saving…" : auditoriumDraft.id ? "Save auditorium" : "Create auditorium"}</button>
+                          <span>
+                            <b>
+                              {auditoriumDraft.seatingMode ===
+                              "GENERAL_ADMISSION"
+                                ? auditoriumDraft.capacity
+                                : auditoriumSeats(auditoriumDraft).length}
+                            </b>{" "}
+                            admission positions
+                          </span>
+                          {auditoriumDraft.seatingMode === "RESERVED" && (
+                            <span>
+                              <b>{auditoriumDraft.accessiblePairs}</b>{" "}
+                              accessible pairs
+                            </span>
+                          )}
+                          <button disabled={saving}>
+                            {saving
+                              ? "Saving…"
+                              : auditoriumDraft.id
+                                ? "Save auditorium"
+                                : "Create auditorium"}
+                          </button>
                         </div>
-                        <p className="form-note">Attend models the layout supplied by the operator. It does not certify ADA, fire, egress, or building-code compliance.</p>
+                        <p className="form-note">
+                          Attend models the layout supplied by the operator. It
+                          does not certify ADA, fire, egress, or building-code
+                          compliance.
+                        </p>
                       </form>
                     )}
                     <div className="auditorium-overview-grid">
@@ -1618,65 +2252,175 @@ export default function AttendMaster() {
                         <article key={auditorium.id}>
                           <div className="auditorium-card-heading">
                             <strong>{auditorium.name}</strong>
-                            <span className={`status ${auditorium.active ? "good" : ""}`}>{auditorium.active ? "Active" : "Inactive"}</span>
+                            <span
+                              className={`status ${auditorium.active ? "good" : ""}`}
+                            >
+                              {auditorium.active ? "Active" : "Inactive"}
+                            </span>
                           </div>
-                          {session.user.role !== "VIEWER" && <div className="auditorium-overview-actions">
-                            <button type="button" onClick={() => {
-                              const activeSeats = auditorium.seatMap?.seats.filter((seat) => seat.active) ?? [];
-                              const rows = Math.max(1, ...activeSeats.map((seat) => seat.y + 1));
-                              const seatsPerRow = Math.max(2, Math.ceil(activeSeats.length / rows));
-                              setAuditoriumDraft({
-                                id: auditorium.id,
-                                locationId: location.id,
-                                name: auditorium.name,
-                                rows,
-                                seatsPerRow,
-                                centerAisle: false,
-                                accessiblePairs: auditorium.seatMap?.accessibleSeats ?? 0,
-                                sourceLayout: auditorium.seatMap?.layout ?? undefined,
-                                sourceSeats: activeSeats.map(({ id: _id, active: _active, ...seat }) => seat),
-                              });
-                            }}>Edit</button>
-                            <button type="button" disabled={saving} onClick={() => void deleteAuditorium(location.id, auditorium.id, auditorium.name)}>Delete</button>
-                          </div>}
-                          <dl>
-                            <div><dt>Configured capacity</dt><dd>{auditorium.capacity}</dd></div>
-                            <div><dt>Seat map</dt><dd>{auditorium.seatMap?.name ?? "Not configured"}</dd></div>
-                            {auditorium.seatMap && <>
-                              <div><dt>Active seats</dt><dd>{auditorium.seatMap.activeSeats}</dd></div>
-                              <div><dt>Accessible / companion</dt><dd>{auditorium.seatMap.accessibleSeats} / {auditorium.seatMap.companionSeats}</dd></div>
-                              <div><dt>Layout version</dt><dd>v{auditorium.seatMap.version}</dd></div>
-                              <div
-                                className="master-seat-preview"
-                                role="img"
-                                aria-label={`${auditorium.name} read-only seat map`}
-                                style={{
-                                  gridTemplateColumns: `repeat(${Math.max(1, ...auditorium.seatMap.seats.map((seat) => seat.x + 1))}, minmax(12px, 1fr))`,
-                                  gridTemplateRows: `repeat(${Math.max(1, ...auditorium.seatMap.seats.map((seat) => seat.y + 1))}, 18px)`,
+                          {session.user.role !== "VIEWER" && (
+                            <div className="auditorium-overview-actions">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const activeSeats =
+                                    auditorium.seatMap?.seats.filter(
+                                      (seat) => seat.active,
+                                    ) ?? [];
+                                  const rows = Math.max(
+                                    1,
+                                    ...activeSeats.map((seat) => seat.y + 1),
+                                  );
+                                  const seatsPerRow = Math.max(
+                                    2,
+                                    Math.ceil(activeSeats.length / rows),
+                                  );
+                                  setAuditoriumDraft({
+                                    id: auditorium.id,
+                                    locationId: location.id,
+                                    name: auditorium.name,
+                                    seatingMode:
+                                      auditorium.seatingMode ?? "RESERVED",
+                                    capacity: auditorium.capacity,
+                                    rows,
+                                    seatsPerRow,
+                                    centerAisle: false,
+                                    accessiblePairs:
+                                      auditorium.seatMap?.accessibleSeats ?? 0,
+                                    sourceLayout:
+                                      auditorium.seatMap?.layout ?? undefined,
+                                    sourceSeats: activeSeats.map(
+                                      ({ id: _id, active: _active, ...seat }) =>
+                                        seat,
+                                    ),
+                                  });
                                 }}
                               >
-                                {auditorium.seatMap.seats.map((seat) => (
-                                  <i
-                                    key={seat.id}
-                                    className={`${seat.active ? "" : "inactive"} ${seat.type.toLowerCase()}`}
-                                    style={{ gridColumn: seat.x + 1, gridRow: seat.y + 1 }}
-                                    title={`${seat.label} · ${seat.type.toLowerCase()}${seat.active ? "" : " · inactive"}`}
-                                  />
-                                ))}
-                              </div>
-                            </>}
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                disabled={saving}
+                                onClick={() =>
+                                  void deleteAuditorium(
+                                    location.id,
+                                    auditorium.id,
+                                    auditorium.name,
+                                  )
+                                }
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                          <dl>
+                            <div>
+                              <dt>Seating type</dt>
+                              <dd>
+                                {auditorium.seatingMode === "GENERAL_ADMISSION"
+                                  ? "General admission"
+                                  : "Reserved seats"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Configured capacity</dt>
+                              <dd>{auditorium.capacity}</dd>
+                            </div>
+                            <div>
+                              <dt>Seat map</dt>
+                              <dd>
+                                {auditorium.seatMap?.name ?? "Not configured"}
+                              </dd>
+                            </div>
+                            {auditorium.seatMap && (
+                              <>
+                                <div>
+                                  <dt>Active seats</dt>
+                                  <dd>{auditorium.seatMap.activeSeats}</dd>
+                                </div>
+                                <div>
+                                  <dt>Accessible / companion</dt>
+                                  <dd>
+                                    {auditorium.seatMap.accessibleSeats} /{" "}
+                                    {auditorium.seatMap.companionSeats}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt>Layout version</dt>
+                                  <dd>v{auditorium.seatMap.version}</dd>
+                                </div>
+                                <div
+                                  className="master-seat-preview"
+                                  role="img"
+                                  aria-label={`${auditorium.name} read-only seat map`}
+                                  style={{
+                                    gridTemplateColumns: `repeat(${Math.max(1, ...auditorium.seatMap.seats.map((seat) => seat.x + 1))}, minmax(12px, 1fr))`,
+                                    gridTemplateRows: `repeat(${Math.max(1, ...auditorium.seatMap.seats.map((seat) => seat.y + 1))}, 18px)`,
+                                  }}
+                                >
+                                  {auditorium.seatMap.seats.map((seat) => (
+                                    <i
+                                      key={seat.id}
+                                      className={`${seat.active ? "" : "inactive"} ${seat.type.toLowerCase()}`}
+                                      style={{
+                                        gridColumn: seat.x + 1,
+                                        gridRow: seat.y + 1,
+                                      }}
+                                      title={`${seat.label} · ${seat.type.toLowerCase()}${seat.active ? "" : " · inactive"}`}
+                                    />
+                                  ))}
+                                </div>
+                              </>
+                            )}
                           </dl>
                           {session.user.role !== "VIEWER" && (
                             <div className="auditorium-card-actions">
-                              <button type="button" className="quiet" disabled={saving} onClick={() => duplicateAuditorium(location, auditorium)}>Duplicate</button>
-                              {auditorium.active
-                                ? <button type="button" className="danger" disabled={saving} onClick={() => deactivateAuditorium(location, auditorium)}>Deactivate</button>
-                                : <button type="button" className="danger" disabled={saving} onClick={() => deleteAuditorium(location.id, auditorium.id, auditorium.name)}>Delete permanently</button>}
+                              <button
+                                type="button"
+                                className="quiet"
+                                disabled={saving}
+                                onClick={() =>
+                                  duplicateAuditorium(location, auditorium)
+                                }
+                              >
+                                Duplicate
+                              </button>
+                              {auditorium.active ? (
+                                <button
+                                  type="button"
+                                  className="danger"
+                                  disabled={saving}
+                                  onClick={() =>
+                                    deactivateAuditorium(location, auditorium)
+                                  }
+                                >
+                                  Deactivate
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="danger"
+                                  disabled={saving}
+                                  onClick={() =>
+                                    deleteAuditorium(
+                                      location.id,
+                                      auditorium.id,
+                                      auditorium.name,
+                                    )
+                                  }
+                                >
+                                  Delete permanently
+                                </button>
+                              )}
                             </div>
                           )}
                         </article>
                       ))}
-                      {location.auditoriums.length === 0 && <p className="muted">No auditoriums have been configured for this cinema.</p>}
+                      {location.auditoriums.length === 0 && (
+                        <p className="muted">
+                          No auditoriums have been configured for this cinema.
+                        </p>
+                      )}
                     </div>
                   </section>
                   {cinemaManagerDraft?.locationId === location.id && (
@@ -1766,9 +2510,9 @@ export default function AttendMaster() {
                           <p className="eyebrow">PLATFORM CONFIGURATION</p>
                           <h3>Edit {location.name}</h3>
                           <p className="muted">
-                            Preview both cinema surfaces here. Operating settings
-                            save immediately; branding stays private as a draft
-                            until you publish it.
+                            Preview both cinema surfaces here. Operating
+                            settings save immediately; branding stays private as
+                            a draft until you publish it.
                           </p>
                         </div>
                         <button
@@ -2193,7 +2937,8 @@ export default function AttendMaster() {
                                   ...contentDraft.values,
                                   typography: {
                                     ...contentDraft.values.typography,
-                                    headingSize: event.target.value as CinemaContent["typography"]["headingSize"],
+                                    headingSize: event.target
+                                      .value as CinemaContent["typography"]["headingSize"],
                                   },
                                 },
                               })
@@ -2215,7 +2960,8 @@ export default function AttendMaster() {
                                   ...contentDraft.values,
                                   typography: {
                                     ...contentDraft.values.typography,
-                                    bodySize: event.target.value as CinemaContent["typography"]["bodySize"],
+                                    bodySize: event.target
+                                      .value as CinemaContent["typography"]["bodySize"],
                                   },
                                 },
                               })
@@ -2238,7 +2984,9 @@ export default function AttendMaster() {
                           <input
                             type="url"
                             placeholder="https://shop.example.com"
-                            value={contentDraft.values.navigation.merchUrl ?? ""}
+                            value={
+                              contentDraft.values.navigation.merchUrl ?? ""
+                            }
                             onChange={(event) =>
                               setContentDraft({
                                 ...contentDraft,
@@ -2255,7 +3003,8 @@ export default function AttendMaster() {
                         </label>
                       </div>
                       <p className="form-note">
-                        When set, Merch appears in customer navigation and opens the hosted shop in a new tab.
+                        When set, Merch appears in customer navigation and opens
+                        the hosted shop in a new tab.
                       </p>
                       <h4>Showtimes page</h4>
                       <div className="form-grid">
@@ -3034,7 +3783,10 @@ export default function AttendMaster() {
               <span>Upcoming showtimes</span>
             </div>
           </section>
-          <section className="client-filters" aria-label="Filter cinema clients">
+          <section
+            className="client-filters"
+            aria-label="Filter cinema clients"
+          >
             <label>
               Search
               <input
@@ -3046,7 +3798,10 @@ export default function AttendMaster() {
             </label>
             <label>
               Stripe onboarding
-              <select value={paymentFilter} onChange={(event) => setPaymentFilter(event.target.value)}>
+              <select
+                value={paymentFilter}
+                onChange={(event) => setPaymentFilter(event.target.value)}
+              >
                 <option value="ALL">All statuses</option>
                 <option value="COMPLETE">Complete</option>
                 <option value="IN_PROGRESS">In progress</option>
@@ -3056,7 +3811,10 @@ export default function AttendMaster() {
             </label>
             <label>
               Location status
-              <select value={locationFilter} onChange={(event) => setLocationFilter(event.target.value)}>
+              <select
+                value={locationFilter}
+                onChange={(event) => setLocationFilter(event.target.value)}
+              >
                 <option value="ALL">Active or inactive</option>
                 <option value="ACTIVE">Has an active location</option>
                 <option value="INACTIVE">Has an inactive location</option>
@@ -3064,7 +3822,10 @@ export default function AttendMaster() {
             </label>
             <label>
               Location count
-              <select value={locationCountFilter} onChange={(event) => setLocationCountFilter(event.target.value)}>
+              <select
+                value={locationCountFilter}
+                onChange={(event) => setLocationCountFilter(event.target.value)}
+              >
                 <option value="ALL">Any number</option>
                 <option value="ONE">One location</option>
                 <option value="MULTIPLE">Multiple locations</option>
@@ -3082,13 +3843,20 @@ export default function AttendMaster() {
             {overview && filteredOrganizations.length === 0 && (
               <div className="client-empty-state">
                 <h2>No clients match</h2>
-                <p className="muted">Try a broader search or clear one of the filters.</p>
-                <button className="quiet" onClick={() => {
-                  setClientQuery("");
-                  setPaymentFilter("ALL");
-                  setLocationFilter("ALL");
-                  setLocationCountFilter("ALL");
-                }}>Clear filters</button>
+                <p className="muted">
+                  Try a broader search or clear one of the filters.
+                </p>
+                <button
+                  className="quiet"
+                  onClick={() => {
+                    setClientQuery("");
+                    setPaymentFilter("ALL");
+                    setLocationFilter("ALL");
+                    setLocationCountFilter("ALL");
+                  }}
+                >
+                  Clear filters
+                </button>
               </div>
             )}
             {filteredOrganizations.map((organizationItem) => (
@@ -3098,7 +3866,8 @@ export default function AttendMaster() {
                     <p className="eyebrow">ORGANIZATION</p>
                     <h2>{organizationItem.name}</h2>
                     <p className="muted">
-                      {organizationItem.businessTypeLabel ?? "Unclassified"} · {organizationItem.legalName ?? organizationItem.timezone}
+                      {organizationItem.businessTypeLabel ?? "Unclassified"} ·{" "}
+                      {organizationItem.legalName ?? organizationItem.timezone}
                     </p>
                   </div>
                   <div className="org-actions">

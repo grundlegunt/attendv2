@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { SeatMapLayout } from "@cinema/shared";
+import type { AuditoriumSeatingMode, SeatMapLayout } from "@cinema/shared";
 import type { SeatMapSeat } from "@cinema/ui";
 import { AuditoriumBuilder } from "../auditorium-builder";
 import { useAdminSession } from "../admin-session";
@@ -12,6 +12,7 @@ interface Auditorium {
   id: string;
   name: string;
   capacity: number;
+  seatingMode: AuditoriumSeatingMode;
   seatMap: {
     id: string;
     name: string;
