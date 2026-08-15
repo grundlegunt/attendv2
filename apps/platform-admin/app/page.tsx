@@ -52,6 +52,13 @@ function statusLabel(status: string) {
 }
 
 function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+const revenueRanges = [
+  { days: 1, label: "Today" },
+  { days: 7, label: "Last 7 days" },
+  { days: 30, label: "Last 30 days" },
+  { days: 365, label: "Last year" },
+] as const;
+
 function revenueRange(days: number) { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`; }
 
 export default function PlatformDashboard() {
@@ -166,9 +173,9 @@ export default function PlatformDashboard() {
         <article className={metrics.attentionClients.length ? "attention" : ""}><span>Needs attention</span><strong>{metrics.attentionClients.length}</strong><small>incomplete payment setup</small></article>
       </section>
       <section className="dashboard-panel platform-revenue">
-        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="range-toggle"><button className={revenueDays === 1 ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(1)}>Today</button><button className={revenueDays === 7 ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(7)}>Last 7 days</button></div></div>
+        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}</div></div>
         {!revenue && <p className="muted">Loading revenue rollup…</p>}
-        {revenue && <><div className="revenue-breakdown"><article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article><article><span>Service fees</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article><article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article><article><span>Ticket total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article><article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article><article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article><article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article></div><div className="client-revenue-list"><div><strong>Client</strong><span>Ticket collected</span><span>F&amp;B</span><span>Combined net</span></div>{revenue.clients.map((client) => <Link key={client.id} href={`/clients?organizationId=${encodeURIComponent(client.id)}`}><strong>{client.name}</strong><span>{money(client.ticketCollectedCents)}</span><span>{money(client.fnbRevenueCents)}</span><span>{money(client.combinedRevenueCents)}</span></Link>)}</div></>}
+        {revenue && <><div className="revenue-breakdown"><article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article><article><span>Attend ticket-fee revenue</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article><article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article><article><span>Ticket total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article><article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article><article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article><article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article></div><div className="client-revenue-list"><div><strong>Client</strong><span>Tickets sold</span><span>Ticket collected</span><span>F&amp;B</span><span>Combined net</span></div>{revenue.clients.map((client) => <Link key={client.id} href={`/clients?organizationId=${encodeURIComponent(client.id)}`}><strong>{client.name}</strong><span>{client.ticketsSold.toLocaleString()}</span><span>{money(client.ticketCollectedCents)}</span><span>{money(client.fnbRevenueCents)}</span><span>{money(client.combinedRevenueCents)}</span></Link>)}</div></>}
       </section>
       <div className="dashboard-grid">
         <section className="dashboard-panel">
