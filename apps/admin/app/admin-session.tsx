@@ -137,9 +137,9 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
   if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><section className="login-layout">
     <div className="login-identity">
-      {publicBranding?.logoUrl ? <img src={publicBranding.logoUrl} alt={`${publicBranding.name} logo`} /> : <div className="login-monogram" aria-hidden="true">A</div>}
+      <div className="login-monogram" aria-hidden="true">A</div>
       <p className="kicker">ATTEND ADMIN</p>
-      <h1>{publicBranding?.name ?? "Cinema operations"}</h1>
+      <h1>Cinema operations</h1>
       <p>Programming, ticketing, restaurant, staff, and reporting tools in one secure workspace.</p>
     </div>
     <form className="panel login-panel" onSubmit={login}>
