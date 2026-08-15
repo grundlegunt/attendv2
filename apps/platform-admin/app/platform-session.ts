@@ -24,7 +24,7 @@ export function readPlatformSession(storageKey: string): StoredPlatformSession |
   }
 }
 
-export async function platformRequest<T>(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string): Promise<T> {
+async function platformResponse(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string) {
   const send = (token?: string) => {
     const headers = new Headers(init?.headers);
     headers.set("Content-Type", "application/json");
@@ -56,5 +56,14 @@ export async function platformRequest<T>(apiBaseUrl: string, storageKey: string,
     const body = await response.json().catch(() => ({ message: response.statusText }));
     throw new Error(typeof body.message === "string" ? body.message : "Request failed.");
   }
+  return response;
+}
+
+export async function platformRequest<T>(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string): Promise<T> {
+  const response = await platformResponse(apiBaseUrl, storageKey, path, init, accessToken);
   return response.json() as Promise<T>;
+}
+
+export async function platformDownload(apiBaseUrl: string, storageKey: string, path: string, accessToken: string) {
+  return (await platformResponse(apiBaseUrl, storageKey, path, undefined, accessToken)).blob();
 }
