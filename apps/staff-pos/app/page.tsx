@@ -28,6 +28,14 @@ interface AvailabilitySeat extends Omit<SeatMapSeat, "state"> {
 
 interface SeatAvailabilityResponse {
   showtimeId: string;
+  showtime: {
+    auditorium: {
+      id: string;
+      name: string;
+      capacity: number;
+      seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+    };
+  };
   seats: AvailabilitySeat[];
   counts: { available: number; held: number; sold: number; blocked: number };
 }
@@ -400,7 +408,7 @@ export default function StaffLoginPage() {
         </section>}
 
         {view === "box-office" && availability ? (
-          <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} refresh={loadAvailability} />
+          <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} seatingMode={availability.showtime.auditorium.seatingMode} refresh={loadAvailability} />
         ) : view === "restaurant" ? (
           <RestaurantPos
             accessToken={accessToken}
@@ -444,7 +452,19 @@ export default function StaffLoginPage() {
           <>
             {selectedShowtimeId && !availability && <p>Loading live seats…</p>}
             {seatDetailPending && <p>Opening seat details…</p>}
-            {availability && (
+            {availability?.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? (
+              <section className="ga-inventory-panel" aria-label="General admission inventory">
+                <span className="eyebrow">GENERAL ADMISSION</span>
+                <h2>{availability.showtime.auditorium.name}</h2>
+                <p>Capacity {availability.showtime.auditorium.capacity}</p>
+                <dl>
+                  <div><dt>Available</dt><dd>{availability.counts.available}</dd></div>
+                  <div><dt>Held</dt><dd>{availability.counts.held}</dd></div>
+                  <div><dt>Sold</dt><dd>{availability.counts.sold}</dd></div>
+                  <div><dt>Blocked</dt><dd>{availability.counts.blocked}</dd></div>
+                </dl>
+              </section>
+            ) : availability && (
               <SeatMap
                 seats={seatMapSeats}
                 label="Live auditorium seat map"

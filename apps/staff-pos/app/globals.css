@@ -191,7 +191,22 @@ button.primary:disabled {
 .sale-total { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--color-border); }
 .sale-total strong { display: block; margin: 12px 0 18px; color: var(--color-accent); font-size: 1.5rem; }
 .success-copy { color: #43d17d; font-weight: 700; }
+.ga-pos-picker,
+.ga-inventory-panel { padding: 28px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-bg-elevated); }
+.ga-pos-picker { display: flex; min-height: 280px; flex-direction: column; align-items: center; justify-content: center; gap: 18px; text-align: center; }
+.ga-pos-picker > strong { font-size: clamp(1.5rem, 4vw, 2.5rem); }
+.ga-pos-picker > span:last-child,
+.ga-inventory-panel > p { color: var(--color-text-secondary); }
+.ga-quantity-control { display: flex; align-items: center; gap: 20px; }
+.ga-quantity-control button { width: var(--tap-target-min); min-height: var(--tap-target-min); font-size: 1.5rem; }
+.ga-quantity-control output { min-width: 2ch; color: var(--color-accent); font-size: 2.5rem; font-weight: 800; }
+.ga-inventory-panel h2 { margin: 8px 0; }
+.ga-inventory-panel dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 24px 0 0; }
+.ga-inventory-panel dl div { padding: 18px; border: 1px solid var(--color-border); background: var(--color-bg); }
+.ga-inventory-panel dt { color: var(--color-text-secondary); }
+.ga-inventory-panel dd { margin: 8px 0 0; color: var(--color-accent); font-size: 2rem; font-weight: 800; }
 @media (max-width: 900px) { .box-office-grid { grid-template-columns: 1fr; } .checkout-card { position: static; } }
+@media (max-width: 620px) { .ga-inventory-panel dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .shift-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--color-text-secondary); }
 .shift-controls button { min-height: 36px; padding: 6px 10px; }
 
