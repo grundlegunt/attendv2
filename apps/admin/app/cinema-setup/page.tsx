@@ -49,7 +49,14 @@ export default function CinemaSetupPage() {
       setError("Your admin session expired. Sign in again, then retry the action.");
       return;
     }
-    setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
+    if (reason instanceof ApiRequestError) {
+      const validationErrors = reason.body.details?.errors;
+      setError(Array.isArray(validationErrors) && validationErrors.length
+        ? `${reason.body.message} ${validationErrors.join(" ")}`
+        : reason.body.message);
+      return;
+    }
+    setError("The request could not be completed.");
   }
 
   return <main>

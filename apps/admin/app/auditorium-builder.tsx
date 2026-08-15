@@ -91,6 +91,50 @@ function baseLayout(mode: "BASIC" | "ADVANCED" = "ADVANCED"): SeatMapLayout {
   };
 }
 
+function renumberLevelSeats(
+  seats: SeatInput[],
+  levelId: string,
+  reverse = false,
+): SeatInput[] {
+  const rows = new Map<number, SeatInput[]>();
+  for (const seat of seats.filter(
+    (candidate) => (candidate.levelKey ?? "main") === levelId,
+  )) {
+    rows.set(seat.y, [...(rows.get(seat.y) ?? []), seat]);
+  }
+
+  const labels = new Map<
+    SeatInput,
+    Pick<SeatInput, "label" | "rowLabel" | "number">
+  >();
+  [...rows.entries()]
+    .sort(([a], [b]) => a - b)
+    .forEach(([_y, row], rowIndex) => {
+      const rowLabel = String.fromCharCode(65 + Math.min(rowIndex, 25));
+      const sorted = row.sort((a, b) => a.x - b.x);
+      sorted.forEach((seat, index) => {
+        const number = reverse ? sorted.length - index : index + 1;
+        labels.set(seat, {
+          label: `${levelId === "main" ? "" : "B"}${rowLabel}${number}`,
+          rowLabel,
+          number,
+        });
+      });
+    });
+
+  return seats.map((seat) => ({ ...seat, ...(labels.get(seat) ?? {}) }));
+}
+
+function renumberAllSeats(
+  seats: SeatInput[],
+  layout: SeatMapLayout,
+): SeatInput[] {
+  return layout.levels.reduce(
+    (numbered, level) => renumberLevelSeats(numbered, level.id),
+    seats,
+  );
+}
+
 function template(name: string): { seats: SeatInput[]; layout: SeatMapLayout } {
   const layout = baseLayout();
   const rows = name === "accessible" ? 5 : name === "stadium" ? 8 : 6;
@@ -382,34 +426,30 @@ export function AuditoriumBuilder({
     if (tool === "SELECT") return;
     snapshot();
     if (["STANDARD", "ADA", "COMPANION"].includes(tool)) {
-      const rowLabel = String.fromCharCode(65 + Math.min(y, 25));
-      const number = activeSeats.filter((seat) => seat.y === y).length + 1;
-      setSeats((current) => [
-        ...current.filter(
-          (seat) =>
-            !(
-              seat.x === x &&
-              seat.y === y &&
-              (seat.levelKey ?? "main") === levelId
+      setSeats((current) =>
+        renumberLevelSeats(
+          [
+            ...current.filter(
+              (seat) =>
+                !(
+                  seat.x === x &&
+                  seat.y === y &&
+                  (seat.levelKey ?? "main") === levelId
+                ),
             ),
+            {
+              label: `NEW-${crypto.randomUUID()}`,
+              rowLabel: "",
+              number: 0,
+              x,
+              y,
+              type: tool as SeatInput["type"],
+              levelKey: levelId,
+            },
+          ],
+          levelId,
         ),
-        {
-          label: `${
-            levelId === "main"
-              ? ""
-              : `${layout.levels
-                  .find((level) => level.id === levelId)
-                  ?.name.slice(0, 1)
-                  .toUpperCase()}-`
-          }${rowLabel}${number}`,
-          rowLabel,
-          number,
-          x,
-          y,
-          type: tool as SeatInput["type"],
-          levelKey: levelId,
-        },
-      ]);
+      );
     } else {
       const element: LayoutElement = {
         id: `${tool.toLowerCase()}-${crypto.randomUUID()}`,
@@ -451,13 +491,26 @@ export function AuditoriumBuilder({
     if (!dragged) return;
     snapshot();
     if (dragged.startsWith("seat:")) {
-      setSeats((current) =>
-        current.map((seat) =>
-          dragged === `seat:${seat.levelKey ?? "main"}:${seat.label}`
-            ? { ...seat, x, y }
-            : seat,
-        ),
-      );
+      setSeats((current) => {
+        const moved = current.find(
+          (seat) => dragged === `seat:${seat.levelKey ?? "main"}:${seat.label}`,
+        );
+        if (!moved) return current;
+        const movedLevel = moved.levelKey ?? "main";
+        const occupant = current.find(
+          (seat) =>
+            seat !== moved &&
+            (seat.levelKey ?? "main") === movedLevel &&
+            seat.x === x &&
+            seat.y === y,
+        );
+        const repositioned = current.map((seat) => {
+          if (seat === moved) return { ...seat, x, y };
+          if (seat === occupant) return { ...seat, x: moved.x, y: moved.y };
+          return seat;
+        });
+        return renumberLevelSeats(repositioned, movedLevel);
+      });
     } else if (dragged.startsWith("element:")) {
       const id = dragged.slice("element:".length);
       setLayout((current) => ({
@@ -553,36 +606,7 @@ export function AuditoriumBuilder({
 
   function autoNumber(reverse = false) {
     snapshot();
-    const levelSeats = seats.filter(
-      (seat) => (seat.levelKey ?? "main") === levelId,
-    );
-    const rows = new Map<number, SeatInput[]>();
-    for (const seat of levelSeats)
-      rows.set(seat.y, [...(rows.get(seat.y) ?? []), seat]);
-    const labels = new Map<
-      string,
-      { label: string; rowLabel: string; number: number }
-    >();
-    [...rows.entries()]
-      .sort(([a], [b]) => a - b)
-      .forEach(([_y, row], rowIndex) => {
-        const rowLabel = String.fromCharCode(65 + Math.min(rowIndex, 25));
-        const sorted = row.sort((a, b) => a.x - b.x);
-        sorted.forEach((seat, index) => {
-          const number = reverse ? sorted.length - index : index + 1;
-          labels.set(`${seat.levelKey ?? "main"}:${seat.label}`, {
-            label: `${levelId === "main" ? "" : "B"}${rowLabel}${number}`,
-            rowLabel,
-            number,
-          });
-        });
-      });
-    setSeats((current) =>
-      current.map((seat) => ({
-        ...seat,
-        ...(labels.get(`${seat.levelKey ?? "main"}:${seat.label}`) ?? {}),
-      })),
-    );
+    setSeats((current) => renumberLevelSeats(current, levelId, reverse));
     setSelected([]);
   }
 
@@ -595,7 +619,10 @@ export function AuditoriumBuilder({
             canvas: { width: seatsPerRow, height: rows },
           }
         : { ...layout, mode: "ADVANCED" };
-    const finalSeats = mode === "BASIC" ? basicSeats(rows, seatsPerRow) : seats;
+    const finalSeats =
+      mode === "BASIC"
+        ? basicSeats(rows, seatsPerRow)
+        : renumberAllSeats(seats, finalLayout);
     try {
       await apiFetch(
         editingId
