@@ -748,6 +748,13 @@ model TicketOrder {
   discountCents Int    @default(0)
   currency      String @default("USD")
 
+  // Trusted, server-quoted food-and-beverage basket captured with checkout.
+  // Ticket subtotal, fees, and tax remain separate for box-office reporting.
+  orderAheadItems              Json?
+  orderAheadSubtotalCents      Int   @default(0)
+  orderAheadTaxCents           Int   @default(0)
+  orderAheadServiceChargeCents Int   @default(0)
+
   promotionId String?
   promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: Restrict)
 
