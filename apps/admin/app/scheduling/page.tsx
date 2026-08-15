@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { showtimeWindowsOverlap, type SeatMapLayout } from "@cinema/shared";
+import { showtimeWindowsOverlap, type AuditoriumSeatingMode, type SeatMapLayout } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SchedulingCalendar, type CalendarShowtime } from "../scheduling-calendar";
@@ -9,8 +9,11 @@ import { applyShowtimeMoves, captureShowtimeMoves, type ShowtimeMoveSnapshot } f
 import { useAdminSession, useAdminUi } from "../admin-session";
 
 interface Auditorium {
-  id: string; name: string; capacity: number;
+  id: string; name: string; capacity: number; seatingMode: AuditoriumSeatingMode;
   seatMap: { id: string; name: string; version: number; layoutJson: SeatMapLayout | null; seats: Array<SeatMapSeat & { rowLabel: string; number: number; levelKey?: string | null; sectionKey?: string | null }> } | null;
+}
+function auditoriumCapacityLabel(auditorium: Auditorium) {
+  return `${auditorium.capacity} ${auditorium.seatingMode === "GENERAL_ADMISSION" ? "admissions" : "seats"}`;
 }
 interface Movie {
   id: string;
@@ -788,7 +791,7 @@ export default function AdminPage() {
     {showtimeEditorOpen && <aside className="schedule-inspector" aria-label="Selected showtime">
       <form id="showtime-editor" onSubmit={createShowtime}>
         <div className="drawer-heading">
-          <div><p className="kicker">SELECTED SHOWTIME</p><h2>{selectedMovie?.title ?? (editingShowtimeId ? "Edit showing" : "Add showing")}</h2>{selectedRoom && <p className="inspector-room">{selectedRoom.name} · {selectedRoom.capacity} seats</p>}</div>
+          <div><p className="kicker">SELECTED SHOWTIME</p><h2>{selectedMovie?.title ?? (editingShowtimeId ? "Edit showing" : "Add showing")}</h2>{selectedRoom && <p className="inspector-room">{selectedRoom.name} · {auditoriumCapacityLabel(selectedRoom)}</p>}</div>
           <button type="button" className="drawer-close" onClick={() => setShowtimeEditorOpen(false)} aria-label="Close showtime editor">×</button>
         </div>
         <div className="showtime-inspector-summary">
@@ -822,7 +825,7 @@ export default function AdminPage() {
         </div>
         <div className="showtime-inspector-fields">
         <label>Movie<select required value={movieId} onChange={(e) => setMovieId(e.target.value)}><option value="">Select</option>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title} · {movie.runtimeMinutes}m</option>)}</select></label>
-        <label>Move to room<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {room.capacity} seats</option>)}</select></label>
+        <label>Move to room<select required value={auditoriumId} onChange={(e) => setAuditoriumId(e.target.value)}><option value="">Select</option>{data.location.auditoriums.map((room) => <option key={room.id} value={room.id}>{room.name} · {auditoriumCapacityLabel(room)}</option>)}</select></label>
         <div className="showtime-time-editor"><label>Doors / advertised time<input type="datetime-local" required value={startsAt} onChange={(e) => setStartsAt(e.target.value)} /></label><div className="time-nudges" aria-label="Adjust showtime"><button type="button" onClick={() => shiftShowtime(-15)}>−15</button><button type="button" onClick={() => shiftShowtime(-5)}>−5</button><button type="button" onClick={() => shiftShowtime(5)}>+5</button><button type="button" onClick={() => shiftShowtime(15)}>+15</button></div></div>
         <label>Sale status<select value={onSale ? "open" : "draft"} onChange={(event) => setOnSale(event.target.value === "open")}><option value="open">Open for sale</option><option value="draft">Closed draft</option></select></label>
         <label>Ticket group<select value={priceTierId} onChange={(event) => setPriceTierId(event.target.value)}><option value="">Automatic for show date</option>{data.location.organization.priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name} · {new Intl.NumberFormat("en-US", { style: "currency", currency: tier.currency }).format(tier.ticketPriceMinor / 100)}</option>)}</select></label>

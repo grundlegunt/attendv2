@@ -387,6 +387,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           where: { active: true },
           select: {
             id: true,
+            capacity: true,
+            seatingMode: true,
             seatMap: {
               select: {
                 seats: {
@@ -422,7 +424,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     );
     const sellableAuditoriumIds = new Set(
       location.auditoriums
-        .filter((auditorium) => auditorium.seatMap?.seats.length)
+        .filter(
+          (auditorium) =>
+            (auditorium.seatingMode === "GENERAL_ADMISSION" &&
+              auditorium.capacity > 0) ||
+            Boolean(auditorium.seatMap?.seats.length),
+        )
         .map((auditorium) => auditorium.id),
     );
     const movies = new Map(
@@ -468,7 +475,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       else if (!sellableAuditoriumIds.has(parsed.data.auditoriumId))
         issues.push({
           index,
-          message: "Auditorium has no active seat layout.",
+          message: "Auditorium has no sellable ticket inventory.",
         });
       if (parsed.data.priceTierId && !priceTierIds.has(parsed.data.priceTierId))
         issues.push({ index, message: "Ticket tier is no longer available." });
@@ -1886,7 +1893,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         });
         if (!auditorium) throw AppError.notFound("Auditorium not found.");
         if (!auditorium.capacity)
-          throw AppError.conflict("Auditorium must have a seat layout.");
+          throw AppError.conflict("Auditorium must have sellable capacity.");
 
         const movie = await tx.movie.findFirst({
           where: {
