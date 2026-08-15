@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { decryptMfaSecret, encryptMfaSecret, hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { Prisma, prisma } from "@cinema/database";
+import { cinemaContentDefaults, cinemaContentSchema } from "@cinema/shared";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 
@@ -18,7 +19,8 @@ export class ManagementService {
       },
     });
     const { organization, ...settings } = location;
-    return { ...settings, priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalTicketFaceValueCents: ticketOrders.reduce((sum, order) => sum + order.subtotalCents, 0), totalCollectedCents: ticketOrders.reduce((sum, order) => sum + order.totalCents, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
+    const content = cinemaContentSchema.safeParse(location.contentPublished ?? location.contentDraft ?? cinemaContentDefaults);
+    return { ...settings, merchUrl: content.success ? content.data.navigation.merchUrl : null, priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalTicketFaceValueCents: ticketOrders.reduce((sum, order) => sum + order.subtotalCents, 0), totalCollectedCents: ticketOrders.reduce((sum, order) => sum + order.totalCents, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
   }
 
   async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
@@ -88,6 +90,33 @@ export class ManagementService {
       });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.branding_updated", entityType: "Location", entityId: input.locationId, beforeState: state(before), afterState: state(updated) } });
       return updated;
+    });
+  }
+
+  async updateMerch(input: { locationId: string; employeeId: string; merchUrl: string | null }) {
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUniqueOrThrow({
+        where: { id: input.locationId },
+        select: { contentDraft: true, contentPublished: true },
+      });
+      const draftResult = cinemaContentSchema.safeParse(location.contentDraft ?? location.contentPublished ?? cinemaContentDefaults);
+      const publishedResult = cinemaContentSchema.safeParse(location.contentPublished ?? location.contentDraft ?? cinemaContentDefaults);
+      const draft = draftResult.success ? draftResult.data : cinemaContentDefaults;
+      const published = publishedResult.success ? publishedResult.data : cinemaContentDefaults;
+      const nextDraft = { ...draft, navigation: { ...draft.navigation, merchUrl: input.merchUrl } };
+      const nextPublished = { ...published, navigation: { ...published.navigation, merchUrl: input.merchUrl } };
+      const publishedAt = new Date();
+      await tx.location.update({ where: { id: input.locationId }, data: {
+        contentDraft: nextDraft as Prisma.InputJsonValue,
+        contentPublished: nextPublished as Prisma.InputJsonValue,
+        contentPublishedAt: publishedAt,
+      } });
+      await tx.auditEvent.create({ data: {
+        actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
+        action: "location.merch_updated", entityType: "Location", entityId: input.locationId,
+        beforeState: { merchUrl: published.navigation.merchUrl }, afterState: { merchUrl: input.merchUrl },
+      } });
+      return { merchUrl: input.merchUrl, publishedAt };
     });
   }
 
