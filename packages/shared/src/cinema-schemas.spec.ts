@@ -1,6 +1,7 @@
 import {
   adminUiConfigSchema,
   adminUiDefaults,
+  auditoriumSeatingModeSchema,
   createFilmSeriesRequestSchema,
   customerBrandingSchema,
   createMovieRequestSchema,
@@ -17,6 +18,17 @@ import {
   validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "./cinema-schemas";
+
+describe("auditorium seating modes", () => {
+  it("recognizes reserved and general-admission inventory", () => {
+    expect(auditoriumSeatingModeSchema.parse("RESERVED")).toBe("RESERVED");
+    expect(auditoriumSeatingModeSchema.parse("GENERAL_ADMISSION")).toBe("GENERAL_ADMISSION");
+  });
+
+  it("rejects unknown inventory modes", () => {
+    expect(() => auditoriumSeatingModeSchema.parse("FESTIVAL_SEATING")).toThrow();
+  });
+});
 
 describe("admin schedule appearance", () => {
   it("adds default showtime control colors to previously saved configurations", () => {
