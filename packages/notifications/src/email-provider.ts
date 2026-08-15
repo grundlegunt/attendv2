@@ -12,6 +12,16 @@ export interface TicketReceipt {
     seat: string;
     startsAt: Date;
   }>;
+  orderAhead?: {
+    subtotalCents: number;
+    taxCents: number;
+    serviceChargeCents: number;
+    items: Array<{
+      name: string;
+      quantity: number;
+      totalCents: number;
+    }>;
+  };
 }
 
 export interface GiftCardDelivery {

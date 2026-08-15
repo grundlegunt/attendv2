@@ -9,6 +9,16 @@ export const createTicketCheckoutRequestSchema = z.object({
   promotionCode: z.string().trim().min(1).max(50).optional(),
   giftCardCode: z.string().trim().min(20).max(40).optional(),
   diningAuthorizationRequested: z.boolean(),
+  orderAhead: z
+    .array(
+      z.object({
+        menuItemId: z.string().uuid(),
+        quantity: z.number().int().min(1).max(20),
+        modifierIds: z.array(z.string().uuid()).max(20),
+      }),
+    )
+    .max(50)
+    .optional(),
 });
 
 export type CreateTicketCheckoutRequest = z.infer<
@@ -23,6 +33,9 @@ export interface TicketCheckoutResponse {
   discountCents: number;
   feesCents: number;
   taxCents: number;
+  orderAheadSubtotalCents: number;
+  orderAheadTaxCents: number;
+  orderAheadServiceChargeCents: number;
   totalCents: number;
   giftCardCents: number;
   currency: string;

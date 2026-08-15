@@ -34,6 +34,12 @@ describe("PostmarkEmailProvider", () => {
           seat: "A1",
           startsAt: new Date("2026-07-29T19:00:00.000Z"),
         }],
+        orderAhead: {
+          subtotalCents: 900,
+          taxCents: 90,
+          serviceChargeCents: 10,
+          items: [{ name: "Shoestring Fries", quantity: 1, totalCents: 900 }],
+        },
       }),
     ).resolves.toEqual({ messageId: "message-1" });
 
@@ -49,6 +55,9 @@ describe("PostmarkEmailProvider", () => {
         Content: expect.any(String),
       }),
     ]);
+    expect(body.HtmlBody).toContain("Order ahead");
+    expect(body.HtmlBody).toContain("Shoestring Fries");
+    expect(body.TextBody).toContain("Service charge: $0.10");
   });
 
   it("rejects a provider error instead of claiming delivery", async () => {

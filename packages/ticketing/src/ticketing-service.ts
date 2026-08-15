@@ -4,6 +4,11 @@ import {
   PaymentStatus,
   Prisma,
   PrismaClient,
+  RestaurantOrderItemStatus,
+  RestaurantOrderSource,
+  RestaurantOrderStatus,
+  RestaurantTabStatus,
+  RestaurantTabType,
   RefundStatus,
   TicketOrderStatus,
 } from "@cinema/database";
@@ -17,6 +22,12 @@ import {
 import { EmailProvider, TicketReceipt } from "@cinema/notifications";
 import { TicketingError } from "./ticketing-error";
 import { createTicketCredential } from "./qr-credential";
+import {
+  OrderAheadQuote,
+  OrderAheadQuoteError,
+  OrderAheadSelection,
+  quoteOrderAheadSelections,
+} from "./order-ahead-quote";
 
 export interface CreateTicketCheckoutInput {
   holdTokens: string[];
@@ -28,6 +39,7 @@ export interface CreateTicketCheckoutInput {
   giftCardCode?: string;
   diningAuthorizationRequested: boolean;
   checkoutIdempotencyKey: string;
+  orderAhead?: OrderAheadSelection[];
 }
 
 interface LockedHold {
@@ -43,6 +55,23 @@ interface LockedHold {
 // reconcilePendingRefunds below.
 const REFUND_LEASE_MS = 60_000;
 const DINING_CONSENT_TERMS_VERSION = "dining-auto-settlement-2026-07-29";
+
+type PersistedOrderAheadLine = OrderAheadQuote["lines"][number];
+
+function normalizeOrderAheadSelections(selections: OrderAheadSelection[] = []) {
+  return selections
+    .map((selection) => ({
+      menuItemId: selection.menuItemId,
+      quantity: selection.quantity,
+      modifierIds: [...selection.modifierIds].sort(),
+    }))
+    .sort((left, right) => left.menuItemId.localeCompare(right.menuItemId));
+}
+
+function persistedOrderAheadLines(value: Prisma.JsonValue | null): PersistedOrderAheadLine[] {
+  if (!Array.isArray(value)) return [];
+  return value as unknown as PersistedOrderAheadLine[];
+}
 
 function paymentAttemptStatus(status: ProviderPaymentStatus): PaymentAttemptStatus {
   switch (status) {
@@ -179,6 +208,48 @@ export class TicketingService {
     });
     if (!ticketType) throw TicketingError.notFound("Ticket type not found.");
 
+    let orderAheadQuote: OrderAheadQuote = {
+      lines: [],
+      subtotalCents: 0,
+      taxCents: 0,
+      serviceChargeCents: 0,
+      totalCents: 0,
+    };
+    if (input.orderAhead?.length) {
+      const [menuItems, taxRules, serviceChargeRules] = await Promise.all([
+        this.prisma.menuItem.findMany({
+          where: {
+            id: { in: input.orderAhead.map((selection) => selection.menuItemId) },
+            active: true,
+            is86d: false,
+            menuCategory: { locationId: location.id, active: true },
+            kitchenStation: { locationId: location.id, active: true },
+          },
+          include: {
+            modifierGroups: {
+              where: { active: true },
+              include: { modifiers: { where: { active: true } } },
+            },
+          },
+        }),
+        this.prisma.taxRule.findMany({ where: { locationId: location.id, active: true } }),
+        this.prisma.serviceChargeRule.findMany({
+          where: { locationId: location.id, active: true, autoApply: true },
+        }),
+      ]);
+      try {
+        orderAheadQuote = quoteOrderAheadSelections({
+          selections: normalizeOrderAheadSelections(input.orderAhead),
+          catalog: menuItems,
+          taxRules,
+          serviceChargeRules,
+        });
+      } catch (error) {
+        if (error instanceof OrderAheadQuoteError) throw TicketingError.validation(error.message);
+        throw error;
+      }
+    }
+
     const subtotalCents = showtime.priceTier.ticketPriceMinor * holds.length;
     const feesCents = showtime.priceTier.feeMinor * holds.length;
     const promotion = input.promotionCode
@@ -213,7 +284,7 @@ export class TicketingService {
     const taxCents = Math.round(
       (taxableSubtotal * location.ticketTaxRateBasisPoints) / 10_000,
     );
-    const totalCents = taxableSubtotal + feesCents + taxCents;
+    const totalCents = taxableSubtotal + feesCents + taxCents + orderAheadQuote.totalCents;
     let giftCard: { id: string; balanceCents: number; currency: string } | null = null;
     let giftCardCents = 0;
     if (input.giftCardCode) {
@@ -269,6 +340,10 @@ export class TicketingService {
           discountCents,
           feesCents,
           taxCents,
+          orderAheadItems: orderAheadQuote.lines as unknown as Prisma.InputJsonValue,
+          orderAheadSubtotalCents: orderAheadQuote.subtotalCents,
+          orderAheadTaxCents: orderAheadQuote.taxCents,
+          orderAheadServiceChargeCents: orderAheadQuote.serviceChargeCents,
           totalCents,
           currency: showtime.priceTier.currency,
           promotionId: promotion?.id,
@@ -311,14 +386,23 @@ export class TicketingService {
     return this.completeCheckout(order);
   }
 
-  private assertCheckoutReplayMatches(order: { ticketTypeId: string; holdTokens: string[]; holderKey: string; guestEmail: string | null; guestName: string | null; diningAuthorizationRequested: boolean | null }, input: CreateTicketCheckoutInput, holdTokens: string[]) {
+  private assertCheckoutReplayMatches(order: { ticketTypeId: string; holdTokens: string[]; holderKey: string; guestEmail: string | null; guestName: string | null; diningAuthorizationRequested: boolean | null; orderAheadItems: Prisma.JsonValue | null }, input: CreateTicketCheckoutInput, holdTokens: string[]) {
+    const persistedSelections = normalizeOrderAheadSelections(
+      persistedOrderAheadLines(order.orderAheadItems).map((line) => ({
+        menuItemId: line.menuItemId,
+        quantity: line.quantity,
+        modifierIds: line.modifiers.map((modifier) => modifier.id),
+      })),
+    );
+    const requestedSelections = normalizeOrderAheadSelections(input.orderAhead);
     const matches = order.ticketTypeId === input.ticketTypeId
       && order.holderKey === input.holderKey
       && order.holdTokens.length === holdTokens.length
       && order.holdTokens.every((token, index) => token === holdTokens[index])
       && order.guestEmail === input.email.toLowerCase()
       && order.guestName === (input.name?.trim() || null)
-      && order.diningAuthorizationRequested === input.diningAuthorizationRequested;
+      && order.diningAuthorizationRequested === input.diningAuthorizationRequested
+      && JSON.stringify(persistedSelections) === JSON.stringify(requestedSelections);
     if (!matches) throw TicketingError.conflict("The checkout idempotency key was already used with different checkout details.");
   }
 
@@ -345,6 +429,9 @@ export class TicketingService {
     discountCents: number;
     feesCents: number;
     taxCents: number;
+    orderAheadSubtotalCents: number;
+    orderAheadTaxCents: number;
+    orderAheadServiceChargeCents: number;
     totalCents: number;
     giftCardCents: number;
     currency: string;
@@ -721,6 +808,7 @@ export class TicketingService {
               };
             }),
           });
+          await this.createPrepaidOrderAheadTab(tx, lockedOrder, inventoryIds);
           await tx.seatHold.updateMany({
             where: { id: { in: lockedHolds.map((hold) => hold.id) }, releasedAt: null },
             data: { releasedAt: purchaseTime },
@@ -785,12 +873,131 @@ export class TicketingService {
       await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: order.locationId, type: "REDEMPTION", amountCents: -order.giftCardCents, balanceAfterCents, reference: order.id } });
       const perTicketPrice = Math.floor(order.subtotalCents / holds.length);
       await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: order.ticketTypeId, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
+      await this.createPrepaidOrderAheadTab(tx, order, inventoryIds);
       await tx.seatHold.updateMany({ where: { id: { in: holds.map((hold) => hold.id) }, releasedAt: null }, data: { releasedAt: now } });
       return tx.ticketOrder.update({ where: { id: order.id }, data: { status: TicketOrderStatus.PAID }, include: { payment: true, location: { include: { organization: true } }, tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } } });
     });
     const diningAuthorization = await this.persistDiningAuthorization(finalized, undefined);
     const receiptDelivery = await this.deliverReceipt(finalized);
     return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization);
+  }
+
+  private async createPrepaidOrderAheadTab(
+    tx: Prisma.TransactionClient,
+    order: {
+      id: string;
+      locationId: string;
+      customerId: string | null;
+      orderNumber: string;
+      orderAheadItems: Prisma.JsonValue | null;
+      orderAheadSubtotalCents: number;
+      orderAheadTaxCents: number;
+      orderAheadServiceChargeCents: number;
+    },
+    showtimeSeatIds: string[],
+  ) {
+    const lines = persistedOrderAheadLines(order.orderAheadItems);
+    if (!lines.length) return;
+
+    const issuedTickets = await tx.ticket.findMany({
+      where: { ticketOrderId: order.id, showtimeSeatId: { in: showtimeSeatIds } },
+      include: {
+        showtimeSeat: {
+          include: {
+            seat: true,
+            showtime: { include: { auditorium: true } },
+          },
+        },
+      },
+    });
+    if (issuedTickets.length !== showtimeSeatIds.length) {
+      throw TicketingError.conflict(
+        "The order-ahead basket could not be linked to every purchased seat.",
+        "ORDER_AHEAD_SEAT_LINK_FAILED",
+      );
+    }
+    const firstTicket = issuedTickets[0]!;
+    const orderAheadTotalCents =
+      order.orderAheadSubtotalCents +
+      order.orderAheadTaxCents +
+      order.orderAheadServiceChargeCents;
+    const tab = await tx.restaurantTab.create({
+      data: {
+        locationId: order.locationId,
+        primaryCustomerId: order.customerId,
+        tabType: RestaurantTabType.SEAT_LINKED,
+        showtimeId: firstTicket.showtimeSeat.showtimeId,
+        label: `Order ahead ${order.orderNumber}`,
+        status: RestaurantTabStatus.OPEN,
+        subtotalCents: order.orderAheadSubtotalCents,
+        taxCents: order.orderAheadTaxCents,
+        serviceChargeCents: order.orderAheadServiceChargeCents,
+        totalCents: orderAheadTotalCents,
+        prepaidCents: orderAheadTotalCents,
+      },
+    });
+
+    for (const ticket of issuedTickets) {
+      const tabSeat = await tx.restaurantTabSeat.create({
+        data: {
+          restaurantTabId: tab.id,
+          showtimeSeatId: ticket.showtimeSeatId,
+          ticketId: ticket.id,
+        },
+      });
+      await tx.showtimeSeat.update({
+        where: { id: ticket.showtimeSeatId },
+        data: { currentTabSeatId: tabSeat.id },
+      });
+    }
+
+    const restaurantOrder = await tx.restaurantOrder.create({
+      data: {
+        restaurantTabId: tab.id,
+        showtimeSeatId: firstTicket.showtimeSeatId,
+        source: RestaurantOrderSource.ONLINE_ORDER_AHEAD,
+        ticketOrderId: order.id,
+        status: RestaurantOrderStatus.SENT,
+        placedAt: new Date(),
+      },
+    });
+    const items = [];
+    for (const line of lines) {
+      items.push(
+        await tx.restaurantOrderItem.create({
+          data: {
+            restaurantOrderId: restaurantOrder.id,
+            menuItemId: line.menuItemId,
+            quantity: line.quantity,
+            unitPriceCentsSnapshot: line.basePriceCents,
+            selectedModifiers: line.modifiers as unknown as Prisma.InputJsonValue,
+            modifierTotalCents: line.unitPriceCents - line.basePriceCents,
+            kitchenStationId: line.kitchenStationId,
+            status: RestaurantOrderItemStatus.SENT,
+          },
+        }),
+      );
+    }
+    const stationIds = [...new Set(items.map((item) => item.kitchenStationId))];
+    for (const kitchenStationId of stationIds) {
+      await tx.fulfillmentTicket.create({
+        data: {
+          restaurantOrderId: restaurantOrder.id,
+          kitchenStationId,
+          tabLabel: tab.label,
+          auditoriumName: firstTicket.showtimeSeat.showtime.auditorium.name,
+          seatLabels: issuedTickets.map((ticket) => ticket.showtimeSeat.seat.label).sort(),
+          showtimeId: firstTicket.showtimeSeat.showtimeId,
+          showtimeStartsAt: firstTicket.showtimeSeat.showtime.startsAt,
+          serverName: "Order ahead",
+          items: {
+            connect: items
+              .filter((item) => item.kitchenStationId === kitchenStationId)
+              .map((item) => ({ id: item.id })),
+          },
+        },
+      });
+    }
   }
 
   async processVerifiedWebhook(event: VerifiedProviderEvent) {
@@ -1607,6 +1814,9 @@ export class TicketingService {
       discountCents: number;
       feesCents: number;
       taxCents: number;
+      orderAheadSubtotalCents: number;
+      orderAheadTaxCents: number;
+      orderAheadServiceChargeCents: number;
       totalCents: number;
       giftCardCents: number;
       currency: string;
@@ -1628,6 +1838,9 @@ export class TicketingService {
       discountCents: order.discountCents,
       feesCents: order.feesCents,
       taxCents: order.taxCents,
+      orderAheadSubtotalCents: order.orderAheadSubtotalCents,
+      orderAheadTaxCents: order.orderAheadTaxCents,
+      orderAheadServiceChargeCents: order.orderAheadServiceChargeCents,
       totalCents: order.totalCents,
       giftCardCents: order.giftCardCents,
       currency: order.currency,
@@ -1651,6 +1864,10 @@ export class TicketingService {
     guestName: string | null;
     totalCents: number;
     currency: string;
+    orderAheadItems: Prisma.JsonValue | null;
+    orderAheadSubtotalCents: number;
+    orderAheadTaxCents: number;
+    orderAheadServiceChargeCents: number;
     receiptEmailSentAt: Date | null;
     tickets: Array<{
       id: string;
@@ -1688,6 +1905,7 @@ export class TicketingService {
       return current.receiptEmailSentAt ? "SENT" : "NOT_REQUESTED";
     }
 
+    const orderAheadLines = persistedOrderAheadLines(order.orderAheadItems);
     const receipt: TicketReceipt = {
       to: order.guestEmail,
       guestName: order.guestName,
@@ -1702,6 +1920,18 @@ export class TicketingService {
         seat: ticket.showtimeSeat.seat.label,
         startsAt: ticket.showtimeSeat.showtime.startsAt,
       })),
+      orderAhead: orderAheadLines.length
+        ? {
+            subtotalCents: order.orderAheadSubtotalCents,
+            taxCents: order.orderAheadTaxCents,
+            serviceChargeCents: order.orderAheadServiceChargeCents,
+            items: orderAheadLines.map((line) => ({
+              name: line.name,
+              quantity: line.quantity,
+              totalCents: line.totalCents,
+            })),
+          }
+        : undefined,
     };
 
     try {

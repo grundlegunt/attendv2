@@ -25,6 +25,10 @@ export class PostmarkEmailProvider implements EmailProvider {
   ) {}
 
   async sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }> {
+    const money = (cents: number) => new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: receipt.currency,
+    }).format(cents / 100);
     const attachments = await Promise.all(
       receipt.tickets.map(async (ticket, index) => ({
         Name: `ticket-${index + 1}.png`,
@@ -46,10 +50,23 @@ export class PostmarkEmailProvider implements EmailProvider {
           </section>`,
       )
       .join("");
-    const total = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: receipt.currency,
-    }).format(receipt.totalCents / 100);
+    const total = money(receipt.totalCents);
+    const orderAheadHtml = receipt.orderAhead
+      ? `<section style="margin:24px 0;padding:18px;border:1px solid #ddd;border-radius:8px">
+          <h2 style="margin-top:0">Order ahead</h2>
+          <ul>${receipt.orderAhead.items
+            .map((item) => `<li>${item.quantity}× ${escapeHtml(item.name)} — ${escapeHtml(money(item.totalCents))}</li>`)
+            .join("")}</ul>
+          <p>Subtotal: ${escapeHtml(money(receipt.orderAhead.subtotalCents))}<br>
+          Tax: ${escapeHtml(money(receipt.orderAhead.taxCents))}<br>
+          Service charge: ${escapeHtml(money(receipt.orderAhead.serviceChargeCents))}</p>
+        </section>`
+      : "";
+    const orderAheadText = receipt.orderAhead
+      ? `\n\nOrder ahead\n${receipt.orderAhead.items
+          .map((item) => `${item.quantity}x ${item.name} — ${money(item.totalCents)}`)
+          .join("\n")}\nSubtotal: ${money(receipt.orderAhead.subtotalCents)}\nTax: ${money(receipt.orderAhead.taxCents)}\nService charge: ${money(receipt.orderAhead.serviceChargeCents)}`
+      : "";
     const response = await fetch("https://api.postmarkapp.com/email", {
       method: "POST",
       signal: AbortSignal.timeout(8_000),
@@ -65,8 +82,9 @@ export class PostmarkEmailProvider implements EmailProvider {
         HtmlBody: `<p>Hi ${escapeHtml(receipt.guestName?.trim() || "there")},</p>
           <p>Your order <strong>${escapeHtml(receipt.orderNumber)}</strong> is confirmed (${escapeHtml(total)}).</p>
           ${ticketHtml}
+          ${orderAheadHtml}
           <p>Please show each QR code at the entrance.</p>`,
-        TextBody: `Order ${receipt.orderNumber} is confirmed (${total}). Your QR tickets are attached.`,
+        TextBody: `Order ${receipt.orderNumber} is confirmed (${total}). Your QR tickets are attached.${orderAheadText}`,
         MessageStream: "outbound",
         Attachments: attachments,
       }),

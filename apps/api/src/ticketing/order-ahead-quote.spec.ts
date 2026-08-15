@@ -3,6 +3,7 @@ import { OrderAheadQuoteError, quoteOrderAheadSelections } from "@cinema/ticketi
 const catalog = [
   {
     id: "burger",
+    kitchenStationId: "kitchen",
     name: "Burger",
     priceCents: 1200,
     chargeCategory: "FOOD" as const,
@@ -30,9 +31,10 @@ const catalog = [
   },
   {
     id: "soda",
+    kitchenStationId: "bar",
     name: "Soda",
     priceCents: 500,
-    chargeCategory: "BEVERAGE" as const,
+    chargeCategory: "NA_BEVERAGE" as const,
     modifierGroups: [],
   },
 ];
