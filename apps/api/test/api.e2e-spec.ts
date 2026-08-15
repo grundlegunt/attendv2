@@ -594,6 +594,40 @@ describe("Attend platform authentication boundary", () => {
     }));
   });
 
+  it("only permanently deletes suspended clients without linked records", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/platform/organizations")
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({
+        name: "Disposable Preview Cinema",
+        timezone: "America/Chicago",
+        location: { name: "Disposable Preview", timezone: "America/Chicago" },
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/platform/organizations/${created.body.id}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/platform/organizations/${created.body.id}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .send({ active: false })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/platform/organizations/${created.body.id}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual(expect.objectContaining({ deleted: true, id: created.body.id })));
+
+    await request(app.getHttpServer())
+      .get(`/api/v1/platform/organizations/${created.body.id}`)
+      .set("Authorization", `Bearer ${platformAccessToken}`)
+      .expect(404);
+  });
+
   it("lets an Attend operator create a validated auditorium for a client location", async () => {
     const platformLogin = await loginPlatformOwner();
     expect(platformLogin.status).toBe(200);

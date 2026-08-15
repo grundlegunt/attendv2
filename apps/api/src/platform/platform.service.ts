@@ -530,6 +530,88 @@ export class PlatformService {
     return this.organization(input.organizationId);
   }
 
+  async deleteOrganization(input: { actorId: string; organizationId: string }) {
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const organization = await tx.organization.findUnique({
+          where: { id: input.organizationId },
+          select: {
+            id: true,
+            name: true,
+            active: true,
+            stripeConnectedAccountId: true,
+            _count: {
+              select: {
+                roles: true,
+                movies: true,
+                filmSeries: true,
+                priceTiers: true,
+                paymentCustomers: true,
+                giftCards: true,
+                giftCardPurchases: true,
+              },
+            },
+            locations: {
+              select: {
+                _count: {
+                  select: {
+                    employees: true,
+                    employeeRoles: true,
+                    auditoriums: true,
+                    ticketTypes: true,
+                    ticketOrders: true,
+                    restaurantTabs: true,
+                    kitchenStations: true,
+                    menuCategories: true,
+                    taxRules: true,
+                    serviceChargeRules: true,
+                    cashDrawers: true,
+                    cashTransactions: true,
+                    promotions: true,
+                    shifts: true,
+                    privateEventInquiries: true,
+                    issuedGiftCards: true,
+                    giftCardTransactions: true,
+                    giftCardPurchases: true,
+                    schedulePlans: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+        if (!organization) throw AppError.notFound("Cinema organization not found.");
+        if (organization.active) throw AppError.conflict("Suspend this client before permanently deleting it.");
+        if (organization.stripeConnectedAccountId) throw AppError.conflict("This client has a connected payment account and cannot be permanently deleted. Keep it suspended to preserve financial records.");
+
+        const organizationRecords = Object.values(organization._count).reduce((total, count) => total + count, 0);
+        const locationRecords = organization.locations.reduce(
+          (total, location) => total + Object.values(location._count).reduce((subtotal, count) => subtotal + count, 0),
+          0,
+        );
+        if (organizationRecords + locationRecords > 0) {
+          throw AppError.conflict("This client has configuration, operational, or financial history and cannot be permanently deleted. Keep it suspended to preserve its records.");
+        }
+
+        await this.audit.record({
+          actorType: "PLATFORM",
+          actorId: input.actorId,
+          action: "platform.organization_deleted",
+          entityType: "Organization",
+          entityId: organization.id,
+          beforeState: { name: organization.name, active: organization.active },
+        }, tx);
+        await tx.organization.delete({ where: { id: organization.id } });
+        return { deleted: true, id: organization.id, name: organization.name };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+        throw AppError.conflict("This client still has linked records and cannot be permanently deleted. Keep it suspended to preserve its history.");
+      }
+      throw error;
+    }
+  }
+
   async createConnectOnboardingLink(input: { actorId: string; organizationId: string; origin: string; returnPath: "/clients" | "/payments" }) {
     const organization = await prisma.organization.findUnique({ where: { id: input.organizationId } });
     if (!organization) throw AppError.notFound("Cinema organization not found.");
