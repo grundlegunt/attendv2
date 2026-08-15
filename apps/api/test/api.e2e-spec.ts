@@ -6513,14 +6513,26 @@ describe("Milestone 9 box office and workforce", () => {
     const { prisma } = await import("@cinema/database");
     const { BoxOfficeService } = await import("../src/box-office/box-office.service");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
-    const inventories = await prisma.showtimeSeat.findMany({
+    const originalInventory = await prisma.showtimeSeat.findFirstOrThrow({
       where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() }, auditorium: { locationId: owner.locationId } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
       include: { showtime: { include: { priceTier: true } } },
-      take: 20,
     });
-    const originalInventory = inventories[0]!;
-    const replacementInventory = inventories.find((inventory) => inventory.id !== originalInventory.id && inventory.showtime.priceTier.ticketPriceMinor === originalInventory.showtime.priceTier.ticketPriceMinor)!;
-    expect(replacementInventory).toBeDefined();
+    const replacementStartsAt = new Date(originalInventory.showtime.startsAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const replacementShowtime = await prisma.showtime.create({
+      data: {
+        movieId: originalInventory.showtime.movieId,
+        auditoriumId: originalInventory.showtime.auditoriumId,
+        priceTierId: originalInventory.showtime.priceTierId,
+        startsAt: replacementStartsAt,
+        featureStartsAt: new Date(replacementStartsAt.getTime() + 30 * 60 * 1000),
+        endsAt: new Date(replacementStartsAt.getTime() + 3 * 60 * 60 * 1000),
+        roomReadyAt: new Date(replacementStartsAt.getTime() + 3.5 * 60 * 60 * 1000),
+        onSale: true,
+        showtimeSeats: { create: { seatId: originalInventory.seatId } },
+      },
+      include: { showtimeSeats: true },
+    });
+    const replacementInventory = replacementShowtime.showtimeSeats[0]!;
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const order = await prisma.ticketOrder.create({ data: {
       locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "PAID",
