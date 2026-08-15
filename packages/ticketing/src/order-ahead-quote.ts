@@ -1,4 +1,4 @@
-export type OrderAheadChargeCategory = "FOOD" | "BEVERAGE" | "ALCOHOL";
+export type OrderAheadChargeCategory = "FOOD" | "NA_BEVERAGE" | "ALCOHOL";
 export type OrderAheadRuleCategory = "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE";
 
 export interface OrderAheadSelection {
@@ -9,6 +9,7 @@ export interface OrderAheadSelection {
 
 export interface OrderAheadCatalogItem {
   id: string;
+  kitchenStationId: string;
   name: string;
   priceCents: number;
   chargeCategory: OrderAheadChargeCategory;
@@ -31,6 +32,7 @@ export interface OrderAheadPricingRule {
 export interface OrderAheadQuote {
   lines: Array<{
     menuItemId: string;
+    kitchenStationId: string;
     name: string;
     quantity: number;
     chargeCategory: OrderAheadChargeCategory;
@@ -53,7 +55,7 @@ function ruleBase(
   categoryTotals: Map<OrderAheadChargeCategory, number>,
 ) {
   if (appliesTo === "ALL") return subtotalCents;
-  if (appliesTo === "NA_BEVERAGE") return categoryTotals.get("BEVERAGE") ?? 0;
+  if (appliesTo === "NA_BEVERAGE") return categoryTotals.get("NA_BEVERAGE") ?? 0;
   return categoryTotals.get(appliesTo) ?? 0;
 }
 
@@ -114,6 +116,7 @@ export function quoteOrderAheadSelections(input: {
     if (unitPriceCents < 0) throw new OrderAheadQuoteError("Menu item pricing cannot be negative.");
     lines.push({
       menuItemId: item.id,
+      kitchenStationId: item.kitchenStationId,
       name: item.name,
       quantity: selection.quantity,
       chargeCategory: item.chargeCategory,
