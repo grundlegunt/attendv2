@@ -2,6 +2,7 @@ import {
   adminUiConfigSchema,
   adminUiDefaults,
   auditoriumSeatingModeSchema,
+  createAuditoriumRequestSchema,
   createFilmSeriesRequestSchema,
   customerBrandingSchema,
   createMovieRequestSchema,
@@ -22,11 +23,52 @@ import {
 describe("auditorium seating modes", () => {
   it("recognizes reserved and general-admission inventory", () => {
     expect(auditoriumSeatingModeSchema.parse("RESERVED")).toBe("RESERVED");
-    expect(auditoriumSeatingModeSchema.parse("GENERAL_ADMISSION")).toBe("GENERAL_ADMISSION");
+    expect(auditoriumSeatingModeSchema.parse("GENERAL_ADMISSION")).toBe(
+      "GENERAL_ADMISSION",
+    );
   });
 
   it("rejects unknown inventory modes", () => {
-    expect(() => auditoriumSeatingModeSchema.parse("FESTIVAL_SEATING")).toThrow();
+    expect(() =>
+      auditoriumSeatingModeSchema.parse("FESTIVAL_SEATING"),
+    ).toThrow();
+  });
+
+  it("accepts general admission with a capacity and no seat map", () => {
+    expect(
+      createAuditoriumRequestSchema.parse({
+        name: "Screen 2",
+        seatingMode: "GENERAL_ADMISSION",
+        capacity: 120,
+      }),
+    ).toMatchObject({ seatingMode: "GENERAL_ADMISSION", capacity: 120 });
+  });
+
+  it("keeps reserved seating as the backwards-compatible default", () => {
+    const seat = {
+      label: "A1",
+      rowLabel: "A",
+      number: 1,
+      x: 0,
+      y: 0,
+      type: "STANDARD",
+    };
+    expect(
+      createAuditoriumRequestSchema.parse({
+        name: "Screen 1",
+        seatMapName: "Main",
+        seats: [seat],
+      }).seatingMode,
+    ).toBe("RESERVED");
+  });
+
+  it("rejects general admission without a capacity", () => {
+    expect(() =>
+      createAuditoriumRequestSchema.parse({
+        name: "Screen 3",
+        seatingMode: "GENERAL_ADMISSION",
+      }),
+    ).toThrow();
   });
 });
 
@@ -42,22 +84,44 @@ describe("admin schedule appearance", () => {
     const parsed = adminUiConfigSchema.parse(legacyConfig);
 
     expect(parsed.removeControlColor).toBe(adminUiDefaults.removeControlColor);
-    expect(parsed.duplicateControlColor).toBe(adminUiDefaults.duplicateControlColor);
+    expect(parsed.duplicateControlColor).toBe(
+      adminUiDefaults.duplicateControlColor,
+    );
   });
 });
 
 describe("customer branding settings", () => {
   it("accepts safe six-digit colors and a hosted logo", () => {
-    expect(customerBrandingSchema.parse({ name: "Meridian Cinema", logoUrl: "https://example.com/logo.svg", accentColor: "#fe2c54" })).toEqual({ name: "Meridian Cinema", logoUrl: "https://example.com/logo.svg", accentColor: "#fe2c54" });
+    expect(
+      customerBrandingSchema.parse({
+        name: "Meridian Cinema",
+        logoUrl: "https://example.com/logo.svg",
+        accentColor: "#fe2c54",
+      }),
+    ).toEqual({
+      name: "Meridian Cinema",
+      logoUrl: "https://example.com/logo.svg",
+      accentColor: "#fe2c54",
+    });
   });
 
   it("supports null overrides for resetting to Attend defaults", () => {
-    expect(customerBrandingSchema.parse({ logoUrl: null, accentColor: null, textColor: null })).toEqual({ logoUrl: null, accentColor: null, textColor: null });
+    expect(
+      customerBrandingSchema.parse({
+        logoUrl: null,
+        accentColor: null,
+        textColor: null,
+      }),
+    ).toEqual({ logoUrl: null, accentColor: null, textColor: null });
   });
 
   it("rejects unsafe or ambiguous color strings", () => {
-    expect(() => customerBrandingSchema.parse({ accentColor: "red" })).toThrow();
-    expect(() => customerBrandingSchema.parse({ backgroundColor: "#fff" })).toThrow();
+    expect(() =>
+      customerBrandingSchema.parse({ accentColor: "red" }),
+    ).toThrow();
+    expect(() =>
+      customerBrandingSchema.parse({ backgroundColor: "#fff" }),
+    ).toThrow();
   });
 });
 
@@ -91,7 +155,9 @@ describe("cinema programming requests", () => {
     expect(parsed.detailPosterUrl).toBe("/posters/matrix-one-sheet.jpg");
     expect(parsed.posterPosition).toBe("BOTTOM");
     expect(parsed.detailPosterPosition).toBe("TOP");
-    expect(parsed.diningSpecialArtworkUrl).toBe("/specials/matrix-paired-menu.jpg");
+    expect(parsed.diningSpecialArtworkUrl).toBe(
+      "/specials/matrix-paired-menu.jpg",
+    );
     expect(parsed.diningSpecialTitle).toBe("There Is No Spoonful");
     expect(parsed.releaseYear).toBe(1999);
     expect(parsed.pairingMenuItemIds).toHaveLength(1);
@@ -104,7 +170,13 @@ describe("cinema programming requests", () => {
     expect(defaults.posterUrl).toBe("/posters/matrix.jpg");
     expect(defaults.posterPosition).toBe("CENTER");
     expect(defaults.detailPosterPosition).toBe("CENTER");
-    expect(() => createMovieRequestSchema.parse({ title: "The Matrix", runtimeMinutes: 136, posterPosition: "LEFT" })).toThrow();
+    expect(() =>
+      createMovieRequestSchema.parse({
+        title: "The Matrix",
+        runtimeMinutes: 136,
+        posterPosition: "LEFT",
+      }),
+    ).toThrow();
   });
 
   it("accepts tiered distributor deal terms", () => {
@@ -119,18 +191,22 @@ describe("cinema programming requests", () => {
     });
 
     expect(parsed.distributorName).toBe("Example Distribution");
-    expect(parsed.distributorTerms?.[0]?.distributorShareBasisPoints).toBe(6000);
+    expect(parsed.distributorTerms?.[0]?.distributorShareBasisPoints).toBe(
+      6000,
+    );
   });
 
   it("rejects overlapping distributor deal periods", () => {
-    expect(() => createMovieRequestSchema.parse({
-      title: "Tony",
-      runtimeMinutes: 137,
-      distributorTerms: [
-        { startWeek: 1, endWeek: 2, distributorShareBasisPoints: 6000 },
-        { startWeek: 2, endWeek: null, distributorShareBasisPoints: 5000 },
-      ],
-    })).toThrow();
+    expect(() =>
+      createMovieRequestSchema.parse({
+        title: "Tony",
+        runtimeMinutes: 137,
+        distributorTerms: [
+          { startWeek: 1, endWeek: 2, distributorShareBasisPoints: 6000 },
+          { startWeek: 2, endWeek: null, distributorShareBasisPoints: 5000 },
+        ],
+      }),
+    ).toThrow();
   });
 
   it("stores a managed film-series assignment and presentation on a new showtime", () => {
@@ -149,18 +225,22 @@ describe("cinema programming requests", () => {
   });
 
   it("accepts a multi-day schedule copy and rejects the source as a target", () => {
-    expect(duplicateShowtimeDayRequestSchema.parse({
-      sourceDate: "2026-08-06",
-      targetDates: ["2026-08-07", "2026-08-08"],
-    })).toEqual({
+    expect(
+      duplicateShowtimeDayRequestSchema.parse({
+        sourceDate: "2026-08-06",
+        targetDates: ["2026-08-07", "2026-08-08"],
+      }),
+    ).toEqual({
       sourceDate: "2026-08-06",
       targetDates: ["2026-08-07", "2026-08-08"],
       saleStatus: "PRESERVE",
     });
-    expect(() => duplicateShowtimeDayRequestSchema.parse({
-      sourceDate: "2026-08-06",
-      targetDates: ["2026-08-06"],
-    })).toThrow();
+    expect(() =>
+      duplicateShowtimeDayRequestSchema.parse({
+        sourceDate: "2026-08-06",
+        targetDates: ["2026-08-06"],
+      }),
+    ).toThrow();
   });
 
   it("validates film-series create, edit, and archive payloads", () => {
@@ -172,63 +252,117 @@ describe("cinema programming requests", () => {
     });
     expect(createdSeries.name).toBe("Summer Classics");
     expect(createdSeries.sortOrder).toBe(3);
-    expect(updateFilmSeriesRequestSchema.parse({ active: false })).toEqual({ active: false });
+    expect(updateFilmSeriesRequestSchema.parse({ active: false })).toEqual({
+      active: false,
+    });
     expect(() => updateFilmSeriesRequestSchema.parse({})).toThrow();
   });
 
   it("does not reset sale or presentation values on an unrelated partial update", () => {
-    expect(updateShowtimeRequestSchema.parse({ startsAt: showtime.startsAt })).toEqual({
+    expect(
+      updateShowtimeRequestSchema.parse({ startsAt: showtime.startsAt }),
+    ).toEqual({
       startsAt: showtime.startsAt,
     });
   });
 
   it("validates atomic multi-showtime moves", () => {
     const moves = [
-      { showtimeId: "10000000-0000-4000-8000-000000000011", startsAt: "2026-08-04T19:00:00.000Z" },
-      { showtimeId: "10000000-0000-4000-8000-000000000012", auditoriumId: "10000000-0000-4000-8000-000000000013", startsAt: "2026-08-04T20:00:00.000Z" },
+      {
+        showtimeId: "10000000-0000-4000-8000-000000000011",
+        startsAt: "2026-08-04T19:00:00.000Z",
+      },
+      {
+        showtimeId: "10000000-0000-4000-8000-000000000012",
+        auditoriumId: "10000000-0000-4000-8000-000000000013",
+        startsAt: "2026-08-04T20:00:00.000Z",
+      },
     ];
 
-    expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves).toHaveLength(2);
-    expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves[1]?.auditoriumId).toBe("10000000-0000-4000-8000-000000000013");
-    expect(() => moveShowtimeGroupRequestSchema.parse({ moves: moves.slice(0, 1) })).toThrow();
-    expect(() => moveShowtimeGroupRequestSchema.parse({ moves: [moves[0], moves[0]] })).toThrow();
+    expect(moveShowtimeGroupRequestSchema.parse({ moves }).moves).toHaveLength(
+      2,
+    );
+    expect(
+      moveShowtimeGroupRequestSchema.parse({ moves }).moves[1]?.auditoriumId,
+    ).toBe("10000000-0000-4000-8000-000000000013");
+    expect(() =>
+      moveShowtimeGroupRequestSchema.parse({ moves: moves.slice(0, 1) }),
+    ).toThrow();
+    expect(() =>
+      moveShowtimeGroupRequestSchema.parse({ moves: [moves[0], moves[0]] }),
+    ).toThrow();
   });
 });
 
 describe("startOfLocalDay", () => {
   it("keeps the full current cinema day visible after showtimes begin", () => {
-    expect(startOfLocalDay(new Date("2026-08-01T22:15:00.000Z"), "America/Chicago").toISOString())
-      .toBe("2026-08-01T05:00:00.000Z");
+    expect(
+      startOfLocalDay(
+        new Date("2026-08-01T22:15:00.000Z"),
+        "America/Chicago",
+      ).toISOString(),
+    ).toBe("2026-08-01T05:00:00.000Z");
   });
 
   it("resolves midnight correctly during standard time", () => {
-    expect(startOfLocalDay(new Date("2026-01-15T18:00:00.000Z"), "America/Chicago").toISOString())
-      .toBe("2026-01-15T06:00:00.000Z");
+    expect(
+      startOfLocalDay(
+        new Date("2026-01-15T18:00:00.000Z"),
+        "America/Chicago",
+      ).toISOString(),
+    ).toBe("2026-01-15T06:00:00.000Z");
   });
 });
 
 describe("validateSeatLayout", () => {
   const base = [
-    { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD" as const },
-    { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD" as const },
+    {
+      label: "A1",
+      rowLabel: "A",
+      number: 1,
+      x: 0,
+      y: 0,
+      type: "STANDARD" as const,
+    },
+    {
+      label: "A2",
+      rowLabel: "A",
+      number: 2,
+      x: 1,
+      y: 0,
+      type: "STANDARD" as const,
+    },
   ];
 
-  it("accepts unique seats", () => expect(validateSeatLayout(base)).toEqual([]));
+  it("accepts unique seats", () =>
+    expect(validateSeatLayout(base)).toEqual([]));
   it("rejects duplicate labels", () =>
-    expect(validateSeatLayout([...base, { ...base[1]!, label: "a1", x: 2 }])).toContain(
-      "Duplicate seat label: a1.",
-    ));
+    expect(
+      validateSeatLayout([...base, { ...base[1]!, label: "a1", x: 2 }]),
+    ).toContain("Duplicate seat label: a1."));
   it("rejects duplicate coordinates", () =>
-    expect(validateSeatLayout([...base, { ...base[1]!, label: "A3", number: 3, x: 0 }])).toContain(
-      "Duplicate seat coordinate: 0:0.",
-    ));
+    expect(
+      validateSeatLayout([
+        ...base,
+        { ...base[1]!, label: "A3", number: 3, x: 0 },
+      ]),
+    ).toContain("Duplicate seat coordinate: 0:0."));
   it("requires complete left/right table pairs", () =>
     expect(
       validateSeatLayout([
         ...base,
-        { ...base[0]!, label: "B1", x: 0, y: 1, tableGroupId: "B-1", tablePosition: "LEFT" },
+        {
+          ...base[0]!,
+          label: "B1",
+          x: 0,
+          y: 1,
+          tableGroupId: "B-1",
+          tablePosition: "LEFT",
+        },
       ]),
-    ).toContain("Table group B-1 must contain exactly one LEFT and one RIGHT seat."));
+    ).toContain(
+      "Table group B-1 must contain exactly one LEFT and one RIGHT seat.",
+    ));
 });
 
 describe("validateAdvancedSeatLayout", () => {
@@ -246,16 +380,61 @@ describe("validateAdvancedSeatLayout", () => {
   };
 
   it("allows the same grid coordinate on separate levels", () => {
-    expect(validateAdvancedSeatLayout([
-      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "main" },
-      { label: "BA1", rowLabel: "BA", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "balcony" },
-    ], layout)).toEqual([]);
+    expect(
+      validateAdvancedSeatLayout(
+        [
+          {
+            label: "A1",
+            rowLabel: "A",
+            number: 1,
+            x: 0,
+            y: 0,
+            type: "STANDARD",
+            levelKey: "main",
+          },
+          {
+            label: "BA1",
+            rowLabel: "BA",
+            number: 1,
+            x: 0,
+            y: 0,
+            type: "STANDARD",
+            levelKey: "balcony",
+          },
+        ],
+        layout,
+      ),
+    ).toEqual([]);
   });
 
   it("rejects seats and non-seat elements outside the canvas", () => {
-    const errors = validateAdvancedSeatLayout([
-      { label: "A1", rowLabel: "A", number: 1, x: 12, y: 0, type: "STANDARD", levelKey: "main" },
-    ], { ...layout, elements: [{ id: "wall", type: "WALL", levelId: "main", x: 10, y: 0, width: 3, height: 1 }] });
+    const errors = validateAdvancedSeatLayout(
+      [
+        {
+          label: "A1",
+          rowLabel: "A",
+          number: 1,
+          x: 12,
+          y: 0,
+          type: "STANDARD",
+          levelKey: "main",
+        },
+      ],
+      {
+        ...layout,
+        elements: [
+          {
+            id: "wall",
+            type: "WALL",
+            levelId: "main",
+            x: 10,
+            y: 0,
+            width: 3,
+            height: 1,
+          },
+        ],
+      },
+    );
     expect(errors).toContain("Seat A1 is outside the canvas.");
     expect(errors).toContain("Layout element wall is outside the canvas.");
   });
@@ -268,7 +447,10 @@ describe("showtimeWindowsOverlap", () => {
     expect(
       showtimeWindowsOverlap(
         { startsAt: start, roomReadyAt: ready },
-        { startsAt: new Date("2026-07-25T20:59:00Z"), roomReadyAt: new Date("2026-07-25T23:00:00Z") },
+        {
+          startsAt: new Date("2026-07-25T20:59:00Z"),
+          roomReadyAt: new Date("2026-07-25T23:00:00Z"),
+        },
       ),
     ).toBe(true));
   it("accepts a window starting exactly when the room is ready", () =>
@@ -280,13 +462,22 @@ describe("showtimeWindowsOverlap", () => {
     ).toBe(false));
 });
 
-function screening(id: string, startsAt: string, auditoriumId = "room-1"): PublicShowtime {
+function screening(
+  id: string,
+  startsAt: string,
+  auditoriumId = "room-1",
+): PublicShowtime {
   return {
     id,
     startsAt,
     presentation: "STANDARD",
     auditorium: { id: auditoriumId, name: "Theater 1", capacity: 60 },
-    priceTier: { name: "Standard", ticketPriceMinor: 1700, feeMinor: 200, currency: "USD" },
+    priceTier: {
+      name: "Standard",
+      ticketPriceMinor: 1700,
+      feeMinor: 200,
+      currency: "USD",
+    },
     filmSeries: null,
     format: null,
   };
