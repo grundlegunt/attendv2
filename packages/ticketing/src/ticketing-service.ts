@@ -927,7 +927,6 @@ export class TicketingService {
         primaryCustomerId: order.customerId,
         tabType: RestaurantTabType.SEAT_LINKED,
         showtimeId: firstTicket.showtimeSeat.showtimeId,
-        label: `Order ahead ${order.orderNumber}`,
         status: RestaurantTabStatus.OPEN,
         subtotalCents: order.orderAheadSubtotalCents,
         taxCents: order.orderAheadTaxCents,
