@@ -1629,6 +1629,92 @@ body:has(.signage-shell) .site-header { display: none; }
   box-sizing: border-box;
   width: 100%;
 }
+.order-ahead-panel {
+  grid-column: 1 / -1;
+}
+.order-ahead-heading,
+.order-ahead-item__summary,
+.order-ahead-estimate {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+.order-ahead-heading h3 {
+  margin-top: 5px;
+}
+.order-ahead-panel > p,
+.order-ahead-item p {
+  color: var(--color-text-secondary);
+}
+.order-ahead-menu {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  margin-top: 24px;
+}
+.order-ahead-category {
+  min-width: 0;
+}
+.order-ahead-category h4 {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 1rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+.order-ahead-item {
+  padding: 15px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.order-ahead-item p {
+  margin: 5px 0;
+}
+.quantity-control {
+  display: grid;
+  grid-template-columns: 34px 30px 34px;
+  align-items: center;
+  text-align: center;
+}
+.quantity-control button {
+  min-height: 34px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.modifier-group {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+}
+.modifier-group legend {
+  padding: 0 5px;
+  font-weight: 700;
+}
+.modifier-group label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+.order-ahead-estimate {
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--color-border);
+}
+.order-ahead-estimate small {
+  flex-basis: 100%;
+  color: var(--color-text-secondary);
+}
+.order-ahead-validation {
+  margin-top: 14px;
+  color: var(--color-accent) !important;
+  font-weight: 700;
+}
 #attend-express-checkout-element:not(:empty) {
   margin-bottom: 18px;
 }
@@ -1689,6 +1775,9 @@ body:has(.signage-shell) .site-header { display: none; }
 @media (max-width: 700px) {
   .checkout-form,
   .payment-form {
+    grid-template-columns: 1fr;
+  }
+  .order-ahead-menu {
     grid-template-columns: 1fr;
   }
 }

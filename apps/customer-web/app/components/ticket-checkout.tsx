@@ -48,6 +48,11 @@ interface CheckoutConfig {
   };
 }
 
+type OrderAheadSelection = {
+  quantity: number;
+  modifierIds: string[];
+};
+
 interface StripeElement {
   mount(target: string | HTMLElement): void;
   unmount(): void;
@@ -144,6 +149,10 @@ export function TicketCheckout({
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
+  const [orderAheadOpen, setOrderAheadOpen] = useState(false);
+  const [orderAheadSelections, setOrderAheadSelections] = useState<
+    Record<string, OrderAheadSelection>
+  >({});
   const [error, setError] = useState<string | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
   const [pending, setPending] = useState(false);
@@ -163,6 +172,84 @@ export function TicketCheckout({
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
 
   const checkoutStorageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
+
+  const selectedOrderAheadItems = config?.orderAhead.categories.flatMap((category) =>
+    category.items.flatMap((item) => {
+      const selection = orderAheadSelections[item.id];
+      return selection?.quantity
+        ? [{ item, quantity: selection.quantity, modifierIds: selection.modifierIds }]
+        : [];
+    }),
+  ) ?? [];
+  const orderAheadEstimateCents = selectedOrderAheadItems.reduce((total, selection) => {
+    const modifierTotal = selection.item.modifierGroups
+      .flatMap((group) => group.modifiers)
+      .filter((modifier) => selection.modifierIds.includes(modifier.id))
+      .reduce((sum, modifier) => sum + modifier.priceDeltaCents, 0);
+    return total + (selection.item.priceCents + modifierTotal) * selection.quantity;
+  }, 0);
+
+  function setOrderAheadQuantity(itemId: string, quantity: number) {
+    setOrderAheadSelections((current) => {
+      if (quantity <= 0) {
+        const next = { ...current };
+        delete next[itemId];
+        return next;
+      }
+      return {
+        ...current,
+        [itemId]: {
+          quantity: Math.min(quantity, 20),
+          modifierIds: current[itemId]?.modifierIds ?? [],
+        },
+      };
+    });
+  }
+
+  function toggleOrderAheadModifier(
+    itemId: string,
+    modifierId: string,
+    selectionType: "SINGLE" | "MULTIPLE",
+    groupModifierIds: string[],
+    maxSelections: number | null,
+  ) {
+    setOrderAheadSelections((current) => {
+      const selection = current[itemId];
+      if (!selection) return current;
+      const otherGroupSelections = selection.modifierIds.filter(
+        (id) => !groupModifierIds.includes(id),
+      );
+      const groupSelections = selection.modifierIds.filter((id) =>
+        groupModifierIds.includes(id),
+      );
+      const nextGroupSelections = selectionType === "SINGLE"
+        ? groupSelections.includes(modifierId) ? [] : [modifierId]
+        : groupSelections.includes(modifierId)
+          ? groupSelections.filter((id) => id !== modifierId)
+          : maxSelections === null || groupSelections.length < maxSelections
+            ? [...groupSelections, modifierId]
+            : groupSelections;
+      return {
+        ...current,
+        [itemId]: {
+          ...selection,
+          modifierIds: [...otherGroupSelections, ...nextGroupSelections],
+        },
+      };
+    });
+  }
+
+  function orderAheadSelectionIsValid() {
+    return selectedOrderAheadItems.every(({ item, modifierIds }) =>
+      item.modifierGroups.every((group) => {
+        const count = group.modifiers.filter((modifier) =>
+          modifierIds.includes(modifier.id),
+        ).length;
+        const minimum = group.required ? Math.max(1, group.minSelections) : group.minSelections;
+        return count >= minimum && (group.maxSelections === null || count <= group.maxSelections);
+      }),
+    );
+  }
 
   const loadConfig = useCallback(async () => {
     if (configLoadingRef.current) return;
@@ -360,6 +447,13 @@ export function TicketCheckout({
             promotionCode: promotionCode.trim() || undefined,
             giftCardCode: giftCardCode.trim() || undefined,
             diningAuthorizationRequested: diningAuthorization,
+            orderAhead: selectedOrderAheadItems.length
+              ? selectedOrderAheadItems.map(({ item, quantity, modifierIds }) => ({
+                  menuItemId: item.id,
+                  quantity,
+                  modifierIds,
+                }))
+              : undefined,
           }),
         },
       );
@@ -490,6 +584,91 @@ export function TicketCheckout({
               <input value={giftCardCode} onChange={(event) => setGiftCardCode(event.target.value.toUpperCase())} autoComplete="off" />
             </label>
           </div>
+          {config?.orderAhead.available && (
+            <div className="checkout-panel order-ahead-panel">
+              <div className="order-ahead-heading">
+                <div>
+                  <span className="eyebrow">OPTIONAL</span>
+                  <h3>Order food + drinks ahead</h3>
+                </div>
+                <button
+                  className="link"
+                  type="button"
+                  onClick={() => setOrderAheadOpen((open) => !open)}
+                  aria-expanded={orderAheadOpen}
+                >
+                  {orderAheadOpen ? "Hide menu" : "View menu"}
+                </button>
+              </div>
+              <p>Add items now and pay once with your tickets. Your order will be linked to these seats.</p>
+              {orderAheadOpen && (
+                <div className="order-ahead-menu">
+                  {config.orderAhead.categories.map((category) => (
+                    <section key={category.id} className="order-ahead-category">
+                      <h4>{category.name}</h4>
+                      {category.items.map((item) => {
+                        const selection = orderAheadSelections[item.id];
+                        return (
+                          <article className="order-ahead-item" key={item.id}>
+                            <div className="order-ahead-item__summary">
+                              <div>
+                                <strong>{item.name}</strong>
+                                {item.description && <p>{item.description}</p>}
+                                <small>{money(item.priceCents, config.currency)}</small>
+                              </div>
+                              <div className="quantity-control" aria-label={`Quantity for ${item.name}`}>
+                                <button type="button" onClick={() => setOrderAheadQuantity(item.id, (selection?.quantity ?? 0) - 1)} aria-label={`Remove one ${item.name}`}>−</button>
+                                <span>{selection?.quantity ?? 0}</span>
+                                <button type="button" onClick={() => setOrderAheadQuantity(item.id, (selection?.quantity ?? 0) + 1)} aria-label={`Add one ${item.name}`}>+</button>
+                              </div>
+                            </div>
+                            {selection && item.modifierGroups.map((group) => (
+                              <fieldset className="modifier-group" key={group.id}>
+                                <legend>
+                                  {group.name}
+                                  {(group.required || group.minSelections > 0) && <small> Required</small>}
+                                </legend>
+                                {group.modifiers.map((modifier) => (
+                                  <label key={modifier.id}>
+                                    <input
+                                      type={group.selectionType === "SINGLE" ? "radio" : "checkbox"}
+                                      name={`modifier-${item.id}-${group.id}`}
+                                      checked={selection.modifierIds.includes(modifier.id)}
+                                      onChange={() => toggleOrderAheadModifier(
+                                        item.id,
+                                        modifier.id,
+                                        group.selectionType,
+                                        group.modifiers.map((entry) => entry.id),
+                                        group.maxSelections,
+                                      )}
+                                    />
+                                    <span>{modifier.name}</span>
+                                    {modifier.priceDeltaCents !== 0 && <small>+{money(modifier.priceDeltaCents, config.currency)}</small>}
+                                  </label>
+                                ))}
+                              </fieldset>
+                            ))}
+                          </article>
+                        );
+                      })}
+                    </section>
+                  ))}
+                </div>
+              )}
+              {selectedOrderAheadItems.length > 0 && (
+                <p className="order-ahead-estimate">
+                  <span>Food + drink subtotal</span>
+                  <strong>{money(orderAheadEstimateCents, config.currency)}</strong>
+                  <small>Tax and any configured service charge are calculated securely at checkout.</small>
+                </p>
+              )}
+              {!orderAheadSelectionIsValid() && (
+                <p className="order-ahead-validation" role="alert">
+                  Complete the required food and drink choices before continuing.
+                </p>
+              )}
+            </div>
+          )}
           <div className="checkout-panel authorization-note">
             <h3>Food + drink during the movie</h3>
             <p>
@@ -529,6 +708,7 @@ export function TicketCheckout({
               configLoading ||
               configShowtimeId !== showtimeId ||
               diningAuthorization === null ||
+              !orderAheadSelectionIsValid() ||
               !config?.ticketTypes.length ||
               (!config.payment.ready && !giftCardCode.trim())
             }
@@ -544,6 +724,9 @@ export function TicketCheckout({
             {checkout.discountCents > 0 && <p><span>Promotion</span><strong>−{money(checkout.discountCents, checkout.currency)}</strong></p>}
             <p><span>Service fee</span><strong>{money(checkout.feesCents, checkout.currency)}</strong></p>
             <p><span>Tax</span><strong>{money(checkout.taxCents, checkout.currency)}</strong></p>
+            {checkout.orderAheadSubtotalCents > 0 && <p><span>Food + drinks</span><strong>{money(checkout.orderAheadSubtotalCents, checkout.currency)}</strong></p>}
+            {checkout.orderAheadTaxCents > 0 && <p><span>Food + drink tax</span><strong>{money(checkout.orderAheadTaxCents, checkout.currency)}</strong></p>}
+            {checkout.orderAheadServiceChargeCents > 0 && <p><span>Food + drink service charge</span><strong>{money(checkout.orderAheadServiceChargeCents, checkout.currency)}</strong></p>}
             {checkout.giftCardCents > 0 && <p><span>Gift card</span><strong>−{money(checkout.giftCardCents, checkout.currency)}</strong></p>}
             <p className="total"><span>Total</span><strong>{money(checkout.totalCents, checkout.currency)}</strong></p>
           </div>
