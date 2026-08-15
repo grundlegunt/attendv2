@@ -154,6 +154,7 @@ export default function KdsPage() {
 
   useEffect(() => {
     if (!accessToken) return;
+    setError(null);
     apiFetch<Station[]>("/fulfillment/stations", { accessToken })
       .then((response) => {
         setStations(response);
@@ -167,9 +168,30 @@ export default function KdsPage() {
           window.localStorage.setItem(STATION_STORAGE_KEY, nextStationId);
         } else {
           window.localStorage.removeItem(STATION_STORAGE_KEY);
+          setError(
+            "No active kitchen or bar station is configured for this cinema. Add one in Admin → Menu, then reload this display.",
+          );
         }
       })
-      .catch(() => setError("No station is available for this account."));
+      .catch((reason) => {
+        setStations([]);
+        setStationId("");
+        if (reason instanceof ApiRequestError) {
+          if (reason.status === 401) {
+            setError("Your display session expired. Please sign in again.");
+            return;
+          }
+          if (reason.status === 403) {
+            setError(
+              "This account cannot operate a kitchen display. Assign it the Kitchen, Bartender, Runner, Owner, or General Manager role in Admin.",
+            );
+            return;
+          }
+          setError(reason.body.message);
+          return;
+        }
+        setError("The station list could not be loaded. Check the API connection and try again.");
+      });
   }, [accessToken]);
 
   useEffect(() => {
