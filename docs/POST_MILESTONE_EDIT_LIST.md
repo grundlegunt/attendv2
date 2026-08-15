@@ -60,6 +60,12 @@ built, both worth reading before scoping this:
   rows, stadium tiering, seating groups, and templates — this ask is about usability
   of that expanded builder, not reverting the feature set.)
 
+### Dining / menu management
+
+- Fix the Admin Dining/Menu tab so structured items, uploaded menu documents or
+  images, and specials can be managed reliably and previewed exactly as customers
+  will see them.
+
 ### Reporting
 
 - Admin needs a reporting element for reporting movie tickets back to the
@@ -92,8 +98,9 @@ built, both worth reading before scoping this:
 
 - Too much dead space throughout the layout.
 - Pictures need to be croppable/movable (positioning control), not just swapped.
-- Dining tab: the menu should look like an actual menu (real layout/design), not a
-  plain list of words. Support uploading a document or image for it.
+- Fix the Dining tab: it should reliably show the configured live menu and look
+  like an actual menu (real layout/design), not a plain list of words. Support
+  uploading a document or image for it.
 - Specials should use the same pictures shown on the movie's own detail page/tab —
   not the generic movie poster.
 - The Afterglow bar should be listed at the top of the relevant page and clickable

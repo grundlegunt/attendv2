@@ -2102,6 +2102,86 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(giftCard.transactions).toEqual([expect.objectContaining({ amountCents: -checkout.body.totalCents, reference: checkout.body.orderId })]);
   });
 
+  it("finalizes tickets and order-ahead food as one prepaid seat-linked purchase", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const holderKey = `online-order-ahead-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .expect(200);
+    const menuItem = config.body.orderAhead.categories
+      .flatMap((category: { items: Array<{
+        id: string;
+        modifierGroups: Array<{
+          required: boolean;
+          minSelections: number;
+          modifiers: Array<{ id: string }>;
+        }>;
+      }> }) => category.items)
+      .find(Boolean) as {
+        id: string;
+        modifierGroups: Array<{
+          required: boolean;
+          minSelections: number;
+          modifiers: Array<{ id: string }>;
+        }>;
+      } | undefined;
+    expect(menuItem).toBeDefined();
+    const modifierIds = menuItem!.modifierGroups.flatMap((group) =>
+      group.modifiers
+        .slice(0, Math.max(group.required ? 1 : 0, group.minSelections))
+        .map((modifier) => modifier.id),
+    );
+
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        diningAuthorizationRequested: true,
+        orderAhead: [{ menuItemId: menuItem!.id, quantity: 1, modifierIds }],
+      })
+      .expect(201);
+
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
+      typeof TestPaymentProvider
+    >;
+    provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
+    const finalized = await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+      .send({})
+      .expect(201);
+
+    expect(finalized.body.status).toBe("PAID");
+    expect(finalized.body.tickets).toHaveLength(1);
+    const restaurantOrder = await prisma.restaurantOrder.findFirstOrThrow({
+      where: { ticketOrderId: checkout.body.orderId },
+      include: {
+        items: true,
+        fulfillmentTickets: true,
+        restaurantTab: { include: { seats: true } },
+      },
+    });
+    expect(restaurantOrder).toMatchObject({
+      source: "ONLINE_ORDER_AHEAD",
+      status: "SENT",
+      restaurantTab: {
+        prepaidCents:
+          checkout.body.orderAheadSubtotalCents +
+          checkout.body.orderAheadTaxCents +
+          checkout.body.orderAheadServiceChargeCents,
+        seats: [expect.objectContaining({ ticketId: finalized.body.tickets[0].id })],
+      },
+    });
+    expect(restaurantOrder.items).toHaveLength(1);
+    expect(restaurantOrder.fulfillmentTickets).toHaveLength(1);
+  });
+
   it("redeems a gift-card-only checkout once when finalize requests race", async () => {
     const { prisma } = await import("@cinema/database");
     const holderKey = `online-gift-card-race-${crypto.randomUUID()}`;
