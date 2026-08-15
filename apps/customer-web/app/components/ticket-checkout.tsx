@@ -150,6 +150,7 @@ export function TicketCheckout({
   const [giftCardCode, setGiftCardCode] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [orderAheadOpen, setOrderAheadOpen] = useState(false);
+  const [openOrderAheadCategoryId, setOpenOrderAheadCategoryId] = useState<string | null>(null);
   const [orderAheadSelections, setOrderAheadSelections] = useState<
     Record<string, OrderAheadSelection>
   >({});
@@ -594,7 +595,12 @@ export function TicketCheckout({
                 <button
                   className="link"
                   type="button"
-                  onClick={() => setOrderAheadOpen((open) => !open)}
+                  onClick={() => {
+                    setOrderAheadOpen((open) => {
+                      if (!open && !openOrderAheadCategoryId) setOpenOrderAheadCategoryId(config.orderAhead.categories[0]?.id ?? null);
+                      return !open;
+                    });
+                  }}
                   aria-expanded={orderAheadOpen}
                 >
                   {orderAheadOpen ? "Hide menu" : "View menu"}
@@ -603,10 +609,14 @@ export function TicketCheckout({
               <p>Add items now and pay once with your tickets. Your order will be linked to these seats.</p>
               {orderAheadOpen && (
                 <div className="order-ahead-menu">
-                  {config.orderAhead.categories.map((category) => (
-                    <section key={category.id} className="order-ahead-category">
-                      <h4>{category.name}</h4>
-                      {category.items.map((item) => {
+                  {config.orderAhead.categories.map((category) => {
+                    const categoryIsOpen = openOrderAheadCategoryId === category.id;
+                    return <section key={category.id} className="order-ahead-category">
+                      <button type="button" className="order-ahead-category__toggle" aria-expanded={categoryIsOpen} aria-controls={`order-ahead-category-${category.id}`} onClick={() => setOpenOrderAheadCategoryId(categoryIsOpen ? null : category.id)}>
+                        <span>{category.name}</span>
+                        <small>{category.items.length} {category.items.length === 1 ? "item" : "items"}</small>
+                      </button>
+                      {categoryIsOpen && <div className="order-ahead-category__items" id={`order-ahead-category-${category.id}`}>{category.items.map((item) => {
                         const selection = orderAheadSelections[item.id];
                         return (
                           <article className="order-ahead-item" key={item.id}>
@@ -650,9 +660,9 @@ export function TicketCheckout({
                             ))}
                           </article>
                         );
-                      })}
-                    </section>
-                  ))}
+                      })}</div>}
+                    </section>;
+                  })}
                 </div>
               )}
               {selectedOrderAheadItems.length > 0 && (
