@@ -303,16 +303,31 @@ export default function AdminPage() {
     }
   }
 
-  async function publishSchedulePlan(plan: SchedulePlan) {
-    if (!planValidation?.valid) return;
-    if (!window.confirm(`Publish “${plan.name}” as the live schedule? This replaces the future live week only when no protected sales or restaurant records would be affected.`)) return;
+  async function makeSchedulePlanLive(plan: SchedulePlan) {
     setError(null);
+    setPlanValidation(null);
+    setValidatingPlan(true);
+    let validation: SchedulePlanValidation;
+    try {
+      validation = await apiFetch<SchedulePlanValidation>(`/cinema/schedule-plans/${plan.id}/validate`, {
+        accessToken: token ?? undefined,
+        method: "POST",
+      });
+      setPlanValidation(validation);
+    } catch (reason) {
+      showError(reason);
+      return;
+    } finally {
+      setValidatingPlan(false);
+    }
+    if (!validation.valid) return;
+    if (!window.confirm(`Publish “${plan.name}” as the live schedule? This replaces the future live week only when no protected sales or restaurant records would be affected.`)) return;
     setPublishingPlan(true);
     try {
       const result = await apiFetch<{ published: boolean; preservedCount: number; createdCount: number; removedCount: number }>(`/cinema/schedule-plans/${plan.id}/publish`, {
         accessToken: token ?? undefined,
         method: "POST",
-        body: JSON.stringify({ expectedUpdatedAt: planValidation.expectedUpdatedAt }),
+        body: JSON.stringify({ expectedUpdatedAt: validation.expectedUpdatedAt }),
       });
       await refresh();
       setPlanValidation(null);
@@ -740,9 +755,9 @@ export default function AdminPage() {
         <button type="button" className="secondary destructive-outline" onClick={() => void deleteSchedulePlan(plan)}>Delete</button>
       </article>)}</div> : <p className="schedule-plan-empty">No alternate schedule plans saved yet.</p>}
       {selectedPlan && <section className="schedule-plan-preview" aria-label={`${selectedPlan.name} preview`}>
-        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><div className="schedule-plan-preview-status"><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span>{selectedPlanRows.some((row) => row.hasConflict) && <strong>{selectedPlanRows.filter((row) => row.hasConflict).length} conflicting showtimes</strong>}<button type="button" className="secondary" disabled={validatingPlan} onClick={() => void validateSchedulePlan(selectedPlan)}>{validatingPlan ? "Checking…" : "Check plan"}</button></div></div>
-        <p className="schedule-plan-preview-note">Editing this saved copy cannot change the published schedule or customer ticket availability.</p>
-        {planValidation && <div className={planValidation.valid ? "plan-validation-success" : "plan-validation-error"}>{planValidation.valid ? <><span>{`Ready for publishing: all ${planValidation.showtimeCount} saved showtimes passed the server safety check.`}</span><button type="button" className="primary" disabled={publishingPlan} onClick={() => void publishSchedulePlan(selectedPlan)}>{publishingPlan ? "Publishing…" : "Publish saved plan"}</button></> : <><strong>This plan is not ready to publish.</strong><ul>{planValidation.issues.map((issue, index) => <li key={`${issue.index}-${index}`}>Showing {issue.index + 1}: {issue.message}</li>)}</ul></>}</div>}
+        <div className="schedule-plan-preview-heading"><div><p className="kicker">SAVED PLAN PREVIEW</p><h3>{selectedPlan.name}</h3></div><div className="schedule-plan-preview-status"><span>{selectedPlanRows.filter((row) => row.matchesLive).length} of {selectedPlanRows.length} match live</span>{selectedPlanRows.some((row) => row.hasConflict) && <strong>{selectedPlanRows.filter((row) => row.hasConflict).length} conflicting showtimes</strong>}<button type="button" className="secondary" disabled={validatingPlan || publishingPlan} onClick={() => void validateSchedulePlan(selectedPlan)}>{validatingPlan ? "Checking…" : "Check plan"}</button><button type="button" className="primary" disabled={validatingPlan || publishingPlan} onClick={() => void makeSchedulePlanLive(selectedPlan)}>{publishingPlan ? "Publishing…" : validatingPlan ? "Checking…" : "Make live"}</button></div></div>
+        <p className="schedule-plan-preview-note">Editing this saved copy cannot change ticket availability until you choose Make live. Publishing replaces only this plan's future week and stops if a showing has sales, active holds, or restaurant activity.</p>
+        {planValidation && <div className={planValidation.valid ? "plan-validation-success" : "plan-validation-error"}>{planValidation.valid ? <span>{`Ready to make live: all ${planValidation.showtimeCount} saved showtimes passed the server safety check.`}</span> : <><strong>This plan is not ready to publish.</strong><ul>{planValidation.issues.map((issue, index) => <li key={`${issue.index}-${index}`}>Showing {issue.index + 1}: {issue.message}</li>)}</ul></>}</div>}
         {data && <form className="schedule-plan-add" onSubmit={(event) => void addSchedulePlanShowtime(event, selectedPlan)}>
           <label>Film<select required value={planShowtimeMovieId || data.location.organization.movies[0]?.id || ""} onChange={(event) => setPlanShowtimeMovieId(event.target.value)}>{data.location.organization.movies.map((movie) => <option key={movie.id} value={movie.id}>{movie.title}</option>)}</select></label>
           <label>Auditorium<select required value={planShowtimeAuditoriumId || data.location.auditoriums[0]?.id || ""} onChange={(event) => setPlanShowtimeAuditoriumId(event.target.value)}>{data.location.auditoriums.map((auditorium) => <option key={auditorium.id} value={auditorium.id}>{auditorium.name}</option>)}</select></label>

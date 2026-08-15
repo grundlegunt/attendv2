@@ -598,7 +598,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         "This plan changed after it was checked. Check it again before publishing.",
       );
 
-    return prisma.$transaction(
+    const publishAttempt = () => prisma.$transaction(
       async (tx) => {
         const plan = await tx.schedulePlan.findFirst({
           where: { id, locationId, updatedAt: expectedUpdatedAt },
@@ -843,6 +843,29 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         maxWait: PUBLISH_PLAN_TRANSACTION_MAX_WAIT_MS,
         timeout: PUBLISH_PLAN_TRANSACTION_TIMEOUT_MS,
       },
+    );
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await publishAttempt();
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034" &&
+          attempt === 0
+        )
+          continue;
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          (error.code === "P2002" || error.code === "P2034")
+        )
+          throw AppError.conflict(
+            "The live schedule changed while this plan was publishing. Check the plan and try again.",
+          );
+        throw error;
+      }
+    }
+    throw AppError.conflict(
+      "The live schedule changed while this plan was publishing. Check the plan and try again.",
     );
   }
 

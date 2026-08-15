@@ -7,6 +7,7 @@ const ts = require("typescript");
 
 const navigationPath = resolve(__dirname, "../app/admin-navigation.ts");
 const adminSessionSource = readFileSync(resolve(__dirname, "../app/admin-session.tsx"), "utf8");
+const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -101,5 +102,14 @@ describe("auditorium layout editing", () => {
     assert.equal(updated[0].levelKey, "main");
     assert.equal(updated[0].x, 4);
     assert.equal(updated[0].y, 2);
+  });
+});
+
+describe("saved schedule publishing", () => {
+  it("offers one clear action that validates immediately before making a plan live", () => {
+    assert.match(schedulingSource, /async function makeSchedulePlanLive/);
+    assert.match(schedulingSource, /"Make live"/);
+    assert.match(schedulingSource, /expectedUpdatedAt: validation\.expectedUpdatedAt/);
+    assert.doesNotMatch(schedulingSource, />Publish saved plan</);
   });
 });
