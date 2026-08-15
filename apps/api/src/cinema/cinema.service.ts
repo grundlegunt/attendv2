@@ -51,6 +51,8 @@ type SchedulePlanShowtimeInput = ShowtimeInput & { priceTierId?: string };
 
 const DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS = 10_000;
 const DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS = 60_000;
+const PUBLISH_PLAN_TRANSACTION_MAX_WAIT_MS = 10_000;
+const PUBLISH_PLAN_TRANSACTION_TIMEOUT_MS = 60_000;
 
 function addIsoDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
@@ -770,6 +772,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           await tx.showtime.deleteMany({ where: { id: { in: removeIds } } });
         }
 
+        const seatsByAuditorium = new Map<string, Array<{ id: string }>>();
         for (const showtime of create) {
           const created = await tx.showtime.create({
             data: {
@@ -791,7 +794,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             throw AppError.conflict(
               "An auditorium in this plan is no longer available. Check the plan again.",
             );
-          const seats = await this.sellableSeatIds(tx, auditorium);
+          let seats = seatsByAuditorium.get(showtime.auditoriumId);
+          if (!seats) {
+            seats = await this.sellableSeatIds(tx, auditorium);
+            seatsByAuditorium.set(showtime.auditoriumId, seats);
+          }
           if (!seats.length)
             throw AppError.conflict(
               "An auditorium in this plan no longer has an active seat layout. Check the plan again.",
@@ -831,7 +838,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           removedCount: remove.length,
         };
       },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        maxWait: PUBLISH_PLAN_TRANSACTION_MAX_WAIT_MS,
+        timeout: PUBLISH_PLAN_TRANSACTION_TIMEOUT_MS,
+      },
     );
   }
 
