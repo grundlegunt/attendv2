@@ -155,6 +155,10 @@ export interface PublicMovieSpecial {
 
 export interface PublicDiningMenuResponse {
   location: { id: string; name: string; address: string | null };
+  menuPresentation: {
+    assetUrl: string;
+    assetType: "IMAGE" | "PDF";
+  } | null;
   categories: PublicMenuCategory[];
   movieSpecials: PublicMovieSpecial[];
 }

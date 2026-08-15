@@ -2967,6 +2967,9 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         name: location.name,
         address: location.address,
       },
+      menuPresentation: location.diningMenuAssetUrl && (location.diningMenuAssetType === "IMAGE" || location.diningMenuAssetType === "PDF")
+        ? { assetUrl: location.diningMenuAssetUrl, assetType: location.diningMenuAssetType }
+        : null,
       categories,
       movieSpecials: movies.map((movie) => ({
         movieId: movie.id,

@@ -107,6 +107,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [itemQuery, setItemQuery] = useState("");
   const [itemCategoryFilter, setItemCategoryFilter] = useState("");
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
+  const [menuAssetUrl, setMenuAssetUrl] = useState("");
+  const [menuAssetType, setMenuAssetType] = useState<"IMAGE" | "PDF">("IMAGE");
   const refreshSequence = useRef(0);
   const lastLoadedMenu = useRef<Menu | null>(null);
   const emptyResponseRetries = useRef(0);
@@ -169,6 +171,32 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   }, [accessToken]);
 
   useEffect(refresh, [refresh]);
+
+  useEffect(() => {
+    apiFetch<{ assetUrl: string | null; assetType: "IMAGE" | "PDF" | null }>("/management/settings/menu-presentation", { accessToken })
+      .then((presentation) => {
+        setMenuAssetUrl(presentation.assetUrl ?? "");
+        setMenuAssetType(presentation.assetType ?? "IMAGE");
+      })
+      .catch((error) => showError(error, "Published menu presentation could not load."));
+  }, [accessToken]);
+
+  async function saveMenuPresentation(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await apiFetch("/management/settings/menu-presentation", {
+        method: "PATCH",
+        accessToken,
+        body: JSON.stringify({
+          assetUrl: menuAssetUrl.trim() || null,
+          assetType: menuAssetUrl.trim() ? menuAssetType : null,
+        }),
+      });
+      setMessage(menuAssetUrl.trim() ? "Customer menu presentation published." : "Published menu presentation removed.");
+    } catch (error) {
+      showError(error, "Menu presentation could not be published.");
+    }
+  }
 
   async function createItem(event: FormEvent) {
     event.preventDefault();
@@ -500,6 +528,29 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   return (
     <section className="management-stack">
+      <form className="panel" onSubmit={saveMenuPresentation}>
+        <p className="kicker">CUSTOMER DINING PAGE</p>
+        <h2>Published menu design</h2>
+        <p>Publish a hosted menu image or PDF. Guests see this designed menu first; the structured menu remains available as accessible text.</p>
+        <div className="two-fields">
+          <label>
+            Asset type
+            <select value={menuAssetType} onChange={(event) => setMenuAssetType(event.target.value as "IMAGE" | "PDF")}>
+              <option value="IMAGE">Image</option>
+              <option value="PDF">PDF document</option>
+            </select>
+          </label>
+          <label>
+            Menu image or PDF URL
+            <input type="url" value={menuAssetUrl} onChange={(event) => setMenuAssetUrl(event.target.value)} placeholder="https://…" />
+          </label>
+        </div>
+        {menuAssetUrl && menuAssetType === "IMAGE" && <div className="menu-image-preview"><img src={menuAssetUrl} alt="" /><span>Published customer menu preview</span></div>}
+        <div className="rule-actions">
+          <button className="primary">Publish menu design</button>
+          {menuAssetUrl && <button className="secondary" type="button" onClick={() => setMenuAssetUrl("")}>Clear field</button>}
+        </div>
+      </form>
       <section className="admin-grid">
         <form className="panel" onSubmit={createCategory}>
           <p className="kicker">ORGANIZE</p>

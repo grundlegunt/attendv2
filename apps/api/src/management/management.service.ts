@@ -120,6 +120,31 @@ export class ManagementService {
     });
   }
 
+  async updateMenuPresentation(input: { locationId: string; employeeId: string; assetUrl: string | null; assetType: "IMAGE" | "PDF" | null }) {
+    return prisma.$transaction(async (tx) => {
+      const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
+      const updated = await tx.location.update({
+        where: { id: input.locationId },
+        data: { diningMenuAssetUrl: input.assetUrl, diningMenuAssetType: input.assetType },
+      });
+      await tx.auditEvent.create({ data: {
+        actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
+        action: "menu.presentation_updated", entityType: "Location", entityId: input.locationId,
+        beforeState: { assetUrl: before.diningMenuAssetUrl, assetType: before.diningMenuAssetType },
+        afterState: { assetUrl: updated.diningMenuAssetUrl, assetType: updated.diningMenuAssetType },
+      } });
+      return { assetUrl: updated.diningMenuAssetUrl, assetType: updated.diningMenuAssetType };
+    });
+  }
+
+  async menuPresentation(locationId: string) {
+    const location = await prisma.location.findUniqueOrThrow({
+      where: { id: locationId },
+      select: { diningMenuAssetUrl: true, diningMenuAssetType: true },
+    });
+    return { assetUrl: location.diningMenuAssetUrl, assetType: location.diningMenuAssetType };
+  }
+
   async createTaxRule(input: { locationId: string; employeeId: string; name: string; appliesTo: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille: number; active: boolean }) {
     return prisma.$transaction(async (tx) => {
       const rule = await tx.taxRule.create({ data: { locationId: input.locationId, name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, active: input.active } });
