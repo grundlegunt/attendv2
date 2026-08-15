@@ -1,4 +1,4 @@
-import { isCorsOriginAllowed } from "./cors-origin";
+import { isCorsOriginAllowed, isPlatformOriginAllowed } from "./cors-origin";
 
 describe("isCorsOriginAllowed", () => {
   const configuredOrigins = ["https://attendv2-admin.vercel.app", "http://localhost:3003"];
@@ -13,6 +13,7 @@ describe("isCorsOriginAllowed", () => {
 
   it("allows this project's production Vercel aliases", () => {
     expect(isCorsOriginAllowed("https://attend-master-attend3.vercel.app", configuredOrigins)).toBe(true);
+    expect(isCorsOriginAllowed("https://attend-company.vercel.app", configuredOrigins)).toBe(true);
     expect(isCorsOriginAllowed("https://attendv2-admin-attend3.vercel.app", configuredOrigins)).toBe(true);
     expect(isCorsOriginAllowed("https://attendv2-attend3.vercel.app", configuredOrigins)).toBe(true);
   });
@@ -43,5 +44,16 @@ describe("isCorsOriginAllowed", () => {
 
   it("rejects unrelated origins", () => {
     expect(isCorsOriginAllowed("https://example.com", configuredOrigins)).toBe(false);
+  });
+});
+
+describe("isPlatformOriginAllowed", () => {
+  it("allows both Attend Master production aliases", () => {
+    expect(isPlatformOriginAllowed("https://attend-master-attend3.vercel.app")).toBe(true);
+    expect(isPlatformOriginAllowed("https://attend-company.vercel.app")).toBe(true);
+  });
+
+  it("rejects unrelated origins", () => {
+    expect(isPlatformOriginAllowed("https://example.com")).toBe(false);
   });
 });

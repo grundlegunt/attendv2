@@ -6,6 +6,7 @@ const FIRST_PARTY_PRODUCTION_ORIGINS = new Set([
   "https://attendv2-attend3.vercel.app",
   "https://attendv2-admin-attend3.vercel.app",
   "https://attend-master-attend3.vercel.app",
+  "https://attend-company.vercel.app",
 ]);
 
 export function isCorsOriginAllowed(origin: string | undefined, configuredOrigins: string[]): boolean {
@@ -15,5 +16,5 @@ export function isCorsOriginAllowed(origin: string | undefined, configuredOrigin
 }
 
 export function isPlatformOriginAllowed(origin: string): boolean {
-  return origin === "http://localhost:3004" || origin === "http://127.0.0.1:3004" || origin === "https://attend-master-attend3.vercel.app" || PLATFORM_PREVIEW_ORIGIN.test(origin);
+  return origin === "http://localhost:3004" || origin === "http://127.0.0.1:3004" || origin === "https://attend-master-attend3.vercel.app" || origin === "https://attend-company.vercel.app" || PLATFORM_PREVIEW_ORIGIN.test(origin);
 }
