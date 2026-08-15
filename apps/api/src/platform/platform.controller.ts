@@ -118,14 +118,14 @@ export class PlatformController {
 
   @Get("revenue")
   @UseGuards(PlatformAuthGuard)
-  revenue(@Query("from") from?: string, @Query("to") to?: string) {
-    return this.platform.revenue({ from, to });
+  revenue(@Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
+    return this.platform.revenue({ from, to, organizationId });
   }
 
   @Get("revenue.csv")
   @UseGuards(PlatformAuthGuard)
-  async revenueCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string) {
-    const report = await this.platform.revenue({ from, to });
+  async revenueCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
+    const report = await this.platform.revenue({ from, to, organizationId });
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="attend-master-revenue.csv"');
     response.send(this.platform.revenueCsv(report));

@@ -437,6 +437,12 @@ describe("Attend platform authentication boundary", () => {
     expect(csv.text).toContain('"Client","Locations","Tickets sold"');
     expect(csv.text).toContain('"TOTAL"');
     expect(csv.text).toContain('"Meridian Cinema Co."');
+    const meridianClient = res.body.clients.find((client: { name: string }) => client.name === "Meridian Cinema Co.");
+    const scoped = await request(app.getHttpServer()).get(`/api/v1/platform/revenue?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&organizationId=${encodeURIComponent(meridianClient.id)}`).set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
+    expect(scoped.body.clients).toHaveLength(1);
+    expect(scoped.body.clients[0].name).toBe("Meridian Cinema Co.");
+    expect(scoped.body.totals).toEqual(expect.objectContaining({ ticketFeesCents: expect.any(Number), combinedRevenueCents: expect.any(Number) }));
+    await request(app.getHttpServer()).get(`/api/v1/platform/revenue?organizationId=00000000-0000-0000-0000-000000000000`).set("Authorization", `Bearer ${platformAccessToken}`).expect(404);
     await request(app.getHttpServer()).get("/api/v1/platform/revenue?from=not-a-date").set("Authorization", `Bearer ${platformAccessToken}`).expect(400);
   });
 
