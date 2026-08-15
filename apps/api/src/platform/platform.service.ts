@@ -105,16 +105,18 @@ export class PlatformService {
     };
   }
 
-  async revenue(input: { from?: string; to?: string }) {
+  async revenue(input: { from?: string; to?: string; organizationId?: string }) {
     const from = input.from ? new Date(input.from) : new Date(Date.now() - 7 * 86_400_000);
     const to = input.to ? new Date(input.to) : new Date();
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from >= to || to.getTime() - from.getTime() > 366 * 86_400_000) {
       throw AppError.validationFailed("A valid revenue date range of 366 days or less is required.");
     }
     const organizations = await prisma.organization.findMany({
+      where: input.organizationId ? { id: input.organizationId } : undefined,
       orderBy: { name: "asc" },
       select: { id: true, name: true, locations: { where: { active: true }, select: { id: true } } },
     });
+    if (input.organizationId && organizations.length === 0) throw AppError.notFound("Cinema client not found.");
     const zero = () => ({ ticketRevenueCents: 0, ticketFeesCents: 0, ticketTaxCents: 0, ticketCollectedCents: 0, fnbRevenueCents: 0, combinedRevenueCents: 0, refundedCents: 0, ticketsSold: 0, fnbOrders: 0 });
     const clients = await Promise.all(organizations.map(async (organization) => {
       const totals = zero();

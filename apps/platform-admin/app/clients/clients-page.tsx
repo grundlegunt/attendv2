@@ -10,7 +10,7 @@ import {
 } from "@cinema/shared";
 import Link from "next/link";
 import { AdminUiEditor } from "../admin-ui-editor";
-import { platformRequest, readPlatformSession } from "../platform-session";
+import { platformDownload, platformRequest, readPlatformSession } from "../platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -69,6 +69,9 @@ interface Overview {
   generatedAt: string;
   organizations: OrganizationOverview[];
 }
+interface RevenueTotals { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }
+interface RevenueReport { generatedAt: string; range: { from: string; to: string }; totals: RevenueTotals; clients: Array<{ id: string; name: string; locations: number } & RevenueTotals> }
+const revenueRanges = [{ days: 1, label: "Today" }, { days: 7, label: "Last 7 days" }, { days: 30, label: "Last 30 days" }, { days: 365, label: "Last year" }] as const;
 type BrandPalette = {
   accentColor: string | null;
   accentMutedColor: string | null;
@@ -232,6 +235,8 @@ type LocationDraft = {
 };
 
 function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
+function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+function revenuePath(organizationId: string, days: number, format: "json" | "csv" = "json") { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue${format === "csv" ? ".csv" : ""}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&organizationId=${encodeURIComponent(organizationId)}`; }
 
 export default function AttendMaster() {
   const [session, setSession] = useState<Session | null>(null);
@@ -244,6 +249,9 @@ export default function AttendMaster() {
     null,
   );
   const [organizationLoading, setOrganizationLoading] = useState(false);
+  const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [revenueDays, setRevenueDays] = useState(30);
+  const [revenueLoading, setRevenueLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -335,6 +343,28 @@ export default function AttendMaster() {
       )
       .finally(() => setOrganizationLoading(false));
   }, [selectedOrganizationId, session]);
+
+  useEffect(() => {
+    if (!session || !selectedOrganizationId) { setRevenue(null); return; }
+    setRevenueLoading(true);
+    request<RevenueReport>(revenuePath(selectedOrganizationId, revenueDays), undefined, session.accessToken)
+      .then(setRevenue)
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load client revenue."))
+      .finally(() => setRevenueLoading(false));
+  }, [selectedOrganizationId, session, revenueDays]);
+
+  async function downloadClientRevenue() {
+    if (!session || !selectedOrganizationId || !organization) return;
+    setRevenueLoading(true); setError(null);
+    try {
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, revenuePath(selectedOrganizationId, revenueDays, "csv"), session.accessToken);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `${organization.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-revenue-${revenueDays}-day.csv`; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not export client revenue."); }
+    finally { setRevenueLoading(false); }
+  }
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -1224,6 +1254,30 @@ export default function AttendMaster() {
                   </button>
                 </form>
               )}
+              <section className="dashboard-panel platform-revenue client-financials">
+                <div className="panel-heading">
+                  <div><p className="eyebrow">FINANCIALS</p><h3>Client revenue</h3><p className="muted">Ticket face value, Attend fees, tax, food and beverage, and refunds across this client&apos;s cinemas.</p></div>
+                  <div className="revenue-actions">
+                    <div className="range-toggle" aria-label="Client revenue date range">
+                      {revenueRanges.map((range) => <button type="button" key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => setRevenueDays(range.days)}>{range.label}</button>)}
+                    </div>
+                    <button type="button" className="quiet" disabled={revenueLoading || !revenue} onClick={() => void downloadClientRevenue()}>Export CSV</button>
+                  </div>
+                </div>
+                {!revenue && <p className="muted">Loading client revenue…</p>}
+                {revenue && <>
+                  <div className="revenue-breakdown">
+                    <article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article>
+                    <article><span>Attend fee revenue</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article>
+                    <article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article>
+                    <article><span>Total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article>
+                    <article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article>
+                    <article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article>
+                    <article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article>
+                  </div>
+                  <p className="dashboard-updated">{revenue.totals.ticketsSold.toLocaleString()} tickets sold · {revenue.totals.fnbOrders.toLocaleString()} F&amp;B orders · Updated {new Date(revenue.generatedAt).toLocaleString()}</p>
+                </>}
+              </section>
               {organization.locations.map((location) => (
                 <article className="location-detail" key={location.id}>
                   <div className="location-detail-heading">
