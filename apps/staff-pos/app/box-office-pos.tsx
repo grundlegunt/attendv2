@@ -8,7 +8,7 @@ type LiveSeat = Omit<SeatMapSeat, "state"> & { id: string; state: "AVAILABLE" | 
 type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}> };
 const DEFAULT_READER_ID = "tmr_box_1";
 
-export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; refresh: () => Promise<void> }) {
+export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; seatingMode: "RESERVED" | "GENERAL_ADMISSION"; refresh: () => Promise<void> }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [holderKey] = useState(() => `box-office-${crypto.randomUUID()}`);
   const [ticketTypes, setTicketTypes] = useState<Array<{id:string;name:string}>>([]);
@@ -41,6 +41,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   const saleActionRequestRef = useRef(0);
   const busyRequestRef = useRef(0);
   const activeHoldsRef = useRef<{ showtimeId: string; tokens: string[] } | null>(null);
+  const isGeneralAdmission = seatingMode === "GENERAL_ADMISSION";
+  const availableSeats = useMemo(() => seats.filter((seat) => seat.state === "AVAILABLE"), [seats]);
 
   useEffect(() => {
     const requestId = ++checkoutConfigRequestRef.current;
@@ -110,11 +112,11 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     setSelected((current) => {
       const next = current.filter((seatId) => availableSeatIds.has(seatId));
       if (next.length !== current.length) {
-        setMessage("Some selected seats are no longer available and were removed.");
+        setMessage(`Some selected ${isGeneralAdmission ? "tickets are" : "seats are"} no longer available and were removed.`);
       }
       return next.length === current.length ? current : next;
     });
-  }, [quote, seats]);
+  }, [isGeneralAdmission, quote, seats]);
 
   const mapSeats = useMemo(() => seats.map((seat) => ({ ...seat, state: selected.includes(seat.id) ? "selected" as const : seat.state === "AVAILABLE" ? "available" as const : "unavailable" as const })), [seats, selected]);
   function errorMessage(error: unknown) { return error instanceof ApiRequestError ? error.body.message : "The request could not be completed."; }
@@ -171,6 +173,13 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       setMessage(null);
       return [...current, seat.id!];
     });
+  }
+
+  function changeGeneralAdmissionQuantity(nextQuantity: number) {
+    if (busyRef.current || quote) return;
+    const quantity = Math.max(0, Math.min(10, availableSeats.length, nextQuantity));
+    setSelected(availableSeats.slice(0, quantity).map((seat) => seat.id));
+    setMessage(null);
   }
 
   async function openDrawer() {
@@ -378,8 +387,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       await refresh();
       setMessage(
         failedReleases
-          ? `Sale canceled. ${failedReleases} seat hold(s) may remain until they expire.`
-          : "Sale canceled and seat holds released.",
+          ? `Sale canceled. ${failedReleases} ${isGeneralAdmission ? "ticket" : "seat"} hold(s) may remain until they expire.`
+          : `Sale canceled and ${isGeneralAdmission ? "ticket" : "seat"} holds released.`,
       );
     } catch (error) {
       if (actionRequestId === saleActionRequestRef.current) setMessage(errorMessage(error));
@@ -416,8 +425,17 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
   }
 
   return <section className="box-office-grid"><div>
-    <h2>Box office</h2><p>Select available seats from the live inventory.</p>
-    <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />
+    <h2>Box office</h2><p>{isGeneralAdmission ? "Choose a ticket quantity from the live general admission inventory." : "Select available seats from the live inventory."}</p>
+    {isGeneralAdmission ? <div className="ga-pos-picker" aria-label="General admission ticket quantity">
+      <span className="eyebrow">GENERAL ADMISSION</span>
+      <strong>{availableSeats.length} tickets available</strong>
+      <div className="ga-quantity-control">
+        <button type="button" className="secondary" aria-label="Remove one ticket" disabled={busy || Boolean(quote) || selected.length === 0} onClick={() => changeGeneralAdmissionQuantity(selected.length - 1)}>−</button>
+        <output aria-live="polite">{selected.length}</output>
+        <button type="button" className="secondary" aria-label="Add one ticket" disabled={busy || Boolean(quote) || selected.length >= Math.min(10, availableSeats.length)} onClick={() => changeGeneralAdmissionQuantity(selected.length + 1)}>+</button>
+      </div>
+      <span>Maximum 10 tickets per sale</span>
+    </div> : <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />}
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
     <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} maxLength={100} disabled={busy || Boolean(quote)} onChange={(event) => changeRegister(event.target.value)} /></label>
@@ -426,8 +444,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
     {drawer && <p className="success-copy">Cash drawer open</p>}
     <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
       <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
-      <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} seat(s)</button></form>
-    {quote && <div className="sale-total"><p>Pricing locked for the held seats.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Discount −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
+      <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} {isGeneralAdmission ? "ticket(s)" : "seat(s)"}</button></form>
+    {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Discount −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => { setCashCents(event.target.value); setCashReceived("0"); }} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} disabled={busy || Number(cashCents) <= 0} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" step="1" value={cardCents} disabled={busy} onChange={(event) => setCardCents(event.target.value)} /></label>
@@ -435,6 +453,6 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, refresh }: { acce
       <label className="field"><span>Gift card code</span><input value={giftCardCode} minLength={20} maxLength={40} disabled={busy} onChange={(event) => { giftCardRequestRef.current += 1; setGiftCardCode(event.target.value.toUpperCase()); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftCardCents("0"); setCashCents("0"); setCashReceived("0"); setCardCents(String(quote.totalCents)); }} /></label>
       {giftCardCode && <><button className="secondary" type="button" onClick={() => void checkGiftCard()} disabled={busy}>Check balance and apply</button>{giftCardBalance !== null && <p>Available {(giftCardBalance/100).toFixed(2)} {giftCardCurrency}</p>}<label className="field"><span>Gift card cents</span><input type="number" min="1" step="1" max={Math.min(quote.totalCents, giftCardBalance ?? quote.totalCents)} value={giftCardCents} disabled={busy} onChange={(event) => { const giftCents = Number(event.target.value); const remainder = Math.max(0, quote.totalCents - giftCents); setGiftCardCents(event.target.value); setCashCents(giftRemainderTender === "CASH" ? String(remainder) : "0"); setCashReceived("0"); setCardCents(giftRemainderTender === "CARD" ? String(remainder) : "0"); }} /></label><label className="field"><span>Remainder tender</span><select value={giftRemainderTender} disabled={busy} onChange={(event) => { const tender = event.target.value as "CASH" | "CARD"; const remainder = Math.max(0, quote.totalCents - Number(giftCardCents)); setGiftRemainderTender(tender); setCashCents(tender === "CASH" ? String(remainder) : "0"); setCashReceived("0"); setCardCents(tender === "CARD" ? String(remainder) : "0"); }}><option value="CASH">Cash</option><option value="CARD">Card terminal</option></select></label></>}
       <button className="primary" type="button" onClick={checkout} disabled={busy || (Number(cashCents)>0&&!drawer)}>Complete sale</button></div>}
-      {quote && <button className="secondary" type="button" onClick={cancelSale} disabled={busy}>Cancel sale &amp; release seats</button>}
+      {quote && <button className="secondary" type="button" onClick={cancelSale} disabled={busy}>Cancel sale &amp; release {isGeneralAdmission ? "tickets" : "seats"}</button>}
   </aside></section>;
 }
