@@ -842,7 +842,7 @@ export default function AttendMaster() {
     setSaving(true);
     setError(null);
     try {
-      await request(`/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}`, { method: "DELETE" }, session.accessToken);
+      await request(`/platform/organizations/${organization.id}/locations/${location.id}/auditoriums/${auditorium.id}/deactivate`, { method: "PATCH" }, session.accessToken);
       const [updated, refreshed] = await Promise.all([
         request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken),
         request<Overview>("/platform/overview", undefined, session.accessToken),
@@ -1579,10 +1579,12 @@ export default function AttendMaster() {
                               </div>
                             </>}
                           </dl>
-                          {session.user.role !== "VIEWER" && auditorium.active && (
+                          {session.user.role !== "VIEWER" && (
                             <div className="auditorium-card-actions">
                               <button type="button" className="quiet" disabled={saving} onClick={() => duplicateAuditorium(location, auditorium)}>Duplicate</button>
-                              <button type="button" className="danger" disabled={saving} onClick={() => deactivateAuditorium(location, auditorium)}>Deactivate</button>
+                              {auditorium.active
+                                ? <button type="button" className="danger" disabled={saving} onClick={() => deactivateAuditorium(location, auditorium)}>Deactivate</button>
+                                : <button type="button" className="danger" disabled={saving} onClick={() => deleteAuditorium(location.id, auditorium.id, auditorium.name)}>Delete permanently</button>}
                             </div>
                           )}
                         </article>

@@ -238,7 +238,7 @@ export class PlatformController {
     return this.platform.duplicateAuditorium({ actorId: actor.sub, organizationId, locationId, auditoriumId, ...auditoriumDuplicateSchema.parse(body) });
   }
 
-  @Delete("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId")
+  @Patch("organizations/:organizationId/locations/:locationId/auditoriums/:auditoriumId/deactivate")
   @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   deactivateAuditorium(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("locationId") locationId: string, @Param("auditoriumId") auditoriumId: string) {
