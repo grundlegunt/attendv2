@@ -318,11 +318,12 @@ model Auditorium {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
 
-  name      String
-  capacity  Int
-  active    Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name        String
+  capacity    Int
+  seatingMode AuditoriumSeatingMode @default(RESERVED)
+  active      Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
 
   seatMap   SeatMap?
   showtimes Showtime[]
@@ -330,6 +331,11 @@ model Auditorium {
   @@unique([locationId, name])
   @@index([locationId, active])
   @@map("auditoriums")
+}
+
+enum AuditoriumSeatingMode {
+  RESERVED
+  GENERAL_ADMISSION
 }
 
 model SeatMap {

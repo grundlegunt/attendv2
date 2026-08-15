@@ -157,6 +157,9 @@ export const seatMapLayoutSchema = z.object({
 
 export type SeatMapLayout = z.infer<typeof seatMapLayoutSchema>;
 
+export const auditoriumSeatingModeSchema = z.enum(["RESERVED", "GENERAL_ADMISSION"]);
+export type AuditoriumSeatingMode = z.infer<typeof auditoriumSeatingModeSchema>;
+
 export const createAuditoriumRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
   seatMapName: z.string().trim().min(1).max(80),
