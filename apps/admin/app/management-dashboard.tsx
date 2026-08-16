@@ -10,6 +10,10 @@ type RevenueReport = {
   movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
 };
+type AudienceOriginsReport = {
+  totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
+  origins: Array<{ zipCode: string; orders: number; tickets: number; sharePercent: number }>;
+};
 type LaborRow = { shiftId: string; employeeName: string; roles: string[]; clockInAt: string; clockOutAt: string | null; breakStartAt: string | null; breakEndAt: string | null; breakMinutes: number; workedMinutes: number };
 type LaborReport = { totalMinutes: number; rows: LaborRow[] };
 type AuditEvent = {
@@ -36,6 +40,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [from, setFrom] = useState(dateInput(new Date(Date.now() - 30 * 86_400_000)));
   const [to, setTo] = useState(dateInput(new Date(Date.now() + 86_400_000)));
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
+  const [audienceOrigins, setAudienceOrigins] = useState<AudienceOriginsReport | null>(null);
   const [labor, setLabor] = useState<LaborReport | null>(null);
   const [shiftDraft, setShiftDraft] = useState<{ shiftId: string; employeeName: string; clockInAt: string; clockOutAt: string; breakStartAt: string; breakEndAt: string; notes: string } | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
@@ -65,13 +70,14 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     if (auditEntityType.trim()) auditQuery.set("entityType", auditEntityType.trim());
     if (auditActorId.trim()) auditQuery.set("actorId", auditActorId.trim());
     try {
-      const [nextRevenue, nextLabor, nextAudit, nextSettings] = await Promise.all([
+      const [nextRevenue, nextAudienceOrigins, nextLabor, nextAudit, nextSettings] = await Promise.all([
         section === "reports" && canFinancial ? apiFetch<RevenueReport>(`/reports/revenue?${range}`, { accessToken }) : null,
+        section === "reports" && canFinancial ? apiFetch<AudienceOriginsReport>(`/reports/audience-origins?${range}`, { accessToken }) : null,
         section === "labor" && canReports ? apiFetch<LaborReport>(`/reports/labor?${range}`, { accessToken }) : null,
         section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?${auditQuery.toString()}`, { accessToken }) : [],
         (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
-      setRevenue(nextRevenue); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
+      setRevenue(nextRevenue); setAudienceOrigins(nextAudienceOrigins); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
       if (section === "branding" && nextSettings) setMerchUrl(nextSettings.merchUrl ?? "");
       if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
@@ -202,6 +208,13 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       <div className="report-export-actions"><button className="primary report-export" onClick={() => void exportRevenue()}>Export revenue CSV</button><button className="secondary report-export" onClick={() => void exportDistributorBoxOffice()}>Export distributor box office</button></div>
       <h3>By movie</h3><div className="management-table"><div className="table-row table-head"><span>Movie</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.movies.map((row) => <div className="table-row" key={row.movieId}><strong>{row.title}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
       <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
+    </section>}
+
+    {audienceOrigins && <section className="panel"><p className="kicker">AUDIENCE</p><h2>Where ticket buyers come from</h2>
+      <p>Aggregated from optional ZIP codes on completed ticket orders. Customer identities are never included.</p>
+      <div className="stats"><div><strong>{audienceOrigins.totals.ordersWithZip}</strong><span>Orders with ZIP</span></div><div><strong>{audienceOrigins.totals.ticketsWithZip}</strong><span>Tickets represented</span></div><div><strong>{audienceOrigins.totals.coveragePercent}%</strong><span>Order coverage</span></div></div>
+      <div className="management-table"><div className="table-row table-head"><span>ZIP code</span><span>Orders</span><span>Tickets</span><span>Share of identified tickets</span></div>{audienceOrigins.origins.map((row) => <div className="table-row" key={row.zipCode}><strong>{row.zipCode}</strong><span>{row.orders}</span><span>{row.tickets}</span><span>{row.sharePercent}%</span></div>)}</div>
+      {audienceOrigins.origins.length === 0 && <p className="dashboard-empty">No completed orders in this range include a ZIP code yet.</p>}
     </section>}
 
     {labor && <section className="panel labor-report"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span className="labor-hours">{(row.workedMinutes / 60).toFixed(2)}{canEditEmployees && <button type="button" className="secondary" onClick={() => editShift(row)}>Adjust</button>}</span></div>)}</div>

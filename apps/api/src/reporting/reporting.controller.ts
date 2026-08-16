@@ -33,6 +33,12 @@ export class ReportingController {
     return this.reporting.revenue(this.location(actor), this.range(from, to));
   }
 
+  @Get("audience-origins")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  audienceOrigins(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
+    return this.reporting.audienceOrigins(this.location(actor), this.range(from, to));
+  }
+
   @Get("revenue.csv")
   @RequirePermissions(Permission.ReportsViewFinancial)
   async revenueCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {

@@ -1,5 +1,24 @@
 import { ReportingService } from "./reporting.service";
 
+describe("ReportingService audience origins", () => {
+  it("groups ZIP+4 orders by five-digit ZIP without exposing order details", () => {
+    const service = new ReportingService();
+    const report = service.summarizeAudienceOrigins([
+      { zipCode: "60614-1234", _count: { tickets: 2 } },
+      { zipCode: "60614", _count: { tickets: 1 } },
+      { zipCode: "60657", _count: { tickets: 1 } },
+      { zipCode: "not-a-zip", _count: { tickets: 2 } },
+      { zipCode: null, _count: { tickets: 3 } },
+    ]);
+
+    expect(report.totals).toEqual({ completedOrders: 5, ordersWithZip: 3, ticketsWithZip: 4, coveragePercent: 60 });
+    expect(report.origins).toEqual([
+      { zipCode: "60614", orders: 2, tickets: 3, sharePercent: 75 },
+      { zipCode: "60657", orders: 1, tickets: 1, sharePercent: 25 },
+    ]);
+  });
+});
+
 describe("ReportingService distributor box-office export", () => {
   it("exports paid admissions and ticket face value without fees, tax, or F&B", () => {
     const service = new ReportingService();
