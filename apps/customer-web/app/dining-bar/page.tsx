@@ -40,7 +40,7 @@ export default function DiningBarPage() {
 
     <section className="afterglow-callout"><div><span className="eyebrow">{dining.afterglowEyebrow}</span><h2>{dining.afterglowTitle}</h2><p>{dining.afterglowBody}</p><Link className="primary-link" href="/afterglow">{dining.afterglowButton}</Link></div></section>
 
-    <section className="how-it-works" aria-labelledby="how-heading">
+    <section className="how-it-works dining-how-it-works" aria-labelledby="how-heading">
       <div><span className="eyebrow">{dining.howEyebrow}</span><h2 id="how-heading">{dining.howTitle}</h2></div>
       <ol>{dining.steps.map((step, index) => <li key={step.title}><strong>{String(index + 1).padStart(2, "0")}</strong><h3>{step.title}</h3><p>{step.body}</p></li>)}</ol>
     </section>
