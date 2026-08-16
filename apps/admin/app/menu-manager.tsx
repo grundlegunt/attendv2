@@ -109,6 +109,10 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
   const [menuAssetUrl, setMenuAssetUrl] = useState("");
   const [menuAssetType, setMenuAssetType] = useState<"IMAGE" | "PDF">("IMAGE");
+  const [savedMenuPresentation, setSavedMenuPresentation] = useState<{
+    assetUrl: string;
+    assetType: "IMAGE" | "PDF";
+  }>({ assetUrl: "", assetType: "IMAGE" });
   const [showCustomerPreview, setShowCustomerPreview] = useState(false);
   const refreshSequence = useRef(0);
   const lastLoadedMenu = useRef<Menu | null>(null);
@@ -176,8 +180,13 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   useEffect(() => {
     apiFetch<{ assetUrl: string | null; assetType: "IMAGE" | "PDF" | null }>("/management/settings/menu-presentation", { accessToken })
       .then((presentation) => {
-        setMenuAssetUrl(presentation.assetUrl ?? "");
-        setMenuAssetType(presentation.assetType ?? "IMAGE");
+        const loadedPresentation = {
+          assetUrl: presentation.assetUrl ?? "",
+          assetType: presentation.assetType ?? "IMAGE",
+        };
+        setMenuAssetUrl(loadedPresentation.assetUrl);
+        setMenuAssetType(loadedPresentation.assetType);
+        setSavedMenuPresentation(loadedPresentation);
       })
       .catch((error) => showError(error, "Published menu presentation could not load."));
   }, [accessToken]);
@@ -192,6 +201,10 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           assetUrl: menuAssetUrl.trim() || null,
           assetType: menuAssetUrl.trim() ? menuAssetType : null,
         }),
+      });
+      setSavedMenuPresentation({
+        assetUrl: menuAssetUrl.trim(),
+        assetType: menuAssetType,
       });
       setMessage(menuAssetUrl.trim() ? "Customer menu presentation published." : "Published menu presentation removed.");
     } catch (error) {
@@ -526,6 +539,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         })
         .map((item) => ({ item, category })),
     ) ?? [];
+  const menuPresentationChanged =
+    menuAssetUrl.trim() !== savedMenuPresentation.assetUrl ||
+    (Boolean(menuAssetUrl.trim()) && menuAssetType !== savedMenuPresentation.assetType);
 
   return (
     <section className="management-stack">
@@ -546,11 +562,21 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
             <input type="url" value={menuAssetUrl} onChange={(event) => setMenuAssetUrl(event.target.value)} placeholder="https://…" />
           </label>
         </div>
-        {menuAssetUrl && menuAssetType === "IMAGE" && <div className="menu-image-preview"><img src={menuAssetUrl} alt="" /><span>Published customer menu preview</span></div>}
+        {menuAssetUrl && <div className="menu-presentation-preview">
+          {menuAssetType === "IMAGE"
+            ? <img src={menuAssetUrl} alt="Draft customer menu" />
+            : <iframe title="Draft customer menu PDF" src={menuAssetUrl} />}
+          <div>
+            <strong>{menuPresentationChanged ? "Unpublished preview" : "Published menu"}</strong>
+            <span>{menuAssetType === "IMAGE" ? "Image" : "PDF document"}</span>
+            <a href={menuAssetUrl} target="_blank" rel="noreferrer">Open asset</a>
+          </div>
+        </div>}
         <div className="rule-actions">
-          <button className="primary">Publish menu design</button>
+          <button className="primary" disabled={!menuPresentationChanged}>{menuPresentationChanged ? "Publish menu design" : "Menu design is live"}</button>
           {menuAssetUrl && <button className="secondary" type="button" onClick={() => setMenuAssetUrl("")}>Clear field</button>}
         </div>
+        {menuPresentationChanged && <p className="secondary-copy">These changes are only a preview until you publish them.</p>}
       </form>
       <section className="panel dining-customer-preview">
         <div className="management-heading">
