@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { platformDownload, platformRequest, readPlatformSession } from "./platform-session";
+import { CompanySignIn } from "./company-sign-in";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -144,17 +145,7 @@ export default function PlatformDashboard() {
   if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
   if (!session) {
     return (
-      <main className="center">
-        <form className="login-card" onSubmit={login}>
-          <p className="eyebrow">ATTEND MASTER</p>
-          <h1>Company sign in</h1>
-          <p className="muted">Separate from every cinema&apos;s staff account.</p>
-          {error && <div className="error">{error}</div>}
-          <label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
-          <label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
-          <button type="submit">Sign in</button>
-        </form>
-      </main>
+      <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />
     );
   }
 

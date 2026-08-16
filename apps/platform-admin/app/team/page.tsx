@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
@@ -33,7 +34,7 @@ export default function PlatformTeam() {
   function signOut() { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setUsers([]); setError(null); }
 
   if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
-  if (!session) return <main className="center"><form className="login-card" onSubmit={login}><p className="eyebrow">ATTEND MASTER</p><h1>Company sign in</h1><p className="muted">Separate from every cinema&apos;s staff account.</p>{error && <div className="error">{error}</div>}<label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input type="password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button type="submit">Sign in</button></form></main>;
+  if (!session) return <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />;
 
   return <main className="shell">
     <header><div><p className="eyebrow">ATTEND MASTER</p><h1>Team</h1><p className="muted">Manage who can operate Attend across every cinema client.</p></div><div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>

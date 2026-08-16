@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession } from "../platform-session";
 
 const API_BASE_URL =
@@ -142,35 +143,7 @@ export default function BrandingDashboard() {
     );
   if (!session)
     return (
-      <main className="center">
-        <form className="login-card" onSubmit={login}>
-          <p className="eyebrow">ATTEND MASTER</p>
-          <h1>Company sign in</h1>
-          <p className="muted">
-            Separate from every cinema&apos;s staff account.
-          </p>
-          {error && <div className="error">{error}</div>}
-          <label>
-            Email
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          <button type="submit">Sign in</button>
-        </form>
-      </main>
+      <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />
     );
   return (
     <main className="shell">
