@@ -64,6 +64,7 @@ interface OrganizationOverview {
   name: string;
   legalName: string | null;
   businessTypeLabel: string | null;
+  defaultSeatingMode: "RESERVED" | "GENERAL_ADMISSION";
   timezone: string;
   active: boolean;
   payments: { connected: boolean; onboardingStatus: string };
@@ -112,6 +113,7 @@ interface OrganizationDetail {
   name: string;
   legalName: string | null;
   businessTypeLabel: string | null;
+  defaultSeatingMode: "RESERVED" | "GENERAL_ADMISSION";
   timezone: string;
   active: boolean;
   ticketFeeMinor: number;
@@ -203,6 +205,7 @@ type OrganizationDraft = {
   name: string;
   legalName: string;
   businessTypeLabel: string;
+  defaultSeatingMode: "RESERVED" | "GENERAL_ADMISSION";
   timezone: string;
   ticketFee: string;
 };
@@ -210,6 +213,7 @@ type OrganizationCreateDraft = {
   name: string;
   legalName: string;
   businessTypeLabel: string;
+  defaultSeatingMode: "RESERVED" | "GENERAL_ADMISSION";
   timezone: string;
   locationName: string;
   address: string;
@@ -489,6 +493,7 @@ export default function AttendMaster() {
       name: detail.name,
       legalName: detail.legalName ?? "",
       businessTypeLabel: detail.businessTypeLabel ?? "",
+      defaultSeatingMode: detail.defaultSeatingMode,
       timezone: detail.timezone,
       ticketFee: (detail.ticketFeeMinor / 100).toFixed(2),
     });
@@ -499,6 +504,7 @@ export default function AttendMaster() {
       name: "",
       legalName: "",
       businessTypeLabel: "Cinema",
+      defaultSeatingMode: "RESERVED",
       timezone: "America/Chicago",
       locationName: "",
       address: "",
@@ -521,6 +527,7 @@ export default function AttendMaster() {
             name: values.name,
             legalName: values.legalName || null,
             businessTypeLabel: values.businessTypeLabel || null,
+            defaultSeatingMode: values.defaultSeatingMode,
             timezone: values.timezone,
             location: {
               name: values.locationName,
@@ -613,6 +620,7 @@ export default function AttendMaster() {
             ...draft,
             legalName: draft.legalName || null,
             businessTypeLabel: draft.businessTypeLabel || null,
+            defaultSeatingMode: draft.defaultSeatingMode,
             ticketFeeMinor: Math.round(Number(ticketFee) * 100),
           }),
         },
@@ -1402,6 +1410,26 @@ export default function AttendMaster() {
               />
             </label>
             <label>
+              Default admission model
+              <select
+                value={organizationCreateDraft.defaultSeatingMode}
+                onChange={(event) =>
+                  setOrganizationCreateDraft({
+                    ...organizationCreateDraft,
+                    defaultSeatingMode: event.target.value as
+                      | "RESERVED"
+                      | "GENERAL_ADMISSION",
+                  })
+                }
+              >
+                <option value="RESERVED">Reserved seating</option>
+                <option value="GENERAL_ADMISSION">General admission</option>
+              </select>
+              <small className="muted">
+                Used for new auditoriums. Existing auditoriums are unchanged.
+              </small>
+            </label>
+            <label>
               First cinema name
               <input
                 required
@@ -1605,6 +1633,26 @@ export default function AttendMaster() {
                           })
                         }
                       />
+                    </label>
+                    <label>
+                      Default admission model
+                      <select
+                        value={organizationDraft.defaultSeatingMode}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            defaultSeatingMode: event.target.value as
+                              | "RESERVED"
+                              | "GENERAL_ADMISSION",
+                          })
+                        }
+                      >
+                        <option value="RESERVED">Reserved seating</option>
+                        <option value="GENERAL_ADMISSION">General admission</option>
+                      </select>
+                      <small className="muted">
+                        Used for new auditoriums. Existing auditoriums are unchanged.
+                      </small>
                     </label>
                     <label>
                       Attend ticket fee per ticket
@@ -1995,7 +2043,7 @@ export default function AttendMaster() {
                                 setAuditoriumDraft({
                                   locationId: location.id,
                                   name: `Theater ${location.auditoriums.length + 1}`,
-                                  seatingMode: "RESERVED",
+                                  seatingMode: organization.defaultSeatingMode,
                                   capacity: 96,
                                   rows: 8,
                                   seatsPerRow: 12,

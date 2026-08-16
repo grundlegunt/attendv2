@@ -18,6 +18,7 @@ const organizationUpdateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   legalName: z.string().trim().min(1).max(200).nullable().optional(),
   businessTypeLabel: z.string().trim().min(1).max(80).nullable().optional(),
+  defaultSeatingMode: z.enum(["RESERVED", "GENERAL_ADMISSION"]).optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
   ticketFeeMinor: z.number().int().min(0).max(100_000).optional(),
   active: z.boolean().optional(),
@@ -32,6 +33,7 @@ const organizationCreateSchema = z.object({
   name: z.string().trim().min(1).max(120),
   legalName: z.string().trim().min(1).max(200).nullable().optional(),
   businessTypeLabel: z.string().trim().min(1).max(80).nullable().optional(),
+  defaultSeatingMode: z.enum(["RESERVED", "GENERAL_ADMISSION"]).optional(),
   timezone: z.string().trim().min(1).max(100),
   location: z.object({
     name: z.string().trim().min(1).max(120),

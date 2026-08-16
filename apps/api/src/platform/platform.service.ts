@@ -144,6 +144,7 @@ export class PlatformService {
           name: organization.name,
           legalName: organization.legalName,
           businessTypeLabel: organization.businessTypeLabel,
+          defaultSeatingMode: organization.defaultSeatingMode,
           timezone: organization.timezone,
           active: organization.active,
           payments: {
@@ -659,6 +660,7 @@ export class PlatformService {
     name: string;
     legalName?: string | null;
     businessTypeLabel?: string | null;
+    defaultSeatingMode?: "RESERVED" | "GENERAL_ADMISSION";
     timezone: string;
     location: { name: string; address?: string | null; timezone: string };
   }) {
@@ -668,6 +670,7 @@ export class PlatformService {
           name: input.name,
           legalName: input.legalName,
           businessTypeLabel: input.businessTypeLabel,
+          defaultSeatingMode: input.defaultSeatingMode,
           timezone: input.timezone,
           locations: {
             create: {
@@ -692,6 +695,7 @@ export class PlatformService {
             name: organization.name,
             legalName: organization.legalName,
             businessTypeLabel: organization.businessTypeLabel,
+            defaultSeatingMode: organization.defaultSeatingMode,
             timezone: organization.timezone,
             initialLocationId: location?.id,
           },
@@ -716,6 +720,7 @@ export class PlatformService {
       name: organization.name,
       legalName: organization.legalName,
       businessTypeLabel: organization.businessTypeLabel,
+      defaultSeatingMode: organization.defaultSeatingMode,
       timezone: organization.timezone,
       active: organization.active,
       ticketFeeMinor: organization.ticketFeeMinor,
@@ -1332,6 +1337,7 @@ export class PlatformService {
     name?: string;
     legalName?: string | null;
     businessTypeLabel?: string | null;
+    defaultSeatingMode?: "RESERVED" | "GENERAL_ADMISSION";
     timezone?: string;
     ticketFeeMinor?: number;
     active?: boolean;
@@ -1347,6 +1353,7 @@ export class PlatformService {
           name: input.name,
           legalName: input.legalName,
           businessTypeLabel: input.businessTypeLabel,
+          defaultSeatingMode: input.defaultSeatingMode,
           timezone: input.timezone,
           ticketFeeMinor: input.ticketFeeMinor,
           active: input.active,
@@ -1369,6 +1376,7 @@ export class PlatformService {
         name: organization.name,
         legalName: organization.legalName,
         businessTypeLabel: organization.businessTypeLabel,
+        defaultSeatingMode: organization.defaultSeatingMode,
         timezone: organization.timezone,
         active: organization.active,
         onboardingStatus: organization.connectOnboardingStatus,
