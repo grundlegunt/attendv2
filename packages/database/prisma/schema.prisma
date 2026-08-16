@@ -25,6 +25,7 @@ model Organization {
   name                     String
   legalName                String?
   businessTypeLabel        String?
+  defaultSeatingMode       AuditoriumSeatingMode @default(RESERVED)
   timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
