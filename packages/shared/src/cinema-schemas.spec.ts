@@ -141,8 +141,8 @@ describe("cinema programming requests", () => {
       rating: "R",
       posterUrl: "https://images.example.com/matrix.jpg",
       detailPosterUrl: "/posters/matrix-one-sheet.jpg",
-      posterPosition: "BOTTOM",
-      detailPosterPosition: "TOP",
+      posterPosition: "BOTTOM_RIGHT",
+      detailPosterPosition: "TOP_LEFT",
       diningSpecialArtworkUrl: "/specials/matrix-paired-menu.jpg",
       diningSpecialTitle: "There Is No Spoonful",
       director: "Lana Wachowski, Lilly Wachowski",
@@ -153,8 +153,8 @@ describe("cinema programming requests", () => {
     });
     expect(parsed.posterUrl).toContain("images.example.com");
     expect(parsed.detailPosterUrl).toBe("/posters/matrix-one-sheet.jpg");
-    expect(parsed.posterPosition).toBe("BOTTOM");
-    expect(parsed.detailPosterPosition).toBe("TOP");
+    expect(parsed.posterPosition).toBe("BOTTOM_RIGHT");
+    expect(parsed.detailPosterPosition).toBe("TOP_LEFT");
     expect(parsed.diningSpecialArtworkUrl).toBe(
       "/specials/matrix-paired-menu.jpg",
     );
@@ -174,7 +174,7 @@ describe("cinema programming requests", () => {
       createMovieRequestSchema.parse({
         title: "The Matrix",
         runtimeMinutes: 136,
-        posterPosition: "LEFT",
+        posterPosition: "SIDEWAYS",
       }),
     ).toThrow();
   });
