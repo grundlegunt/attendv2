@@ -325,6 +325,31 @@ html[data-branding-status="loading"] body {
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
+.dining-page .route-heading {
+  padding-bottom: 20px;
+}
+.dining-page .afterglow-callout {
+  min-height: 280px;
+}
+.dining-how-it-works {
+  grid-template-columns: minmax(180px, 0.42fr) 1.58fr;
+  gap: clamp(24px, 3vw, 40px);
+  padding: 28px 0 32px;
+}
+.dining-how-it-works h2 {
+  font-size: clamp(2.2rem, 4vw, 3.7rem);
+}
+.dining-how-it-works li {
+  padding: 18px 20px;
+}
+.dining-how-it-works h3 {
+  margin: 14px 0 6px;
+  font-size: 1.25rem;
+}
+.dining-how-it-works p {
+  margin: 0;
+  line-height: 1.45;
+}
 .public-menu {
   padding: 48px 0;
 }
@@ -333,7 +358,7 @@ html[data-branding-status="loading"] body {
   grid-template-columns: minmax(320px, 0.75fr) minmax(0, 1.25fr);
   gap: clamp(28px, 4vw, 64px);
   align-items: start;
-  padding: 48px 0;
+  padding: 32px 0 48px;
   border-top: 1px solid var(--color-border);
 }
 .dining-menu-layout__specials,
