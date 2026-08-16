@@ -18,8 +18,12 @@ export async function verifyMfaCode(secret: string, token: string): Promise<bool
   return authenticator.verify({ secret, token: token.replace(/\s/g, "") });
 }
 
-function bytes(value: Uint8Array): Uint8Array {
-  return Uint8Array.from(value);
+function bytes(value: ArrayLike<number>): Uint8Array {
+  const copy = new Uint8Array(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    copy[index] = value[index] ?? 0;
+  }
+  return copy;
 }
 
 function decodeBase64Url(value: string): Uint8Array {
