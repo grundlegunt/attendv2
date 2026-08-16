@@ -30,6 +30,20 @@ const brandingSchema = customerBrandingSchema.merge(adminBrandingSchema).strict(
 const merchSchema = z.object({
   merchUrl: z.string().trim().url().max(2000).refine((value) => /^https?:\/\//i.test(value), "Use an HTTP(S) URL.").nullable(),
 }).strict();
+const siteHeadingSchema = z.object({
+  eyebrow: z.string().trim().min(1).max(80),
+  title: z.string().trim().min(1).max(120),
+  intro: z.string().trim().min(1).max(300),
+}).strict();
+const customerSiteCopySchema = z.object({
+  showtimes: siteHeadingSchema,
+  comingSoon: siteHeadingSchema,
+  filmSeries: siteHeadingSchema,
+  dining: siteHeadingSchema,
+  about: siteHeadingSchema.extend({
+    body: z.array(z.string().trim().min(1).max(2000)).min(1).max(4),
+  }).strict(),
+}).strict();
 const menuPresentationSchema = z.object({
   assetUrl: z.string().trim().url().max(2000).refine((value) => /^https?:\/\//i.test(value), "Use an HTTP(S) URL.").nullable(),
   assetType: z.enum(["IMAGE", "PDF"]).nullable(),
@@ -86,6 +100,9 @@ export class ManagementController {
 
   @Patch("settings/merch") @RequirePermissions(Permission.TicketPriceEdit)
   updateMerch(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(merchSchema)) body: unknown) { return this.management.updateMerch({ ...merchSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("settings/site-copy") @RequirePermissions(Permission.TicketPriceEdit)
+  updateSiteCopy(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(customerSiteCopySchema)) body: unknown) { return this.management.updateSiteCopy({ ...customerSiteCopySchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Patch("settings/menu-presentation") @RequirePermissions(Permission.MenuEdit)
   updateMenuPresentation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(menuPresentationSchema)) body: unknown) { return this.management.updateMenuPresentation({ ...menuPresentationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

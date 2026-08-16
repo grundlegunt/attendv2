@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
-import { BrandingSummary, type BrandingDraft, type BrandingSettings } from "./branding-editor";
+import { BrandingSummary, CustomerSiteCopyEditor, type BrandingDraft, type BrandingSettings, type CustomerSiteCopy } from "./branding-editor";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
 
 type RevenueReport = {
@@ -25,7 +25,7 @@ type PromotionDraft = { code: string; name: string; type: PromotionType; value: 
 type Promotion = { id: string; code: string; name: string; type: PromotionType; amountCents: number | null; percentageBasisPoints: number | null; minimumSubtotalCents: number | null; maximumRedemptions: number | null; active: boolean; startsAt: string | null; endsAt: string | null; redemptionCount: number; discountedTicketCount: number; totalTicketFaceValueCents: number; totalCollectedCents: number; totalDiscountCents: number };
 type CustomerRecencySegment = { inactiveSince: string; total: number; preview: Array<{ id: string; name: string; email: string; lastPurchaseAt: string; lastOrderNumber: string; lastOrderTotalCents: number }> };
 type OperatingSettings = { name: string; address: string | null; timezone: string; currency: string; timeClockEnabled: boolean; ticketTaxRateBasisPoints: number; preShowBufferMinutes: number; cleaningBufferMinutes: number; checkDropMinutesBeforeEnd: number; autoSettleGraceMinutes: number; autoSettleTipBasisPoints: number };
-type Settings = BrandingSettings & OperatingSettings & { id: string; merchUrl: string | null; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
+type Settings = BrandingSettings & OperatingSettings & { id: string; merchUrl: string | null; siteCopy: CustomerSiteCopy; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const dateInput = (date: Date) => date.toISOString().slice(0, 10);
@@ -101,6 +101,17 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       await apiFetch("/management/settings/branding", { accessToken, method: "PATCH", body: JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null }) });
       await refresh();
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved."); throw reason; }
+  }
+
+  async function saveSiteCopy(copy: CustomerSiteCopy) {
+    setError(null);
+    try {
+      await apiFetch("/management/settings/site-copy", { accessToken, method: "PATCH", body: JSON.stringify(copy) });
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof ApiRequestError ? reason.body.message : "The customer website copy could not be published.");
+      throw reason;
+    }
   }
 
   async function saveMerch(event: FormEvent) {
@@ -223,6 +234,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
     {settings && section === "branding" && <>
       <BrandingSummary settings={settings} onSave={saveBranding} />
+      <CustomerSiteCopyEditor copy={settings.siteCopy} onSave={saveSiteCopy} />
       <form className="panel location-settings" onSubmit={(event) => void saveMerch(event)}>
         <p className="kicker">MERCHANDISE</p><h2>External shop</h2>
         <p>Publish a link to the cinema’s existing merchandise store. Customers will see a Merch link that opens the shop in a new tab.</p>

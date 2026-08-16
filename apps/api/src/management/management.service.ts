@@ -2,9 +2,35 @@ import { Injectable } from "@nestjs/common";
 import { decryptMfaSecret, encryptMfaSecret, hashPassword, hashPin, Permission as PermissionKey } from "@cinema/auth";
 import { loadEnv } from "@cinema/config/env";
 import { Prisma, prisma } from "@cinema/database";
-import { cinemaContentDefaults, cinemaContentSchema } from "@cinema/shared";
+import { cinemaContentDefaults, cinemaContentSchema, type CinemaContent } from "@cinema/shared";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
+
+type SiteHeadingCopy = { eyebrow: string; title: string; intro: string };
+type CustomerSiteCopy = {
+  showtimes: SiteHeadingCopy;
+  comingSoon: SiteHeadingCopy;
+  filmSeries: SiteHeadingCopy;
+  dining: SiteHeadingCopy;
+  about: SiteHeadingCopy & { body: string[] };
+};
+
+const siteCopyFrom = (content: CinemaContent): CustomerSiteCopy => ({
+  showtimes: { eyebrow: content.showtimes.eyebrow, title: content.showtimes.title, intro: content.showtimes.intro },
+  comingSoon: { eyebrow: content.comingSoon.eyebrow, title: content.comingSoon.title, intro: content.comingSoon.intro },
+  filmSeries: { eyebrow: content.filmSeries.eyebrow, title: content.filmSeries.title, intro: content.filmSeries.intro },
+  dining: { eyebrow: content.dining.eyebrow, title: content.dining.title, intro: content.dining.intro },
+  about: { eyebrow: content.about.eyebrow, title: content.about.title, intro: content.about.intro, body: content.about.body },
+});
+
+const applySiteCopy = (content: CinemaContent, copy: CustomerSiteCopy): CinemaContent => ({
+  ...content,
+  showtimes: { ...content.showtimes, ...copy.showtimes },
+  comingSoon: { ...content.comingSoon, ...copy.comingSoon },
+  filmSeries: { ...content.filmSeries, ...copy.filmSeries },
+  dining: { ...content.dining, ...copy.dining },
+  about: { ...content.about, ...copy.about },
+});
 
 @Injectable()
 export class ManagementService {
@@ -20,7 +46,8 @@ export class ManagementService {
     });
     const { organization, ...settings } = location;
     const content = cinemaContentSchema.safeParse(location.contentPublished ?? location.contentDraft ?? cinemaContentDefaults);
-    return { ...settings, merchUrl: content.success ? content.data.navigation.merchUrl : null, priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalTicketFaceValueCents: ticketOrders.reduce((sum, order) => sum + order.subtotalCents, 0), totalCollectedCents: ticketOrders.reduce((sum, order) => sum + order.totalCents, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
+    const parsedContent = content.success ? content.data : cinemaContentDefaults;
+    return { ...settings, merchUrl: parsedContent.navigation.merchUrl, siteCopy: siteCopyFrom(parsedContent), priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalTicketFaceValueCents: ticketOrders.reduce((sum, order) => sum + order.subtotalCents, 0), totalCollectedCents: ticketOrders.reduce((sum, order) => sum + order.totalCents, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
   }
 
   async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
@@ -117,6 +144,21 @@ export class ManagementService {
         beforeState: { merchUrl: published.navigation.merchUrl }, afterState: { merchUrl: input.merchUrl },
       } });
       return { merchUrl: input.merchUrl, publishedAt };
+    });
+  }
+
+  async updateSiteCopy(input: { locationId: string; employeeId: string } & CustomerSiteCopy) {
+    return prisma.$transaction(async (tx) => {
+      const { locationId, employeeId, ...copy } = input;
+      const location = await tx.location.findUniqueOrThrow({ where: { id: locationId }, select: { contentDraft: true, contentPublished: true } });
+      const draftResult = cinemaContentSchema.safeParse(location.contentDraft ?? location.contentPublished ?? cinemaContentDefaults);
+      const publishedResult = cinemaContentSchema.safeParse(location.contentPublished ?? location.contentDraft ?? cinemaContentDefaults);
+      const draft = draftResult.success ? draftResult.data : cinemaContentDefaults;
+      const published = publishedResult.success ? publishedResult.data : cinemaContentDefaults;
+      const publishedAt = new Date();
+      await tx.location.update({ where: { id: locationId }, data: { contentDraft: applySiteCopy(draft, copy) as Prisma.InputJsonValue, contentPublished: applySiteCopy(published, copy) as Prisma.InputJsonValue, contentPublishedAt: publishedAt } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "location.site_copy_updated", entityType: "Location", entityId: locationId, beforeState: siteCopyFrom(published) as Prisma.InputJsonValue, afterState: copy as Prisma.InputJsonValue } });
+      return { siteCopy: copy, publishedAt };
     });
   }
 
