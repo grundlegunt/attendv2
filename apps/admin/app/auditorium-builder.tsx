@@ -7,7 +7,10 @@ import type {
   SeatMapLayout,
 } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
-import { replaceSeatTypeAtCoordinate } from "./auditorium-layout";
+import {
+  normalizeSeatTableMetadata,
+  replaceSeatTypeAtCoordinate,
+} from "./auditorium-layout";
 import { apiFetch } from "./lib/api-client";
 
 type Tool =
@@ -71,9 +74,6 @@ function basicSeats(rows: number, seatsPerRow: number): SeatInput[] {
             ? ("ADA" as const)
             : ("COMPANION" as const)
           : ("STANDARD" as const),
-        tableGroupId: `${rowLabel}-${Math.floor(seatIndex / 2) + 1}`,
-        tablePosition:
-          seatIndex % 2 === 0 ? ("LEFT" as const) : ("RIGHT" as const),
         levelKey: "main",
       };
     });
@@ -608,10 +608,12 @@ export function AuditoriumBuilder({
             canvas: { width: seatsPerRow, height: rows },
           }
         : { ...layout, mode: "ADVANCED" };
-    const finalSeats =
+    const finalSeats = normalizeSeatTableMetadata(
       mode === "BASIC"
         ? basicSeats(rows, seatsPerRow)
-        : renumberAllSeats(seats, finalLayout);
+        : renumberAllSeats(seats, finalLayout),
+      finalLayout.seatingStyle,
+    );
     try {
       await apiFetch(
         editingId

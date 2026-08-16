@@ -1,4 +1,23 @@
-import type { SeatInput } from "@cinema/shared";
+import type { SeatInput, SeatMapLayout } from "@cinema/shared";
+
+/**
+ * Table pairing is only meaningful for two-seat table layouts. Older basic
+ * layouts accidentally attached pair metadata to every seat, so moving or
+ * deleting an ADA/companion position could orphan a pair and make an otherwise
+ * valid layout fail API validation.
+ */
+export function normalizeSeatTableMetadata(
+  seats: SeatInput[],
+  seatingStyle: SeatMapLayout["seatingStyle"],
+): SeatInput[] {
+  if (seatingStyle === "TABLE_2") {
+    return seats;
+  }
+
+  return seats.map(
+    ({ tableGroupId: _group, tablePosition: _position, ...seat }) => seat,
+  );
+}
 
 /**
  * Change the sellable position at a coordinate without discarding its table,

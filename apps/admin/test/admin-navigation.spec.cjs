@@ -29,7 +29,7 @@ const auditoriumLayoutModule = new Module(auditoriumLayoutPath, module);
 auditoriumLayoutModule.filename = auditoriumLayoutPath;
 auditoriumLayoutModule.paths = module.paths;
 auditoriumLayoutModule._compile(auditoriumLayoutCompiled.outputText, auditoriumLayoutPath);
-const { replaceSeatTypeAtCoordinate } = auditoriumLayoutModule.exports;
+const { normalizeSeatTableMetadata, replaceSeatTypeAtCoordinate } = auditoriumLayoutModule.exports;
 
 describe("admin navigation", () => {
   it("keeps the signed-out identity fixed to Attend instead of client branding", () => {
@@ -107,6 +107,26 @@ describe("auditorium layout editing", () => {
     assert.equal(updated[0].levelKey, "main");
     assert.equal(updated[0].x, 4);
     assert.equal(updated[0].y, 2);
+  });
+
+  it("removes stale table pairing from single-seat layouts", () => {
+    const seats = [
+      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "ADA", levelKey: "main", tableGroupId: "A-1", tablePosition: "LEFT" },
+      { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "COMPANION", levelKey: "main", tableGroupId: "A-1", tablePosition: "RIGHT" },
+    ];
+
+    const normalized = normalizeSeatTableMetadata(seats, "SINGLE");
+
+    assert.deepEqual(normalized, seats.map(({ tableGroupId: _group, tablePosition: _position, ...seat }) => seat));
+  });
+
+  it("preserves pairing metadata for actual two-seat table layouts", () => {
+    const seats = [
+      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "main", tableGroupId: "A-1", tablePosition: "LEFT" },
+      { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD", levelKey: "main", tableGroupId: "A-1", tablePosition: "RIGHT" },
+    ];
+
+    assert.equal(normalizeSeatTableMetadata(seats, "TABLE_2"), seats);
   });
 });
 
