@@ -6,6 +6,36 @@ export interface ReportRange { from: Date; to: Date }
 
 @Injectable()
 export class ReportingService {
+  async audienceOrigins(locationId: string, range: ReportRange) {
+    const orders = await prisma.ticketOrder.findMany({
+      where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED"] } },
+      select: { zipCode: true, _count: { select: { tickets: true } } },
+    });
+    return { range, ...this.summarizeAudienceOrigins(orders) };
+  }
+
+  summarizeAudienceOrigins(orders: Array<{ zipCode: string | null; _count: { tickets: number } }>) {
+    const grouped = new Map<string, { zipCode: string; orders: number; tickets: number }>();
+    let ordersWithZip = 0;
+    let ticketsWithZip = 0;
+    for (const order of orders) {
+      const zipCode = order.zipCode?.trim().match(/^(\d{5})(?:-\d{4})?$/)?.[1];
+      if (!zipCode) continue;
+      ordersWithZip += 1;
+      ticketsWithZip += order._count.tickets;
+      const row = grouped.get(zipCode) ?? { zipCode, orders: 0, tickets: 0 };
+      row.orders += 1;
+      row.tickets += order._count.tickets;
+      grouped.set(zipCode, row);
+    }
+    return {
+      totals: { completedOrders: orders.length, ordersWithZip, ticketsWithZip, coveragePercent: orders.length ? Math.round((ordersWithZip / orders.length) * 100) : 0 },
+      origins: [...grouped.values()]
+        .map((row) => ({ ...row, sharePercent: ticketsWithZip ? Math.round((row.tickets / ticketsWithZip) * 1000) / 10 : 0 }))
+        .sort((a, b) => b.tickets - a.tickets || b.orders - a.orders || a.zipCode.localeCompare(b.zipCode)),
+    };
+  }
+
   async expenses(locationId: string, range: ReportRange) {
     const rows = await prisma.expense.findMany({
       where: { locationId, incurredAt: { gte: range.from, lt: range.to } },
