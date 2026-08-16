@@ -2,6 +2,66 @@ import { expect, test } from "@playwright/test";
 
 const password = "DevPassword123!";
 
+test("customer sees the published dining experience and accessible menu", async ({ page }) => {
+  await page.route("**/api/v1/cinema/menu", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { id: "location-1", name: "Meridian Cinema", address: null },
+        menuPresentation: {
+          assetUrl: "https://example.com/current-menu.jpg",
+          assetType: "IMAGE",
+        },
+        categories: [{
+          id: "category-1",
+          name: "Shareables",
+          items: [{
+            id: "item-1",
+            name: "Shoestring Fries",
+            description: "Rosemary chive aioli and ketchup",
+            imageUrl: null,
+            priceCents: 800,
+            isVegan: true,
+            isGlutenFree: false,
+          }],
+        }],
+        movieSpecials: [{
+          movieId: "movie-1",
+          movieTitle: "Spider-Man: Brand New Day",
+          posterUrl: null,
+          artworkUrl: null,
+          headline: "Spidey Supper",
+          items: [{
+            id: "special-1",
+            name: "Spidey Dog",
+            description: "A special available only with this film",
+            imageUrl: "https://example.com/spidey-dog.jpg",
+            priceCents: 900,
+            isVegan: false,
+            isGlutenFree: false,
+          }],
+        }],
+      }),
+    });
+  });
+
+  await page.goto("http://127.0.0.1:3000/dining-bar");
+
+  await expect(page.getByRole("heading", { name: "Dining & Bar" })).toBeVisible();
+  await expect(page.locator('a[href="/afterglow"]')).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Movie Specials" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Spider-Man: Brand New Day" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Spidey Dog" })).toBeVisible();
+  await expect(page.getByRole("img", { name: "Current food and drink menu" })).toBeVisible();
+
+  await page.getByText("Browse accessible text menu").click();
+  await expect(page.getByRole("heading", { name: "Shareables" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Shoestring Fries" })).toBeVisible();
+  await page.getByRole("button", { name: "Vegan", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Shoestring Fries" })).toBeVisible();
+});
+
 test("customer browses a live program and safely holds a seat", async ({ page }) => {
   await page.goto("http://127.0.0.1:3000");
   await expect(page.getByText("NOW PLAYING")).toBeVisible();
