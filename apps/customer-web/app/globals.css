@@ -27,15 +27,16 @@ html[data-branding-status="loading"] body {
   box-sizing: border-box;
   display: flex;
   width: 100%;
-  max-width: 1320px;
+  max-width: 1600px;
   margin: 0 auto;
   justify-content: space-between;
   align-items: center;
-  gap: 28px;
-  padding: 14px clamp(20px, 5vw, 72px);
+  gap: clamp(18px, 2.5vw, 36px);
+  padding: 14px clamp(18px, 3vw, 48px);
 }
 .site-brand {
   display: grid;
+  flex: 0 0 auto;
   gap: 2px;
   color: var(--color-text-primary);
   text-decoration: none;
@@ -57,14 +58,17 @@ html[data-branding-status="loading"] body {
 }
 .site-nav {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px clamp(2px, 0.45vw, 7px);
+  min-width: 0;
 }
 .site-nav a {
-  padding: 12px 14px 10px;
+  padding: 12px clamp(5px, 0.65vw, 11px) 10px;
   border-bottom: 2px solid transparent;
   color: var(--color-text-secondary);
-  font-size: 0.82rem;
+  font-size: clamp(0.7rem, 0.76vw, 0.82rem);
   font-weight: 700;
   text-decoration: none;
   white-space: nowrap;
@@ -1596,10 +1600,11 @@ body:has(.signage-shell) .site-header { display: none; }
   }
   .site-nav {
     width: 100%;
+    justify-content: flex-start;
   }
   .site-nav a {
-    padding-left: 0;
-    padding-right: 18px;
+    padding: 9px 14px 8px 0;
+    font-size: 0.76rem;
   }
   .account-grid,
   .event-grid {
