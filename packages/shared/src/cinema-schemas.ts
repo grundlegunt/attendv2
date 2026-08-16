@@ -325,6 +325,35 @@ export const duplicateAuditoriumRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
 });
 
+export const movieArtworkPositionSchema = z.enum([
+  "TOP_LEFT",
+  "TOP",
+  "TOP_RIGHT",
+  "CENTER_LEFT",
+  "CENTER",
+  "CENTER_RIGHT",
+  "BOTTOM_LEFT",
+  "BOTTOM",
+  "BOTTOM_RIGHT",
+]);
+
+export type MovieArtworkPosition = z.infer<typeof movieArtworkPositionSchema>;
+
+export function movieArtworkObjectPosition(position: MovieArtworkPosition) {
+  const values: Record<MovieArtworkPosition, string> = {
+    TOP_LEFT: "left top",
+    TOP: "center top",
+    TOP_RIGHT: "right top",
+    CENTER_LEFT: "left center",
+    CENTER: "center center",
+    CENTER_RIGHT: "right center",
+    BOTTOM_LEFT: "left bottom",
+    BOTTOM: "center bottom",
+    BOTTOM_RIGHT: "right bottom",
+  };
+  return values[position];
+}
+
 export const createMovieRequestSchema = z.object({
   title: z.string().trim().min(1).max(200),
   synopsis: z.string().trim().max(2000).nullable().optional(),
@@ -353,8 +382,8 @@ export const createMovieRequestSchema = z.object({
     ])
     .nullable()
     .optional(),
-  posterPosition: z.enum(["TOP", "CENTER", "BOTTOM"]).default("CENTER"),
-  detailPosterPosition: z.enum(["TOP", "CENTER", "BOTTOM"]).default("CENTER"),
+  posterPosition: movieArtworkPositionSchema.default("CENTER"),
+  detailPosterPosition: movieArtworkPositionSchema.default("CENTER"),
   diningSpecialArtworkUrl: z
     .union([
       z.string().trim().url("Dining special artwork URL must be a valid URL."),
@@ -708,8 +737,8 @@ export interface NowPlayingMovie {
   rating: string | null;
   posterUrl: string | null;
   detailPosterUrl: string | null;
-  posterPosition: "TOP" | "CENTER" | "BOTTOM";
-  detailPosterPosition: "TOP" | "CENTER" | "BOTTOM";
+  posterPosition: MovieArtworkPosition;
+  detailPosterPosition: MovieArtworkPosition;
   director: string | null;
   starring: string | null;
   trailerUrl: string | null;
