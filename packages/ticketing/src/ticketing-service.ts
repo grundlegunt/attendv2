@@ -35,6 +35,7 @@ export interface CreateTicketCheckoutInput {
   ticketTypeId: string;
   email: string;
   name?: string;
+  zipCode?: string;
   promotionCode?: string;
   giftCardCode?: string;
   diningAuthorizationRequested: boolean;
@@ -332,6 +333,7 @@ export class TicketingService {
           holderKey: input.holderKey,
           guestEmail: normalizedEmail,
           guestName: input.name?.trim() || null,
+          zipCode: input.zipCode?.trim() || null,
           diningAuthorizationRequested: input.diningAuthorizationRequested,
           status: TicketOrderStatus.AWAITING_PAYMENT,
           orderNumber: publicOrderNumber(),
@@ -386,7 +388,20 @@ export class TicketingService {
     return this.completeCheckout(order);
   }
 
-  private assertCheckoutReplayMatches(order: { ticketTypeId: string; holdTokens: string[]; holderKey: string; guestEmail: string | null; guestName: string | null; diningAuthorizationRequested: boolean | null; orderAheadItems: Prisma.JsonValue | null }, input: CreateTicketCheckoutInput, holdTokens: string[]) {
+  private assertCheckoutReplayMatches(
+    order: {
+      ticketTypeId: string;
+      holdTokens: string[];
+      holderKey: string;
+      guestEmail: string | null;
+      guestName: string | null;
+      zipCode: string | null;
+      diningAuthorizationRequested: boolean | null;
+      orderAheadItems: Prisma.JsonValue | null;
+    },
+    input: CreateTicketCheckoutInput,
+    holdTokens: string[],
+  ) {
     const persistedSelections = normalizeOrderAheadSelections(
       persistedOrderAheadLines(order.orderAheadItems).map((line) => ({
         menuItemId: line.menuItemId,
@@ -401,6 +416,7 @@ export class TicketingService {
       && order.holdTokens.every((token, index) => token === holdTokens[index])
       && order.guestEmail === input.email.toLowerCase()
       && order.guestName === (input.name?.trim() || null)
+      && order.zipCode === (input.zipCode?.trim() || null)
       && order.diningAuthorizationRequested === input.diningAuthorizationRequested
       && JSON.stringify(persistedSelections) === JSON.stringify(requestedSelections);
     if (!matches) throw TicketingError.conflict("The checkout idempotency key was already used with different checkout details.");

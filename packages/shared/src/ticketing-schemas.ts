@@ -6,6 +6,11 @@ export const createTicketCheckoutRequestSchema = z.object({
   ticketTypeId: z.string().uuid(),
   email: z.string().email().max(320),
   name: z.string().trim().min(1).max(120).optional(),
+  zipCode: z
+    .string()
+    .trim()
+    .regex(/^\d{5}(?:-\d{4})?$/, "Enter a valid ZIP code.")
+    .optional(),
   promotionCode: z.string().trim().min(1).max(50).optional(),
   giftCardCode: z.string().trim().min(20).max(40).optional(),
   diningAuthorizationRequested: z.boolean(),
