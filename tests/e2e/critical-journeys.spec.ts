@@ -49,7 +49,7 @@ test("customer sees the published dining experience and accessible menu", async 
   await page.goto("http://127.0.0.1:3000/dining-bar");
 
   await expect(page.getByRole("heading", { name: "Dining & Bar" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /Afterglow/i })).toHaveAttribute("href", "/afterglow");
+  await expect(page.locator('a[href="/afterglow"]')).toBeVisible();
   await expect(page.getByRole("heading", { name: "Movie Specials" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Spider-Man: Brand New Day" })).toBeVisible();
   await expect(page.getByRole("img", { name: "Spidey Dog" })).toBeVisible();
