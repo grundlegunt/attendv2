@@ -21,6 +21,15 @@ export type BrandingSettings = {
   adminMutedTextColor: string | null;
 };
 
+export type SiteHeadingCopy = { eyebrow: string; title: string; intro: string };
+export type CustomerSiteCopy = {
+  showtimes: SiteHeadingCopy;
+  comingSoon: SiteHeadingCopy;
+  filmSeries: SiteHeadingCopy;
+  dining: SiteHeadingCopy;
+  about: SiteHeadingCopy & { body: string[] };
+};
+
 function Palette({ title, colors }: { title: string; colors: Array<[string, string]> }) {
   return <section className="brand-summary-card">
     <p className="kicker">{title}</p>
@@ -93,5 +102,57 @@ export function BrandingSummary({ settings, onSave }: { settings: BrandingSettin
     <h3>Customer website colors</h3><div className="brand-editor-fields">{([['Accent','accentColor'],['Muted accent','accentMutedColor'],['Background','backgroundColor'],['Background glow','backgroundGlowColor'],['Surface','surfaceColor'],['Text','textColor'],['Muted text','mutedTextColor']] as Array<[string, keyof BrandingDraft]>).map(([label, field]) => <ColorField key={field} label={label} field={field} draft={draft} setDraft={setDraft} />)}</div>
     <h3>Cinema admin colors</h3><div className="brand-editor-fields">{([['Accent','adminAccentColor'],['Muted accent','adminAccentMutedColor'],['Background','adminBackgroundColor'],['Surface','adminSurfaceColor'],['Text','adminTextColor'],['Muted text','adminMutedTextColor']] as Array<[string, keyof BrandingDraft]>).map(([label, field]) => <ColorField key={field} label={label} field={field} draft={draft} setDraft={setDraft} />)}</div>
     <button className="primary" disabled={saving}>{saving ? "Saving brand…" : "Save brand"}</button>
+  </form>;
+}
+
+const siteCopySections = [
+  ["showtimes", "Showtimes"],
+  ["comingSoon", "Coming soon"],
+  ["filmSeries", "Film series"],
+  ["dining", "Dining"],
+] as const;
+
+export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCopy; onSave: (copy: CustomerSiteCopy) => Promise<void> }) {
+  const [draft, setDraft] = useState(copy);
+  const [aboutBody, setAboutBody] = useState(copy.about.body.join("\n\n"));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setDraft(copy); setAboutBody(copy.about.body.join("\n\n")); }, [copy]);
+
+  function updateHeading(section: keyof Omit<CustomerSiteCopy, "about">, field: keyof SiteHeadingCopy, value: string) {
+    setDraft((current) => ({ ...current, [section]: { ...current[section], [field]: value } }));
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      await onSave({
+        ...draft,
+        about: {
+          ...draft.about,
+          body: aboutBody.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean),
+        },
+      });
+    } finally { setSaving(false); }
+  }
+
+  return <form className="panel site-copy-editor" onSubmit={(event) => void submit(event)}>
+    <div className="management-heading"><div><p className="kicker">CUSTOMER WEBSITE</p><h2>Page language</h2><p className="muted">Edit headings and introductions without changing code. Saving publishes these words immediately.</p></div><span className="managed-badge">PUBLISHES LIVE</span></div>
+    <div className="site-copy-sections">
+      {siteCopySections.map(([key, label]) => <section className="site-copy-section" key={key}>
+        <h3>{label}</h3>
+        <label>Eyebrow<input required maxLength={80} value={draft[key].eyebrow} onChange={(event) => updateHeading(key, "eyebrow", event.target.value)} /></label>
+        <label>Page title<input required maxLength={120} value={draft[key].title} onChange={(event) => updateHeading(key, "title", event.target.value)} /></label>
+        <label>Introduction<textarea required maxLength={300} value={draft[key].intro} onChange={(event) => updateHeading(key, "intro", event.target.value)} /></label>
+      </section>)}
+      <section className="site-copy-section site-copy-section-wide">
+        <h3>About</h3>
+        <label>Eyebrow<input required maxLength={80} value={draft.about.eyebrow} onChange={(event) => setDraft({ ...draft, about: { ...draft.about, eyebrow: event.target.value } })} /></label>
+        <label>Page title<input required maxLength={120} value={draft.about.title} onChange={(event) => setDraft({ ...draft, about: { ...draft.about, title: event.target.value } })} /></label>
+        <label>Introduction<textarea required maxLength={300} value={draft.about.intro} onChange={(event) => setDraft({ ...draft, about: { ...draft.about, intro: event.target.value } })} /></label>
+        <label>About paragraphs<textarea required maxLength={8000} value={aboutBody} onChange={(event) => setAboutBody(event.target.value)} /><span className="muted">Separate paragraphs with a blank line.</span></label>
+      </section>
+    </div>
+    <button className="primary" disabled={saving}>{saving ? "Publishing…" : "Publish website copy"}</button>
   </form>;
 }
