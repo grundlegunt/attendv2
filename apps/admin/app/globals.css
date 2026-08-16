@@ -362,6 +362,23 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .setup-scope-note { margin-top: 20px; }
 .auditorium-builder { min-width: 0; }
 .cinema-setup-workspace .auditorium-builder { border: 0; }
+.auditorium-overview { min-width: 0; padding: 28px; }
+.master-managed-note { display: grid; grid-template-columns: minmax(240px, .8fr) minmax(280px, 1.2fr); gap: 28px; align-items: end; padding: 0 0 24px; border-bottom: 1px solid var(--color-border); }
+.master-managed-note h2, .auditorium-readonly-detail h2 { margin: 5px 0 0; font-family: Georgia, serif; }
+.master-managed-note > p { margin: 0; color: var(--color-text-secondary); line-height: 1.55; }
+.auditorium-overview > .auditorium-options { margin: 24px 0; }
+.auditorium-readonly-detail { padding-top: 4px; }
+.auditorium-readonly-detail > header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+.auditorium-readonly-detail > header > strong { display: grid; color: var(--color-accent); font-size: 2rem; text-align: right; }
+.auditorium-readonly-detail > header small { color: var(--color-text-secondary); font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; }
+.auditorium-readonly-stats { display: grid; grid-template-columns: repeat(4, 1fr); margin-bottom: 24px; border: 1px solid var(--color-border); }
+.auditorium-readonly-stats span { display: grid; gap: 5px; padding: 14px; color: var(--color-text-secondary); font-size: .7rem; text-transform: uppercase; }
+.auditorium-readonly-stats span + span { border-left: 1px solid var(--color-border); }
+.auditorium-readonly-stats b { color: var(--color-text-primary); font-size: .95rem; text-transform: none; }
+.auditorium-readonly-detail .seat-map { overflow-x: auto; padding: 22px; border: 1px solid var(--color-border); background: var(--color-bg); }
+.ga-capacity-preview { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: center; padding: 28px; border: 1px solid var(--color-border); background: var(--color-bg); }
+.ga-capacity-preview strong { color: var(--color-accent); font-family: Georgia, serif; font-size: 3.5rem; }
+.ga-capacity-preview span { max-width: 520px; color: var(--color-text-secondary); line-height: 1.55; }
 .film-series-manager { display: grid; grid-template-columns: minmax(240px, .7fr) minmax(320px, 1fr); gap: 28px 42px; margin: 0 20px 28px; padding: 30px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
 .film-series-intro h2 { margin: 8px 0 12px; font-family: Georgia, serif; font-size: 2rem; }
 .film-series-intro p:last-child { max-width: 560px; color: var(--color-text-secondary); line-height: 1.55; }
@@ -474,6 +491,11 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .showtime-inspector-actions { grid-template-columns: 1fr 1fr; }
   .cinema-setup-workspace { grid-template-columns: 1fr; margin: 0 0 20px; }
   .setup-location-rail { border-right: 0; border-bottom: 1px solid var(--color-border); }
+  .auditorium-overview { padding: 22px 18px; }
+  .master-managed-note { grid-template-columns: 1fr; gap: 12px; }
+  .auditorium-readonly-stats { grid-template-columns: 1fr 1fr; }
+  .auditorium-readonly-stats span:nth-child(3) { border-left: 0; border-top: 1px solid var(--color-border); }
+  .auditorium-readonly-stats span:nth-child(4) { border-top: 1px solid var(--color-border); }
   .film-series-manager { grid-template-columns: 1fr; margin: 0 0 20px; padding: 22px 18px; }
   .film-series-list article { grid-template-columns: 64px minmax(0, 1fr); }
   .film-series-list img, .series-artwork-placeholder { width: 64px; height: 48px; }
