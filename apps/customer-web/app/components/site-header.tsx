@@ -13,10 +13,16 @@ const links = [
   { href: "/showtimes?presentation=OPEN_CAPTIONS", label: "Open Captions" },
   { href: "/dining-bar", label: "Dining & Bar" },
   { href: "/account", label: "Account" },
+];
+
+const aboutLinks = [
   { href: "/about", label: "About" },
   { href: "/directions", label: "Directions" },
-  { href: "/private-events", label: "Private Events" },
   { href: "/gift-cards", label: "Gift Cards" },
+  { href: "/about#press", label: "Press" },
+  { href: "/about#contact", label: "Contact" },
+  { href: "/private-events", label: "Private Events" },
+  { href: "/about#age-policy", label: "Age Policy" },
 ];
 
 export function SiteHeader() {
@@ -49,6 +55,22 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
+          <details className="site-nav__group">
+            <summary aria-current={aboutLinks.some((link) => link.href.split("#")[0] === pathname) ? "page" : undefined}>
+              About <span aria-hidden="true">⌄</span>
+            </summary>
+            <div className="site-nav__submenu">
+              {aboutLinks.map((link) => (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={link.href === pathname ? "page" : undefined}
+                >
+                  {link.label}
+                </Link>
+              ))}
+            </div>
+          </details>
           {content.navigation.merchUrl && (
             <a href={content.navigation.merchUrl} target="_blank" rel="noreferrer">Merch ↗</a>
           )}
