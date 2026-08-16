@@ -773,6 +773,7 @@ model TicketOrder {
   holderKey                    String
   guestEmail                   String?
   guestName                    String?
+  zipCode                      String?
   receiptEmailClaimedAt        DateTime?
   receiptEmailSentAt           DateTime?
   receiptEmailMessageId        String?

@@ -146,6 +146,7 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [zipCode, setZipCode] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
@@ -445,6 +446,7 @@ export function TicketCheckout({
             ticketTypeId: config.ticketTypes[0]?.id,
             email,
             name: name || undefined,
+            zipCode: zipCode.trim() || undefined,
             promotionCode: promotionCode.trim() || undefined,
             giftCardCode: giftCardCode.trim() || undefined,
             diningAuthorizationRequested: diningAuthorization,
@@ -575,6 +577,20 @@ export function TicketCheckout({
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
               />
+            </label>
+            <label className="field">
+              <span>ZIP code (optional)</span>
+              <input
+                value={zipCode}
+                onChange={(event) => setZipCode(event.target.value)}
+                inputMode="numeric"
+                autoComplete="postal-code"
+                pattern="[0-9]{5}(-[0-9]{4})?"
+                maxLength={10}
+              />
+              <small>
+                Helps the cinema understand where its audience comes from. This is not used for billing.
+              </small>
             </label>
             <label className="field">
               <span>Promotion code</span>
