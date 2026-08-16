@@ -113,6 +113,8 @@ model Location {
   contentDraft                Json?
   contentPublished            Json?
   contentPublishedAt          DateTime?
+  diningMenuAssetUrl          String?
+  diningMenuAssetType         String?
   timezone                    String    @default("America/New_York")
   currency                    String    @default("USD")
   // Configured by the operator. Zero is a deliberate safe default until the

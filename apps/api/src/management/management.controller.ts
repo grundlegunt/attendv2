@@ -30,6 +30,13 @@ const brandingSchema = customerBrandingSchema.merge(adminBrandingSchema).strict(
 const merchSchema = z.object({
   merchUrl: z.string().trim().url().max(2000).refine((value) => /^https?:\/\//i.test(value), "Use an HTTP(S) URL.").nullable(),
 }).strict();
+const menuPresentationSchema = z.object({
+  assetUrl: z.string().trim().url().max(2000).refine((value) => /^https?:\/\//i.test(value), "Use an HTTP(S) URL.").nullable(),
+  assetType: z.enum(["IMAGE", "PDF"]).nullable(),
+}).strict().refine(
+  (value) => (value.assetUrl === null) === (value.assetType === null),
+  "Provide both a menu asset URL and type, or clear both.",
+);
 const appliesTo = z.enum(["ALL", "FOOD", "ALCOHOL", "NA_BEVERAGE"]);
 const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000), active: z.boolean().default(true) }).strict();
 const taxUpdateSchema = taxSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one tax-rule change.");
@@ -79,6 +86,12 @@ export class ManagementController {
 
   @Patch("settings/merch") @RequirePermissions(Permission.TicketPriceEdit)
   updateMerch(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(merchSchema)) body: unknown) { return this.management.updateMerch({ ...merchSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Patch("settings/menu-presentation") @RequirePermissions(Permission.MenuEdit)
+  updateMenuPresentation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(menuPresentationSchema)) body: unknown) { return this.management.updateMenuPresentation({ ...menuPresentationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+
+  @Get("settings/menu-presentation") @RequirePermissions(Permission.MenuEdit)
+  menuPresentation(@CurrentActor() actor: RequestActor) { return this.management.menuPresentation(this.location(actor)); }
 
   @Post("settings/price-tiers") @RequirePermissions(Permission.TicketPriceEdit)
   createPriceTier(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(priceTierSchema)) body: unknown) { return this.management.createPriceTier({ ...priceTierSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

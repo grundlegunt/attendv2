@@ -55,9 +55,24 @@ export default function DiningBarPage() {
         {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={retry}>Try again</button></>}
         {!menu && !error && <p className="loading-copy">Loading the menu…</p>}
         {menu && categories.length === 0 && <p className="secondary-copy">No menu items match this filter.</p>}
-        <div className="public-menu-sheet">
-          {categories.map((category) => <section className="menu-category" key={category.id}><h3>{category.name}</h3><div className="public-menu-grid">{category.items.map((item) => <MenuItemCard item={item} key={item.id} />)}</div></section>)}
-        </div>
+        {menu?.menuPresentation && <div className="published-menu-asset">
+          {menu.menuPresentation.assetType === "IMAGE"
+            ? <img src={menu.menuPresentation.assetUrl} alt="Current food and drink menu" />
+            : <><iframe title="Current food and drink menu" src={menu.menuPresentation.assetUrl} /><a className="primary-link" href={menu.menuPresentation.assetUrl} target="_blank" rel="noreferrer">Open full menu PDF</a></>}
+        </div>}
+        <details className="accessible-menu" open={!menu?.menuPresentation}>
+          <summary>{menu?.menuPresentation ? "Browse accessible text menu" : "Current menu"}</summary>
+          <div className="public-menu-sheet">
+            {categories.map((category) => (
+              <section className="menu-category" key={category.id}>
+                <h3>{category.name}</h3>
+                <div className="public-menu-grid">
+                  {category.items.map((item) => <MenuItemCard item={item} key={item.id} />)}
+                </div>
+              </section>
+            ))}
+          </div>
+        </details>
       </section>
     </div>
 
