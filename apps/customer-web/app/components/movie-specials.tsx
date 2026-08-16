@@ -31,8 +31,8 @@ export function MovieSpecials({ specials, showtimes = false }: { specials: Publi
       </div>
       <div className="dining-special__items">
         {special.items.map((item) => <div className="dining-special-item" key={item.id}>
-          {(item.imageUrl || special.artworkUrl) && <img src={item.imageUrl || special.artworkUrl!} alt="" />}
-          <div className="special-line"><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span><b>${(item.priceCents / 100).toFixed(2)}</b></div>
+          {item.imageUrl && <img src={item.imageUrl} alt={item.name} />}
+          <div className="special-line"><span><strong>{item.name}</strong>{item.description && <small>{item.description}</small>}</span></div>
         </div>)}
       </div>
     </article>)}</div>
