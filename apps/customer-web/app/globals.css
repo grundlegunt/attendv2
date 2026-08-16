@@ -73,57 +73,6 @@ html[data-branding-status="loading"] body {
   text-decoration: none;
   white-space: nowrap;
 }
-.site-nav__group {
-  position: relative;
-}
-.site-nav__group summary {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 12px clamp(5px, 0.65vw, 11px) 10px;
-  border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
-  font-size: clamp(0.7rem, 0.76vw, 0.82rem);
-  font-weight: 700;
-  list-style: none;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.site-nav__group summary::-webkit-details-marker {
-  display: none;
-}
-.site-nav__group summary:hover,
-.site-nav__group summary[aria-current="page"],
-.site-nav__group[open] summary {
-  border-color: var(--color-accent);
-  color: var(--color-text-primary);
-}
-.site-nav__submenu {
-  display: none;
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 190px;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--color-text-secondary) 30%, transparent);
-  background: var(--color-bg-elevated);
-  box-shadow: 0 18px 48px rgb(0 0 0 / 35%);
-}
-.site-nav__group[open] .site-nav__submenu,
-.site-nav__group:hover .site-nav__submenu,
-.site-nav__group:focus-within .site-nav__submenu {
-  display: grid;
-}
-.site-nav__submenu a {
-  width: 100%;
-  padding: 10px 12px;
-  border-bottom: 0;
-}
-.site-nav__submenu a:hover,
-.site-nav__submenu a[aria-current="page"] {
-  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
-}
 .about-details {
   margin-top: 24px;
   scroll-margin-top: 100px;
@@ -1664,14 +1613,6 @@ body:has(.signage-shell) .site-header { display: none; }
   .site-nav a {
     padding: 9px 14px 8px 0;
     font-size: 0.76rem;
-  }
-  .site-nav__group summary {
-    padding: 9px 14px 8px 0;
-    font-size: 0.76rem;
-  }
-  .site-nav__submenu {
-    right: auto;
-    left: 0;
   }
   .account-grid,
   .event-grid {
