@@ -628,6 +628,16 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .modifier-group-editor .secondary { width: auto; margin: 0; }
 .menu-image-preview { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: center; margin: -6px 0 18px; color: var(--color-text-secondary); font-weight: 700; }
 .menu-image-preview img { width: 120px; aspect-ratio: 4 / 3; border: 1px solid var(--color-border); background: var(--color-bg); object-fit: cover; }
+.dining-customer-preview .management-heading { align-items: start; }
+.dining-customer-preview .management-heading .rule-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.dining-customer-preview .management-heading .secondary { width: auto; margin: 0; }
+.dining-customer-preview__frame { margin-top: 20px; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); }
+.dining-customer-preview__frame iframe { display: block; width: 100%; min-height: 760px; border: 0; background: var(--color-bg); }
+@media (max-width: 760px) {
+  .dining-customer-preview .management-heading .rule-actions { justify-content: stretch; width: 100%; }
+  .dining-customer-preview .management-heading .secondary { flex: 1 1 180px; }
+  .dining-customer-preview__frame iframe { min-height: 620px; }
+}
 
 /* Operator-managed admin palette: structural chrome and work surfaces inherit
    the same tokens as standard panels instead of retaining the legacy black UI. */

@@ -109,6 +109,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
   const [menuAssetUrl, setMenuAssetUrl] = useState("");
   const [menuAssetType, setMenuAssetType] = useState<"IMAGE" | "PDF">("IMAGE");
+  const [showCustomerPreview, setShowCustomerPreview] = useState(false);
   const refreshSequence = useRef(0);
   const lastLoadedMenu = useRef<Menu | null>(null);
   const emptyResponseRetries = useRef(0);
@@ -551,6 +552,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           {menuAssetUrl && <button className="secondary" type="button" onClick={() => setMenuAssetUrl("")}>Clear field</button>}
         </div>
       </form>
+      <section className="panel dining-customer-preview">
+        <div className="management-heading">
+          <div>
+            <p className="kicker">LIVE CUSTOMER VIEW</p>
+            <h2>Dining page preview</h2>
+          </div>
+          <div className="rule-actions">
+            <button className="secondary" type="button" aria-expanded={showCustomerPreview} onClick={() => setShowCustomerPreview((visible) => !visible)}>
+              {showCustomerPreview ? "Hide live preview" : "Show live preview"}
+            </button>
+            <a className="secondary button-link" href={`${CUSTOMER_WEB_URL}/dining-bar`} target="_blank" rel="noreferrer">Open customer page</a>
+          </div>
+        </div>
+        <p>Review the same specials, uploaded menu design, and accessible text menu that guests currently see.</p>
+        {showCustomerPreview && <div className="dining-customer-preview__frame">
+          <iframe title="Live customer Dining and Bar page" src={`${CUSTOMER_WEB_URL}/dining-bar`} />
+        </div>}
+      </section>
       <section className="admin-grid">
         <form className="panel" onSubmit={createCategory}>
           <p className="kicker">ORGANIZE</p>
