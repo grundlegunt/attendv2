@@ -1116,11 +1116,22 @@ describe("Milestone 1 cinema configuration", () => {
 
   it("keeps complete past schedule days available to Admin", async () => {
     const { prisma } = await import("@cinema/database");
-    const reference = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
+    const reference = await prisma.showtime.findUniqueOrThrow({
+      where: { id: secondShowtimeId },
+      include: { auditorium: true },
+    });
+    const archivedAuditorium = await prisma.auditorium.create({
+      data: {
+        locationId: reference.auditorium.locationId,
+        name: `Archived history room ${Date.now()}`,
+        capacity: 40,
+        active: false,
+      },
+    });
     const historical = await prisma.showtime.create({
       data: {
         movieId,
-        auditoriumId,
+        auditoriumId: archivedAuditorium.id,
         priceTierId: reference.priceTierId,
         startsAt: new Date("2029-12-20T18:00:00.000Z"),
         featureStartsAt: new Date("2029-12-20T18:30:00.000Z"),
@@ -1136,8 +1147,10 @@ describe("Milestone 1 cinema configuration", () => {
         .set("Authorization", `Bearer ${ownerAccessToken}`)
         .expect(200);
       expect(res.body.showtimes.some((item: { id: string }) => item.id === historical.id)).toBe(true);
+      expect(res.body.location.auditoriums.some((item: { id: string }) => item.id === archivedAuditorium.id)).toBe(false);
     } finally {
       await prisma.showtime.delete({ where: { id: historical.id } });
+      await prisma.auditorium.delete({ where: { id: archivedAuditorium.id } });
     }
   });
 
