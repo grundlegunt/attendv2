@@ -10,6 +10,7 @@ import {
 } from "@cinema/shared";
 import Link from "next/link";
 import { AdminUiEditor } from "../admin-ui-editor";
+import { CompanySignIn } from "../company-sign-in";
 import {
   platformDownload,
   platformRequest,
@@ -1267,35 +1268,7 @@ export default function AttendMaster() {
       </main>
     );
   if (!session)
-    return (
-      <main className="center">
-        <form className="login-card" onSubmit={login}>
-          <p className="eyebrow">ATTEND MASTER</p>
-          <h1>Company sign in</h1>
-          <p className="muted">Separate from every cinema’s staff account.</p>
-          {error && <div className="error">{error}</div>}
-          <label>
-            Email
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          <button type="submit">Sign in</button>
-        </form>
-      </main>
-    );
+    return <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />;
 
   return (
     <main className="shell">
