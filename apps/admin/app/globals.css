@@ -650,12 +650,20 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .modifier-group-editor .secondary { width: auto; margin: 0; }
 .menu-image-preview { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 14px; align-items: center; margin: -6px 0 18px; color: var(--color-text-secondary); font-weight: 700; }
 .menu-image-preview img { width: 120px; aspect-ratio: 4 / 3; border: 1px solid var(--color-border); background: var(--color-bg); object-fit: cover; }
+.menu-presentation-preview { display: grid; grid-template-columns: minmax(180px, 320px) minmax(0, 1fr); gap: 18px; align-items: center; margin: 4px 0 18px; }
+.menu-presentation-preview img,
+.menu-presentation-preview iframe { display: block; width: 100%; aspect-ratio: 4 / 3; border: 1px solid var(--color-border); background: white; object-fit: contain; }
+.menu-presentation-preview > div { display: grid; gap: 6px; }
+.menu-presentation-preview strong { color: var(--color-text-primary); }
+.menu-presentation-preview span { color: var(--color-text-secondary); }
+.menu-presentation-preview a { color: var(--color-accent); font-weight: 800; }
 .dining-customer-preview .management-heading { align-items: start; }
 .dining-customer-preview .management-heading .rule-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .dining-customer-preview .management-heading .secondary { width: auto; margin: 0; }
 .dining-customer-preview__frame { margin-top: 20px; overflow: hidden; border: 1px solid var(--color-border); background: var(--color-bg); }
 .dining-customer-preview__frame iframe { display: block; width: 100%; min-height: 760px; border: 0; background: var(--color-bg); }
 @media (max-width: 760px) {
+  .menu-presentation-preview { grid-template-columns: 1fr; }
   .dining-customer-preview .management-heading .rule-actions { justify-content: stretch; width: 100%; }
   .dining-customer-preview .management-heading .secondary { flex: 1 1 180px; }
   .dining-customer-preview__frame iframe { min-height: 620px; }
