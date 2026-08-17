@@ -207,6 +207,38 @@ button.primary:disabled {
 .ga-inventory-panel dd { margin: 8px 0 0; color: var(--color-accent); font-size: 2rem; font-weight: 800; }
 @media (max-width: 900px) { .box-office-grid { grid-template-columns: 1fr; } .checkout-card { position: static; } }
 @media (max-width: 620px) { .ga-inventory-panel dl { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.ticket-service { display: grid; gap: 20px; }
+.ticket-service__heading h2 { margin: 6px 0; }
+.ticket-service__heading p { margin: 0; color: var(--color-text-secondary); }
+.ticket-service__search { display: grid; grid-template-columns: minmax(0, 1fr) 220px; align-items: end; gap: 12px; padding: 20px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.ticket-service__search .field { margin: 0; }
+.ticket-service__results { display: grid; gap: 12px; }
+.ticket-service__results article { padding: 18px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.ticket-service__results header,
+.ticket-service__ticket-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.ticket-service__results header { padding-bottom: 12px; border-bottom: 1px solid var(--color-border); }
+.ticket-service__results header div,
+.ticket-service__ticket-row div { display: grid; gap: 4px; min-width: 0; }
+.ticket-service__results span { color: var(--color-text-secondary); }
+.ticket-service__ticket-row { padding-top: 14px; }
+.ticket-service__ticket-row button { flex: 0 0 auto; }
+.ticket-reprint { display: grid; justify-items: center; gap: 10px; max-width: 480px; padding: 28px; border: 2px solid var(--color-accent); background: #fff; color: #000; text-align: center; }
+.ticket-reprint h2,
+.ticket-reprint p { margin: 0; }
+.ticket-reprint .eyebrow { color: #000; }
+.ticket-reprint__print { margin-top: 10px; }
+@media (max-width: 680px) {
+  .ticket-service__search { grid-template-columns: 1fr; }
+  .ticket-service__results header,
+  .ticket-service__ticket-row { align-items: stretch; flex-direction: column; }
+}
+@media print {
+  body * { visibility: hidden; }
+  .ticket-reprint,
+  .ticket-reprint * { visibility: visible; }
+  .ticket-reprint { position: absolute; top: 0; left: 0; width: 100%; max-width: none; border: 0; }
+  .ticket-reprint__print { display: none; }
+}
 .shift-controls { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--color-text-secondary); }
 .shift-controls button { min-height: 36px; padding: 6px 10px; }
 

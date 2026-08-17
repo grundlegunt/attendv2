@@ -9,10 +9,11 @@ import { RestaurantPos } from "./restaurant-pos";
 import { TimeClockGate } from "./time-clock-gate";
 import { BoxOfficePos } from "./box-office-pos";
 import { ShiftControls } from "./shift-controls";
+import { TicketService } from "./ticket-service";
 
 type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
-type StaffView = "scanner" | "seats" | "tabs" | "restaurant" | "box-office";
+type StaffView = "scanner" | "seats" | "tabs" | "restaurant" | "box-office" | "ticket-service";
 const STORAGE_KEY = "attend-staff-pos-session";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -384,9 +385,10 @@ export default function StaffLoginPage() {
           <button type="button" className={view === "tabs" ? "active" : ""} onClick={() => changeView("tabs")}>Tab debug</button>
           <button type="button" className={view === "restaurant" ? "active" : ""} onClick={() => changeView("restaurant")}>Server POS</button>
           {employee.permissions.includes("seat.sell") && <button type="button" className={view === "box-office" ? "active" : ""} onClick={() => changeView("box-office")}>Box office</button>}
+          {employee.permissions.includes("seat.sell") && <button type="button" className={view === "ticket-service" ? "active" : ""} onClick={() => changeView("ticket-service")}>Ticket service</button>}
         </nav>
 
-        {view !== "tabs" && view !== "restaurant" && <section className="showtime-toolbar" aria-label="Select a showtime">
+        {view !== "tabs" && view !== "restaurant" && view !== "ticket-service" && <section className="showtime-toolbar" aria-label="Select a showtime">
           <label htmlFor="showtime">Showtime</label>
           <select id="showtime" value={selectedShowtimeId} onChange={(event) => changeShowtime(event.target.value)}>
             {program?.movies.flatMap((movie) =>
@@ -409,6 +411,8 @@ export default function StaffLoginPage() {
 
         {view === "box-office" && availability ? (
           <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} seatingMode={availability.showtime.auditorium.seatingMode} refresh={loadAvailability} />
+        ) : view === "ticket-service" ? (
+          <TicketService accessToken={accessToken} />
         ) : view === "restaurant" ? (
           <RestaurantPos
             accessToken={accessToken}
