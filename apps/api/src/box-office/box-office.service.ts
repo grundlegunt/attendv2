@@ -38,6 +38,61 @@ export class BoxOfficeService {
     return customers.map((customer) => ({ ...customer, membership: null }));
   }
 
+  async orderLookup(locationId: string, query: string) {
+    const normalized = query.trim();
+    if (normalized.length < 2) {
+      throw AppError.validationFailed("Enter at least two characters.");
+    }
+    if (normalized.length > 100) {
+      throw AppError.validationFailed("Order searches cannot exceed 100 characters.");
+    }
+    return prisma.ticketOrder.findMany({
+      where: {
+        locationId,
+        OR: [
+          { orderNumber: { contains: normalized, mode: "insensitive" } },
+          { guestEmail: { contains: normalized, mode: "insensitive" } },
+          { guestName: { contains: normalized, mode: "insensitive" } },
+          { customer: { email: { contains: normalized, mode: "insensitive" } } },
+          { customer: { name: { contains: normalized, mode: "insensitive" } } },
+        ],
+      },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        totalCents: true,
+        currency: true,
+        guestName: true,
+        guestEmail: true,
+        customer: { select: { name: true, email: true } },
+        createdAt: true,
+        tickets: {
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            status: true,
+            ticketType: { select: { name: true } },
+            showtimeSeat: {
+              select: {
+                seat: { select: { label: true } },
+                showtime: {
+                  select: {
+                    startsAt: true,
+                    movie: { select: { title: true } },
+                    auditorium: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    });
+  }
+
   giftCardBalance(locationId: string, code: string) {
     return this.cinema.giftCardBalance(locationId, code);
   }

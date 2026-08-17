@@ -89,6 +89,11 @@ export class BoxOfficeController {
     return this.boxOffice.attentionRequired(this.location(actor));
   }
 
+  @Get("orders")
+  orders(@CurrentActor() actor: RequestActor, @Query("q") query = "") {
+    return this.boxOffice.orderLookup(this.location(actor), query);
+  }
+
   @Get("customers")
   customers(@CurrentActor() actor: RequestActor, @Query("q") query = "") {
     return this.boxOffice.customerLookup(this.location(actor), query);

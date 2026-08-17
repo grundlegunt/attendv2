@@ -6586,6 +6586,22 @@ describe("Milestone 9 box office and workforce", () => {
     expect(sale.body.cashTransactions[0]).toMatchObject({ amountCents: cashCents, changeGivenCents: 500 });
     expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
 
+    const lookup = await request(app.getHttpServer())
+      .get(`/api/v1/box-office/orders?q=${encodeURIComponent(sale.body.orderNumber)}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(lookup.body).toEqual([
+      expect.objectContaining({
+        id: sale.body.id,
+        orderNumber: sale.body.orderNumber,
+        tickets: [expect.objectContaining({ id: sale.body.tickets[0].id, status: "ISSUED" })],
+      }),
+    ]);
+    await request(app.getHttpServer())
+      .get("/api/v1/box-office/orders?q=A")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(400);
+
     await request(app.getHttpServer()).post(`/api/v1/box-office/tickets/${sale.body.tickets[0].id}/reprint`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({}).expect(201);
     const refundRequestId = crypto.randomUUID();
