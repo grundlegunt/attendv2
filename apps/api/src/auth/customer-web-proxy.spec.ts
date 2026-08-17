@@ -9,6 +9,7 @@ describe("customer-web API proxy", () => {
   it("accepts only fixed customer-facing namespaces and customer auth", () => {
     expect(() => validateCustomerApiPath(["auth", "customers", "login"])).not.toThrow();
     expect(() => validateCustomerApiPath(["customer", "restaurant-tabs", "tab-id"])).not.toThrow();
+    expect(() => validateCustomerApiPath(["gift-card-purchases", "config"])).not.toThrow();
     expect(() => validateCustomerApiPath(["admin", "reports"])).toThrow();
     expect(() => validateCustomerApiPath(["auth", "staff", "login"])).toThrow();
     expect(() => validateCustomerApiPath(["cinema", "..", "admin"])).toThrow();

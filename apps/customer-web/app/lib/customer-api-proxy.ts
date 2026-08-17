@@ -21,7 +21,14 @@ const RESPONSE_HEADERS = [
   "x-request-id",
 ] as const;
 
-const CUSTOMER_API_NAMESPACES = new Set(["auth", "cinema", "customer", "public", "ticketing"]);
+const CUSTOMER_API_NAMESPACES = new Set([
+  "auth",
+  "cinema",
+  "customer",
+  "gift-card-purchases",
+  "public",
+  "ticketing",
+]);
 
 export interface CustomerApiProxyOptions {
   upstreamBaseUrl?: string;
