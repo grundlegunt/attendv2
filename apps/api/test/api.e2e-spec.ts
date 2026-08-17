@@ -1328,6 +1328,42 @@ describe("Milestone 1 cinema configuration", () => {
       .send({ ticketPriceMinor: 2000, active: false });
   });
 
+  it("lets managers create, rename, and retire customer-facing ticket types", async () => {
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/ticket-types")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: `Member ${Date.now()}` })
+      .expect(201);
+    expect(created.body).toEqual(expect.objectContaining({ active: true }));
+
+    const renamed = await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/ticket-types/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: `Member admission ${Date.now()}`, active: false })
+      .expect(200);
+    expect(renamed.body).toEqual(expect.objectContaining({ active: false }));
+
+    const settings = await request(app.getHttpServer())
+      .get("/api/v1/management/settings")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(settings.body.ticketTypes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: created.body.id, name: renamed.body.name, active: false }),
+    ]));
+
+    await request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/ticket-types/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ active: true })
+      .expect(200);
+
+    const audit = await request(app.getHttpServer())
+      .get("/api/v1/audit-events?action=ticket.type_updated&limit=2")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(audit.body.filter((event: { entityId: string }) => event.entityId === created.body.id)).toHaveLength(2);
+  });
+
   it("lets managers update and deactivate restaurant charge rules", async () => {
     const tax = await request(app.getHttpServer())
       .post("/api/v1/management/settings/tax-rules")

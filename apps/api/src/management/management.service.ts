@@ -39,6 +39,7 @@ export class ManagementService {
       where: { id: locationId },
       include: {
         organization: { select: { priceTiers: { orderBy: { name: "asc" }, select: { id: true, name: true, ticketPriceMinor: true, active: true } } } },
+        ticketTypes: { orderBy: { name: "asc" }, select: { id: true, name: true, active: true } },
         taxRules: { orderBy: { name: "asc" } },
         serviceChargeRules: { orderBy: { name: "asc" } },
         promotions: { orderBy: { code: "asc" }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { subtotalCents: true, totalCents: true, discountCents: true, tickets: { select: { id: true } } } } } },
@@ -66,6 +67,35 @@ export class ManagementService {
       if (!before) throw AppError.notFound("Ticket price group not found.");
       const updated = await tx.priceTier.update({ where: { id: before.id }, data: { ticketPriceMinor: input.ticketPriceMinor, active: input.active } });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_updated", entityType: "PriceTier", entityId: updated.id, beforeState: { ticketPriceMinor: before.ticketPriceMinor, active: before.active }, afterState: { ticketPriceMinor: updated.ticketPriceMinor, active: updated.active } } });
+      return updated;
+    });
+  }
+
+  async createTicketType(input: { locationId: string; employeeId: string; name: string }) {
+    return prisma.$transaction(async (tx) => {
+      const duplicate = await tx.ticketType.findFirst({ where: { locationId: input.locationId, name: { equals: input.name, mode: "insensitive" } } });
+      if (duplicate) throw AppError.conflict("A ticket type with this name already exists.");
+      const ticketType = await tx.ticketType.create({ data: { locationId: input.locationId, name: input.name } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.type_created", entityType: "TicketType", entityId: ticketType.id, afterState: { name: ticketType.name, active: ticketType.active } } });
+      return ticketType;
+    });
+  }
+
+  async updateTicketType(input: { locationId: string; employeeId: string; ticketTypeId: string; name?: string; active?: boolean }) {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
+      const before = await tx.ticketType.findFirst({ where: { id: input.ticketTypeId, locationId: input.locationId } });
+      if (!before) throw AppError.notFound("Ticket type not found.");
+      if (input.name && input.name.toLocaleLowerCase() !== before.name.toLocaleLowerCase()) {
+        const duplicate = await tx.ticketType.findFirst({ where: { locationId: input.locationId, name: { equals: input.name, mode: "insensitive" }, id: { not: before.id } } });
+        if (duplicate) throw AppError.conflict("A ticket type with this name already exists.");
+      }
+      if (before.active && input.active === false) {
+        const activeCount = await tx.ticketType.count({ where: { locationId: input.locationId, active: true } });
+        if (activeCount <= 1) throw AppError.conflict("At least one ticket type must remain active for checkout.");
+      }
+      const updated = await tx.ticketType.update({ where: { id: before.id }, data: { name: input.name, active: input.active } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.type_updated", entityType: "TicketType", entityId: updated.id, beforeState: { name: before.name, active: before.active }, afterState: { name: updated.name, active: updated.active } } });
       return updated;
     });
   }
