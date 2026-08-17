@@ -15,7 +15,12 @@ export class BoxOfficeService {
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
   ) {}
 
-  holdSeats(showtimeId: string, seatIds: string[], holderKey: string) {
+  async holdSeats(showtimeId: string, seatIds: string[], holderKey: string, locationId: string) {
+    const showtime = await prisma.showtime.findFirst({
+      where: { id: showtimeId, auditorium: { locationId } },
+      select: { id: true },
+    });
+    if (!showtime) throw AppError.notFound("Showtime was not found.");
     return this.cinema.holdSeats(showtimeId, seatIds, holderKey);
   }
 
@@ -72,6 +77,7 @@ export class BoxOfficeService {
           select: {
             id: true,
             status: true,
+            priceCentsPaid: true,
             ticketType: { select: { name: true } },
             showtimeSeat: {
               select: {

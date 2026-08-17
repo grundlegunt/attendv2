@@ -39,9 +39,9 @@ export class BoxOfficeController {
   }
 
   @Post("showtimes/:showtimeId/holds")
-  hold(@Param("showtimeId") showtimeId: string, @Body(new ZodValidationPipe(boxOfficeHoldRequestSchema)) body: unknown) {
+  hold(@CurrentActor() actor: RequestActor, @Param("showtimeId") showtimeId: string, @Body(new ZodValidationPipe(boxOfficeHoldRequestSchema)) body: unknown) {
     const parsed = boxOfficeHoldRequestSchema.parse(body);
-    return this.boxOffice.holdSeats(showtimeId, parsed.seatIds, parsed.holderKey);
+    return this.boxOffice.holdSeats(showtimeId, parsed.seatIds, parsed.holderKey, this.location(actor));
   }
 
   @Post("quotes")
