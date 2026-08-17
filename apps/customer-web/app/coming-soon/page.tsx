@@ -1,29 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { localDateKey, MovieTile } from "../components/movie-tile";
 import { useCinemaContent } from "../components/customer-branding";
+import { EditorialMovieList } from "../components/editorial-movie-list";
 
 interface ProgramResponse {
   location: { id: string; name: string; timezone: string };
   movies: NowPlayingMovie[];
 }
 
-export default function ComingSoonPage() {
+function ComingSoonContent() {
   const { comingSoon: copy } = useCinemaContent();
+  const searchParams = useSearchParams();
   const [program, setProgram] = useState<ProgramResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [justAnnounced, setJustAnnounced] = useState(false);
-
-  useEffect(() => {
-    setJustAnnounced(
-      new URLSearchParams(window.location.search).get("view") ===
-        "JUST_ANNOUNCED",
-    );
-  }, []);
+  const justAnnounced = searchParams.get("view") === "JUST_ANNOUNCED";
 
   useEffect(() => {
     setError(null);
@@ -75,17 +71,13 @@ export default function ComingSoonPage() {
 
   return (
     <main className="cinema-shell route-page">
-      <section className="route-heading">
+      {!justAnnounced && <section className="route-heading">
         <span className="eyebrow">
-          {justAnnounced ? "NEWLY ADDED" : copy.eyebrow}
+          {copy.eyebrow}
         </span>
-        <h1>{justAnnounced ? "Just Announced" : copy.title}</h1>
-        <p>
-          {justAnnounced
-            ? "The newest films added to our upcoming program."
-            : copy.intro}
-        </p>
-      </section>
+        <h1>{copy.title}</h1>
+        <p>{copy.intro}</p>
+      </section>}
       {error && <><div className="error-banner">{error}</div><button className="primary" type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>Try again</button></>}
       {!program && !error && <p className="loading-copy">{copy.loading}</p>}
       {program && movies.length === 0 && (
@@ -93,18 +85,34 @@ export default function ComingSoonPage() {
           {justAnnounced ? "No newly announced films yet." : copy.empty}
         </p>
       )}
-      <section className="movie-grid">
-        {program &&
-          movies.map((movie) => (
-            <MovieTile
-              key={movie.id}
-              movie={movie}
-              showtimes={movie.showtimes}
-              timeZone={program.location.timezone}
-              firstDateOnly
-            />
-          ))}
-      </section>
+      {program && justAnnounced && movies.length > 0 ? (
+        <EditorialMovieList
+          movies={movies}
+          timeZone={program.location.timezone}
+          variant="just-announced"
+        />
+      ) : (
+        <section className="movie-grid">
+          {program &&
+            movies.map((movie) => (
+              <MovieTile
+                key={movie.id}
+                movie={movie}
+                showtimes={movie.showtimes}
+                timeZone={program.location.timezone}
+                firstDateOnly
+              />
+            ))}
+        </section>
+      )}
     </main>
+  );
+}
+
+export default function ComingSoonPage() {
+  return (
+    <Suspense fallback={<main className="cinema-shell route-page" />}>
+      <ComingSoonContent />
+    </Suspense>
   );
 }

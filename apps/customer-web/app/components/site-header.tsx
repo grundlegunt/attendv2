@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useCinemaContent, useCustomerBranding } from "./customer-branding";
 
@@ -18,6 +18,7 @@ const links = [
 
 export function SiteHeader() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const branding = useCustomerBranding();
   const content = useCinemaContent();
   const [logoFailed, setLogoFailed] = useState(false);
@@ -25,6 +26,9 @@ export function SiteHeader() {
   useEffect(() => setLogoFailed(false), [branding.logoUrl]);
 
   const showLogo = Boolean(branding.logoUrl) && !logoFailed;
+  const activeHref = searchParams.size
+    ? `${pathname}?${searchParams.toString()}`
+    : pathname;
 
   return (
     <header className="site-header">
@@ -41,7 +45,7 @@ export function SiteHeader() {
             <Link
               key={link.href}
               href={link.href}
-              aria-current={pathname === link.href ? "page" : undefined}
+              aria-current={activeHref === link.href ? "page" : undefined}
             >
               {link.label}
             </Link>

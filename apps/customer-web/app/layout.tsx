@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import "@cinema/ui/theme.css";
 import "./globals.css";
 import { SiteHeader } from "./components/site-header";
@@ -14,7 +14,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en" data-theme="cinematic" data-branding-status="loading">
       <body>
         <CustomerBrandingProvider>
-          <SiteHeader />
+          <Suspense fallback={null}>
+            <SiteHeader />
+          </Suspense>
           {children}
         </CustomerBrandingProvider>
       </body>

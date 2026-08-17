@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { showtimeDateStrip, type NowPlayingMovie } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { SeatPicker } from "../components/seat-picker";
@@ -9,6 +10,7 @@ import { ShowtimeCalendar } from "../components/showtime-calendar";
 import { useCinemaContent } from "../components/customer-branding";
 import { MovieSpecials } from "../components/movie-specials";
 import { usePublicDiningMenu } from "../components/public-dining-menu";
+import { EditorialMovieList } from "../components/editorial-movie-list";
 
 interface NowPlayingResponse {
   location: {
@@ -20,9 +22,10 @@ interface NowPlayingResponse {
   movies: NowPlayingMovie[];
 }
 
-export default function ShowtimesPage() {
+function ShowtimesContent() {
   const { showtimes: copy } = useCinemaContent();
   const { menu } = usePublicDiningMenu();
+  const searchParams = useSearchParams();
   const [program, setProgram] = useState<NowPlayingResponse | null>(null);
   const [programError, setProgramError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -31,11 +34,8 @@ export default function ShowtimesPage() {
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [openCaptionsOnly, setOpenCaptionsOnly] = useState(false);
-
-  useEffect(() => {
-    setOpenCaptionsOnly(new URLSearchParams(window.location.search).get("presentation") === "OPEN_CAPTIONS");
-  }, []);
+  const openCaptionsOnly =
+    searchParams.get("presentation") === "OPEN_CAPTIONS";
 
   const programMovies = useMemo(() => (program?.movies ?? [])
     .map((movie) => ({
@@ -126,13 +126,13 @@ export default function ShowtimesPage() {
 
   return (
     <main className="cinema-shell route-page">
-      <section className="route-heading">
-        <span className="eyebrow">{openCaptionsOnly ? "ACCESSIBLE SCREENINGS" : copy.eyebrow}</span>
-        <h1>{openCaptionsOnly ? "Open Caption Showtimes" : copy.title}</h1>
+      {!openCaptionsOnly && <section className="route-heading">
+        <span className="eyebrow">{copy.eyebrow}</span>
+        <h1>{copy.title}</h1>
         {program && <p>{copy.intro}</p>}
-      </section>
+      </section>}
 
-      {!selectedShowtimeId && visibleDates.length > 0 && (
+      {!openCaptionsOnly && !selectedShowtimeId && visibleDates.length > 0 && (
         <nav className="date-bar" aria-label="Showtime dates">
           {visibleDates.map((dateKey) => {
             const date = new Date(`${dateKey}T12:00:00`);
@@ -196,22 +196,42 @@ export default function ShowtimesPage() {
           )}
           {program &&
             programMovies.length > 0 &&
+            !openCaptionsOnly &&
             moviesForActiveDate.length === 0 && (
               <p className="loading-copy">{copy.emptyDate}</p>
             )}
 
-          <section className="movie-grid showtimes-movie-grid">
-            {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
-              key={movie.id}
-              movie={movie}
-              showtimes={showtimes}
-              timeZone={program!.location.timezone}
+          {program && openCaptionsOnly && programMovies.length > 0 ? (
+            <EditorialMovieList
+              movies={programMovies}
+              timeZone={program.location.timezone}
+              variant="open-captions"
               onSelectShowtime={setSelectedShowtimeId}
-            />)}
-          </section>
-          <MovieSpecials specials={specialsForActiveDate} showtimes />
+            />
+          ) : (
+            <>
+              <section className="movie-grid showtimes-movie-grid">
+                {moviesForActiveDate.map(({ movie, showtimes }) => <MovieTile
+                  key={movie.id}
+                  movie={movie}
+                  showtimes={showtimes}
+                  timeZone={program!.location.timezone}
+                  onSelectShowtime={setSelectedShowtimeId}
+                />)}
+              </section>
+              <MovieSpecials specials={specialsForActiveDate} showtimes />
+            </>
+          )}
         </>
       )}
     </main>
+  );
+}
+
+export default function ShowtimesPage() {
+  return (
+    <Suspense fallback={<main className="cinema-shell route-page" />}>
+      <ShowtimesContent />
+    </Suspense>
   );
 }
