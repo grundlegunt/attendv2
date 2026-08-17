@@ -21,8 +21,12 @@ import {
   validateSeatLayout,
   cinemaContentDefaults,
   cinemaContentSchema,
+  dedupePublicShowtimes,
 } from "@cinema/shared";
-import type { PublicDiningMenuResponse } from "@cinema/shared";
+import type {
+  PublicDiningMenuResponse,
+  PublicShowtime,
+} from "@cinema/shared";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 
@@ -2866,10 +2870,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       movies: sortedMovies.map((movie) => ({
         ...movie,
-        showtimes: movie.showtimes.map((showtime) => ({
-          ...showtime,
-          startsAt: showtime.startsAt.toISOString(),
-        })),
+        showtimes: dedupePublicShowtimes(
+          movie.showtimes.map((showtime) => ({
+            ...showtime,
+            startsAt: showtime.startsAt.toISOString(),
+          })) as PublicShowtime[],
+        ),
       })),
     };
   }
