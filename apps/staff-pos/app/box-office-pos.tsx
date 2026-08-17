@@ -5,7 +5,7 @@ import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type LiveSeat = Omit<SeatMapSeat, "state"> & { id: string; state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" };
-type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}> };
+type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}>; promotion: {code:string;name:string}|null };
 const DEFAULT_READER_ID = "tmr_box_1";
 
 export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; seatingMode: "RESERVED" | "GENERAL_ADMISSION"; refresh: () => Promise<void> }) {
@@ -445,7 +445,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
       <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
       <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} {isGeneralAdmission ? "ticket(s)" : "seat(s)"}</button></form>
-    {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Discount −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
+    {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Promotion{quote.promotion ? ` · ${quote.promotion.name} (${quote.promotion.code})` : ""} −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => { setCashCents(event.target.value); setCashReceived("0"); }} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} disabled={busy || Number(cashCents) <= 0} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" step="1" value={cardCents} disabled={busy} onChange={(event) => setCardCents(event.target.value)} /></label>

@@ -773,7 +773,7 @@ export function TicketCheckout({
           <div className="checkout-panel order-total">
             <h3>Order</h3>
             <p><span>Tickets ({seats.length})</span><strong>{money(checkout.subtotalCents, checkout.currency)}</strong></p>
-            {checkout.discountCents > 0 && <p><span>Promotion</span><strong>−{money(checkout.discountCents, checkout.currency)}</strong></p>}
+            {checkout.discountCents > 0 && <p><span>Promotion{checkout.promotion ? ` · ${checkout.promotion.name} (${checkout.promotion.code})` : ""}</span><strong>−{money(checkout.discountCents, checkout.currency)}</strong></p>}
             <p><span>Service fee</span><strong>{money(checkout.feesCents, checkout.currency)}</strong></p>
             <p><span>Tax</span><strong>{money(checkout.taxCents, checkout.currency)}</strong></p>
             {checkout.orderAheadSubtotalCents > 0 && <p><span>Food + drinks</span><strong>{money(checkout.orderAheadSubtotalCents, checkout.currency)}</strong></p>}
