@@ -3,6 +3,7 @@ import {
   proxyCustomerApiRequest,
   validateCustomerApiPath,
 } from "../../../customer-web/app/lib/customer-api-proxy";
+import { GET as getCustomerNowPlaying } from "../../../customer-web/app/api/v1/cinema/now-playing/route";
 
 describe("customer-web API proxy", () => {
   it("accepts only fixed customer-facing namespaces and customer auth", () => {
@@ -80,6 +81,32 @@ describe("customer-web API proxy", () => {
       new URL("http://127.0.0.1:4000/api/v1/cinema/content"),
       expect.any(Object),
     );
+  });
+
+  it("serves the customer program from the same upstream API as movie details", async () => {
+    const originalUpstream = process.env.CUSTOMER_API_UPSTREAM_URL;
+    process.env.CUSTOMER_API_UPSTREAM_URL = "https://api.example/api/v1";
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(
+      Response.json({ movies: [{ id: "movie-id", detailPosterUrl: "/canonical-poster.jpg" }] }),
+    );
+
+    try {
+      const response = await getCustomerNowPlaying(
+        new Request("https://customer.example/api/v1/cinema/now-playing?locationId=location-id"),
+      );
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        new URL("https://api.example/api/v1/cinema/now-playing?locationId=location-id"),
+        expect.any(Object),
+      );
+      await expect(response.json()).resolves.toEqual({
+        movies: [{ id: "movie-id", detailPosterUrl: "/canonical-poster.jpg" }],
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      if (originalUpstream === undefined) delete process.env.CUSTOMER_API_UPSTREAM_URL;
+      else process.env.CUSTOMER_API_UPSTREAM_URL = originalUpstream;
+    }
   });
 
   it("returns 404 without contacting the upstream for disallowed paths", async () => {
