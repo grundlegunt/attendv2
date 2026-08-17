@@ -1017,8 +1017,14 @@ html[data-branding-status="loading"] body {
 .program-tile__showtimes .program-tile__showtime-time {
   display: flex;
   align-items: center;
+  flex-wrap: nowrap;
   gap: 6px;
   color: inherit;
+  white-space: nowrap;
+}
+.program-tile__showtime-time strong,
+.program-tile__showtime-time .program-tile__presentation {
+  flex-shrink: 0;
 }
 .program-tile__presentation {
   display: inline-flex;

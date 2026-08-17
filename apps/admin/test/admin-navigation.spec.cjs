@@ -8,6 +8,7 @@ const ts = require("typescript");
 const navigationPath = resolve(__dirname, "../app/admin-navigation.ts");
 const adminSessionSource = readFileSync(resolve(__dirname, "../app/admin-session.tsx"), "utf8");
 const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
+const globalStylesSource = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -136,5 +137,26 @@ describe("saved schedule publishing", () => {
     assert.match(schedulingSource, /"Make live"/);
     assert.match(schedulingSource, /expectedUpdatedAt: validation\.expectedUpdatedAt/);
     assert.doesNotMatch(schedulingSource, />Publish saved plan</);
+  });
+});
+
+describe("showtime inspector layout", () => {
+  it("contains the seat map and form controls within their grid columns", () => {
+    assert.match(
+      globalStylesSource,
+      /\.schedule-inspector \.showtime-inspector-summary \{[^}]*min-width: 0;/,
+    );
+    assert.match(
+      globalStylesSource,
+      /\.schedule-inspector \.showtime-inspector-fields \{[^}]*min-width: 0;/,
+    );
+    assert.match(
+      globalStylesSource,
+      /\.showtime-seat-inventory \{[^}]*grid-column: 1 \/ -1;[^}]*min-width: 0;/,
+    );
+    assert.match(
+      globalStylesSource,
+      /\.showtime-inspector-fields input, \.showtime-inspector-fields select \{[^}]*width: 100%;[^}]*min-width: 0;/,
+    );
   });
 });
