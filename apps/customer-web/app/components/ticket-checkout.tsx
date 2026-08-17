@@ -149,6 +149,7 @@ export function TicketCheckout({
   const [zipCode, setZipCode] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
+  const [selectedTicketTypeId, setSelectedTicketTypeId] = useState("");
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [orderAheadOpen, setOrderAheadOpen] = useState(false);
   const [openOrderAheadCategoryId, setOpenOrderAheadCategoryId] = useState<string | null>(null);
@@ -266,6 +267,11 @@ export function TicketCheckout({
       if (requestId !== configRequestRef.current) return;
       setConfig(nextConfig);
       setConfigShowtimeId(showtimeId);
+      setSelectedTicketTypeId((current) =>
+        nextConfig.ticketTypes.some((ticketType) => ticketType.id === current)
+          ? current
+          : nextConfig.ticketTypes[0]?.id ?? "",
+      );
     } catch (requestError) {
       if (requestId !== configRequestRef.current) return;
       setError(
@@ -286,6 +292,7 @@ export function TicketCheckout({
     configLoadingRef.current = false;
     setConfig(null);
     setConfigShowtimeId(null);
+    setSelectedTicketTypeId("");
     void loadConfig();
     return () => {
       configRequestRef.current += 1;
@@ -443,7 +450,7 @@ export function TicketCheckout({
           body: JSON.stringify({
             holdTokens,
             holderKey,
-            ticketTypeId: config.ticketTypes[0]?.id,
+            ticketTypeId: selectedTicketTypeId,
             email,
             name: name || undefined,
             zipCode: zipCode.trim() || undefined,
@@ -563,6 +570,24 @@ export function TicketCheckout({
       )}
       {!checkout ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
+          <div className="checkout-panel">
+            <h3>Ticket type</h3>
+            <label className="field">
+              <span>Apply to all {seats.length} selected {seats.length === 1 ? "seat" : "seats"}</span>
+              <select
+                required
+                value={selectedTicketTypeId}
+                disabled={configLoading || !config?.ticketTypes.length}
+                onChange={(event) => setSelectedTicketTypeId(event.target.value)}
+              >
+                {!config?.ticketTypes.length && <option value="">No ticket types available</option>}
+                {config?.ticketTypes.map((ticketType) => (
+                  <option key={ticketType.id} value={ticketType.id}>{ticketType.name}</option>
+                ))}
+              </select>
+            </label>
+            <small>The selected type applies to every ticket in this order.</small>
+          </div>
           <div className="checkout-panel">
             <h3>Receipt</h3>
             <label className="field">
@@ -735,7 +760,8 @@ export function TicketCheckout({
               configShowtimeId !== showtimeId ||
               diningAuthorization === null ||
               !orderAheadSelectionIsValid() ||
-              !config?.ticketTypes.length ||
+              !config ||
+              !selectedTicketTypeId ||
               (!config.payment.ready && !giftCardCode.trim())
             }
           >
