@@ -56,7 +56,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
     setPromotionCode(""); setCashCents("0"); setCardCents("0"); setCashReceived("0");
     setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
-    setReaderId("");
+    setReaderId(DEFAULT_READER_ID);
     setMessage(null);
     apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
       .then((data) => {
@@ -148,7 +148,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     setGiftCardBalance(null);
     setGiftCardCurrency(null);
     setGiftRemainderTender("CASH");
-    setReaderId("");
+    setReaderId(DEFAULT_READER_ID);
   }
   function changeRegister(nextRegisterId: string) {
     openDrawerAttemptRef.current = null;
@@ -156,7 +156,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     setDrawer(null);
     setDrawerStatus("loading");
     setOpeningBalance("");
-    setReaderId("");
+    setReaderId(DEFAULT_READER_ID);
     setMessage(null);
     setRegisterId(nextRegisterId);
   }
