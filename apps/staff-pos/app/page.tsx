@@ -412,7 +412,11 @@ export default function StaffLoginPage() {
         {view === "box-office" && availability ? (
           <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} seatingMode={availability.showtime.auditorium.seatingMode} refresh={loadAvailability} />
         ) : view === "ticket-service" ? (
-          <TicketService accessToken={accessToken} />
+          <TicketService
+            accessToken={accessToken}
+            movies={program?.movies ?? []}
+            canExchange={employee.permissions.includes("ticket.refund")}
+          />
         ) : view === "restaurant" ? (
           <RestaurantPos
             accessToken={accessToken}
