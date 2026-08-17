@@ -1741,7 +1741,8 @@ body:has(.signage-shell) .site-header { display: none; }
   margin: 0 0 18px;
   font: 1.5rem var(--font-family-display);
 }
-.checkout-panel .field input {
+.checkout-panel .field input,
+.checkout-panel .field select {
   box-sizing: border-box;
   width: 100%;
 }
