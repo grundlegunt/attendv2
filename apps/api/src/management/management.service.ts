@@ -54,19 +54,31 @@ export class ManagementService {
   async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, organization: { select: { ticketFeeMinor: true } } } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const duplicate = await tx.priceTier.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
+      if (duplicate) throw AppError.conflict("A ticket price group with this name already exists.");
       const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor, appliesOnWeekdays: [] } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { name: tier.name, ticketPriceMinor: tier.ticketPriceMinor } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { name: tier.name, ticketPriceMinor: tier.ticketPriceMinor, active: tier.active } } });
       return tier;
     });
   }
 
-  async updatePriceTier(input: { locationId: string; employeeId: string; priceTierId: string; ticketPriceMinor: number; active?: boolean }) {
+  async updatePriceTier(input: { locationId: string; employeeId: string; priceTierId: string; name?: string; ticketPriceMinor?: number; active?: boolean }) {
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
       const before = await tx.priceTier.findFirst({ where: { id: input.priceTierId, organizationId: location.organizationId } });
       if (!before) throw AppError.notFound("Ticket price group not found.");
-      const updated = await tx.priceTier.update({ where: { id: before.id }, data: { ticketPriceMinor: input.ticketPriceMinor, active: input.active } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_updated", entityType: "PriceTier", entityId: updated.id, beforeState: { ticketPriceMinor: before.ticketPriceMinor, active: before.active }, afterState: { ticketPriceMinor: updated.ticketPriceMinor, active: updated.active } } });
+      if (input.name && input.name.toLocaleLowerCase() !== before.name.toLocaleLowerCase()) {
+        const duplicate = await tx.priceTier.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" }, id: { not: before.id } } });
+        if (duplicate) throw AppError.conflict("A ticket price group with this name already exists.");
+      }
+      if (before.active && input.active === false) {
+        const activeCount = await tx.priceTier.count({ where: { organizationId: location.organizationId, active: true } });
+        if (activeCount <= 1) throw AppError.conflict("At least one ticket price group must remain active for scheduling and checkout.");
+      }
+      const updated = await tx.priceTier.update({ where: { id: before.id }, data: { name: input.name, ticketPriceMinor: input.ticketPriceMinor, active: input.active } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_updated", entityType: "PriceTier", entityId: updated.id, beforeState: { name: before.name, ticketPriceMinor: before.ticketPriceMinor, active: before.active }, afterState: { name: updated.name, ticketPriceMinor: updated.ticketPriceMinor, active: updated.active } } });
       return updated;
     });
   }

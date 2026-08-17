@@ -1322,10 +1322,18 @@ describe("Milestone 1 cinema configuration", () => {
       entityId: created.body.id,
     }));
 
-    await request(app.getHttpServer())
+    const duplicate = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/price-tiers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: name.toUpperCase(), ticketPriceMinor: 2100 });
+    expect(duplicate.status).toBe(409);
+
+    const renamed = await request(app.getHttpServer())
       .patch(`/api/v1/management/settings/price-tiers/${created.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ ticketPriceMinor: 2000, active: false });
+      .send({ name: `${name} renamed`, active: false });
+    expect(renamed.status).toBe(200);
+    expect(renamed.body).toEqual(expect.objectContaining({ name: `${name} renamed`, ticketPriceMinor: 2000, active: false }));
   });
 
   it("lets managers create, rename, and retire customer-facing ticket types", async () => {
