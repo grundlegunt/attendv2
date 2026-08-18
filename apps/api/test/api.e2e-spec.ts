@@ -2061,6 +2061,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       `/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`,
     );
     expect(config.status).toBe(200);
+    expect(config.body.baseTicketPriceCents).toBe(showtime.priceTier.ticketPriceMinor);
     const basePriceTicketType = config.body.ticketTypes.find(
       (ticketType: { priceAdjustmentMinor: number }) => ticketType.priceAdjustmentMinor === 0,
     );

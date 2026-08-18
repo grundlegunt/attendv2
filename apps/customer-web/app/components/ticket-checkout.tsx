@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CustomerAccountResponse,
   CustomerSessionResponse,
@@ -13,6 +13,7 @@ import { downloadTicketCalendar } from "../lib/ticket-calendar";
 
 interface CheckoutConfig {
   currency: string;
+  baseTicketPriceCents: number;
   ticketTypes: Array<{ id: string; name: string; priceAdjustmentMinor: number }>;
   orderAhead: {
     available: boolean;
@@ -178,6 +179,16 @@ export function TicketCheckout({
   const paymentConfirmedRef = useRef(false);
   const configRequestRef = useRef(0);
   const configLoadingRef = useRef(false);
+  const ticketTypeById = useMemo(
+    () => new Map(config?.ticketTypes.map((ticketType) => [ticketType.id, ticketType]) ?? []),
+    [config],
+  );
+  const ticketPricePreviewCents = config
+    ? holdTokens.reduce((total, holdToken) => {
+      const ticketType = ticketTypeById.get(ticketTypeByHoldToken[holdToken] ?? "");
+      return total + Math.max(0, config.baseTicketPriceCents + (ticketType?.priceAdjustmentMinor ?? 0));
+    }, 0)
+    : 0;
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
   const nameDirtyRef = useRef(false);
@@ -717,7 +728,12 @@ export function TicketCheckout({
             </label>
             {seats.map((seat, index) => (
               <label className="field" key={holdTokens[index]}>
-                <span>Seat {seat}</span>
+                <span>
+                  Seat {seat}
+                  {config && ticketTypeById.get(ticketTypeByHoldToken[holdTokens[index]!] ?? "") && (
+                    <> · {money(Math.max(0, config.baseTicketPriceCents + ticketTypeById.get(ticketTypeByHoldToken[holdTokens[index]!] ?? "")!.priceAdjustmentMinor), config.currency)}</>
+                  )}
+                </span>
                 <select
                   required
                   value={ticketTypeByHoldToken[holdTokens[index]!] ?? ""}
@@ -733,6 +749,13 @@ export function TicketCheckout({
                 </select>
               </label>
             ))}
+            {config && (
+              <p className="order-ahead-estimate">
+                <span>Ticket subtotal</span>
+                <strong>{money(ticketPricePreviewCents, config.currency)}</strong>
+                <small>Service fees, tax, promotions, and gift cards are applied securely at checkout.</small>
+              </p>
+            )}
             <small>Choose the admission type that applies to each ticket.</small>
           </div>
           <div className="checkout-panel">
