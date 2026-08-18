@@ -135,6 +135,7 @@ export function TicketCheckout({
   auditorium,
   startsAt,
   timeZone,
+  holdRemainingSeconds,
   onBack,
 }: {
   showtimeId: string;
@@ -145,6 +146,7 @@ export function TicketCheckout({
   auditorium: string;
   startsAt: string;
   timeZone: string;
+  holdRemainingSeconds: number;
   onBack: () => void;
 }) {
   const [config, setConfig] = useState<CheckoutConfig | null>(null);
@@ -313,6 +315,14 @@ export function TicketCheckout({
         `/ticketing/showtimes/${showtimeId}/checkout-config`,
       );
       if (requestId !== configRequestRef.current) return;
+      if (
+        !Number.isFinite(nextConfig.baseTicketPriceCents) ||
+        nextConfig.ticketTypes.some(
+          (ticketType) => !Number.isFinite(ticketType.priceAdjustmentMinor),
+        )
+      ) {
+        throw new Error("Ticket pricing is temporarily unavailable.");
+      }
       setConfig(nextConfig);
       setConfigShowtimeId(showtimeId);
       setSelectedTicketTypeId((current) =>
@@ -333,6 +343,8 @@ export function TicketCheckout({
       setError(
         requestError instanceof ApiRequestError
           ? requestError.body.message
+          : requestError instanceof Error
+            ? requestError.message
           : "Checkout is temporarily unavailable.",
       );
     } finally {
@@ -710,6 +722,12 @@ export function TicketCheckout({
           }).format(new Date(startsAt))} · {auditorium}
         </p>
         <p>{seats.join(", ")}</p>
+        <div className="hold-clock" aria-live="polite">
+          <span>{holdRemainingSeconds > 0 ? "Tickets held" : "Hold expired"}</span>
+          <strong>
+            {Math.floor(holdRemainingSeconds / 60)}:{String(holdRemainingSeconds % 60).padStart(2, "0")}
+          </strong>
+        </div>
       </div>
       {error && <div className="error-banner">{error}</div>}
       {!config && error && !checkout && (
@@ -947,6 +965,7 @@ export function TicketCheckout({
               !orderAheadSelectionIsValid() ||
               !config ||
               !selectedTicketTypeId ||
+              holdRemainingSeconds === 0 ||
               holdTokens.some((holdToken) => !ticketTypeByHoldToken[holdToken]) ||
               (!config.payment.ready && !giftCardCode.trim())
             }
