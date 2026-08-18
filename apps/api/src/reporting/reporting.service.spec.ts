@@ -29,6 +29,7 @@ describe("ReportingService distributor box-office export", () => {
         ticketRevenueCents: 1700, ticketFeesCents: 200, ticketTaxCents: 166, ticketCollectedCents: 2066,
         fnbRevenueCents: 1400, combinedRevenueCents: 3466, ticketsSold: 1, fnbOrders: 1,
         averageFnbSpendPerOrderCents: 1400, averageFnbSpendPerSeatCents: 1400,
+        averageTotalSpendPerPatronCents: 3466, concessionAttachRatePercent: 100,
       },
       movies: [{ movieId: "movie-1", title: 'Film, "One"', ticketRevenueCents: 1700, ticketsSold: 1, fnbRevenueCents: 1400 }],
       showtimes: [{ showtimeId: "show-1", movieId: "movie-1", title: 'Film, "One"', startsAt: new Date("2026-08-05T18:00:00.000Z"), ticketRevenueCents: 1700, ticketsSold: 1, fnbRevenueCents: 1400 }],

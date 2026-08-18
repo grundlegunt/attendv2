@@ -20,7 +20,7 @@ type Bootstrap = {
 };
 
 type RevenueReport = {
-  totals: { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
+  totals: { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number; averageTotalSpendPerPatronCents: number; concessionAttachRatePercent: number };
   movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; startsAt: string; ticketsSold: number }>;
   admissionTypes: Array<{ ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>;
