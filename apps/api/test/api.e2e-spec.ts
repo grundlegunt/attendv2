@@ -6076,7 +6076,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       data: {
         paymentCustomerId: source.activePaymentMethod!.paymentCustomerId,
         provider: "test",
-        providerPaymentMethodId: "pm_delayed_staff_fallback_race",
+        providerPaymentMethodId: "pm_slow_staff_fallback_race",
         brand: "visa",
         last4: "0004",
         expMonth: 12,
@@ -6132,14 +6132,19 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const settlement = app.get(RestaurantSettlementService);
 
     const fallback = settlement.runFallback();
-    for (let attempt = 0; attempt < 50; attempt += 1) {
+    let fallbackStarted = false;
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
       const current = await prisma.restaurantTab.findUniqueOrThrow({
         where: { id: tab.id },
         select: { status: true },
       });
-      if (current.status === "SETTLEMENT_PENDING") break;
+      if (current.status === "SETTLEMENT_PENDING") {
+        fallbackStarted = true;
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
+    expect(fallbackStarted).toBe(true);
     await prisma.restaurantTab.update({
       where: { id: tab.id },
       data: { checkDroppedAt: new Date(), checkDroppedByEmployeeId: owner.id },
@@ -6625,17 +6630,29 @@ describe("Milestone 9 box office and workforce", () => {
     const cashCents = Math.floor(quote.body.totalCents / 2);
     const cardCents = quote.body.totalCents - cashCents;
     const customerEmail = `box-office-${crypto.randomUUID()}@example.test`;
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const receiptsBefore = emailProvider.sent.length;
+    const saleRequestId = crypto.randomUUID();
+    const salePayload = {
+      requestId: saleRequestId, holdTokens: [holds.body[0].holdToken], holderKey,
+      ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
+      cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
+      customerName: "Box Office Customer", customerEmail,
+    };
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
-        requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey,
-        ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
-        cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
-        customerName: "Box Office Customer", customerEmail,
-      }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(salePayload).expect(201);
     expect(sale.body.status).toBe("PAID");
+    expect(sale.body.receiptDelivery).toBe("SENT");
     expect(sale.body.tickets).toHaveLength(1);
     expect(sale.body.cashTransactions[0]).toMatchObject({ amountCents: cashCents, changeGivenCents: 500 });
     expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
+    expect(emailProvider.sent.slice(receiptsBefore)).toEqual([expect.objectContaining({ to: customerEmail, guestName: "Box Office Customer", orderNumber: sale.body.orderNumber, tickets: [expect.objectContaining({ credential: expect.any(String) })] })]);
+    const replayedSale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(salePayload).expect(201);
+    expect(replayedSale.body).toEqual(expect.objectContaining({ id: sale.body.id, receiptDelivery: "SENT" }));
+    expect(emailProvider.sent).toHaveLength(receiptsBefore + 1);
 
     const customerLookup = await request(app.getHttpServer())
       .get(`/api/v1/box-office/customers?q=${encodeURIComponent(customerEmail.slice(0, 18))}`)
