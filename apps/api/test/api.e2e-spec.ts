@@ -2474,6 +2474,72 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     ).toBe("SOLD");
   });
 
+  it("preserves a different admission type for each held seat", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const holderKey = `mixed-ticket-types-${crypto.randomUUID()}`;
+    const availability = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`)
+      .expect(200);
+    const seats = availability.body.seats
+      .filter((seat: { state: string }) => seat.state === "AVAILABLE")
+      .slice(0, 2);
+    expect(seats).toHaveLength(2);
+    const holds = await request(app.getHttpServer())
+      .post(`/api/v1/cinema/showtimes/${showtimeId}/holds`)
+      .send({ seatIds: seats.map((seat: { id: string }) => seat.id), holderKey })
+      .expect(201);
+    const showtime = await prisma.showtime.findUniqueOrThrow({
+      where: { id: showtimeId },
+      select: { auditorium: { select: { locationId: true } } },
+    });
+    const adult = await prisma.ticketType.findFirstOrThrow({
+      where: { locationId: showtime.auditorium.locationId, active: true },
+    });
+    const child = await prisma.ticketType.create({
+      data: {
+        locationId: showtime.auditorium.locationId,
+        name: `Child ${crypto.randomUUID()}`,
+      },
+    });
+    const ticketTypeSelections = [
+      { holdToken: holds.body[0].holdToken, ticketTypeId: adult.id },
+      { holdToken: holds.body[1].holdToken, ticketTypeId: child.id },
+    ];
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: ticketTypeSelections.map((selection) => selection.holdToken),
+        holderKey,
+        ticketTypeId: adult.id,
+        ticketTypeSelections,
+        email: `${holderKey}@example.test`,
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+      .send({})
+      .expect(201);
+
+    const issued = await prisma.ticket.findMany({
+      where: { ticketOrderId: checkout.body.orderId },
+      select: { showtimeSeatId: true, ticketTypeId: true },
+    });
+    const heldInventory = await prisma.seatHold.findMany({
+      where: { holdToken: { in: ticketTypeSelections.map((selection) => selection.holdToken) } },
+      select: { holdToken: true, showtimeSeatId: true },
+    });
+    for (const selection of ticketTypeSelections) {
+      const inventoryId = heldInventory.find((hold) => hold.holdToken === selection.holdToken)!.showtimeSeatId;
+      expect(issued).toContainEqual({ showtimeSeatId: inventoryId, ticketTypeId: selection.ticketTypeId });
+    }
+  });
+
   it("still issues tickets when receipt email delivery is unavailable", async () => {
     const holderKey = `ticket-receipt-outage-${crypto.randomUUID()}`;
     const { hold } = await holdAvailableSeat(holderKey);

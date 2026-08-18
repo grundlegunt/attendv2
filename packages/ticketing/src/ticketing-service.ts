@@ -33,6 +33,7 @@ export interface CreateTicketCheckoutInput {
   holdTokens: string[];
   holderKey: string;
   ticketTypeId: string;
+  ticketTypeSelections?: Array<{ holdToken: string; ticketTypeId: string }>;
   email: string;
   name?: string;
   zipCode?: string;
@@ -45,6 +46,7 @@ export interface CreateTicketCheckoutInput {
 
 interface LockedHold {
   id: string;
+  holdToken: string;
   showtimeSeatId: string;
   holderKey: string;
   expiresAt: Date;
@@ -58,6 +60,27 @@ const REFUND_LEASE_MS = 60_000;
 const DINING_CONSENT_TERMS_VERSION = "dining-auto-settlement-2026-07-29";
 
 type PersistedOrderAheadLine = OrderAheadQuote["lines"][number];
+type TicketTypeSelection = { holdToken: string; ticketTypeId: string };
+
+function normalizeTicketTypeSelections(
+  holdTokens: string[],
+  defaultTicketTypeId: string,
+  selections?: TicketTypeSelection[],
+) {
+  const requested = selections?.length
+    ? selections
+    : holdTokens.map((holdToken) => ({ holdToken, ticketTypeId: defaultTicketTypeId }));
+  const byHoldToken = new Map(requested.map((selection) => [selection.holdToken, selection.ticketTypeId]));
+  if (requested.length !== holdTokens.length || byHoldToken.size !== holdTokens.length || holdTokens.some((token) => !byHoldToken.has(token))) {
+    throw TicketingError.validation("Choose one ticket type for every held seat.");
+  }
+  return holdTokens.map((holdToken) => ({ holdToken, ticketTypeId: byHoldToken.get(holdToken)! }));
+}
+
+function persistedTicketTypeSelections(value: Prisma.JsonValue | null): TicketTypeSelection[] {
+  if (!Array.isArray(value)) return [];
+  return value as unknown as TicketTypeSelection[];
+}
 
 function normalizeOrderAheadSelections(selections: OrderAheadSelection[] = []) {
   return selections
@@ -135,6 +158,7 @@ export class TicketingService {
 
   async createCheckout(input: CreateTicketCheckoutInput) {
     const holdTokens = [...new Set(input.holdTokens)].sort();
+    const ticketTypeSelections = normalizeTicketTypeSelections(holdTokens, input.ticketTypeId, input.ticketTypeSelections);
     if (!input.checkoutIdempotencyKey || input.checkoutIdempotencyKey.length < 16) {
       throw TicketingError.validation("A valid checkout idempotency key is required.");
     }
@@ -204,10 +228,13 @@ export class TicketingService {
     if (showtime.startsAt <= now || !showtime.onSale) {
       throw TicketingError.conflict("This showtime is no longer on sale.");
     }
-    const ticketType = await this.prisma.ticketType.findFirst({
-      where: { id: input.ticketTypeId, locationId: location.id, active: true },
+    const ticketTypes = await this.prisma.ticketType.findMany({
+      where: { id: { in: [...new Set(ticketTypeSelections.map((selection) => selection.ticketTypeId))] }, locationId: location.id, active: true },
     });
-    if (!ticketType) throw TicketingError.notFound("Ticket type not found.");
+    if (ticketTypes.length !== new Set(ticketTypeSelections.map((selection) => selection.ticketTypeId)).size) {
+      throw TicketingError.notFound("One or more ticket types were not found.");
+    }
+    const ticketType = ticketTypes.find((candidate) => candidate.id === input.ticketTypeId) ?? ticketTypes[0]!;
 
     let orderAheadQuote: OrderAheadQuote = {
       lines: [],
@@ -329,6 +356,7 @@ export class TicketingService {
           locationId: location.id,
           customerId: customer.id,
           ticketTypeId: ticketType.id,
+          ticketTypeSelections: ticketTypeSelections as unknown as Prisma.InputJsonValue,
           holdTokens,
           holderKey: input.holderKey,
           guestEmail: normalizedEmail,
@@ -398,6 +426,7 @@ export class TicketingService {
       zipCode: string | null;
       diningAuthorizationRequested: boolean | null;
       orderAheadItems: Prisma.JsonValue | null;
+      ticketTypeSelections: Prisma.JsonValue | null;
     },
     input: CreateTicketCheckoutInput,
     holdTokens: string[],
@@ -410,6 +439,8 @@ export class TicketingService {
       })),
     );
     const requestedSelections = normalizeOrderAheadSelections(input.orderAhead);
+    const requestedTicketTypes = normalizeTicketTypeSelections(holdTokens, input.ticketTypeId, input.ticketTypeSelections);
+    const persistedTicketTypes = persistedTicketTypeSelections(order.ticketTypeSelections);
     const matches = order.ticketTypeId === input.ticketTypeId
       && order.holderKey === input.holderKey
       && order.holdTokens.length === holdTokens.length
@@ -418,6 +449,7 @@ export class TicketingService {
       && order.guestName === (input.name?.trim() || null)
       && order.zipCode === (input.zipCode?.trim() || null)
       && order.diningAuthorizationRequested === input.diningAuthorizationRequested
+      && JSON.stringify(persistedTicketTypes) === JSON.stringify(requestedTicketTypes)
       && JSON.stringify(persistedSelections) === JSON.stringify(requestedSelections);
     if (!matches) throw TicketingError.conflict("The checkout idempotency key was already used with different checkout details.");
   }
@@ -765,7 +797,7 @@ export class TicketingService {
 
           const lockedHolds = await tx.$queryRaw<LockedHold[]>(
             Prisma.sql`
-              SELECT sh."id", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
+              SELECT sh."id", sh."holdToken", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
               FROM "seat_holds" sh
               JOIN "showtime_seats" ss ON ss."id" = sh."showtimeSeatId"
               WHERE sh."holdToken" IN (${Prisma.join(lockedOrder.holdTokens)})
@@ -815,6 +847,12 @@ export class TicketingService {
           const perTicketPrice = Math.floor(
             lockedOrder.subtotalCents / lockedHolds.length,
           );
+          const selectedTicketTypes = normalizeTicketTypeSelections(
+            lockedOrder.holdTokens,
+            lockedOrder.ticketTypeId,
+            persistedTicketTypeSelections(lockedOrder.ticketTypeSelections),
+          );
+          const ticketTypeByHold = new Map(selectedTicketTypes.map((selection) => [selection.holdToken, selection.ticketTypeId]));
           await tx.ticket.createMany({
             data: lockedHolds.map((hold) => {
               const id = randomUUID();
@@ -822,7 +860,7 @@ export class TicketingService {
                 id,
                 ticketOrderId: lockedOrder.id,
                 showtimeSeatId: hold.showtimeSeatId,
-                ticketTypeId: lockedOrder.ticketTypeId,
+                ticketTypeId: ticketTypeByHold.get(hold.holdToken)!,
                 priceCentsPaid: perTicketPrice,
                 qrToken: createTicketCredential(id, this.qrCredentialSecret),
               };
@@ -906,7 +944,7 @@ export class TicketingService {
       if (order.status === TicketOrderStatus.PAID) return order;
       if (order.payment || !order.giftCardId || order.giftCardCents !== order.totalCents) throw TicketingError.conflict("Gift-card-only order is invalid.");
       const holds = await tx.$queryRaw<LockedHold[]>(Prisma.sql`
-        SELECT sh."id", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
+        SELECT sh."id", sh."holdToken", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
         FROM "seat_holds" sh JOIN "showtime_seats" ss ON ss."id" = sh."showtimeSeatId"
         WHERE sh."holdToken" IN (${Prisma.join(order.holdTokens)}) ORDER BY ss."id" FOR UPDATE OF ss, sh
       `);
@@ -921,7 +959,9 @@ export class TicketingService {
       await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
       await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: order.locationId, type: "REDEMPTION", amountCents: -order.giftCardCents, balanceAfterCents, reference: order.id } });
       const perTicketPrice = Math.floor(order.subtotalCents / holds.length);
-      await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: order.ticketTypeId, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
+      const selectedTicketTypes = normalizeTicketTypeSelections(order.holdTokens, order.ticketTypeId, persistedTicketTypeSelections(order.ticketTypeSelections));
+      const ticketTypeByHold = new Map(selectedTicketTypes.map((selection) => [selection.holdToken, selection.ticketTypeId]));
+      await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: ticketTypeByHold.get(hold.holdToken)!, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
       await this.createPrepaidOrderAheadTab(tx, order, inventoryIds);
       await tx.seatHold.updateMany({ where: { id: { in: holds.map((hold) => hold.id) }, releasedAt: null }, data: { releasedAt: now } });
       return tx.ticketOrder.update({ where: { id: order.id }, data: { status: TicketOrderStatus.PAID }, include: { payment: true, location: { include: { organization: true } }, tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } } });
