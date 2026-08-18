@@ -44,7 +44,7 @@ const sellouts = await Promise.all(showtimeIds.map(async (showtimeId, auditorium
     const holderKey = `opening-night-${randomUUID()}`;
     const holds = await call(`/box-office/showtimes/${showtimeId}/holds`, { method: "POST", headers: auth, body: JSON.stringify({ holderKey, seatIds: seats.map((seat) => seat.id) }) }, "ticketSales");
     const holdTokens = holds.map((hold) => hold.holdToken);
-    const quote = await call("/box-office/quotes", { method: "POST", headers: auth, body: JSON.stringify({ holderKey, holdTokens }) }, "ticketSales");
+    const quote = await call("/box-office/quotes", { method: "POST", headers: auth, body: JSON.stringify({ ticketTypeId, holderKey, holdTokens }) }, "ticketSales");
     return call("/box-office/checkouts", { method: "POST", headers: auth, body: JSON.stringify({ requestId: randomUUID(), ticketTypeId, holderKey, holdTokens, cashDrawerId: drawers[auditoriumIndex].id, cashCents: quote.totalCents, cardCents: 0, cashReceivedCents: quote.totalCents }) }, "ticketSales");
   }));
   const after = await call(`/cinema/showtimes/${showtimeId}/seats`, {}, "ticketSales");
