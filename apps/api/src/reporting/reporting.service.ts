@@ -187,8 +187,10 @@ export class ReportingService {
       concessionSales.set(item.menuItemId, sale);
     }
 
+    const ticketsSold = ticketOrders.filter((order) => order.status !== "REFUNDED").reduce((sum, order) => sum + order.tickets.length, 0);
+    const combinedRevenueCents = ticketCollectedCents + fnbRevenueCents;
     return {
-      range, totals: { grossRevenueCents: ticketCollectedCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, ticketFeesCents, ticketTaxCents, ticketCollectedCents, fnbRevenueCents, combinedRevenueCents: ticketCollectedCents + fnbRevenueCents, ticketsSold: ticketOrders.filter((order) => order.status !== "REFUNDED").reduce((sum, order) => sum + order.tickets.length, 0), fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0 },
+      range, totals: { grossRevenueCents: ticketCollectedCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, ticketFeesCents, ticketTaxCents, ticketCollectedCents, fnbRevenueCents, combinedRevenueCents, ticketsSold, fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0, averageTotalSpendPerPatronCents: ticketsSold ? Math.round(combinedRevenueCents / ticketsSold) : 0, concessionAttachRatePercent: ticketsSold ? Math.min(100, Math.round((fnbSeatCount / ticketsSold) * 1000) / 10) : 0 },
       movies: [...movies.values()].sort((a, b) => a.title.localeCompare(b.title)),
       showtimes: [...showtimes.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
       admissionTypes: [...admissionTypes.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.name.localeCompare(b.name)),
@@ -227,6 +229,8 @@ export class ReportingService {
       ["F&B revenue (cents)", report.totals.fnbRevenueCents], ["Tickets sold", report.totals.ticketsSold],
       ["F&B orders", report.totals.fnbOrders], ["Average F&B per order (cents)", report.totals.averageFnbSpendPerOrderCents],
       ["Average F&B per occupied seat (cents)", report.totals.averageFnbSpendPerSeatCents],
+      ["Average total spend per patron (cents)", report.totals.averageTotalSpendPerPatronCents],
+      ["Concession attach rate (percent)", report.totals.concessionAttachRatePercent],
     ];
     return [
       row(["Report from", report.range.from.toISOString()]), row(["Report to", report.range.to.toISOString()]),
