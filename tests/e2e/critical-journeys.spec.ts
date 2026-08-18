@@ -309,12 +309,12 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await expect(page.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
   await page.getByRole("button", { name: /Financial Reports/ }).click();
-  await expect(page.getByRole("link", { name: "Revenue Reports" })).toBeHidden();
+  await expect(page.getByRole("link", { name: "Revenue Overview" })).toBeHidden();
   await page.getByRole("button", { name: /Financial Reports/ }).click();
-  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Revenue Reports" }).click();
+  await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Revenue Overview" }).click();
   await expect(page.getByRole("heading", { name: "Reports & finance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Revenue overview" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Revenue Reports" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "Revenue Overview" })).toHaveAttribute("aria-current", "page");
   await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Team Access" }).click();
   await expect(page.getByRole("heading", { name: "Role access" })).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
