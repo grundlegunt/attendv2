@@ -262,11 +262,8 @@ export function SeatPicker({
         showtimeId={showtimeId}
         holdTokens={mySeats.map((seat) => seat.holdToken!)}
         holderKey={holderKey}
-        seats={
-          availability.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
-            ? [`General admission × ${mySeats.length}`]
-            : mySeats.map((seat) => seat.label)
-        }
+        seats={mySeats.map((seat) => seat.label)}
+        generalAdmission={availability.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"}
         movie={availability.showtime.movie.title}
         auditorium={availability.showtime.auditorium.name}
         startsAt={availability.showtime.startsAt}
