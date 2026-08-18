@@ -271,6 +271,7 @@ export function SeatPicker({
         auditorium={availability.showtime.auditorium.name}
         startsAt={availability.showtime.startsAt}
         timeZone={availability.showtime.timezone}
+        holdRemainingSeconds={remainingSeconds}
         onBack={() => setCheckoutOpen(false)}
       />
     );

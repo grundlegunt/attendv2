@@ -13,6 +13,7 @@ export async function GET(
     where: { id: showtimeId, onSale: true, startsAt: { gt: new Date() } },
     select: {
       id: true,
+      priceTier: { select: { ticketPriceMinor: true } },
       auditorium: {
         select: {
           location: {
@@ -24,7 +25,7 @@ export async function GET(
               },
               ticketTypes: {
                 where: { active: true },
-                select: { id: true, name: true },
+                select: { id: true, name: true, priceAdjustmentMinor: true },
                 orderBy: { name: "asc" },
               },
               menuCategories: {
@@ -93,6 +94,7 @@ export async function GET(
     showtimeId,
     locationId: location.id,
     currency: location.currency,
+    baseTicketPriceCents: showtime.priceTier.ticketPriceMinor,
     ticketTypes: location.ticketTypes,
     orderAhead: {
       available: location.menuCategories.some((category) => category.items.length > 0),
