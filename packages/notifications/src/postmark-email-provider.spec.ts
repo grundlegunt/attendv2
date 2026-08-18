@@ -80,6 +80,29 @@ describe("PostmarkEmailProvider", () => {
     ).rejects.toThrow("Sender not allowed");
   });
 
+  it("sends a time-limited customer password reset link", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ MessageID: "message-reset" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider("POSTMARK_API_TEST", "receipts@example.com");
+
+    await expect(provider.sendCustomerPasswordReset({
+      to: "customer@example.com",
+      customerName: "Customer <One>",
+      resetUrl: "https://cinema.example/account#resetPassword=signed-token&unsafe=true",
+      expiresInMinutes: 30,
+    })).resolves.toEqual({ messageId: "message-reset" });
+
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.To).toBe("customer@example.com");
+    expect(body.HtmlBody).toContain("Customer &lt;One&gt;");
+    expect(body.HtmlBody).toContain("resetPassword=signed-token&amp;unsafe=true");
+    expect(body.TextBody).toContain("within 30 minutes");
+  });
+
   it("sends a restaurant payment failure notice with a recovery link", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ MessageID: "message-2", ErrorCode: 0 }), {

@@ -12,7 +12,7 @@ import { LiveRestaurantTab } from "../components/live-restaurant-tab";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { useCinemaContent } from "../components/customer-branding";
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "forgot" | "reset";
 function money(cents: number, currency: string) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
     cents / 100,
@@ -50,6 +50,9 @@ export default function AccountPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
@@ -72,6 +75,12 @@ export default function AccountPage() {
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.slice(1));
+    const passwordResetToken = hash.get("resetPassword");
+    if (passwordResetToken) {
+      setResetToken(passwordResetToken);
+      setMode("reset");
+    }
     const token = search.get("restaurantTab");
     if (token) setGuestTabToken(token);
 
@@ -177,6 +186,57 @@ export default function AccountPage() {
       );
     } finally {
       setAccountLoading(false);
+      setLoading(false);
+    }
+  }
+
+  async function requestPasswordReset(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setRecoveryMessage(null);
+    setLoading(true);
+    try {
+      await apiFetch<{ accepted: true }>("/auth/customers/password-reset/request", {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setRecoveryMessage(
+        "If an account exists for that email, a password reset link is on its way.",
+      );
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.body.message : "Please try again.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function confirmPasswordReset(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setRecoveryMessage(null);
+    if (password !== passwordConfirmation) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await apiFetch<{ reset: true }>("/auth/customers/password-reset/confirm", {
+        method: "POST",
+        body: JSON.stringify({ token: resetToken, newPassword: password }),
+      });
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setResetToken("");
+      setPassword("");
+      setPasswordConfirmation("");
+      setMode("login");
+      setRecoveryMessage("Password updated. You can sign in now.");
+    } catch (err) {
+      setError(
+        err instanceof ApiRequestError ? err.body.message : "Please try again.",
+      );
+    } finally {
       setLoading(false);
     }
   }
@@ -376,7 +436,7 @@ export default function AccountPage() {
         <div className="content-panel">
           <p>{copy.loading}</p>
         </div>
-      ) : session ? (
+      ) : session && mode !== "reset" ? (
         <div className="account-dashboard">
           <section className="content-panel account-session-bar">
             <div>
@@ -474,11 +534,32 @@ export default function AccountPage() {
           </section>
 
           <section className="content-panel" aria-label="Customer account">
-            <h2>{mode === "login" ? "Sign in" : "Create account"}</h2>
+            <h2>
+              {mode === "login"
+                ? "Sign in"
+                : mode === "register"
+                  ? "Create account"
+                  : mode === "forgot"
+                    ? "Reset password"
+                    : "Choose a new password"}
+            </h2>
             <p className="secondary-copy">
-              See upcoming tickets, QR codes, and previous orders.
+              {mode === "forgot"
+                ? "Enter your account email and we’ll send a secure reset link."
+                : mode === "reset"
+                  ? "This reset link can be used once and expires after 30 minutes."
+                  : "See upcoming tickets, QR codes, and previous orders."}
             </p>
-            <form onSubmit={handleSubmit}>
+            {recoveryMessage && <p role="status">{recoveryMessage}</p>}
+            <form
+              onSubmit={
+                mode === "forgot"
+                  ? requestPasswordReset
+                  : mode === "reset"
+                    ? confirmPasswordReset
+                    : handleSubmit
+              }
+            >
               {mode === "register" && (
                 <div className="field">
                   <label htmlFor="name">Name</label>
@@ -489,7 +570,7 @@ export default function AccountPage() {
                   />
                 </div>
               )}
-              <div className="field">
+              {mode !== "reset" && <div className="field">
                 <label htmlFor="email">Email</label>
                 <input
                   id="email"
@@ -498,9 +579,11 @@ export default function AccountPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                 />
-              </div>
-              <div className="field">
-                <label htmlFor="password">Password</label>
+              </div>}
+              {mode !== "forgot" && <div className="field">
+                <label htmlFor="password">
+                  {mode === "reset" ? "New password" : "Password"}
+                </label>
                 <input
                   id="password"
                   type="password"
@@ -509,23 +592,51 @@ export default function AccountPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                 />
-              </div>
+              </div>}
+              {mode === "reset" && (
+                <div className="field">
+                  <label htmlFor="password-confirmation">Confirm new password</label>
+                  <input
+                    id="password-confirmation"
+                    type="password"
+                    required
+                    minLength={8}
+                    value={passwordConfirmation}
+                    onChange={(event) => setPasswordConfirmation(event.target.value)}
+                  />
+                </div>
+              )}
               <button className="primary" type="submit" disabled={loading}>
                 {loading
                   ? "Please wait…"
                   : mode === "login"
                     ? "Sign in"
-                    : "Create account"}
+                    : mode === "register"
+                      ? "Create account"
+                      : mode === "forgot"
+                        ? "Send reset link"
+                        : "Update password"}
               </button>
             </form>
-            <button
-              className="link"
-              onClick={() => setMode(mode === "login" ? "register" : "login")}
-            >
-              {mode === "login"
-                ? "Need an account? Register"
-                : "Already registered? Sign in"}
-            </button>
+            {mode === "login" && (
+              <button className="link" onClick={() => setMode("forgot")}>
+                Forgot password?
+              </button>
+            )}
+            {mode === "forgot" ? (
+              <button className="link" onClick={() => setMode("login")}>
+                Back to sign in
+              </button>
+            ) : mode !== "reset" && (
+              <button
+                className="link"
+                onClick={() => setMode(mode === "register" ? "login" : "register")}
+              >
+                {mode === "register"
+                  ? "Already registered? Sign in"
+                  : "Need an account? Register"}
+              </button>
+            )}
           </section>
         </div>
       )}

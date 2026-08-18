@@ -5,6 +5,7 @@ import {
   RestaurantPaymentFailedNotice,
   RestaurantReceiptDelivery,
   TicketReceipt,
+  CustomerPasswordResetDelivery,
 } from "./email-provider";
 
 function escapeHtml(value: string) {
@@ -96,6 +97,33 @@ export class PostmarkEmailProvider implements EmailProvider {
     };
     if (!response.ok || !body.MessageID) {
       throw new Error(`Postmark rejected the ticket receipt: ${body.Message ?? response.statusText}`);
+    }
+    return { messageId: body.MessageID };
+  }
+
+  async sendCustomerPasswordReset(
+    delivery: CustomerPasswordResetDelivery,
+  ): Promise<{ messageId: string }> {
+    const response = await fetch("https://api.postmarkapp.com/email", {
+      method: "POST",
+      signal: AbortSignal.timeout(8_000),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Postmark-Server-Token": this.serverToken,
+      },
+      body: JSON.stringify({
+        From: this.from,
+        To: delivery.to,
+        Subject: "Reset your cinema account password",
+        HtmlBody: `<p>Hi ${escapeHtml(delivery.customerName?.trim() || "there")},</p><p>Use the link below within ${delivery.expiresInMinutes} minutes to choose a new password.</p><p><a href="${escapeHtml(delivery.resetUrl)}">Reset password</a></p><p>If you did not request this, you can ignore this email.</p>`,
+        TextBody: `Reset your password within ${delivery.expiresInMinutes} minutes: ${delivery.resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+        MessageStream: "outbound",
+      }),
+    });
+    const body = (await response.json()) as { MessageID?: string; Message?: string };
+    if (!response.ok || !body.MessageID) {
+      throw new Error(`Postmark rejected the password reset email: ${body.Message ?? response.statusText}`);
     }
     return { messageId: body.MessageID };
   }

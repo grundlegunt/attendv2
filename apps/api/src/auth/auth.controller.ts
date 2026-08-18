@@ -3,6 +3,8 @@ import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
   customerPasswordChangeRequestSchema,
+  customerPasswordResetConfirmSchema,
+  customerPasswordResetRequestSchema,
   customerRegisterRequestSchema,
   refreshRequestSchema,
   staffLoginRequestSchema,
@@ -153,6 +155,36 @@ export class AuthController {
     );
     setCustomerSessionCookies(response, tokens);
     return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };
+  }
+
+  @Post("customers/password-reset/request")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "email" })
+  async requestCustomerPasswordReset(
+    @Req() request: Request,
+    @Body(new ZodValidationPipe(customerPasswordResetRequestSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    await this.authService.requestCustomerPasswordReset(
+      customerPasswordResetRequestSchema.parse(body),
+    );
+    return { accepted: true };
+  }
+
+  @Post("customers/password-reset/confirm")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth" })
+  async resetCustomerPassword(
+    @Req() request: Request,
+    @Body(new ZodValidationPipe(customerPasswordResetConfirmSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    await this.authService.resetCustomerPassword(
+      customerPasswordResetConfirmSchema.parse(body),
+    );
+    return { reset: true };
   }
 
   @Post("customers/refresh")

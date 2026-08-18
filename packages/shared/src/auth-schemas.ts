@@ -51,6 +51,17 @@ export const customerPasswordChangeRequestSchema = z.object({
 }).strict();
 export type CustomerPasswordChangeRequest = z.infer<typeof customerPasswordChangeRequestSchema>;
 
+export const customerPasswordResetRequestSchema = z.object({
+  email: z.string().email(),
+}).strict();
+export type CustomerPasswordResetRequest = z.infer<typeof customerPasswordResetRequestSchema>;
+
+export const customerPasswordResetConfirmSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(8).max(200),
+}).strict();
+export type CustomerPasswordResetConfirm = z.infer<typeof customerPasswordResetConfirmSchema>;
+
 export const refreshRequestSchema = z.object({
   refreshToken: z.string().min(1),
 });
