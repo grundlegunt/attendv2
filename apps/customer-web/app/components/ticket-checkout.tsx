@@ -131,6 +131,7 @@ export function TicketCheckout({
   holdTokens,
   holderKey,
   seats,
+  generalAdmission,
   movie,
   auditorium,
   startsAt,
@@ -142,6 +143,7 @@ export function TicketCheckout({
   holdTokens: string[];
   holderKey: string;
   seats: string[];
+  generalAdmission: boolean;
   movie: string;
   auditorium: string;
   startsAt: string;
@@ -721,7 +723,7 @@ export function TicketCheckout({
             minute: "2-digit",
           }).format(new Date(startsAt))} · {auditorium}
         </p>
-        <p>{seats.join(", ")}</p>
+        <p>{generalAdmission ? `General admission × ${seats.length}` : seats.join(", ")}</p>
         <div className="hold-clock" aria-live="polite">
           <span>{holdRemainingSeconds > 0 ? "Tickets held" : "Hold expired"}</span>
           <strong>
@@ -739,8 +741,11 @@ export function TicketCheckout({
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
             <h3>Ticket types</h3>
-            <label className="field">
-              <span>Apply one type to all seats</span>
+            {configLoading && !config ? (
+              <p className="loading-copy" role="status">Loading ticket prices…</p>
+            ) : config ? <>
+              <label className="field">
+              <span>Apply one type to all tickets</span>
               <select
                 required
                 value={selectedTicketTypeId}
@@ -751,16 +756,16 @@ export function TicketCheckout({
                   setTicketTypeByHoldToken(Object.fromEntries(holdTokens.map((holdToken) => [holdToken, ticketTypeId])));
                 }}
               >
-                {!config?.ticketTypes.length && <option value="">No ticket types available</option>}
-                {config?.ticketTypes.map((ticketType) => (
+                {!config.ticketTypes.length && <option value="">No ticket types available</option>}
+                {config.ticketTypes.map((ticketType) => (
                   <option key={ticketType.id} value={ticketType.id}>{ticketType.name}{ticketType.priceAdjustmentMinor ? ` (${ticketType.priceAdjustmentMinor > 0 ? "+" : ""}${money(ticketType.priceAdjustmentMinor, config.currency)})` : ""}</option>
                 ))}
               </select>
-            </label>
+              </label>
             {seats.map((seat, index) => (
               <label className="field" key={holdTokens[index]}>
                 <span>
-                  Seat {seat}
+                  {generalAdmission ? `Ticket ${index + 1}` : `Seat ${seat}`}
                   {config && ticketTypeById.get(ticketTypeByHoldToken[holdTokens[index]!] ?? "") && (
                     <> · {money(Math.max(0, config.baseTicketPriceCents + ticketTypeById.get(ticketTypeByHoldToken[holdTokens[index]!] ?? "")!.priceAdjustmentMinor), config.currency)}</>
                   )}
@@ -780,14 +785,13 @@ export function TicketCheckout({
                 </select>
               </label>
             ))}
-            {config && (
               <p className="order-ahead-estimate">
                 <span>Ticket subtotal</span>
                 <strong>{money(ticketPricePreviewCents, config.currency)}</strong>
                 <small>Service fees, tax, promotions, and gift cards are applied securely at checkout.</small>
               </p>
-            )}
-            <small>Choose the admission type that applies to each ticket.</small>
+              <small>Choose the admission type that applies to each ticket.</small>
+            </> : null}
           </div>
           <div className="checkout-panel">
             <h3>Receipt</h3>
