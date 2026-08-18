@@ -9,6 +9,7 @@ import type {
 } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { QRCodeSVG } from "qrcode.react";
+import { downloadTicketCalendar } from "../lib/ticket-calendar";
 
 interface CheckoutConfig {
   currency: string;
@@ -630,6 +631,23 @@ export function TicketCheckout({
         <div className="ticket-confirmation__actions">
           <button className="account-secondary-button" type="button" onClick={printConfirmation}>
             Print tickets
+          </button>
+          <button
+            className="account-secondary-button"
+            type="button"
+            onClick={() => downloadTicketCalendar(
+              confirmation.orderNumber,
+              confirmation.tickets.map((ticket) => ({
+                id: ticket.id,
+                movie: ticket.movie,
+                auditorium: ticket.auditorium,
+                seat: ticket.seat,
+                startsAt: ticket.startsAt,
+                endsAt: ticket.endsAt,
+              })),
+            )}
+          >
+            Add to calendar
           </button>
           <a className="primary-link" href={accountRecognized ? "/account" : "/account?createAccount=1"}>{accountRecognized ? "View tickets in my account" : "Create an account to save my tickets"}</a>
         </div>

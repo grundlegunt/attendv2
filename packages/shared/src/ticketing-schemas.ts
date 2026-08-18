@@ -70,6 +70,7 @@ export interface TicketConfirmationResponse {
     movie: string;
     auditorium: string;
     startsAt: string;
+    endsAt: string;
   }>;
 }
 

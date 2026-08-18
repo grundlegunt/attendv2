@@ -556,6 +556,7 @@ export class AuthService {
           moviePosterUrl: ticket.showtimeSeat.showtime.movie.posterUrl,
           auditoriumName: ticket.showtimeSeat.showtime.auditorium.name,
           startsAt: ticket.showtimeSeat.showtime.startsAt.toISOString(),
+          endsAt: ticket.showtimeSeat.showtime.endsAt.toISOString(),
         })),
       })),
     };

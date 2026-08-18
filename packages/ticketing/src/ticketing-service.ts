@@ -1932,6 +1932,7 @@ export class TicketingService {
         seat: { label: string };
         showtime: {
           startsAt: Date;
+          endsAt: Date;
           movie: { title: string };
           auditorium: {
             name: string;
@@ -2131,6 +2132,7 @@ export class TicketingService {
         seat: { label: string };
         showtime: {
           startsAt: Date;
+          endsAt: Date;
           movie: { title: string };
           auditorium: {
             name: string;
@@ -2162,6 +2164,7 @@ export class TicketingService {
         movie: ticket.showtimeSeat.showtime.movie.title,
         auditorium: ticket.showtimeSeat.showtime.auditorium.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt.toISOString(),
+        endsAt: ticket.showtimeSeat.showtime.endsAt.toISOString(),
       })),
     };
   }
