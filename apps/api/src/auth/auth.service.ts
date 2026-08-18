@@ -5,6 +5,8 @@ import {
   verifyPassword,
   signTokenPair,
   verifyRefreshToken,
+  signCustomerPasswordResetToken,
+  verifyCustomerPasswordResetToken,
   InvalidTokenError,
   TokenPair,
   createMfaSecret,
@@ -22,6 +24,8 @@ import {
   AuthenticatedEmployee,
   CustomerLoginRequest,
   CustomerPasswordChangeRequest,
+  CustomerPasswordResetConfirm,
+  CustomerPasswordResetRequest,
   CustomerRegisterRequest,
   StaffLoginRequest,
   StaffPasswordChangeRequest,
@@ -368,6 +372,94 @@ export class AuthService {
       data: { refreshTokenVersion: { increment: 1 } },
     });
     if (result.count !== 1) throw AppError.unauthenticated("Session has already been invalidated.");
+  }
+
+  async requestCustomerPasswordReset(input: CustomerPasswordResetRequest): Promise<void> {
+    const customer = await prisma.customer.findUnique({
+      where: { email: input.email.toLowerCase() },
+      include: { authAccount: true },
+    });
+    if (!customer?.email || !customer.authAccount?.passwordHash) return;
+
+    const env = loadEnv();
+    const token = signCustomerPasswordResetToken(
+      {
+        sub: customer.id,
+        tokenVersion: customer.authAccount.refreshTokenVersion,
+        purpose: "customer-password-reset",
+      },
+      env.JWT_REFRESH_SECRET,
+    );
+    const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
+    try {
+      const delivery = await this.emailProvider.sendCustomerPasswordReset({
+        to: customer.email,
+        customerName: customer.name,
+        resetUrl: `${customerWebUrl}/account#resetPassword=${encodeURIComponent(token)}`,
+        expiresInMinutes: 30,
+      });
+      await this.audit.record({
+        actorType: "CUSTOMER",
+        actorId: customer.id,
+        action: "customer.password_reset_requested",
+        entityType: "Customer",
+        entityId: customer.id,
+        afterState: { messageId: delivery.messageId },
+      });
+    } catch (error) {
+      await this.audit.record({
+        actorType: "SYSTEM",
+        action: "customer.password_reset_delivery_failed",
+        entityType: "Customer",
+        entityId: customer.id,
+        afterState: {
+          error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000),
+        },
+      });
+    }
+  }
+
+  async resetCustomerPassword(input: CustomerPasswordResetConfirm): Promise<void> {
+    let payload;
+    try {
+      payload = verifyCustomerPasswordResetToken(input.token, loadEnv().JWT_REFRESH_SECRET);
+    } catch (error) {
+      if (error instanceof InvalidTokenError) {
+        throw AppError.validationFailed("This password reset link is invalid or expired.");
+      }
+      throw error;
+    }
+    const customer = await prisma.customer.findUnique({
+      where: { id: payload.sub },
+      include: { authAccount: true },
+    });
+    if (
+      !customer?.authAccount?.passwordHash ||
+      customer.authAccount.refreshTokenVersion !== payload.tokenVersion
+    ) {
+      throw AppError.validationFailed("This password reset link is invalid or expired.");
+    }
+    if (await verifyPassword(customer.authAccount.passwordHash, input.newPassword)) {
+      throw AppError.validationFailed("Choose a password that differs from your current password.");
+    }
+
+    const passwordHash = await hashPassword(input.newPassword);
+    await prisma.$transaction(async (tx) => {
+      const result = await tx.customerAuthAccount.updateMany({
+        where: { customerId: customer.id, refreshTokenVersion: payload.tokenVersion },
+        data: { passwordHash, refreshTokenVersion: { increment: 1 } },
+      });
+      if (result.count !== 1) {
+        throw AppError.validationFailed("This password reset link is invalid or expired.");
+      }
+      await this.audit.record({
+        actorType: "CUSTOMER",
+        actorId: customer.id,
+        action: "customer.password_reset",
+        entityType: "Customer",
+        entityId: customer.id,
+      }, tx);
+    });
   }
 
   async changeCustomerPassword(

@@ -63,6 +63,13 @@ export interface RestaurantReceiptDelivery {
   }>;
 }
 
+export interface CustomerPasswordResetDelivery {
+  to: string;
+  customerName?: string | null;
+  resetUrl: string;
+  expiresInMinutes: number;
+}
+
 export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
@@ -72,5 +79,8 @@ export interface EmailProvider {
   ): Promise<{ messageId: string }>;
   sendRestaurantReceipt(
     receipt: RestaurantReceiptDelivery,
+  ): Promise<{ messageId: string }>;
+  sendCustomerPasswordReset(
+    delivery: CustomerPasswordResetDelivery,
   ): Promise<{ messageId: string }>;
 }

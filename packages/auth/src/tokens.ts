@@ -30,6 +30,12 @@ export interface RefreshTokenPayload {
   tokenVersion: number;
 }
 
+export interface CustomerPasswordResetPayload {
+  sub: string;
+  tokenVersion: number;
+  purpose: "customer-password-reset";
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -78,6 +84,36 @@ export function verifyRefreshToken(token: string, secret: string): RefreshTokenP
   try {
     const decoded = jwt.verify(token, secret, { issuer: "cinema-platform" });
     return decoded as unknown as RefreshTokenPayload;
+  } catch (err) {
+    throw new InvalidTokenError(err instanceof Error ? err.message : "unknown");
+  }
+}
+
+export function signCustomerPasswordResetToken(
+  payload: CustomerPasswordResetPayload,
+  secret: string,
+  ttlSeconds = 30 * 60,
+): string {
+  return jwt.sign(payload, secret, {
+    expiresIn: ttlSeconds,
+    issuer: "cinema-platform",
+    audience: "customer-password-reset",
+  });
+}
+
+export function verifyCustomerPasswordResetToken(
+  token: string,
+  secret: string,
+): CustomerPasswordResetPayload {
+  try {
+    const decoded = jwt.verify(token, secret, {
+      issuer: "cinema-platform",
+      audience: "customer-password-reset",
+    }) as unknown as CustomerPasswordResetPayload;
+    if (decoded.purpose !== "customer-password-reset") {
+      throw new Error("incorrect token purpose");
+    }
+    return decoded;
   } catch (err) {
     throw new InvalidTokenError(err instanceof Error ? err.message : "unknown");
   }
