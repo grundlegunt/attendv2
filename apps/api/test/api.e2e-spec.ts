@@ -7340,11 +7340,13 @@ describe("Milestone 10 management reporting", () => {
     const firstOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1700, feesCents: 200, taxCents: 166, totalCents: 2066, createdAt: new Date("2024-01-10T12:00:00.000Z"), tickets: { create: { showtimeSeatId: firstShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 1700, qrToken: `m10-${crypto.randomUUID()}` } } } });
     const secondOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1800, feesCents: 100, taxCents: 100, totalCents: 2000, placedByEmployeeId: owner.id, createdAt: new Date("2024-01-12T12:00:00.000Z"), tickets: { create: { showtimeSeatId: secondShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 1800, qrToken: `m10-${crypto.randomUUID()}` } } } });
     const [firstTicket, secondTicket] = await Promise.all([prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: firstOrder.id } }), prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: secondOrder.id } })]);
-    await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: firstShowing!.id, status: "CLOSED", subtotalCents: 450, taxCents: 50, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2024-01-10T16:00:00.000Z"), seats: { create: { showtimeSeatId: firstTicket.showtimeSeatId, ticketId: firstTicket.id } } } });
+    const firstTab = await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: firstShowing!.id, status: "CLOSED", subtotalCents: 450, taxCents: 50, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2024-01-10T16:00:00.000Z"), seats: { create: { showtimeSeatId: firstTicket.showtimeSeatId, ticketId: firstTicket.id } } } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: secondShowing!.id, status: "CLOSED", subtotalCents: 650, taxCents: 50, serviceChargeCents: 0, totalCents: 700, closedAt: new Date("2024-01-12T16:00:00.000Z"), seats: { create: { showtimeSeatId: secondTicket.showtimeSeatId, ticketId: secondTicket.id } } } });
     await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 750, feesCents: 25, taxCents: 25, totalCents: 800, createdAt: new Date("2024-01-15T12:00:00.000Z") } });
     await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 350, feesCents: 25, taxCents: 25, totalCents: 400, placedByEmployeeId: owner.id, createdAt: new Date("2024-01-16T12:00:00.000Z") } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", label: "Refunded reporting fixture", status: "REFUNDED", subtotalCents: 275, taxCents: 25, serviceChargeCents: 0, totalCents: 300, closedAt: new Date("2024-01-15T16:00:00.000Z") } });
+    const menuItem = await prisma.menuItem.findFirstOrThrow({ where: { menuCategory: { locationId: owner.locationId } } });
+    await prisma.restaurantOrder.create({ data: { restaurantTabId: firstTab.id, serverEmployeeId: owner.id, status: "DELIVERED", placedAt: new Date("2024-01-10T15:00:00.000Z"), items: { create: { menuItemId: menuItem.id, quantity: 2, unitPriceCentsSnapshot: menuItem.priceCents, modifierTotalCents: 50, selectedModifiers: [], kitchenStationId: menuItem.kitchenStationId, status: "SENT" } } } });
 
     const segment = await request(app.getHttpServer()).get(`/api/v1/reports/customer-recency?inactiveSince=${encodeURIComponent(new Date(Date.now() + 86_400_000).toISOString())}&limit=5`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(segment.body.total).toBeGreaterThan(0);
@@ -7360,6 +7362,7 @@ describe("Milestone 10 management reporting", () => {
       { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, grossCollectedCents: 2866, refundedCents: 800, netCollectedCents: 2066 },
     ]);
     expect(response.body.salesOperators).toEqual([{ employeeId: owner.id, employeeName: owner.name, ticketsSold: 1, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 }]);
+    expect(response.body.concessionTopSellers).toEqual([{ menuItemId: menuItem.id, name: menuItem.name, unitsSold: 2, salesCents: (menuItem.priceCents + 50) * 2 }]);
     const csv = await request(app.getHttpServer()).get(`/api/v1/reports/revenue.csv?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.headers["content-disposition"]).toContain("attend-revenue.csv");
@@ -7376,6 +7379,8 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain('"ONLINE","1","1700","2866","800","2066"');
     expect(csv.text).toContain('"Box-office operator","Tickets sold","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
     expect(csv.text).toContain(`"${owner.name}","1","2400","400","2000"`);
+    expect(csv.text).toContain('"Concession item","Units sold","Sales value (cents)"');
+    expect(csv.text).toContain(`"${menuItem.name}","2","${(menuItem.priceCents + 50) * 2}"`);
   });
 
   it("reports exact worked minutes and exports payroll-ready CSV", async () => {

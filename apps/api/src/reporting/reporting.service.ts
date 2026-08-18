@@ -69,7 +69,7 @@ export class ReportingService {
   }
 
   async revenue(locationId: string, range: ReportRange) {
-    const [ticketOrders, tabs] = await Promise.all([
+    const [ticketOrders, tabs, concessionItems] = await Promise.all([
       prisma.ticketOrder.findMany({
         where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
         include: { placedByEmployee: { select: { id: true, name: true } }, tickets: { include: { ticketType: true, showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
@@ -78,6 +78,17 @@ export class ReportingService {
         where: { locationId, closedAt: { gte: range.from, lt: range.to }, status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } },
         include: { showtime: { include: { movie: true } }, seats: true, payments: { include: { refunds: { where: { status: "SUCCEEDED" } } } } },
       }),
+      prisma.restaurantOrderItem.findMany({
+        where: {
+          restaurantOrder: {
+            restaurantTab: { locationId },
+            placedAt: { gte: range.from, lt: range.to },
+            status: { in: ["SENT", "IN_PROGRESS", "PARTIALLY_DELIVERED", "DELIVERED"] },
+          },
+          status: "SENT",
+        },
+        include: { menuItem: { select: { id: true, name: true } } },
+      }),
     ]);
 
     const movies = new Map<string, { movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
@@ -85,6 +96,7 @@ export class ReportingService {
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const salesOperators = new Map<string, { employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
+    const concessionSales = new Map<string, { menuItemId: string; name: string; unitsSold: number; salesCents: number }>();
     const ensureMovie = (movieId: string, title: string) => {
       let row = movies.get(movieId);
       if (!row) { row = { movieId, title, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; movies.set(movieId, row); }
@@ -168,6 +180,13 @@ export class ReportingService {
       }
     }
 
+    for (const item of concessionItems) {
+      const sale = concessionSales.get(item.menuItemId) ?? { menuItemId: item.menuItem.id, name: item.menuItem.name, unitsSold: 0, salesCents: 0 };
+      sale.unitsSold += item.quantity;
+      sale.salesCents += (item.unitPriceCentsSnapshot + item.modifierTotalCents) * item.quantity;
+      concessionSales.set(item.menuItemId, sale);
+    }
+
     return {
       range, totals: { grossRevenueCents: ticketCollectedCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, ticketFeesCents, ticketTaxCents, ticketCollectedCents, fnbRevenueCents, combinedRevenueCents: ticketCollectedCents + fnbRevenueCents, ticketsSold: ticketOrders.filter((order) => order.status !== "REFUNDED").reduce((sum, order) => sum + order.tickets.length, 0), fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0 },
       movies: [...movies.values()].sort((a, b) => a.title.localeCompare(b.title)),
@@ -175,6 +194,7 @@ export class ReportingService {
       admissionTypes: [...admissionTypes.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.name.localeCompare(b.name)),
       salesChannels: [...salesChannels.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.channel.localeCompare(b.channel)),
       salesOperators: [...salesOperators.values()].sort((a, b) => b.netCollectedCents - a.netCollectedCents || a.employeeName.localeCompare(b.employeeName)),
+      concessionTopSellers: [...concessionSales.values()].sort((a, b) => b.unitsSold - a.unitsSold || b.salesCents - a.salesCents || a.name.localeCompare(b.name)),
     };
   }
 
@@ -221,6 +241,8 @@ export class ReportingService {
       ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents, channel.grossCollectedCents, channel.refundedCents, channel.netCollectedCents])),
       "", row(["Box-office operator", "Tickets sold", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
       ...report.salesOperators.map((operator) => row([operator.employeeName, operator.ticketsSold, operator.grossCollectedCents, operator.refundedCents, operator.netCollectedCents])),
+      "", row(["Concession item", "Units sold", "Sales value (cents)"]),
+      ...report.concessionTopSellers.map((item) => row([item.name, item.unitsSold, item.salesCents])),
     ].join("\n");
   }
 
