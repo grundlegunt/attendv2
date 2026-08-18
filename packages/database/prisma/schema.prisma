@@ -773,10 +773,10 @@ model TicketOrder {
   ticketTypeId String
   ticketType   TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Restrict)
 
-  // A single Milestone 3 checkout uses one ticket type for all selected
-  // seats. The hold tokens identify the exact pending seat lines and are
-  // revalidated under row locks during finalization.
   holdTokens                   String[]
+  // Per-held-seat admission types are persisted before payment so retries
+  // and asynchronous finalization always issue the originally quoted mix.
+  ticketTypeSelections         Json?
   holderKey                    String
   guestEmail                   String?
   guestName                    String?

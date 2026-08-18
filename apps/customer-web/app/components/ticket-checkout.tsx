@@ -156,6 +156,7 @@ export function TicketCheckout({
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState("");
+  const [ticketTypeByHoldToken, setTicketTypeByHoldToken] = useState<Record<string, string>>({});
   const [diningAuthorization, setDiningAuthorization] = useState<boolean | null>(null);
   const [orderAheadOpen, setOrderAheadOpen] = useState(false);
   const [openOrderAheadCategoryId, setOpenOrderAheadCategoryId] = useState<string | null>(null);
@@ -304,6 +305,14 @@ export function TicketCheckout({
           ? current
           : nextConfig.ticketTypes[0]?.id ?? "",
       );
+      setTicketTypeByHoldToken((current) => Object.fromEntries(
+        holdTokens.map((holdToken) => [
+          holdToken,
+          nextConfig.ticketTypes.some((ticketType) => ticketType.id === current[holdToken])
+            ? current[holdToken]!
+            : nextConfig.ticketTypes[0]?.id ?? "",
+        ]),
+      ));
     } catch (requestError) {
       if (requestId !== configRequestRef.current) return;
       setError(
@@ -317,7 +326,7 @@ export function TicketCheckout({
         setConfigLoading(false);
       }
     }
-  }, [showtimeId]);
+  }, [holdTokens, showtimeId]);
 
   useEffect(() => {
     configRequestRef.current += 1;
@@ -325,6 +334,7 @@ export function TicketCheckout({
     setConfig(null);
     setConfigShowtimeId(null);
     setSelectedTicketTypeId("");
+    setTicketTypeByHoldToken({});
     void loadConfig();
     return () => {
       configRequestRef.current += 1;
@@ -489,6 +499,10 @@ export function TicketCheckout({
             holdTokens,
             holderKey,
             ticketTypeId: selectedTicketTypeId,
+            ticketTypeSelections: holdTokens.map((holdToken) => ({
+              holdToken,
+              ticketTypeId: ticketTypeByHoldToken[holdToken],
+            })),
             email,
             name: name || undefined,
             zipCode: zipCode.trim() || undefined,
@@ -681,14 +695,18 @@ export function TicketCheckout({
       {!checkout ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
-            <h3>Ticket type</h3>
+            <h3>Ticket types</h3>
             <label className="field">
-              <span>Apply to all {seats.length} selected {seats.length === 1 ? "seat" : "seats"}</span>
+              <span>Apply one type to all seats</span>
               <select
                 required
                 value={selectedTicketTypeId}
                 disabled={configLoading || !config?.ticketTypes.length}
-                onChange={(event) => setSelectedTicketTypeId(event.target.value)}
+                onChange={(event) => {
+                  const ticketTypeId = event.target.value;
+                  setSelectedTicketTypeId(ticketTypeId);
+                  setTicketTypeByHoldToken(Object.fromEntries(holdTokens.map((holdToken) => [holdToken, ticketTypeId])));
+                }}
               >
                 {!config?.ticketTypes.length && <option value="">No ticket types available</option>}
                 {config?.ticketTypes.map((ticketType) => (
@@ -696,7 +714,25 @@ export function TicketCheckout({
                 ))}
               </select>
             </label>
-            <small>The selected type applies to every ticket in this order.</small>
+            {seats.map((seat, index) => (
+              <label className="field" key={holdTokens[index]}>
+                <span>Seat {seat}</span>
+                <select
+                  required
+                  value={ticketTypeByHoldToken[holdTokens[index]!] ?? ""}
+                  disabled={configLoading || !config?.ticketTypes.length}
+                  onChange={(event) => setTicketTypeByHoldToken((current) => ({
+                    ...current,
+                    [holdTokens[index]!]: event.target.value,
+                  }))}
+                >
+                  {config?.ticketTypes.map((ticketType) => (
+                    <option key={ticketType.id} value={ticketType.id}>{ticketType.name}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+            <small>Choose the admission type that applies to each ticket.</small>
           </div>
           <div className="checkout-panel">
             <h3>Receipt</h3>
@@ -874,6 +910,7 @@ export function TicketCheckout({
               !orderAheadSelectionIsValid() ||
               !config ||
               !selectedTicketTypeId ||
+              holdTokens.some((holdToken) => !ticketTypeByHoldToken[holdToken]) ||
               (!config.payment.ready && !giftCardCode.trim())
             }
           >

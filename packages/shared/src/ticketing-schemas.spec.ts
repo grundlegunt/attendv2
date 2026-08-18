@@ -28,3 +28,14 @@ describe("ticket checkout ZIP code", () => {
     },
   );
 });
+
+describe("ticket checkout admission types", () => {
+  it("accepts one ticket type selection per held seat", () => {
+    const ticketTypeSelections = [{
+      holdToken: validCheckout.holdTokens[0],
+      ticketTypeId: validCheckout.ticketTypeId,
+    }];
+    expect(createTicketCheckoutRequestSchema.parse({ ...validCheckout, ticketTypeSelections }).ticketTypeSelections)
+      .toEqual(ticketTypeSelections);
+  });
+});

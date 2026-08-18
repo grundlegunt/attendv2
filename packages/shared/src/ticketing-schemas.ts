@@ -4,6 +4,11 @@ export const createTicketCheckoutRequestSchema = z.object({
   holdTokens: z.array(z.string().uuid()).min(1).max(10),
   holderKey: z.string().min(16).max(200),
   ticketTypeId: z.string().uuid(),
+  ticketTypeSelections: z
+    .array(z.object({ holdToken: z.string().uuid(), ticketTypeId: z.string().uuid() }).strict())
+    .min(1)
+    .max(10)
+    .optional(),
   email: z.string().email().max(320),
   name: z.string().trim().min(1).max(120).optional(),
   zipCode: z
