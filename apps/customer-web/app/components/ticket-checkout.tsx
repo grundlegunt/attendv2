@@ -754,7 +754,7 @@ export function TicketCheckout({
               <p className="loading-copy" role="status">Loading ticket prices…</p>
             ) : config ? <>
               <label className="field">
-              <span>Apply one type to all tickets</span>
+              <span>{seats.length === 1 ? "Ticket type" : "Apply one type to all tickets"}</span>
               <select
                 required
                 value={selectedTicketTypeId}
@@ -771,7 +771,7 @@ export function TicketCheckout({
                 ))}
               </select>
               </label>
-            {seats.map((seat, index) => (
+            {seats.length > 1 && seats.map((seat, index) => (
               <label className="field" key={holdTokens[index]}>
                 <span>
                   {generalAdmission ? `Ticket ${index + 1}` : `Seat ${seat}`}
