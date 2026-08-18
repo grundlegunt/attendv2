@@ -226,6 +226,8 @@ button.primary:disabled {
 .ticket-service__results header,
 .ticket-service__ticket-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .ticket-service__results header { padding-bottom: 12px; border-bottom: 1px solid var(--color-border); }
+.ticket-service__receipt { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--color-border); }
+.ticket-service__receipt .field { margin: 0; }
 .ticket-service__results header div,
 .ticket-service__ticket-row div { display: grid; gap: 4px; min-width: 0; }
 .ticket-service__results span { color: var(--color-text-secondary); }
@@ -243,6 +245,7 @@ button.primary:disabled {
 .ticket-reprint__print { margin-top: 10px; }
 @media (max-width: 680px) {
   .ticket-service__search { grid-template-columns: 1fr; }
+  .ticket-service__receipt { grid-template-columns: 1fr; }
   .ticket-service__results header,
   .ticket-service__ticket-row { align-items: stretch; flex-direction: column; }
   .ticket-exchange { grid-template-columns: 1fr; }

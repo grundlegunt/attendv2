@@ -110,3 +110,7 @@ export const ticketExchangeRequestSchema = z.object({
   holderKey: z.string().min(16).max(200),
   reason: z.string().trim().min(1).max(500),
 });
+
+export const ticketReceiptResendRequestSchema = z.object({
+  email: z.string().trim().email().max(320),
+});

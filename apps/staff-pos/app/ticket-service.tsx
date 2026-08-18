@@ -71,6 +71,7 @@ export function TicketService({
   const [orders, setOrders] = useState<TicketOrder[]>([]);
   const [printable, setPrintable] = useState<PrintableTicket | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [receiptEmails, setReceiptEmails] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [exchangeTicket, setExchangeTicket] = useState<TicketOrder["tickets"][number] | null>(null);
   const [exchangeShowtimeId, setExchangeShowtimeId] = useState("");
@@ -124,6 +125,7 @@ export function TicketService({
       );
       if (requestId !== requestRef.current) return;
       setOrders(results);
+      setReceiptEmails(Object.fromEntries(results.map((order) => [order.id, order.guestEmail || order.customer?.email || ""])));
       if (!results.length) setMessage("No ticket orders match this search.");
     } catch (error) {
       if (requestId === requestRef.current) {
@@ -132,6 +134,25 @@ export function TicketService({
       }
     } finally {
       if (requestId === requestRef.current) setBusy(false);
+    }
+  }
+
+  async function resendReceipt(order: TicketOrder) {
+    const email = receiptEmails[order.id]?.trim();
+    if (!email) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await apiFetch<{ receiptDelivery: "SENT" | "FAILED"; email: string }>(`/box-office/orders/${order.id}/receipt`, {
+        accessToken,
+        method: "POST",
+        body: JSON.stringify({ email }),
+      });
+      setMessage(result.receiptDelivery === "SENT" ? `Receipt sent to ${result.email}.` : `Receipt delivery to ${result.email} failed. Reprint the tickets instead.`);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -306,6 +327,13 @@ export function TicketService({
               </div>
               <b>{order.status}</b>
             </header>
+            <div className="ticket-service__receipt">
+              <label className="field">
+                <span>Receipt email</span>
+                <input type="email" maxLength={320} disabled={busy} value={receiptEmails[order.id] ?? ""} onChange={(event) => setReceiptEmails((current) => ({ ...current, [order.id]: event.target.value }))} />
+              </label>
+              <button type="button" className="secondary" disabled={busy || !receiptEmails[order.id]?.trim() || !["PAID", "EXCHANGED"].includes(order.status)} onClick={() => void resendReceipt(order)}>Resend tickets</button>
+            </div>
             {order.tickets.map((ticket) => {
               const showtime = ticket.showtimeSeat.showtime;
               const printableStatus = ticket.status === "ISSUED" || ticket.status === "ADMITTED";
