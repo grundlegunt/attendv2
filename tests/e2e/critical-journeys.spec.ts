@@ -126,6 +126,28 @@ test("customer account session restores from HttpOnly cookies and clears on logo
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 });
 
+test("signed-in customer details carry into ticket checkout", async ({ page }) => {
+  const login = await page.request.post("http://127.0.0.1:3000/api/v1/auth/customers/login", {
+    data: { email: "customer@ridgelinecinema.test", password },
+  });
+  expect(login.status()).toBe(201);
+
+  await page.goto("http://127.0.0.1:3000");
+  const showtime = page.locator(".program-tile__showtimes button:not([disabled])").first();
+  const showtimeDates = page.getByRole("navigation", { name: "Showtime dates" }).getByRole("button");
+  for (let index = 0; index < await showtimeDates.count() && await showtime.count() === 0; index += 1) {
+    await showtimeDates.nth(index).click();
+  }
+  await showtime.click();
+  const seatMap = page.getByRole("region", { name: /seating chart/i });
+  await seatMap.locator("button:not([disabled])").first().click();
+  await page.getByRole("button", { name: "Continue to tickets" }).click();
+
+  await expect(page.getByText("Using your signed-in account details.", { exact: false })).toBeVisible();
+  await expect(page.getByLabel("Name")).toHaveValue("Casey Customer");
+  await expect(page.getByLabel("Email")).toHaveValue("customer@ridgelinecinema.test");
+});
+
 test("restaurant payment recovery link shows the remaining balance without retrying automatically", async ({ page }) => {
   let paymentRequests = 0;
   await page.route("**/api/v1/public/restaurant-tabs/recovery-token**", async (route) => {
