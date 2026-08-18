@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { Permission } from "@cinema/auth";
-import { boxOfficeCheckoutRequestSchema, boxOfficeHoldRequestSchema, boxOfficeQuoteRequestSchema, cashMovementRequestSchema, closeCashDrawerRequestSchema, giftCardBalanceRequestSchema, openCashDrawerRequestSchema, seatBlockRequestSchema, ticketExchangeRequestSchema, ticketRefundRequestSchema } from "@cinema/shared";
+import { boxOfficeCheckoutRequestSchema, boxOfficeHoldRequestSchema, boxOfficeQuoteRequestSchema, cashMovementRequestSchema, closeCashDrawerRequestSchema, giftCardBalanceRequestSchema, openCashDrawerRequestSchema, seatBlockRequestSchema, ticketExchangeRequestSchema, ticketReceiptResendRequestSchema, ticketRefundRequestSchema } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -70,6 +70,11 @@ export class BoxOfficeController {
   @Post("tickets/:ticketId/reprint")
   reprint(@CurrentActor() actor: RequestActor, @Param("ticketId") ticketId: string) {
     return this.boxOffice.reprint(ticketId, this.location(actor), actor.sub);
+  }
+
+  @Post("orders/:orderId/receipt")
+  resendReceipt(@CurrentActor() actor: RequestActor, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(ticketReceiptResendRequestSchema)) body: unknown) {
+    return this.boxOffice.resendReceipt({ orderId, email: ticketReceiptResendRequestSchema.parse(body).email, locationId: this.location(actor), employeeId: actor.sub });
   }
 
   @Post("orders/:orderId/refund")

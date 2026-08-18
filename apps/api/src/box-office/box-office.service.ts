@@ -454,6 +454,50 @@ export class BoxOfficeService {
     };
   }
 
+  async resendReceipt(input: { orderId: string; email: string; locationId: string; employeeId: string }) {
+    const email = input.email.toLowerCase();
+    const order = await prisma.ticketOrder.findFirst({
+      where: { id: input.orderId, locationId: input.locationId, status: { in: ["PAID", "EXCHANGED"] } },
+      include: {
+        tickets: {
+          where: { status: { in: ["ISSUED", "ADMITTED"] } },
+          include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } },
+        },
+      },
+    });
+    if (!order || order.tickets.length === 0) throw AppError.notFound("Receiptable ticket order was not found.");
+    const receipt: TicketReceipt = {
+      to: email,
+      guestName: order.guestName,
+      orderNumber: order.orderNumber,
+      totalCents: order.totalCents,
+      currency: order.currency,
+      tickets: order.tickets.map((ticket) => ({
+        id: ticket.id,
+        credential: ticket.qrToken,
+        movie: ticket.showtimeSeat.showtime.movie.title,
+        auditorium: ticket.showtimeSeat.showtime.auditorium.name,
+        seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label,
+        startsAt: ticket.showtimeSeat.showtime.startsAt,
+      })),
+    };
+    try {
+      const delivery = await this.emailProvider.sendTicketReceipt(receipt);
+      await prisma.$transaction([
+        prisma.ticketOrder.update({ where: { id: order.id }, data: { guestEmail: email, receiptEmailSentAt: new Date(), receiptEmailMessageId: delivery.messageId, receiptEmailClaimedAt: null, receiptEmailError: null } }),
+        prisma.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id, beforeState: { email: order.guestEmail }, afterState: { email, messageId: delivery.messageId } } }),
+      ]);
+      return { receiptDelivery: "SENT" as const, email };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error";
+      await prisma.$transaction([
+        prisma.ticketOrder.update({ where: { id: order.id }, data: { guestEmail: email, receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) } }),
+        prisma.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.receipt_resend_failed", entityType: "TicketOrder", entityId: order.id, beforeState: { email: order.guestEmail }, afterState: { email, error: message.slice(0, 1000) } } }),
+      ]);
+      return { receiptDelivery: "FAILED" as const, email };
+    }
+  }
+
   async exchangeTicket(input: { ticketId: string; locationId: string; employeeId: string; requestId: string; holdToken: string; holderKey: string; reason: string }) {
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "tickets" WHERE "id" = ${input.ticketId} FOR UPDATE`;
