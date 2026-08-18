@@ -126,7 +126,7 @@ function ShowtimesContent() {
 
   return (
     <main className="cinema-shell route-page">
-      {!openCaptionsOnly && <section className="route-heading">
+      {!openCaptionsOnly && !selectedShowtimeId && <section className="route-heading">
         <span className="eyebrow">{copy.eyebrow}</span>
         <h1>{copy.title}</h1>
         {program && <p>{copy.intro}</p>}
