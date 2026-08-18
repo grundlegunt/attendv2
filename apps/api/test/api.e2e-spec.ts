@@ -3633,6 +3633,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
 describe("Customer authentication", () => {
   const email = "new-customer@m0test.local";
+  let customerId: string;
   let accessCookie: string;
   let refreshCookie: string;
 
@@ -3643,6 +3644,7 @@ describe("Customer authentication", () => {
       .send({ email, password: "customer-password-1", name: "New Customer" });
 
     expect(res.status).toBe(201);
+    customerId = res.body.customer.id;
     expect(res.body.customer.isGuest).toBe(false);
     expect(res.body.accessToken).toBeUndefined();
     expect(res.body.refreshToken).toBeUndefined();
@@ -3706,6 +3708,58 @@ describe("Customer authentication", () => {
     expect(account.status).toBe(200);
     expect(account.body.customer).toMatchObject({ email, isGuest: false });
     expect(account.body.orders).toEqual(expect.any(Array));
+  });
+
+  it("lets a customer resend only their own paid ticket order to their account email", async () => {
+    const { prisma } = await import("@cinema/database");
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { tickets: { none: {} } },
+      include: {
+        showtime: {
+          include: { auditorium: { include: { location: { include: { ticketTypes: true } } } } },
+        },
+      },
+    });
+    const ticketType = inventory.showtime.auditorium.location.ticketTypes[0]!;
+    const order = await prisma.ticketOrder.create({
+      data: {
+        locationId: inventory.showtime.auditorium.location.id,
+        customerId,
+        ticketTypeId: ticketType.id,
+        holdTokens: [],
+        holderKey: crypto.randomUUID(),
+        status: "PAID",
+        orderNumber: `CUSTOMER-RECEIPT-${crypto.randomUUID()}`,
+        checkoutIdempotencyKey: crypto.randomUUID(),
+        subtotalCents: 1700,
+        feesCents: 0,
+        taxCents: 0,
+        totalCents: 1700,
+        tickets: {
+          create: {
+            showtimeSeatId: inventory.id,
+            ticketTypeId: ticketType.id,
+            priceCentsPaid: 1700,
+            qrToken: `customer-receipt-${crypto.randomUUID()}`,
+          },
+        },
+      },
+    });
+
+    const sent = await request(app.getHttpServer())
+      .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send();
+    expect(sent.status).toBe(200);
+    expect(sent.body).toEqual({ receiptDelivery: "SENT", email });
+
+    const blocked = await request(app.getHttpServer())
+      .post(`/api/v1/auth/customers/orders/${crypto.randomUUID()}/receipt`)
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send();
+    expect(blocked.status).toBe(404);
   });
 
   it("refreshes from the HttpOnly refresh cookie and restores an access-cookie session", async () => {

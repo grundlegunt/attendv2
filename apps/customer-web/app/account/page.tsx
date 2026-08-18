@@ -57,6 +57,8 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
   const [accountLoading, setAccountLoading] = useState(false);
+  const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
+  const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
   const [liveTabId, setLiveTabId] = useState("");
@@ -183,6 +185,28 @@ export default function AccountPage() {
     setError(null);
   }
 
+  async function resendReceipt(order: CustomerTicketOrderSummary) {
+    setReceiptOrderId(order.id);
+    setReceiptMessage(null);
+    try {
+      const result = await apiFetch<{ receiptDelivery: "SENT" | "FAILED"; email: string }>(
+        `/auth/customers/orders/${order.id}/receipt`,
+        { method: "POST" },
+      );
+      setReceiptMessage(
+        result.receiptDelivery === "SENT"
+          ? `Tickets for order ${order.orderNumber} were sent to ${result.email}.`
+          : `We could not email order ${order.orderNumber}. Your QR tickets remain available below.`,
+      );
+    } catch (err) {
+      setReceiptMessage(
+        err instanceof ApiRequestError ? err.body.message : "The ticket email could not be sent.",
+      );
+    } finally {
+      setReceiptOrderId(null);
+    }
+  }
+
   function renderOrders(title: string, orders: CustomerTicketOrderSummary[]) {
     return (
       <section className="account-orders" aria-label={title}>
@@ -210,7 +234,17 @@ export default function AccountPage() {
                     {dateTime(order.createdAt)}
                   </p>
                 </div>
-                <strong>{money(order.totalCents, order.currency)}</strong>
+                <div>
+                  <strong>{money(order.totalCents, order.currency)}</strong>
+                  <button
+                    className="account-secondary-button"
+                    type="button"
+                    disabled={receiptOrderId === order.id || !["PAID", "EXCHANGED"].includes(order.status)}
+                    onClick={() => void resendReceipt(order)}
+                  >
+                    {receiptOrderId === order.id ? "Sending…" : "Email tickets"}
+                  </button>
+                </div>
               </header>
               <div className="ticket-order__tickets">
                 {order.tickets.map((ticket) => (
@@ -313,6 +347,7 @@ export default function AccountPage() {
             </div>
           ) : (
             <>
+              {receiptMessage && <div className="content-panel" role="status">{receiptMessage}</div>}
               {renderOrders("Upcoming visits", upcomingOrders)}
               {renderOrders("Order history", pastOrders)}
             </>

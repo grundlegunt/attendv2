@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, HttpCode, HttpStatus, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Get, HttpCode, HttpStatus, Param, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
@@ -183,5 +183,19 @@ export class AuthController {
   async customerMe(@CurrentActor() actor: RequestActor) {
     if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
     return this.authService.customerAccount(actor.sub);
+  }
+
+  @Post("customers/orders/:orderId/receipt")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout", identity: "actor" })
+  async customerReceipt(
+    @Req() request: Request,
+    @CurrentActor() actor: RequestActor,
+    @Param("orderId") orderId: string,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
+    return this.authService.resendCustomerReceipt(actor.sub, orderId);
   }
 }
