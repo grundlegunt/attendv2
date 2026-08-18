@@ -36,6 +36,7 @@ export class TicketingService {
         where: { id: showtimeId, onSale: true, startsAt: { gt: new Date() } },
         select: {
           id: true,
+          priceTier: { select: { ticketPriceMinor: true } },
           auditorium: {
             select: {
               location: {
@@ -106,6 +107,7 @@ export class TicketingService {
           showtimeId: showtime.id,
           locationId: showtime.auditorium.location.id,
           currency: showtime.auditorium.location.currency,
+          baseTicketPriceCents: showtime.priceTier.ticketPriceMinor,
           ticketTypes: showtime.auditorium.location.ticketTypes,
           orderAhead: {
             available: showtime.auditorium.location.menuCategories.some(
