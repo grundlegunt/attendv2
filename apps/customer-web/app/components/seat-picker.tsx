@@ -70,6 +70,10 @@ export function SeatPicker({
   const pendingSeatIdsRef = useRef(new Set<string>());
   const closingRef = useRef(false);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0 });
+  }, []);
+
   useEffect(() => setHolderKey(getHolderKey()), []);
 
   const refresh = useCallback(async () => {
