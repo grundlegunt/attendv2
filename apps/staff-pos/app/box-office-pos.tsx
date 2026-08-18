@@ -5,14 +5,14 @@ import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type LiveSeat = Omit<SeatMapSeat, "state"> & { id: string; state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" };
-type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}>; promotion: {code:string;name:string}|null };
+type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}>; ticketType: {id:string;name:string;priceCents:number}; promotion: {code:string;name:string}|null };
 type CustomerResult = { id: string; name: string | null; email: string; phone: string | null };
 const DEFAULT_READER_ID = "tmr_box_1";
 
 export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; seatingMode: "RESERVED" | "GENERAL_ADMISSION"; refresh: () => Promise<void> }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [holderKey] = useState(() => `box-office-${crypto.randomUUID()}`);
-  const [ticketTypes, setTicketTypes] = useState<Array<{id:string;name:string}>>([]);
+  const [ticketTypes, setTicketTypes] = useState<Array<{id:string;name:string;priceAdjustmentMinor:number}>>([]);
   const [ticketTypeId, setTicketTypeId] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
   const [customerQuery, setCustomerQuery] = useState("");
@@ -66,7 +66,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
     setReaderId(DEFAULT_READER_ID);
     setMessage(null);
-    apiFetch<{ticketTypes:Array<{id:string;name:string}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
+    apiFetch<{currency:string;ticketTypes:Array<{id:string;name:string;priceAdjustmentMinor:number}>}>(`/ticketing/showtimes/${showtimeId}/checkout-config`)
       .then((data) => {
         if (requestId !== checkoutConfigRequestRef.current) return;
         setTicketTypes(data.ticketTypes);
@@ -259,7 +259,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       createdHoldTokens = tokens;
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       setHoldTokens(tokens);
-      const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, promotionCode: requestedPromotionCode || undefined }) });
+      const next = await apiFetch<Quote>("/box-office/quotes", { method: "POST", accessToken, body: JSON.stringify({ holdTokens: tokens, holderKey, ticketTypeId, promotionCode: requestedPromotionCode || undefined }) });
       if (requestId !== pricingRequestRef.current) { await releaseStaleHolds(tokens); return; }
       activeHoldsRef.current = { showtimeId: requestShowtimeId, tokens };
       checkoutAttemptRef.current = null; setQuote(next); setCardCents(String(next.totalCents)); setCashCents("0"); setCashReceived("0"); setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
@@ -476,10 +476,10 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     {drawerStatus === "error" && <div className="error-banner">Cash drawer status is unavailable. Check the register ID or try again before opening a drawer.</div>}
     {!drawer && <><label className="field"><span>Opening cash (cents)</span><input type="number" min="0" value={openingBalance} disabled={busy || Boolean(quote) || drawerStatus !== "ready"} onChange={(event) => setOpeningBalance(event.target.value)} /></label><button className="primary" type="button" onClick={openDrawer} disabled={busy || Boolean(quote) || drawerStatus !== "ready"}>{drawerStatus === "loading" ? "Checking drawer…" : "Open drawer"}</button></>}
     {drawer && <p className="success-copy">Cash drawer open</p>}
-    <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
+    <form onSubmit={prepareSale}><label className="field"><span>Ticket type</span><select value={ticketTypeId} disabled={busy || Boolean(quote)} onChange={(event) => setTicketTypeId(event.target.value)}>{ticketTypes.map((type) => <option key={type.id} value={type.id}>{type.name}{type.priceAdjustmentMinor ? ` (${type.priceAdjustmentMinor > 0 ? "+" : ""}${(type.priceAdjustmentMinor / 100).toFixed(2)})` : ""}</option>)}</select></label>
       <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
       <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} {isGeneralAdmission ? "ticket(s)" : "seat(s)"}</button></form>
-    {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Promotion{quote.promotion ? ` · ${quote.promotion.name} (${quote.promotion.code})` : ""} −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
+    {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p><p>{quote.ticketType.name} · ${(quote.ticketType.priceCents/100).toFixed(2)} each</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Promotion{quote.promotion ? ` · ${quote.promotion.name} (${quote.promotion.code})` : ""} −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
       <section className="customer-attach"><h4>Customer (optional)</h4><p>Attach this sale for lookup and service later, or leave blank for a walk-up customer.</p><div className="customer-attach__search"><label className="field"><span>Find by name, email, or phone</span><input value={customerQuery} maxLength={100} disabled={busy || customerSearching} onChange={(event) => setCustomerQuery(event.target.value)} /></label><button className="secondary" type="button" disabled={busy || customerSearching || customerQuery.trim().length < 2} onClick={() => void searchCustomers()}>{customerSearching ? "Searching…" : "Find customer"}</button></div>{customerResults.length > 0 && <div className="customer-attach__results">{customerResults.map((customer) => <button className="secondary" type="button" key={customer.id} disabled={busy} onClick={() => { setCustomerName(customer.name ?? ""); setCustomerEmail(customer.email); setCustomerQuery(customer.email); setCustomerResults([]); setMessage(null); }}><strong>{customer.name || customer.email}</strong><span>{customer.email}{customer.phone ? ` · ${customer.phone}` : ""}</span></button>)}</div>}<label className="field"><span>Customer name</span><input value={customerName} maxLength={120} disabled={busy} onChange={(event) => setCustomerName(event.target.value)} /></label><label className="field"><span>Customer email</span><input type="email" value={customerEmail} maxLength={320} disabled={busy} onChange={(event) => setCustomerEmail(event.target.value)} /></label>{(customerName || customerEmail) && <button className="secondary" type="button" disabled={busy} onClick={() => { setCustomerName(""); setCustomerEmail(""); setCustomerQuery(""); setCustomerResults([]); }}>Clear customer</button>}</section>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => { setCashCents(event.target.value); setCashReceived("0"); }} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} disabled={busy || Number(cashCents) <= 0} onChange={(event) => setCashReceived(event.target.value)} /></label>

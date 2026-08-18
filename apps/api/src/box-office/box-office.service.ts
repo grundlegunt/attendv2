@@ -107,7 +107,7 @@ export class BoxOfficeService {
     return this.cinema.giftCardBalance(locationId, code);
   }
 
-  async quote(input: { locationId: string; holdTokens: string[]; holderKey: string; promotionCode?: string }) {
+  async quote(input: { locationId: string; holdTokens: string[]; holderKey: string; ticketTypeId: string; promotionCode?: string }) {
     const tokens = [...new Set(input.holdTokens)].sort();
     const now = new Date();
     const holds = await prisma.seatHold.findMany({
@@ -123,8 +123,13 @@ export class BoxOfficeService {
     const showtimeIds = new Set(holds.map((hold) => hold.showtimeSeat.showtimeId));
     if (showtimeIds.size !== 1) throw AppError.validationFailed("All seats must be for one showtime.");
     const priceTier = holds[0]!.showtimeSeat.showtime.priceTier;
+    const ticketType = await prisma.ticketType.findFirst({
+      where: { id: input.ticketTypeId, locationId: input.locationId, active: true },
+    });
+    if (!ticketType) throw AppError.notFound("Ticket type was not found.");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const subtotalCents = priceTier.ticketPriceMinor * holds.length;
+    const ticketPriceCents = Math.max(0, priceTier.ticketPriceMinor + ticketType.priceAdjustmentMinor);
+    const subtotalCents = ticketPriceCents * holds.length;
     const feesCents = priceTier.feeMinor * holds.length;
     const promotion = input.promotionCode
       ? await prisma.promotion.findFirst({ where: { locationId: input.locationId, code: input.promotionCode.toUpperCase(), active: true, AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { id: true } } } })
@@ -141,6 +146,7 @@ export class BoxOfficeService {
       subtotalCents, discountCents, feesCents, taxCents,
       totalCents: taxableSubtotal + feesCents + taxCents,
       currency: priceTier.currency,
+      ticketType: { id: ticketType.id, name: ticketType.name, priceCents: ticketPriceCents },
       promotion: promotion ? { id: promotion.id, code: promotion.code, name: promotion.name } : null,
     };
   }
@@ -503,7 +509,7 @@ export class BoxOfficeService {
   async exchangeTicket(input: { ticketId: string; locationId: string; employeeId: string; requestId: string; holdToken: string; holderKey: string; reason: string }) {
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "tickets" WHERE "id" = ${input.ticketId} FOR UPDATE`;
-      const original = await tx.ticket.findFirst({ where: { id: input.ticketId, ticketOrder: { locationId: input.locationId } }, include: { ticketOrder: true } });
+      const original = await tx.ticket.findFirst({ where: { id: input.ticketId, ticketOrder: { locationId: input.locationId } }, include: { ticketOrder: true, ticketType: true } });
       if (!original) throw AppError.notFound("Exchangeable ticket was not found.");
       if (original.status === "CANCELED") {
         const completed = await tx.auditEvent.findFirst({
@@ -526,7 +532,7 @@ export class BoxOfficeService {
       const ids = [original.showtimeSeatId, hold.showtimeSeatId].sort();
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "showtime_seats" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`);
       if (await tx.ticket.findFirst({ where: { showtimeSeatId: hold.showtimeSeatId, status: { notIn: ["REFUNDED", "CANCELED"] } } })) throw AppError.conflict("The replacement seat is no longer available.");
-      const replacementPrice = hold.showtimeSeat.showtime.priceTier.ticketPriceMinor;
+      const replacementPrice = Math.max(0, hold.showtimeSeat.showtime.priceTier.ticketPriceMinor + original.ticketType.priceAdjustmentMinor);
       if (replacementPrice !== original.priceCentsPaid) throw AppError.validationFailed("MVP exchanges require a replacement seat with the same ticket price.");
       await tx.ticket.update({ where: { id: original.id }, data: { status: "CANCELED" } });
       const id = randomUUID();

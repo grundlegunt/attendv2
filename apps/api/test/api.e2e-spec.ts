@@ -6891,7 +6891,7 @@ describe("Milestone 9 box office and workforce", () => {
     const holderKey = `promotion-controls-${crypto.randomUUID()}`;
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
-    const quoteBody = { holdTokens: [holds.body[0].holdToken], holderKey, promotionCode: promotion.code };
+    const quoteBody = { holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id, promotionCode: promotion.code };
 
     await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send(quoteBody).expect(400);
@@ -6907,9 +6907,11 @@ describe("Milestone 9 box office and workforce", () => {
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const inventory = await prisma.showtimeSeat.findFirstOrThrow({
       where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
-      include: { showtime: true },
+      include: { showtime: { include: { priceTier: true } } },
     });
-    const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const ticketType = await prisma.ticketType.create({
+      data: { locationId: owner.locationId, name: `Box Office Child ${crypto.randomUUID()}`, priceAdjustmentMinor: -200 },
+    });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: "E2E-BOX", openingBalanceCents: 20000 }).expect(201);
     const holderKey = `box-office-e2e-${crypto.randomUUID()}`;
@@ -6920,7 +6922,11 @@ describe("Milestone 9 box office and workforce", () => {
     await request(app.getHttpServer()).post(`/api/v1/cinema/showtimes/${inventory.showtimeId}/holds`)
       .send({ seatIds: [inventory.seatId], holderKey: `online-e2e-${crypto.randomUUID()}` }).expect(409);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
+    expect(quote.body).toMatchObject({
+      subtotalCents: Math.max(0, inventory.showtime.priceTier.ticketPriceMinor + ticketType.priceAdjustmentMinor),
+      ticketType: { id: ticketType.id, name: ticketType.name, priceCents: Math.max(0, inventory.showtime.priceTier.ticketPriceMinor + ticketType.priceAdjustmentMinor) },
+    });
     const cashCents = Math.floor(quote.body.totalCents / 2);
     const cardCents = quote.body.totalCents - cashCents;
     const customerEmail = `box-office-${crypto.randomUUID()}@example.test`;
@@ -6940,6 +6946,7 @@ describe("Milestone 9 box office and workforce", () => {
     expect(sale.body.status).toBe("PAID");
     expect(sale.body.receiptDelivery).toBe("SENT");
     expect(sale.body.tickets).toHaveLength(1);
+    expect(sale.body.tickets[0]).toMatchObject({ ticketType: { id: ticketType.id, name: ticketType.name }, priceCentsPaid: quote.body.subtotalCents });
     expect(sale.body.cashTransactions[0]).toMatchObject({ amountCents: cashCents, changeGivenCents: 500 });
     expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
     expect(emailProvider.sent.slice(receiptsBefore)).toEqual([expect.objectContaining({ to: customerEmail, guestName: "Box Office Customer", orderNumber: sale.body.orderNumber, tickets: [expect.objectContaining({ credential: expect.any(String) })] })]);
@@ -7005,6 +7012,7 @@ describe("Milestone 9 box office and workforce", () => {
     expect(history.body.ticketOrders.find((order: { id: string }) => order.id === sale.body.id).cashTransactions).toEqual(
       expect.arrayContaining([expect.objectContaining({ type: "REFUND" })]),
     );
+    await prisma.ticketType.update({ where: { id: ticketType.id }, data: { active: false } });
   });
 
   it("replays a completed ticket exchange without creating another replacement", async () => {
@@ -7098,7 +7106,7 @@ describe("Milestone 9 box office and workforce", () => {
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
     const requestId = crypto.randomUUID();
     const payload = { requestId, holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents: quote.body.totalCents, cashReceivedCents: quote.body.totalCents };
 
@@ -7143,7 +7151,7 @@ describe("Milestone 9 box office and workforce", () => {
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
     const cashCents = 100;
     const giftCardCents = quote.body.totalCents - cashCents;
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
@@ -7183,7 +7191,7 @@ describe("Milestone 9 box office and workforce", () => {
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
     const cardCents = quote.body.totalCents - 500;
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({
@@ -7214,7 +7222,7 @@ describe("Milestone 9 box office and workforce", () => {
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
     const requestId = crypto.randomUUID();
     const checkout = request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({
