@@ -56,6 +56,7 @@ export const boxOfficeHoldRequestSchema = z.object({
 export const boxOfficeQuoteRequestSchema = z.object({
   holdTokens: z.array(z.string().uuid()).min(1).max(10),
   holderKey: z.string().min(16).max(200),
+  ticketTypeId: z.string().uuid(),
   promotionCode: z.string().trim().min(1).max(50).optional(),
 });
 
@@ -65,7 +66,6 @@ export const giftCardBalanceRequestSchema = z.object({
 
 export const boxOfficeCheckoutRequestSchema = boxOfficeQuoteRequestSchema.extend({
   requestId: z.string().uuid(),
-  ticketTypeId: z.string().uuid(),
   cashDrawerId: z.string().uuid().optional(),
   cashCents: z.number().int().nonnegative().default(0),
   cardCents: z.number().int().nonnegative().default(0),
