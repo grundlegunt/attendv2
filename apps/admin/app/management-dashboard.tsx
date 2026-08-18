@@ -13,6 +13,7 @@ type RevenueReport = {
   salesChannels: Array<{ channel: "ONLINE" | "BOX_OFFICE"; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
   salesOperators: Array<{ employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
   concessionTopSellers: Array<{ menuItemId: string; name: string; unitsSold: number; salesCents: number }>;
+  dailyPerformance: Array<{ date: string; ticketsSold: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; averageTotalSpendPerPatronCents: number }>;
 };
 type AudienceOriginsReport = {
   totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
@@ -229,6 +230,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       {revenue.salesOperators.length === 0 && <p className="dashboard-empty">No staff-assisted ticket sales in this range.</p>}
       <h3>Top-selling concessions</h3><div className="management-table"><div className="table-row table-head"><span>Item</span><span>Units</span><span>Sales value</span><span>Average unit</span></div>{revenue.concessionTopSellers.map((row) => <div className="table-row" key={row.menuItemId}><strong>{row.name}</strong><span>{row.unitsSold}</span><span>{money(row.salesCents)}</span><span>{money(row.unitsSold ? Math.round(row.salesCents / row.unitsSold) : 0)}</span></div>)}</div>
       {revenue.concessionTopSellers.length === 0 && <p className="dashboard-empty">No sent concession items in this range.</p>}
+      <h3>Daily performance</h3><div className="management-table"><div className="table-row table-head"><span>Business date</span><span>Tickets</span><span>Net revenue</span><span>Average patron spend</span></div>{revenue.dailyPerformance.map((row) => <div className="table-row" key={row.date}><strong>{new Date(`${row.date}T12:00:00`).toLocaleDateString()}</strong><span>{row.ticketsSold}</span><span>{money(row.combinedRevenueCents)}</span><span>{money(row.averageTotalSpendPerPatronCents)}</span></div>)}</div>
+      {revenue.dailyPerformance.length === 0 && <p className="dashboard-empty">No completed sales in this range.</p>}
     </section>}
 
     {audienceOrigins && <section className="panel"><p className="kicker">AUDIENCE</p><h2>Where ticket buyers come from</h2>

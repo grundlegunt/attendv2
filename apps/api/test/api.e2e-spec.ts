@@ -7363,6 +7363,10 @@ describe("Milestone 10 management reporting", () => {
     ]);
     expect(response.body.salesOperators).toEqual([{ employeeId: owner.id, employeeName: owner.name, ticketsSold: 1, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 }]);
     expect(response.body.concessionTopSellers).toEqual([{ menuItemId: menuItem.id, name: menuItem.name, unitsSold: 2, salesCents: (menuItem.priceCents + 50) * 2 }]);
+    expect(response.body.dailyPerformance).toEqual([
+      { date: "2024-01-10", ticketsSold: 1, ticketCollectedCents: 2066, fnbRevenueCents: 500, combinedRevenueCents: 2566, averageTotalSpendPerPatronCents: 2566 },
+      { date: "2024-01-12", ticketsSold: 1, ticketCollectedCents: 2000, fnbRevenueCents: 700, combinedRevenueCents: 2700, averageTotalSpendPerPatronCents: 2700 },
+    ]);
     const csv = await request(app.getHttpServer()).get(`/api/v1/reports/revenue.csv?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.headers["content-disposition"]).toContain("attend-revenue.csv");
@@ -7383,6 +7387,8 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain(`"${owner.name}","1","2400","400","2000"`);
     expect(csv.text).toContain('"Concession item","Units sold","Sales value (cents)"');
     expect(csv.text).toContain(`"${menuItem.name}","2","${(menuItem.priceCents + 50) * 2}"`);
+    expect(csv.text).toContain('"Business date","Tickets sold","Ticket collected (cents)","F&B revenue (cents)","Net revenue (cents)","Average total spend per patron (cents)"');
+    expect(csv.text).toContain('"2024-01-10","1","2066","500","2566","2566"');
   });
 
   it("reports exact worked minutes and exports payroll-ready CSV", async () => {

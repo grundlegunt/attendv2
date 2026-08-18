@@ -27,6 +27,7 @@ type RevenueReport = {
   salesChannels: Array<{ channel: "ONLINE" | "BOX_OFFICE"; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
   salesOperators: Array<{ employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
   concessionTopSellers: Array<{ menuItemId: string; name: string; unitsSold: number; salesCents: number }>;
+  dailyPerformance: Array<{ date: string; ticketsSold: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; averageTotalSpendPerPatronCents: number }>;
 };
 
 type AuditEvent = { id: string; action: string; entityType: string; occurredAt: string };
