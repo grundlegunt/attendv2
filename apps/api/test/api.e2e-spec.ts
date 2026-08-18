@@ -7353,6 +7353,7 @@ describe("Milestone 10 management reporting", () => {
     expect(response.body.totals).toMatchObject({ grossRevenueCents: 6366, refundedCents: 1100, ticketRefundedCents: 800, fnbRefundedCents: 300, ticketRevenueCents: 3500, ticketFeesCents: 300, ticketTaxCents: 266, ticketCollectedCents: 4066, fnbRevenueCents: 1200, combinedRevenueCents: 5266, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
     expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, ticketRevenueCents: 3500, ticketsSold: 2, fnbRevenueCents: 1200 }]);
     expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1700, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 1800, fnbRevenueCents: 700, ticketsSold: 1 }]);
+    expect(response.body.admissionTypes).toEqual([{ ticketTypeId: ticketType.id, name: ticketType.name, ticketsSold: 2, ticketRevenueCents: 3500 }]);
     const csv = await request(app.getHttpServer()).get(`/api/v1/reports/revenue.csv?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.headers["content-disposition"]).toContain("attend-revenue.csv");
@@ -7362,6 +7363,8 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain('"Ticket tax (cents)","266"');
     expect(csv.text).toContain('"Ticket total collected (cents)","4066"');
     expect(csv.text).toContain(`"${movie!.title}","2","3500","1200"`);
+    expect(csv.text).toContain(`"Admission type","Tickets sold","Ticket face value (cents)"`);
+    expect(csv.text).toContain(`"${ticketType.name}","2","3500"`);
   });
 
   it("reports exact worked minutes and exports payroll-ready CSV", async () => {
