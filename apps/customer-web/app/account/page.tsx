@@ -59,6 +59,7 @@ export default function AccountPage() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
   const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
+  const [printOrderId, setPrintOrderId] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
   const [liveTabId, setLiveTabId] = useState("");
@@ -84,6 +85,17 @@ export default function AccountPage() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!printOrderId) return;
+    document.body.classList.add("ticket-order-printing");
+    const reset = () => setPrintOrderId(null);
+    window.addEventListener("afterprint", reset);
+    return () => {
+      document.body.classList.remove("ticket-order-printing");
+      window.removeEventListener("afterprint", reset);
+    };
+  }, [printOrderId]);
 
   const upcomingOrders = useMemo(
     () => account?.orders.filter(hasUpcomingTicket) ?? [],
@@ -207,6 +219,11 @@ export default function AccountPage() {
     }
   }
 
+  function printOrder(orderId: string) {
+    setPrintOrderId(orderId);
+    window.requestAnimationFrame(() => window.print());
+  }
+
   function renderOrders(title: string, orders: CustomerTicketOrderSummary[]) {
     return (
       <section className="account-orders" aria-label={title}>
@@ -224,7 +241,7 @@ export default function AccountPage() {
           </div>
         ) : (
           orders.map((order) => (
-            <article className="ticket-order" key={order.id}>
+            <article className={`ticket-order${printOrderId === order.id ? " ticket-order--printing" : ""}`} key={order.id}>
               <header className="ticket-order__header">
                 <div>
                   <span className="eyebrow">ORDER {order.orderNumber}</span>
@@ -243,6 +260,13 @@ export default function AccountPage() {
                     onClick={() => void resendReceipt(order)}
                   >
                     {receiptOrderId === order.id ? "Sending…" : "Email tickets"}
+                  </button>
+                  <button
+                    className="account-secondary-button"
+                    type="button"
+                    onClick={() => printOrder(order.id)}
+                  >
+                    Print tickets
                   </button>
                 </div>
               </header>
