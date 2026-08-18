@@ -83,7 +83,7 @@ export class ReportingService {
     const movies = new Map<string, { movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
     const showtimes = new Map<string, { showtimeId: string; movieId: string; title: string; startsAt: Date; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
-    const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; collectedCents: number }>();
+    const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const ensureMovie = (movieId: string, title: string) => {
       let row = movies.get(movieId);
       if (!row) { row = { movieId, title, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; movies.set(movieId, row); }
@@ -101,14 +101,23 @@ export class ReportingService {
     let ticketCollectedCents = 0;
     let ticketRefundedCents = 0;
     for (const order of ticketOrders) {
-      if (order.status === "REFUNDED") { ticketRefundedCents += order.totalCents; continue; }
-      if (!order.tickets.length) continue;
+      const salesChannel = salesChannels.get(order.channel) ?? { channel: order.channel, ticketsSold: 0, ticketRevenueCents: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 };
+      salesChannel.grossCollectedCents += order.totalCents;
+      if (order.status === "REFUNDED") {
+        ticketRefundedCents += order.totalCents;
+        salesChannel.refundedCents += order.totalCents;
+        salesChannels.set(order.channel, salesChannel);
+        continue;
+      }
+      salesChannel.netCollectedCents += order.totalCents;
+      if (!order.tickets.length) {
+        salesChannels.set(order.channel, salesChannel);
+        continue;
+      }
       ticketFeesCents += order.feesCents;
       ticketTaxCents += order.taxCents;
       ticketCollectedCents += order.totalCents;
-      const salesChannel = salesChannels.get(order.channel) ?? { channel: order.channel, ticketsSold: 0, ticketRevenueCents: 0, collectedCents: 0 };
       salesChannel.ticketsSold += order.tickets.length;
-      salesChannel.collectedCents += order.totalCents;
       order.tickets.forEach((ticket) => {
         const showtime = ticket.showtimeSeat.showtime;
         const revenue = ticket.priceCentsPaid;
@@ -194,8 +203,8 @@ export class ReportingService {
       ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents, showtime.fnbRevenueCents])), "",
       row(["Admission type", "Tickets sold", "Ticket face value (cents)"]),
       ...report.admissionTypes.map((ticketType) => row([ticketType.name, ticketType.ticketsSold, ticketType.ticketRevenueCents])), "",
-      row(["Sales channel", "Tickets sold", "Ticket face value (cents)", "Total collected (cents)"]),
-      ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents, channel.collectedCents])),
+      row(["Sales channel", "Tickets sold", "Ticket face value (cents)", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
+      ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents, channel.grossCollectedCents, channel.refundedCents, channel.netCollectedCents])),
     ].join("\n");
   }
 
