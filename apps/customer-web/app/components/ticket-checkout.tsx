@@ -133,6 +133,7 @@ export function TicketCheckout({
   seats,
   movie,
   auditorium,
+  startsAt,
   timeZone,
   onBack,
 }: {
@@ -142,6 +143,7 @@ export function TicketCheckout({
   seats: string[];
   movie: string;
   auditorium: string;
+  startsAt: string;
   timeZone: string;
   onBack: () => void;
 }) {
@@ -698,8 +700,16 @@ export function TicketCheckout({
         <span className="eyebrow">TICKETS + PAYMENT</span>
         <h2>{movie}</h2>
         <p>
-          {auditorium} · Seats {seats.join(", ")}
+          {new Intl.DateTimeFormat("en-US", {
+            timeZone,
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          }).format(new Date(startsAt))} · {auditorium}
         </p>
+        <p>{seats.join(", ")}</p>
       </div>
       {error && <div className="error-banner">{error}</div>}
       {!config && error && !checkout && (
