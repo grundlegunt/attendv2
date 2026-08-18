@@ -2061,13 +2061,17 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       `/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`,
     );
     expect(config.status).toBe(200);
+    const basePriceTicketType = config.body.ticketTypes.find(
+      (ticketType: { priceAdjustmentMinor: number }) => ticketType.priceAdjustmentMinor === 0,
+    );
+    expect(basePriceTicketType).toBeDefined();
     const result = await request(app.getHttpServer())
       .post("/api/v1/ticketing/checkouts")
       .set("Idempotency-Key", `checkout-${holderKey}`)
       .send({
         holdTokens: [holdToken],
         holderKey,
-        ticketTypeId: config.body.ticketTypes[0].id,
+        ticketTypeId: basePriceTicketType.id,
         email: `${holderKey}@example.test`,
         diningAuthorizationRequested: true,
       });
