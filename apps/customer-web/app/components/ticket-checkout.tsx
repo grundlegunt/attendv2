@@ -146,6 +146,8 @@ export function TicketCheckout({
   const [checkout, setCheckout] = useState<TicketCheckoutResponse | null>(null);
   const [confirmation, setConfirmation] =
     useState<TicketConfirmationResponse | null>(null);
+  const [receiptRetryPending, setReceiptRetryPending] = useState(false);
+  const [receiptRetryMessage, setReceiptRetryMessage] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [accountRecognized, setAccountRecognized] = useState(false);
@@ -547,6 +549,35 @@ export function TicketCheckout({
     await confirmAndFinalize(stripeRef.current, elementsRef.current, checkout.orderId);
   }
 
+  async function retryReceipt() {
+    if (!confirmation || receiptRetryPending) return;
+    setReceiptRetryPending(true);
+    setReceiptRetryMessage(null);
+    try {
+      const result = await apiFetch<{
+        receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED";
+        email: string;
+      }>(`/ticketing/orders/${confirmation.orderId}/receipt`, {
+        method: "POST",
+        body: JSON.stringify({ holderKey }),
+      });
+      setConfirmation((current) => current ? { ...current, receiptDelivery: result.receiptDelivery } : current);
+      setReceiptRetryMessage(
+        result.receiptDelivery === "SENT"
+          ? `Your tickets were sent to ${result.email}.`
+          : "The email still could not be sent. Keep these QR tickets for admission and try again.",
+      );
+    } catch (requestError) {
+      setReceiptRetryMessage(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : "The ticket email could not be retried.",
+      );
+    } finally {
+      setReceiptRetryPending(false);
+    }
+  }
+
   if (confirmation) {
     return (
       <section className="ticket-confirmation">
@@ -558,6 +589,19 @@ export function TicketCheckout({
             ? ` A receipt with your QR tickets was sent to ${email}.`
             : " Save these tickets for admission."}
         </p>
+        {confirmation.receiptDelivery === "FAILED" && (
+          <p>
+            <button
+              className="account-secondary-button"
+              type="button"
+              disabled={receiptRetryPending}
+              onClick={() => void retryReceipt()}
+            >
+              {receiptRetryPending ? "Sending…" : "Retry ticket email"}
+            </button>
+          </p>
+        )}
+        {receiptRetryMessage && <p role="status">{receiptRetryMessage}</p>}
         {confirmation.diningAuthorization === "AUTHORIZED" && (
           <p>Your saved card is authorized for food and drinks during this visit.</p>
         )}
