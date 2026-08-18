@@ -64,10 +64,23 @@ export default function AccountPage() {
   const [guestTabToken, setGuestTabToken] = useState("");
 
   useEffect(() => {
-    const token = new URLSearchParams(window.location.search).get(
-      "restaurantTab",
-    );
+    const search = new URLSearchParams(window.location.search);
+    const token = search.get("restaurantTab");
     if (token) setGuestTabToken(token);
+
+    if (search.get("createAccount") === "1") {
+      setMode("register");
+      const serialized = window.sessionStorage.getItem("attend-account-handoff");
+      if (!serialized) return;
+      window.sessionStorage.removeItem("attend-account-handoff");
+      try {
+        const handoff = JSON.parse(serialized) as { email?: unknown; name?: unknown };
+        if (typeof handoff.email === "string") setEmail(handoff.email);
+        if (typeof handoff.name === "string") setName(handoff.name);
+      } catch {
+        // Ignore an invalid or stale handoff and leave registration editable.
+      }
+    }
   }, []);
 
   const upcomingOrders = useMemo(
