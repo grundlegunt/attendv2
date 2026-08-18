@@ -130,7 +130,7 @@ test("signed-in customer details carry into ticket checkout", async ({ page }) =
   const login = await page.request.post("http://127.0.0.1:3000/api/v1/auth/customers/login", {
     data: { email: "customer@ridgelinecinema.test", password },
   });
-  expect(login.status()).toBe(201);
+  expect(login.status()).toBe(200);
 
   await page.goto("http://127.0.0.1:3000");
   const showtime = page.locator(".program-tile__showtimes button:not([disabled])").first();
