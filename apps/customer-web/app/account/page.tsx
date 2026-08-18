@@ -70,6 +70,11 @@ export default function AccountPage() {
   const [profileName, setProfileName] = useState("");
   const [profilePending, setProfilePending] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [emailChangePassword, setEmailChangePassword] = useState("");
+  const [emailChangeToken, setEmailChangeToken] = useState("");
+  const [emailChangePending, setEmailChangePending] = useState(false);
+  const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
   const [liveTabId, setLiveTabId] = useState("");
@@ -84,6 +89,8 @@ export default function AccountPage() {
       setResetToken(passwordResetToken);
       setMode("reset");
     }
+    const emailToken = hash.get("emailChange");
+    if (emailToken) setEmailChangeToken(emailToken);
     const token = search.get("restaurantTab");
     if (token) setGuestTabToken(token);
 
@@ -339,6 +346,51 @@ export default function AccountPage() {
     }
   }
 
+  async function requestEmailChange(event: FormEvent) {
+    event.preventDefault();
+    setEmailChangePending(true);
+    setEmailChangeMessage(null);
+    try {
+      await apiFetch<{ accepted: true }>("/auth/customers/email-change/request", {
+        method: "POST",
+        body: JSON.stringify({ newEmail, password: emailChangePassword }),
+      });
+      setNewEmail("");
+      setEmailChangePassword("");
+      setEmailChangeMessage("Check the new address for a confirmation link.");
+    } catch (err) {
+      setEmailChangeMessage(
+        err instanceof ApiRequestError ? err.body.message : "The email change could not be started.",
+      );
+    } finally {
+      setEmailChangePending(false);
+    }
+  }
+
+  async function confirmEmailChange(event: FormEvent) {
+    event.preventDefault();
+    setEmailChangePending(true);
+    setEmailChangeMessage(null);
+    try {
+      await apiFetch<{ changed: true }>("/auth/customers/email-change/confirm", {
+        method: "POST",
+        body: JSON.stringify({ token: emailChangeToken }),
+      });
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      setEmailChangeToken("");
+      setSession(null);
+      setAccount(null);
+      setMode("login");
+      setRecoveryMessage("Email updated. Sign in with your new address.");
+    } catch (err) {
+      setEmailChangeMessage(
+        err instanceof ApiRequestError ? err.body.message : "The email change could not be confirmed.",
+      );
+    } finally {
+      setEmailChangePending(false);
+    }
+  }
+
   function renderOrders(title: string, orders: CustomerTicketOrderSummary[]) {
     return (
       <section className="account-orders" aria-label={title}>
@@ -450,6 +502,26 @@ export default function AccountPage() {
     );
   }
 
+  if (emailChangeToken) {
+    return (
+      <main className="cinema-shell route-page">
+        <section className="route-heading">
+          <span className="eyebrow">ACCOUNT SECURITY</span>
+          <h1>Confirm email change</h1>
+          <p>Confirm this address as your new sign-in email. The link expires after 30 minutes.</p>
+        </section>
+        <section className="content-panel" aria-label="Confirm email change">
+          <form onSubmit={confirmEmailChange}>
+            <button className="primary" type="submit" disabled={emailChangePending}>
+              {emailChangePending ? "Confirming…" : "Confirm email change"}
+            </button>
+          </form>
+          {emailChangeMessage && <p role="status">{emailChangeMessage}</p>}
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="cinema-shell route-page">
       <section className="route-heading">
@@ -524,7 +596,7 @@ export default function AccountPage() {
               <span className="eyebrow">ACCOUNT DETAILS</span>
               <h2>Profile</h2>
               <p className="secondary-copy">
-                This name appears with your account and ticket communications. Your sign-in email cannot be changed here.
+                This name appears with your account and ticket communications.
               </p>
             </div>
             <form onSubmit={updateProfile}>
@@ -543,6 +615,32 @@ export default function AccountPage() {
                 {profilePending ? "Saving…" : "Save profile"}
               </button>
               {profileMessage && <p role="status">{profileMessage}</p>}
+            </form>
+            <form onSubmit={requestEmailChange}>
+              <label className="field">
+                <span>New sign-in email</span>
+                <input
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={newEmail}
+                  onChange={(event) => setNewEmail(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <span>Current password</span>
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={emailChangePassword}
+                  onChange={(event) => setEmailChangePassword(event.target.value)}
+                />
+              </label>
+              <button className="account-secondary-button" disabled={emailChangePending || !newEmail || !emailChangePassword}>
+                {emailChangePending ? "Sending…" : "Verify new email"}
+              </button>
+              {emailChangeMessage && <p role="status">{emailChangeMessage}</p>}
             </form>
           </section>
 

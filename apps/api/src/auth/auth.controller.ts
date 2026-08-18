@@ -6,6 +6,8 @@ import {
   customerPasswordResetConfirmSchema,
   customerPasswordResetRequestSchema,
   customerProfileUpdateRequestSchema,
+  customerEmailChangeConfirmSchema,
+  customerEmailChangeRequestSchema,
   customerRegisterRequestSchema,
   refreshRequestSchema,
   staffLoginRequestSchema,
@@ -234,6 +236,41 @@ export class AuthController {
       actor.sub,
       customerProfileUpdateRequestSchema.parse(body),
     );
+  }
+
+  @Post("customers/email-change/request")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async requestCustomerEmailChange(
+    @Req() request: Request,
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(customerEmailChangeRequestSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
+    await this.authService.requestCustomerEmailChange(
+      actor.sub,
+      customerEmailChangeRequestSchema.parse(body),
+    );
+    return { accepted: true };
+  }
+
+  @Post("customers/email-change/confirm")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "auth" })
+  async confirmCustomerEmailChange(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @Body(new ZodValidationPipe(customerEmailChangeConfirmSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    await this.authService.confirmCustomerEmailChange(
+      customerEmailChangeConfirmSchema.parse(body),
+    );
+    clearCustomerSessionCookies(response);
+    return { changed: true };
   }
 
   @Post("customers/orders/:orderId/receipt")

@@ -67,6 +67,17 @@ export const customerProfileUpdateRequestSchema = z.object({
 }).strict();
 export type CustomerProfileUpdateRequest = z.infer<typeof customerProfileUpdateRequestSchema>;
 
+export const customerEmailChangeRequestSchema = z.object({
+  newEmail: z.string().email(),
+  password: z.string().min(1),
+}).strict();
+export type CustomerEmailChangeRequest = z.infer<typeof customerEmailChangeRequestSchema>;
+
+export const customerEmailChangeConfirmSchema = z.object({
+  token: z.string().min(1),
+}).strict();
+export type CustomerEmailChangeConfirm = z.infer<typeof customerEmailChangeConfirmSchema>;
+
 export const refreshRequestSchema = z.object({
   refreshToken: z.string().min(1),
 });

@@ -6,6 +6,7 @@ import {
   RestaurantReceiptDelivery,
   TicketReceipt,
   CustomerPasswordResetDelivery,
+  CustomerEmailChangeDelivery,
 } from "./email-provider";
 
 function escapeHtml(value: string) {
@@ -124,6 +125,33 @@ export class PostmarkEmailProvider implements EmailProvider {
     const body = (await response.json()) as { MessageID?: string; Message?: string };
     if (!response.ok || !body.MessageID) {
       throw new Error(`Postmark rejected the password reset email: ${body.Message ?? response.statusText}`);
+    }
+    return { messageId: body.MessageID };
+  }
+
+  async sendCustomerEmailChange(
+    delivery: CustomerEmailChangeDelivery,
+  ): Promise<{ messageId: string }> {
+    const response = await fetch("https://api.postmarkapp.com/email", {
+      method: "POST",
+      signal: AbortSignal.timeout(8_000),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Postmark-Server-Token": this.serverToken,
+      },
+      body: JSON.stringify({
+        From: this.from,
+        To: delivery.to,
+        Subject: "Confirm your new cinema account email",
+        HtmlBody: `<p>Hi ${escapeHtml(delivery.customerName?.trim() || "there")},</p><p>Confirm this as your new sign-in email within ${delivery.expiresInMinutes} minutes.</p><p><a href="${escapeHtml(delivery.verificationUrl)}">Confirm email change</a></p><p>If you did not request this, do not use the link. Your current sign-in email will remain unchanged.</p>`,
+        TextBody: `Confirm this as your new sign-in email within ${delivery.expiresInMinutes} minutes: ${delivery.verificationUrl}\n\nIf you did not request this, ignore this email.`,
+        MessageStream: "outbound",
+      }),
+    });
+    const body = (await response.json()) as { MessageID?: string; Message?: string };
+    if (!response.ok || !body.MessageID) {
+      throw new Error(`Postmark rejected the email-change message: ${body.Message ?? response.statusText}`);
     }
     return { messageId: body.MessageID };
   }

@@ -4,6 +4,7 @@ import {
   RestaurantPaymentFailedNotice,
   RestaurantReceiptDelivery,
   CustomerPasswordResetDelivery,
+  CustomerEmailChangeDelivery,
   TicketReceipt,
 } from "./email-provider";
 
@@ -14,6 +15,7 @@ export class TestEmailProvider implements EmailProvider {
   readonly sentRestaurantPaymentFailures: RestaurantPaymentFailedNotice[] = [];
   readonly sentRestaurantReceipts: RestaurantReceiptDelivery[] = [];
   readonly sentCustomerPasswordResets: CustomerPasswordResetDelivery[] = [];
+  readonly sentCustomerEmailChanges: CustomerEmailChangeDelivery[] = [];
 
   async sendTicketReceipt(receipt: TicketReceipt) {
     this.sent.push(receipt);
@@ -40,5 +42,10 @@ export class TestEmailProvider implements EmailProvider {
   async sendCustomerPasswordReset(delivery: CustomerPasswordResetDelivery) {
     this.sentCustomerPasswordResets.push(delivery);
     return { messageId: `test-customer-password-reset-${this.sentCustomerPasswordResets.length}` };
+  }
+
+  async sendCustomerEmailChange(delivery: CustomerEmailChangeDelivery) {
+    this.sentCustomerEmailChanges.push(delivery);
+    return { messageId: `test-customer-email-change-${this.sentCustomerEmailChanges.length}` };
   }
 }

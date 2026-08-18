@@ -7,6 +7,8 @@ import {
   verifyRefreshToken,
   signCustomerPasswordResetToken,
   verifyCustomerPasswordResetToken,
+  signCustomerEmailChangeToken,
+  verifyCustomerEmailChangeToken,
   InvalidTokenError,
   TokenPair,
   createMfaSecret,
@@ -28,6 +30,8 @@ import {
   CustomerPasswordResetRequest,
   CustomerRegisterRequest,
   CustomerProfileUpdateRequest,
+  CustomerEmailChangeConfirm,
+  CustomerEmailChangeRequest,
   StaffLoginRequest,
   StaffPasswordChangeRequest,
   StaffMfaConfirmRequest,
@@ -583,6 +587,118 @@ export class AuthService {
       return updated;
     });
     return this.customerToProfile(customer);
+  }
+
+  async requestCustomerEmailChange(
+    customerId: string,
+    input: CustomerEmailChangeRequest,
+  ): Promise<void> {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { authAccount: true },
+    });
+    if (!customer?.email || !customer.authAccount?.passwordHash) {
+      throw AppError.unauthenticated();
+    }
+    if (!(await verifyPassword(customer.authAccount.passwordHash, input.password))) {
+      throw AppError.invalidCredentials("Password is incorrect.");
+    }
+    const newEmail = input.newEmail.toLowerCase();
+    if (newEmail === customer.email.toLowerCase()) {
+      throw AppError.validationFailed("Enter a different email address.");
+    }
+    if (await prisma.customer.findUnique({ where: { email: newEmail } })) {
+      throw AppError.conflict("That email address cannot be used.");
+    }
+
+    const env = loadEnv();
+    const token = signCustomerEmailChangeToken({
+      sub: customer.id,
+      tokenVersion: customer.authAccount.refreshTokenVersion,
+      newEmail,
+      purpose: "customer-email-change",
+    }, env.JWT_REFRESH_SECRET);
+    const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
+    try {
+      const delivery = await this.emailProvider.sendCustomerEmailChange({
+        to: newEmail,
+        customerName: customer.name,
+        verificationUrl: `${customerWebUrl}/account#emailChange=${encodeURIComponent(token)}`,
+        expiresInMinutes: 30,
+      });
+      await this.audit.record({
+        actorType: "CUSTOMER",
+        actorId: customer.id,
+        action: "customer.email_change_requested",
+        entityType: "Customer",
+        entityId: customer.id,
+        afterState: { newEmail, messageId: delivery.messageId },
+      });
+    } catch (error) {
+      await this.audit.record({
+        actorType: "SYSTEM",
+        action: "customer.email_change_delivery_failed",
+        entityType: "Customer",
+        entityId: customer.id,
+        afterState: {
+          newEmail,
+          error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000),
+        },
+      });
+      throw AppError.validationFailed("The verification email could not be sent. Please try again.");
+    }
+  }
+
+  async confirmCustomerEmailChange(input: CustomerEmailChangeConfirm): Promise<void> {
+    let payload;
+    try {
+      payload = verifyCustomerEmailChangeToken(input.token, loadEnv().JWT_REFRESH_SECRET);
+    } catch (error) {
+      if (error instanceof InvalidTokenError) {
+        throw AppError.validationFailed("This email verification link is invalid or expired.");
+      }
+      throw error;
+    }
+    const customer = await prisma.customer.findUnique({
+      where: { id: payload.sub },
+      include: { authAccount: true },
+    });
+    if (!customer?.authAccount || customer.authAccount.refreshTokenVersion !== payload.tokenVersion) {
+      throw AppError.validationFailed("This email verification link is invalid or expired.");
+    }
+    if (await prisma.customer.findUnique({ where: { email: payload.newEmail } })) {
+      throw AppError.conflict("That email address cannot be used.");
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        const authUpdate = await tx.customerAuthAccount.updateMany({
+          where: { customerId: customer.id, refreshTokenVersion: payload.tokenVersion },
+          data: { refreshTokenVersion: { increment: 1 } },
+        });
+        if (authUpdate.count !== 1) {
+          throw AppError.validationFailed("This email verification link is invalid or expired.");
+        }
+        await tx.customer.update({
+          where: { id: customer.id },
+          data: { email: payload.newEmail },
+        });
+        await this.audit.record({
+          actorType: "CUSTOMER",
+          actorId: customer.id,
+          action: "customer.email_changed",
+          entityType: "Customer",
+          entityId: customer.id,
+          beforeState: { email: customer.email },
+          afterState: { email: payload.newEmail },
+        }, tx);
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === "P2002") {
+        throw AppError.conflict("That email address cannot be used.");
+      }
+      throw error;
+    }
   }
 
   async resendCustomerReceipt(customerId: string, orderId: string) {
