@@ -103,6 +103,29 @@ describe("PostmarkEmailProvider", () => {
     expect(body.TextBody).toContain("within 30 minutes");
   });
 
+  it("sends a time-limited customer email-change verification link", async () => {
+    const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ MessageID: "message-email-change" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider("POSTMARK_API_TEST", "receipts@example.com");
+
+    await expect(provider.sendCustomerEmailChange({
+      to: "new-address@example.com",
+      customerName: "Customer",
+      verificationUrl: "https://cinema.example/account#emailChange=signed-token",
+      expiresInMinutes: 30,
+    })).resolves.toEqual({ messageId: "message-email-change" });
+
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.To).toBe("new-address@example.com");
+    expect(body.Subject).toContain("Confirm your new");
+    expect(body.HtmlBody).toContain("emailChange=signed-token");
+    expect(body.TextBody).toContain("within 30 minutes");
+  });
+
   it("sends a restaurant payment failure notice with a recovery link", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ MessageID: "message-2", ErrorCode: 0 }), {

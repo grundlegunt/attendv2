@@ -36,6 +36,13 @@ export interface CustomerPasswordResetPayload {
   purpose: "customer-password-reset";
 }
 
+export interface CustomerEmailChangePayload {
+  sub: string;
+  tokenVersion: number;
+  newEmail: string;
+  purpose: "customer-email-change";
+}
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -112,6 +119,36 @@ export function verifyCustomerPasswordResetToken(
     }) as unknown as CustomerPasswordResetPayload;
     if (decoded.purpose !== "customer-password-reset") {
       throw new Error("incorrect token purpose");
+    }
+    return decoded;
+  } catch (err) {
+    throw new InvalidTokenError(err instanceof Error ? err.message : "unknown");
+  }
+}
+
+export function signCustomerEmailChangeToken(
+  payload: CustomerEmailChangePayload,
+  secret: string,
+  ttlSeconds = 30 * 60,
+): string {
+  return jwt.sign(payload, secret, {
+    expiresIn: ttlSeconds,
+    issuer: "cinema-platform",
+    audience: "customer-email-change",
+  });
+}
+
+export function verifyCustomerEmailChangeToken(
+  token: string,
+  secret: string,
+): CustomerEmailChangePayload {
+  try {
+    const decoded = jwt.verify(token, secret, {
+      issuer: "cinema-platform",
+      audience: "customer-email-change",
+    }) as unknown as CustomerEmailChangePayload;
+    if (decoded.purpose !== "customer-email-change" || typeof decoded.newEmail !== "string") {
+      throw new Error("incorrect token purpose or payload");
     }
     return decoded;
   } catch (err) {

@@ -3890,6 +3890,55 @@ describe("Customer authentication", () => {
     refreshCookie = cookiePair(cookies, "attend_customer_refresh");
   });
 
+  it("changes a customer email only after the new address is verified", async () => {
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const newEmail = "updated-customer@m0test.local";
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/email-change/request")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send({ newEmail, password: "wrong-password" })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/email-change/request")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send({ newEmail: newEmail.toUpperCase(), password: "customer-password-3" })
+      .expect(202, { accepted: true });
+    const delivery = emailProvider.sentCustomerEmailChanges.at(-1)!;
+    expect(delivery.to).toBe(newEmail);
+    const token = new URL(delivery.verificationUrl).hash.replace("#emailChange=", "");
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/email-change/confirm")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ token })
+      .expect(200, { changed: true });
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/email-change/confirm")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ token })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ email, password: "customer-password-3" })
+      .expect(401);
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ email: newEmail, password: "customer-password-3" })
+      .expect(200);
+    const cookies = setCookieHeaders(login);
+    accessCookie = cookiePair(cookies, "attend_customer_access");
+    refreshCookie = cookiePair(cookies, "attend_customer_refresh");
+  });
+
   it("rejects a foreign Origin before a cookie-authenticated state change", async () => {
     const protectedMutation = await request(app.getHttpServer())
       .post("/api/v1/customer/restaurant-tabs/00000000-0000-4000-8000-000000000001/tip")

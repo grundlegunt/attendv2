@@ -70,6 +70,13 @@ export interface CustomerPasswordResetDelivery {
   expiresInMinutes: number;
 }
 
+export interface CustomerEmailChangeDelivery {
+  to: string;
+  customerName?: string | null;
+  verificationUrl: string;
+  expiresInMinutes: number;
+}
+
 export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
@@ -82,5 +89,8 @@ export interface EmailProvider {
   ): Promise<{ messageId: string }>;
   sendCustomerPasswordReset(
     delivery: CustomerPasswordResetDelivery,
+  ): Promise<{ messageId: string }>;
+  sendCustomerEmailChange(
+    delivery: CustomerEmailChangeDelivery,
   ): Promise<{ messageId: string }>;
 }
