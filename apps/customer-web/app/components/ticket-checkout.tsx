@@ -578,9 +578,16 @@ export function TicketCheckout({
     }
   }
 
+  function printConfirmation() {
+    document.body.classList.add("ticket-confirmation-printing");
+    const cleanup = () => document.body.classList.remove("ticket-confirmation-printing");
+    window.addEventListener("afterprint", cleanup, { once: true });
+    window.print();
+  }
+
   if (confirmation) {
     return (
-      <section className="ticket-confirmation">
+      <section className="ticket-confirmation ticket-confirmation--printable">
         <span className="eyebrow">ORDER CONFIRMED</span>
         <h2>See you at the movies.</h2>
         <p>
@@ -620,7 +627,12 @@ export function TicketCheckout({
           </div>
         ))}
         <strong>{money(confirmation.totalCents, confirmation.currency)}</strong>
-        <p><a className="primary-link" href={accountRecognized ? "/account" : "/account?createAccount=1"}>{accountRecognized ? "View tickets in my account" : "Create an account to save my tickets"}</a></p>
+        <div className="ticket-confirmation__actions">
+          <button className="account-secondary-button" type="button" onClick={printConfirmation}>
+            Print tickets
+          </button>
+          <a className="primary-link" href={accountRecognized ? "/account" : "/account?createAccount=1"}>{accountRecognized ? "View tickets in my account" : "Create an account to save my tickets"}</a>
+        </div>
       </section>
     );
   }

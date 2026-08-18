@@ -281,6 +281,37 @@ html[data-branding-status="loading"] body {
   body.ticket-order-printing .ticket-order--printing .account-ticket p {
     color: #333;
   }
+  body.ticket-confirmation-printing * {
+    visibility: hidden;
+  }
+  body.ticket-confirmation-printing .ticket-confirmation--printable,
+  body.ticket-confirmation-printing .ticket-confirmation--printable * {
+    visibility: visible;
+  }
+  body.ticket-confirmation-printing .ticket-confirmation--printable {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    background: white;
+    color: black;
+    print-color-adjust: exact;
+  }
+  body.ticket-confirmation-printing .ticket-confirmation__actions,
+  body.ticket-confirmation-printing .ticket-confirmation--printable button {
+    display: none;
+  }
+  body.ticket-confirmation-printing .confirmation-card {
+    break-inside: avoid;
+    border-color: #999;
+    background: white;
+    color: black;
+  }
+  body.ticket-confirmation-printing .confirmation-card p,
+  body.ticket-confirmation-printing .ticket-confirmation--printable > p {
+    color: #333;
+  }
 }
 .account-ticket:last-child {
   border-bottom: 0;
@@ -1764,6 +1795,12 @@ body:has(.signage-shell) .site-header { display: none; }
 .ticket-confirmation {
   max-width: 920px;
   margin: 0 auto;
+}
+.ticket-confirmation__actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-top: 20px;
 }
 .private-event-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 28px; }
 .private-event-form h2, .private-event-message, .private-event-form button, .private-event-form .configuration-note { grid-column: 1 / -1; }
