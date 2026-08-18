@@ -243,7 +243,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @cinema/database exec prisma migrate deploy
       - run: pnpm --filter @cinema/database seed
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright install chromium
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v7
         if: failure()
