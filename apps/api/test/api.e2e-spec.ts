@@ -6076,7 +6076,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       data: {
         paymentCustomerId: source.activePaymentMethod!.paymentCustomerId,
         provider: "test",
-        providerPaymentMethodId: "pm_delayed_staff_fallback_race",
+        providerPaymentMethodId: "pm_slow_staff_fallback_race",
         brand: "visa",
         last4: "0004",
         expMonth: 12,
@@ -6132,14 +6132,19 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const settlement = app.get(RestaurantSettlementService);
 
     const fallback = settlement.runFallback();
-    for (let attempt = 0; attempt < 50; attempt += 1) {
+    let fallbackStarted = false;
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
       const current = await prisma.restaurantTab.findUniqueOrThrow({
         where: { id: tab.id },
         select: { status: true },
       });
-      if (current.status === "SETTLEMENT_PENDING") break;
+      if (current.status === "SETTLEMENT_PENDING") {
+        fallbackStarted = true;
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
+    expect(fallbackStarted).toBe(true);
     await prisma.restaurantTab.update({
       where: { id: tab.id },
       data: { checkDroppedAt: new Date(), checkDroppedByEmployeeId: owner.id },
