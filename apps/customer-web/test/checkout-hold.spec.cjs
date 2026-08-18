@@ -31,6 +31,12 @@ describe("checkout hold expiration", () => {
     assert.match(checkoutSource, /pendingRef\.current \|\| isCheckoutHoldExpired\(holdRemainingSecondsRef\.current\)/);
     assert.match(checkoutSource, /!checkout \|\| pendingRef\.current \|\| holdExpired/);
     assert.match(checkoutSource, /disabled=\{pending \|\| holdExpired \|\|/);
-    assert.match(checkoutSource, /No payment was submitted\./);
+    assert.match(checkoutSource, /Payment is now disabled and no new payment will be submitted\./);
+  });
+
+  it("destroys mounted payment controls and explains confirmed-payment recovery", () => {
+    assert.match(checkoutSource, /!mountableElements \|\| confirmation \|\| holdExpired/);
+    assert.match(checkoutSource, /\[confirmation, holdExpired, mountableElements\]/);
+    assert.match(checkoutSource, /it will be refunded if tickets cannot be issued\./);
   });
 });

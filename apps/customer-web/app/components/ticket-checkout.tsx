@@ -376,7 +376,7 @@ export function TicketCheckout({
   }, [loadConfig]);
 
   useEffect(() => {
-    if (!mountableElements || confirmation) return;
+    if (!mountableElements || confirmation || holdExpired) return;
     const paymentContainer = paymentContainerRef.current;
     const expressContainer = expressCheckoutContainerRef.current;
     if (!paymentContainer || !expressContainer) return;
@@ -389,7 +389,7 @@ export function TicketCheckout({
       mountableElements.express.destroy();
       mountableElements.payment.destroy();
     };
-  }, [confirmation, mountableElements]);
+  }, [confirmation, holdExpired, mountableElements]);
 
   async function finalizeOrder(orderId: string) {
     const completed = await apiFetch<TicketConfirmationResponse>(
@@ -739,7 +739,11 @@ export function TicketCheckout({
       {holdExpired && (
         <div className="checkout-panel hold-expired-panel" role="alert">
           <h3>Your ticket hold has expired</h3>
-          <p>No payment was submitted. Return to seat selection to check current availability and start a new hold.</p>
+          <p>
+            {paymentConfirmed
+              ? "Your payment was submitted before the hold expired. It is being reconciled automatically, and it will be refunded if tickets cannot be issued."
+              : "Payment is now disabled and no new payment will be submitted. Return to seat selection to check current availability and start a new hold."}
+          </p>
           <button className="primary" type="button" onClick={onBack}>
             Choose seats again
           </button>
