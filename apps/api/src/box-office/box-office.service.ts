@@ -7,12 +7,15 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 import { CinemaService } from "../cinema/cinema.service";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
+import { EmailProvider, TicketReceipt } from "@cinema/notifications";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 
 @Injectable()
 export class BoxOfficeService {
   constructor(
     private readonly cinema: CinemaService,
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
+    @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
 
   async holdSeats(showtimeId: string, seatIds: string[], holderKey: string, locationId: string) {
@@ -175,7 +178,7 @@ export class BoxOfficeService {
       if (!matches) throw AppError.conflict("The checkout request id was already used with different sale details.");
     };
     if (existing) assertReplayMatches(existing);
-    if (existing?.status === "PAID") return existing;
+    if (existing?.status === "PAID") return this.paidOrderWithReceipt(existing.id);
     const quote = await this.quote(input);
     if (input.cashCents + input.cardCents + input.giftCardCents !== quote.totalCents) {
       throw AppError.validationFailed(`Tender amounts must total ${quote.totalCents} cents.`);
@@ -259,11 +262,12 @@ export class BoxOfficeService {
       }
     }
 
+    let finalizedOrderId: string;
     try {
-      return await prisma.$transaction(async (tx) => {
+      finalizedOrderId = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`);
         const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true } });
-        if (lockedOrder.status === "PAID") return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true } });
+        if (lockedOrder.status === "PAID") return lockedOrder.id;
         const lockedHolds = await tx.$queryRaw<Array<{ id: string; showtimeSeatId: string; holderKey: string; expiresAt: Date; releasedAt: Date | null }>>(Prisma.sql`
           SELECT sh."id", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
           FROM "seat_holds" sh JOIN "showtime_seats" ss ON ss."id" = sh."showtimeSeatId"
@@ -311,7 +315,7 @@ export class BoxOfficeService {
           action: "ticket_order.box_office_sold", entityType: "TicketOrder", entityId: order.id,
           afterState: { status: "PAID", cashCents: input.cashCents, cardCents: input.cardCents, giftCardCents: input.giftCardCents, seatCount: lockedHolds.length },
         } });
-        return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: { include: { showtimeSeat: { include: { seat: true } } } }, payment: true, cashTransactions: true } });
+        return order.id;
       });
     } catch (error) {
       if (cardResult?.status === "SUCCEEDED") await this.compensateFailedCardOrder({
@@ -320,6 +324,52 @@ export class BoxOfficeService {
         requestId: input.requestId, locationId: input.locationId, employeeId: input.employeeId,
       });
       throw error;
+    }
+    return this.paidOrderWithReceipt(finalizedOrderId);
+  }
+
+  private async paidOrderWithReceipt(orderId: string) {
+    const order = await prisma.ticketOrder.findUniqueOrThrow({
+      where: { id: orderId },
+      include: {
+        tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } },
+        payment: true,
+        cashTransactions: true,
+      },
+    });
+    if (!order.guestEmail) return { ...order, receiptDelivery: "NOT_REQUESTED" as const };
+    if (order.receiptEmailSentAt) return { ...order, receiptDelivery: "SENT" as const };
+
+    const now = new Date();
+    const claimed = await prisma.ticketOrder.updateMany({
+      where: { id: order.id, receiptEmailSentAt: null, OR: [{ receiptEmailClaimedAt: null }, { receiptEmailClaimedAt: { lt: new Date(now.getTime() - 5 * 60_000) } }] },
+      data: { receiptEmailClaimedAt: now, receiptEmailError: null },
+    });
+    if (claimed.count === 0) return { ...order, receiptDelivery: "NOT_REQUESTED" as const };
+
+    const receipt: TicketReceipt = {
+      to: order.guestEmail,
+      guestName: order.guestName,
+      orderNumber: order.orderNumber,
+      totalCents: order.totalCents,
+      currency: order.currency,
+      tickets: order.tickets.map((ticket) => ({
+        id: ticket.id,
+        credential: ticket.qrToken,
+        movie: ticket.showtimeSeat.showtime.movie.title,
+        auditorium: ticket.showtimeSeat.showtime.auditorium.name,
+        seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label,
+        startsAt: ticket.showtimeSeat.showtime.startsAt,
+      })),
+    };
+    try {
+      const delivery = await this.emailProvider.sendTicketReceipt(receipt);
+      await prisma.ticketOrder.update({ where: { id: order.id }, data: { receiptEmailSentAt: new Date(), receiptEmailMessageId: delivery.messageId, receiptEmailClaimedAt: null, receiptEmailError: null } });
+      return { ...order, receiptDelivery: "SENT" as const };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error";
+      await prisma.ticketOrder.update({ where: { id: order.id }, data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) } });
+      return { ...order, receiptDelivery: "FAILED" as const };
     }
   }
 

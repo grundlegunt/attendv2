@@ -388,9 +388,10 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       checkoutAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     }
     try {
-      const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ ...checkoutPayload, requestId: checkoutAttemptRef.current.requestId }) });
+      const order = await apiFetch<{orderNumber:string;tickets:Array<unknown>;receiptDelivery:"SENT"|"FAILED"|"NOT_REQUESTED"}>("/box-office/checkouts", { method: "POST", accessToken, body: JSON.stringify({ ...checkoutPayload, requestId: checkoutAttemptRef.current.requestId }) });
       if (actionRequestId !== saleActionRequestRef.current) return;
-      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)`); resetSale(); await refresh();
+      const receiptStatus = order.receiptDelivery === "SENT" ? " · receipt emailed" : order.receiptDelivery === "FAILED" ? " · receipt email failed; reprint tickets if needed" : "";
+      setMessage(`Sale complete: ${order.orderNumber} · ${order.tickets.length} ticket(s)${receiptStatus}`); resetSale(); await refresh();
     } catch (error) {
       if (actionRequestId === saleActionRequestRef.current) setMessage(errorMessage(error));
     } finally {

@@ -6625,17 +6625,29 @@ describe("Milestone 9 box office and workforce", () => {
     const cashCents = Math.floor(quote.body.totalCents / 2);
     const cardCents = quote.body.totalCents - cashCents;
     const customerEmail = `box-office-${crypto.randomUUID()}@example.test`;
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const receiptsBefore = emailProvider.sent.length;
+    const saleRequestId = crypto.randomUUID();
+    const salePayload = {
+      requestId: saleRequestId, holdTokens: [holds.body[0].holdToken], holderKey,
+      ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
+      cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
+      customerName: "Box Office Customer", customerEmail,
+    };
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
-        requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey,
-        ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
-        cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
-        customerName: "Box Office Customer", customerEmail,
-      }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(salePayload).expect(201);
     expect(sale.body.status).toBe("PAID");
+    expect(sale.body.receiptDelivery).toBe("SENT");
     expect(sale.body.tickets).toHaveLength(1);
     expect(sale.body.cashTransactions[0]).toMatchObject({ amountCents: cashCents, changeGivenCents: 500 });
     expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
+    expect(emailProvider.sent.slice(receiptsBefore)).toEqual([expect.objectContaining({ to: customerEmail, guestName: "Box Office Customer", orderNumber: sale.body.orderNumber, tickets: [expect.objectContaining({ credential: expect.any(String) })] })]);
+    const replayedSale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send(salePayload).expect(201);
+    expect(replayedSale.body).toEqual(expect.objectContaining({ id: sale.body.id, receiptDelivery: "SENT" }));
+    expect(emailProvider.sent).toHaveLength(receiptsBefore + 1);
 
     const customerLookup = await request(app.getHttpServer())
       .get(`/api/v1/box-office/customers?q=${encodeURIComponent(customerEmail.slice(0, 18))}`)
