@@ -7015,6 +7015,47 @@ describe("Milestone 9 box office and workforce", () => {
     await prisma.ticketType.update({ where: { id: ticketType.id }, data: { active: false } });
   });
 
+  it("prices and issues mixed ticket types in one box-office sale", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const showtime = await prisma.showtime.findFirstOrThrow({
+      where: { onSale: true, startsAt: { gt: new Date() }, auditorium: { locationId: owner.locationId } },
+      include: { priceTier: true },
+    });
+    const inventory = await prisma.showtimeSeat.findMany({
+      where: { showtimeId: showtime.id, blockedAt: null, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
+      take: 2,
+      orderBy: { seatId: "asc" },
+    });
+    expect(inventory).toHaveLength(2);
+    const adult = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
+    const child = await prisma.ticketType.create({ data: { locationId: owner.locationId, name: `Mixed Child ${crypto.randomUUID()}`, priceAdjustmentMinor: -250 } });
+    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `MIXED-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
+    const holderKey = `mixed-ticket-types-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${showtime.id}/holds`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: inventory.map((seat) => seat.seatId), holderKey }).expect(201);
+    const selections = [
+      { holdToken: holds.body[0].holdToken, ticketTypeId: adult.id },
+      { holdToken: holds.body[1].holdToken, ticketTypeId: child.id },
+    ];
+    const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: selections.map((selection) => selection.holdToken), holderKey, ticketTypeId: adult.id, ticketTypeSelections: selections }).expect(201);
+    expect(quote.body.subtotalCents).toBe(
+      showtime.priceTier.ticketPriceMinor + Math.max(0, showtime.priceTier.ticketPriceMinor + child.priceAdjustmentMinor),
+    );
+    expect(quote.body.tickets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ticketTypeId: adult.id, priceCents: showtime.priceTier.ticketPriceMinor }),
+      expect.objectContaining({ ticketTypeId: child.id, priceCents: Math.max(0, showtime.priceTier.ticketPriceMinor + child.priceAdjustmentMinor) }),
+    ]));
+    const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), holdTokens: selections.map((selection) => selection.holdToken), holderKey, ticketTypeId: adult.id, ticketTypeSelections: selections, cashDrawerId: drawer.body.id, cashCents: quote.body.totalCents, cardCents: 0, cashReceivedCents: quote.body.totalCents }).expect(201);
+    expect(sale.body.tickets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ ticketTypeId: adult.id, priceCentsPaid: showtime.priceTier.ticketPriceMinor }),
+      expect.objectContaining({ ticketTypeId: child.id, priceCentsPaid: Math.max(0, showtime.priceTier.ticketPriceMinor + child.priceAdjustmentMinor) }),
+    ]));
+  });
+
   it("replays a completed ticket exchange without creating another replacement", async () => {
     const { prisma } = await import("@cinema/database");
     const { BoxOfficeService } = await import("../src/box-office/box-office.service");

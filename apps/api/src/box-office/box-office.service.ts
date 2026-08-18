@@ -10,6 +10,21 @@ import { PAYMENT_PROVIDER } from "../payments/payments.module";
 import { EmailProvider, TicketReceipt } from "@cinema/notifications";
 import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 
+type TicketTypeSelection = { holdToken: string; ticketTypeId: string; priceCents?: number };
+
+function normalizeTicketTypeSelections(holdTokens: string[], defaultTicketTypeId: string, selections?: TicketTypeSelection[]): TicketTypeSelection[] {
+  const requested = selections?.length ? selections : holdTokens.map((holdToken) => ({ holdToken, ticketTypeId: defaultTicketTypeId }));
+  const byHoldToken = new Map(requested.map((selection) => [selection.holdToken, selection]));
+  if (requested.length !== holdTokens.length || byHoldToken.size !== holdTokens.length || holdTokens.some((token) => !byHoldToken.has(token))) {
+    throw AppError.validationFailed("Choose one ticket type for every held seat.");
+  }
+  return holdTokens.map((holdToken) => byHoldToken.get(holdToken)!);
+}
+
+function persistedTicketTypeSelections(value: Prisma.JsonValue | null): TicketTypeSelection[] {
+  return Array.isArray(value) ? value as unknown as TicketTypeSelection[] : [];
+}
+
 @Injectable()
 export class BoxOfficeService {
   constructor(
@@ -24,7 +39,13 @@ export class BoxOfficeService {
       select: { id: true },
     });
     if (!showtime) throw AppError.notFound("Showtime was not found.");
-    return this.cinema.holdSeats(showtimeId, seatIds, holderKey);
+    const holds = await this.cinema.holdSeats(showtimeId, seatIds, holderKey);
+    const inventory = await prisma.showtimeSeat.findMany({
+      where: { id: { in: holds.map((hold) => hold.showtimeSeatId) } },
+      select: { id: true, seatId: true },
+    });
+    const seatIdByInventoryId = new Map(inventory.map((item) => [item.id, item.seatId]));
+    return holds.map((hold) => ({ ...hold, seatId: seatIdByInventoryId.get(hold.showtimeSeatId)! }));
   }
 
   async customerLookup(locationId: string, query: string) {
@@ -107,7 +128,7 @@ export class BoxOfficeService {
     return this.cinema.giftCardBalance(locationId, code);
   }
 
-  async quote(input: { locationId: string; holdTokens: string[]; holderKey: string; ticketTypeId: string; promotionCode?: string }) {
+  async quote(input: { locationId: string; holdTokens: string[]; holderKey: string; ticketTypeId: string; ticketTypeSelections?: TicketTypeSelection[]; promotionCode?: string }) {
     const tokens = [...new Set(input.holdTokens)].sort();
     const now = new Date();
     const holds = await prisma.seatHold.findMany({
@@ -123,13 +144,19 @@ export class BoxOfficeService {
     const showtimeIds = new Set(holds.map((hold) => hold.showtimeSeat.showtimeId));
     if (showtimeIds.size !== 1) throw AppError.validationFailed("All seats must be for one showtime.");
     const priceTier = holds[0]!.showtimeSeat.showtime.priceTier;
-    const ticketType = await prisma.ticketType.findFirst({
-      where: { id: input.ticketTypeId, locationId: input.locationId, active: true },
+    const selections = normalizeTicketTypeSelections(tokens, input.ticketTypeId, input.ticketTypeSelections);
+    const ticketTypes = await prisma.ticketType.findMany({
+      where: { id: { in: [...new Set(selections.map((selection) => selection.ticketTypeId))] }, locationId: input.locationId, active: true },
     });
-    if (!ticketType) throw AppError.notFound("Ticket type was not found.");
+    if (ticketTypes.length !== new Set(selections.map((selection) => selection.ticketTypeId)).size) throw AppError.notFound("Ticket type was not found.");
+    const ticketTypeById = new Map(ticketTypes.map((ticketType) => [ticketType.id, ticketType]));
+    const ticketType = ticketTypeById.get(input.ticketTypeId) ?? ticketTypes[0]!;
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const ticketPriceCents = Math.max(0, priceTier.ticketPriceMinor + ticketType.priceAdjustmentMinor);
-    const subtotalCents = ticketPriceCents * holds.length;
+    const quotedSelections = selections.map((selection) => ({
+      ...selection,
+      priceCents: Math.max(0, priceTier.ticketPriceMinor + ticketTypeById.get(selection.ticketTypeId)!.priceAdjustmentMinor),
+    }));
+    const subtotalCents = quotedSelections.reduce((sum, selection) => sum + selection.priceCents, 0);
     const feesCents = priceTier.feeMinor * holds.length;
     const promotion = input.promotionCode
       ? await prisma.promotion.findFirst({ where: { locationId: input.locationId, code: input.promotionCode.toUpperCase(), active: true, AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] }, include: { ticketOrders: { where: { status: { in: ["PAID", "EXCHANGED"] } }, select: { id: true } } } })
@@ -146,14 +173,15 @@ export class BoxOfficeService {
       subtotalCents, discountCents, feesCents, taxCents,
       totalCents: taxableSubtotal + feesCents + taxCents,
       currency: priceTier.currency,
-      ticketType: { id: ticketType.id, name: ticketType.name, priceCents: ticketPriceCents },
+      ticketType: { id: ticketType.id, name: ticketType.name, priceCents: Math.max(0, priceTier.ticketPriceMinor + ticketType.priceAdjustmentMinor) },
+      tickets: quotedSelections.map((selection) => ({ holdToken: selection.holdToken, seatLabel: holds.find((hold) => hold.holdToken === selection.holdToken)!.showtimeSeat.seat.label, ticketTypeId: selection.ticketTypeId, ticketTypeName: ticketTypeById.get(selection.ticketTypeId)!.name, priceCents: selection.priceCents })),
       promotion: promotion ? { id: promotion.id, code: promotion.code, name: promotion.name } : null,
     };
   }
 
   async checkout(input: {
     requestId: string; locationId: string; employeeId: string;
-    holdTokens: string[]; holderKey: string; ticketTypeId: string;
+    holdTokens: string[]; holderKey: string; ticketTypeId: string; ticketTypeSelections?: TicketTypeSelection[];
     promotionCode?: string; cashDrawerId?: string; cashCents: number;
     cardCents: number; giftCardCents: number; giftCardCode?: string; readerId?: string; cashReceivedCents?: number;
     customerEmail?: string; customerName?: string;
@@ -170,12 +198,17 @@ export class BoxOfficeService {
         && (input.cashCents === 0 || saleCash?.cashDrawerId === input.cashDrawerId)
         && order.totalCents - (order.payment?.amountCents ?? 0) - (saleCash?.amountCents ?? 0) === input.giftCardCents
       );
+      const requestedSelections = normalizeTicketTypeSelections(holdTokens, input.ticketTypeId, input.ticketTypeSelections)
+        .map(({ holdToken, ticketTypeId }) => ({ holdToken, ticketTypeId }));
+      const savedSelections = normalizeTicketTypeSelections(order.holdTokens, order.ticketTypeId, persistedTicketTypeSelections(order.ticketTypeSelections))
+        .map(({ holdToken, ticketTypeId }) => ({ holdToken, ticketTypeId }));
       const matches = order.locationId === input.locationId
         && order.placedByEmployeeId === input.employeeId
         && order.ticketTypeId === input.ticketTypeId
         && order.holderKey === input.holderKey
         && order.holdTokens.length === holdTokens.length
         && order.holdTokens.every((token, index) => token === holdTokens[index])
+        && JSON.stringify(savedSelections) === JSON.stringify(requestedSelections)
         && order.guestEmail === (input.customerEmail?.toLowerCase() ?? null)
         && order.guestName === (input.customerName ?? null)
         && (order.payment?.amountCents ?? 0) === input.cardCents
@@ -192,7 +225,7 @@ export class BoxOfficeService {
     if (input.cashCents > 0 && (input.cashReceivedCents ?? 0) < input.cashCents) {
       throw AppError.validationFailed("Cash received must cover the cash tender.");
     }
-    const ticketType = await prisma.ticketType.findFirst({ where: { id: input.ticketTypeId, locationId: input.locationId, active: true } });
+    const ticketType = await prisma.ticketType.findFirst({ where: { id: quote.ticketType.id, locationId: input.locationId, active: true } });
     if (!ticketType) throw AppError.notFound("Ticket type was not found.");
     if (input.cashCents > 0) {
       const drawer = await prisma.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
@@ -216,6 +249,7 @@ export class BoxOfficeService {
         order = await prisma.ticketOrder.create({
           data: {
             locationId: input.locationId, customerId: customer?.id, ticketTypeId: ticketType.id,
+            ticketTypeSelections: quote.tickets,
             holdTokens: [...new Set(input.holdTokens)].sort(), holderKey: input.holderKey,
             guestEmail: input.customerEmail?.toLowerCase(), guestName: input.customerName,
             channel: "BOX_OFFICE", status: "AWAITING_PAYMENT",
@@ -274,8 +308,8 @@ export class BoxOfficeService {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`);
         const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true } });
         if (lockedOrder.status === "PAID") return lockedOrder.id;
-        const lockedHolds = await tx.$queryRaw<Array<{ id: string; showtimeSeatId: string; holderKey: string; expiresAt: Date; releasedAt: Date | null }>>(Prisma.sql`
-          SELECT sh."id", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
+        const lockedHolds = await tx.$queryRaw<Array<{ id: string; holdToken: string; showtimeSeatId: string; holderKey: string; expiresAt: Date; releasedAt: Date | null }>>(Prisma.sql`
+          SELECT sh."id", sh."holdToken", sh."showtimeSeatId", sh."holderKey", sh."expiresAt", sh."releasedAt"
           FROM "seat_holds" sh JOIN "showtime_seats" ss ON ss."id" = sh."showtimeSeatId"
           WHERE sh."holdToken" IN (${Prisma.join(lockedOrder.holdTokens)}) ORDER BY ss."id" FOR UPDATE OF ss, sh
         `);
@@ -299,9 +333,12 @@ export class BoxOfficeService {
           await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: input.locationId, employeeId: input.employeeId, type: "REDEMPTION", amountCents: -input.giftCardCents, balanceAfterCents, reference: order.id } });
         }
         const perTicketPrice = Math.floor((lockedOrder.subtotalCents - lockedOrder.discountCents) / lockedHolds.length);
+        const selectedTicketTypes = normalizeTicketTypeSelections(lockedOrder.holdTokens, lockedOrder.ticketTypeId, persistedTicketTypeSelections(lockedOrder.ticketTypeSelections));
+        const ticketTypeByHold = new Map(selectedTicketTypes.map((selection) => [selection.holdToken, selection]));
         await tx.ticket.createMany({ data: lockedHolds.map((hold) => {
           const id = randomUUID();
-          return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: lockedOrder.ticketTypeId, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, loadEnv().QR_CREDENTIAL_SECRET) };
+          const selection = ticketTypeByHold.get(hold.holdToken);
+          return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: selection?.ticketTypeId ?? lockedOrder.ticketTypeId, priceCentsPaid: selection?.priceCents ?? perTicketPrice, qrToken: createTicketCredential(id, loadEnv().QR_CREDENTIAL_SECRET) };
         }) });
         await tx.seatHold.updateMany({ where: { id: { in: lockedHolds.map((hold) => hold.id) }, releasedAt: null }, data: { releasedAt: now } });
         if (input.cashCents > 0) {
