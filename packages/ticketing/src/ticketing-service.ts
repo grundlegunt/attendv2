@@ -60,21 +60,21 @@ const REFUND_LEASE_MS = 60_000;
 const DINING_CONSENT_TERMS_VERSION = "dining-auto-settlement-2026-07-29";
 
 type PersistedOrderAheadLine = OrderAheadQuote["lines"][number];
-type TicketTypeSelection = { holdToken: string; ticketTypeId: string };
+type TicketTypeSelection = { holdToken: string; ticketTypeId: string; priceCents?: number };
 
 function normalizeTicketTypeSelections(
   holdTokens: string[],
   defaultTicketTypeId: string,
   selections?: TicketTypeSelection[],
 ) {
-  const requested = selections?.length
+  const requested: TicketTypeSelection[] = selections?.length
     ? selections
     : holdTokens.map((holdToken) => ({ holdToken, ticketTypeId: defaultTicketTypeId }));
-  const byHoldToken = new Map(requested.map((selection) => [selection.holdToken, selection.ticketTypeId]));
+  const byHoldToken = new Map(requested.map((selection) => [selection.holdToken, selection]));
   if (requested.length !== holdTokens.length || byHoldToken.size !== holdTokens.length || holdTokens.some((token) => !byHoldToken.has(token))) {
     throw TicketingError.validation("Choose one ticket type for every held seat.");
   }
-  return holdTokens.map((holdToken) => ({ holdToken, ticketTypeId: byHoldToken.get(holdToken)! }));
+  return holdTokens.map((holdToken) => byHoldToken.get(holdToken)!);
 }
 
 function persistedTicketTypeSelections(value: Prisma.JsonValue | null): TicketTypeSelection[] {
@@ -278,7 +278,11 @@ export class TicketingService {
       }
     }
 
-    const subtotalCents = showtime.priceTier.ticketPriceMinor * holds.length;
+    const quotedTicketTypeSelections = ticketTypeSelections.map((selection) => ({
+      ...selection,
+      priceCents: Math.max(0, showtime.priceTier.ticketPriceMinor + ticketTypes.find((type) => type.id === selection.ticketTypeId)!.priceAdjustmentMinor),
+    }));
+    const subtotalCents = quotedTicketTypeSelections.reduce((sum, selection) => sum + selection.priceCents, 0);
     const feesCents = showtime.priceTier.feeMinor * holds.length;
     const promotion = input.promotionCode
       ? await this.prisma.promotion.findFirst({
@@ -356,7 +360,7 @@ export class TicketingService {
           locationId: location.id,
           customerId: customer.id,
           ticketTypeId: ticketType.id,
-          ticketTypeSelections: ticketTypeSelections as unknown as Prisma.InputJsonValue,
+          ticketTypeSelections: quotedTicketTypeSelections as unknown as Prisma.InputJsonValue,
           holdTokens,
           holderKey: input.holderKey,
           guestEmail: normalizedEmail,
@@ -440,7 +444,8 @@ export class TicketingService {
     );
     const requestedSelections = normalizeOrderAheadSelections(input.orderAhead);
     const requestedTicketTypes = normalizeTicketTypeSelections(holdTokens, input.ticketTypeId, input.ticketTypeSelections);
-    const persistedTicketTypes = persistedTicketTypeSelections(order.ticketTypeSelections);
+    const persistedTicketTypes = persistedTicketTypeSelections(order.ticketTypeSelections)
+      .map(({ holdToken, ticketTypeId }) => ({ holdToken, ticketTypeId }));
     const matches = order.ticketTypeId === input.ticketTypeId
       && order.holderKey === input.holderKey
       && order.holdTokens.length === holdTokens.length
@@ -862,7 +867,7 @@ export class TicketingService {
                 ticketOrderId: lockedOrder.id,
                 showtimeSeatId: hold.showtimeSeatId,
                 ticketTypeId: ticketTypeByHold.get(hold.holdToken)!,
-                priceCentsPaid: perTicketPrice,
+                priceCentsPaid: selectedTicketTypes.find((selection) => selection.holdToken === hold.holdToken)?.priceCents ?? perTicketPrice,
                 qrToken: createTicketCredential(id, this.qrCredentialSecret),
               };
             }),
@@ -964,7 +969,7 @@ export class TicketingService {
       const perTicketPrice = Math.floor(order.subtotalCents / holds.length);
       const selectedTicketTypes = normalizeTicketTypeSelections(order.holdTokens, order.ticketTypeId, persistedTicketTypeSelections(order.ticketTypeSelections));
       const ticketTypeByHold = new Map(selectedTicketTypes.map((selection) => [selection.holdToken, selection.ticketTypeId]));
-      await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: ticketTypeByHold.get(hold.holdToken)!, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
+      await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: ticketTypeByHold.get(hold.holdToken)!, priceCentsPaid: selectedTicketTypes.find((selection) => selection.holdToken === hold.holdToken)?.priceCents ?? perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
       await this.createPrepaidOrderAheadTab(tx, order, inventoryIds);
       await tx.seatHold.updateMany({ where: { id: { in: holds.map((hold) => hold.id) }, releasedAt: null }, data: { releasedAt: now } });
       return tx.ticketOrder.update({ where: { id: order.id }, data: { status: TicketOrderStatus.PAID }, include: { payment: true, location: { include: { organization: true } }, tickets: { include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } } });
