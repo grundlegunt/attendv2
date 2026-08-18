@@ -17,6 +17,7 @@ interface Availability {
   showtime: {
     id: string;
     startsAt: string;
+    timezone: string;
     movie: { id: string; title: string };
     auditorium: {
       id: string;
@@ -268,6 +269,7 @@ export function SeatPicker({
         }
         movie={availability.showtime.movie.title}
         auditorium={availability.showtime.auditorium.name}
+        timeZone={availability.showtime.timezone}
         onBack={() => setCheckoutOpen(false)}
       />
     );
@@ -293,10 +295,11 @@ export function SeatPicker({
           {availability && (
             <p>
               {availability.showtime.auditorium.name} ·{" "}
-              {new Date(availability.showtime.startsAt).toLocaleTimeString([], {
+              {new Intl.DateTimeFormat("en-US", {
+                timeZone: availability.showtime.timezone,
                 hour: "numeric",
                 minute: "2-digit",
-              })}
+              }).format(new Date(availability.showtime.startsAt))}
             </p>
           )}
         </div>

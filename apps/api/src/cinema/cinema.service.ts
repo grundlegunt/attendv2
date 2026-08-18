@@ -3267,7 +3267,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       where: { id: showtimeId, onSale: true },
       include: {
         movie: true,
-        auditorium: true,
+        auditorium: { include: { location: { select: { timezone: true } } } },
         priceTier: true,
         showtimeSeats: {
           where: generalAdmissionSeatIds
@@ -3327,6 +3327,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       showtime: {
         id: showtime.id,
         startsAt: showtime.startsAt.toISOString(),
+        timezone: showtime.auditorium.location.timezone,
         movie: { id: showtime.movie.id, title: showtime.movie.title },
         auditorium: {
           id: showtime.auditorium.id,
