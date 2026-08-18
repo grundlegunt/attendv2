@@ -72,7 +72,7 @@ export class ReportingService {
     const [ticketOrders, tabs] = await Promise.all([
       prisma.ticketOrder.findMany({
         where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
-        include: { tickets: { include: { ticketType: true, showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
+        include: { placedByEmployee: { select: { id: true, name: true } }, tickets: { include: { ticketType: true, showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
       }),
       prisma.restaurantTab.findMany({
         where: { locationId, closedAt: { gte: range.from, lt: range.to }, status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } },
@@ -84,6 +84,7 @@ export class ReportingService {
     const showtimes = new Map<string, { showtimeId: string; movieId: string; title: string; startsAt: Date; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
+    const salesOperators = new Map<string, { employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const ensureMovie = (movieId: string, title: string) => {
       let row = movies.get(movieId);
       if (!row) { row = { movieId, title, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; movies.set(movieId, row); }
@@ -103,14 +104,24 @@ export class ReportingService {
     for (const order of ticketOrders) {
       const salesChannel = salesChannels.get(order.channel) ?? { channel: order.channel, ticketsSold: 0, ticketRevenueCents: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 };
       salesChannel.grossCollectedCents += order.totalCents;
+      const salesOperator = order.placedByEmployee
+        ? salesOperators.get(order.placedByEmployee.id) ?? { employeeId: order.placedByEmployee.id, employeeName: order.placedByEmployee.name, ticketsSold: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 }
+        : null;
+      if (salesOperator) salesOperator.grossCollectedCents += order.totalCents;
       if (order.status === "REFUNDED") {
         ticketRefundedCents += order.totalCents;
         salesChannel.refundedCents += order.totalCents;
+        if (salesOperator) {
+          salesOperator.refundedCents += order.totalCents;
+          salesOperators.set(salesOperator.employeeId, salesOperator);
+        }
         salesChannels.set(order.channel, salesChannel);
         continue;
       }
       salesChannel.netCollectedCents += order.totalCents;
+      if (salesOperator) salesOperator.netCollectedCents += order.totalCents;
       if (!order.tickets.length) {
+        if (salesOperator) salesOperators.set(salesOperator.employeeId, salesOperator);
         salesChannels.set(order.channel, salesChannel);
         continue;
       }
@@ -118,6 +129,7 @@ export class ReportingService {
       ticketTaxCents += order.taxCents;
       ticketCollectedCents += order.totalCents;
       salesChannel.ticketsSold += order.tickets.length;
+      if (salesOperator) salesOperator.ticketsSold += order.tickets.length;
       order.tickets.forEach((ticket) => {
         const showtime = ticket.showtimeSeat.showtime;
         const revenue = ticket.priceCentsPaid;
@@ -133,6 +145,7 @@ export class ReportingService {
         showing.ticketRevenueCents += revenue; showing.ticketsSold += 1;
       });
       salesChannels.set(order.channel, salesChannel);
+      if (salesOperator) salesOperators.set(salesOperator.employeeId, salesOperator);
     }
 
     let fnbRevenueCents = 0;
@@ -161,6 +174,7 @@ export class ReportingService {
       showtimes: [...showtimes.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
       admissionTypes: [...admissionTypes.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.name.localeCompare(b.name)),
       salesChannels: [...salesChannels.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.channel.localeCompare(b.channel)),
+      salesOperators: [...salesOperators.values()].sort((a, b) => b.netCollectedCents - a.netCollectedCents || a.employeeName.localeCompare(b.employeeName)),
     };
   }
 
@@ -205,6 +219,8 @@ export class ReportingService {
       ...report.admissionTypes.map((ticketType) => row([ticketType.name, ticketType.ticketsSold, ticketType.ticketRevenueCents])), "",
       row(["Sales channel", "Tickets sold", "Ticket face value (cents)", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
       ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents, channel.grossCollectedCents, channel.refundedCents, channel.netCollectedCents])),
+      "", row(["Box-office operator", "Tickets sold", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
+      ...report.salesOperators.map((operator) => row([operator.employeeName, operator.ticketsSold, operator.grossCollectedCents, operator.refundedCents, operator.netCollectedCents])),
     ].join("\n");
   }
 

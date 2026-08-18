@@ -7338,11 +7338,12 @@ describe("Milestone 10 management reporting", () => {
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const period = { from: new Date("2024-01-01T00:00:00.000Z"), to: new Date("2024-02-01T00:00:00.000Z") };
     const firstOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1700, feesCents: 200, taxCents: 166, totalCents: 2066, createdAt: new Date("2024-01-10T12:00:00.000Z"), tickets: { create: { showtimeSeatId: firstShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 1700, qrToken: `m10-${crypto.randomUUID()}` } } } });
-    const secondOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1800, feesCents: 100, taxCents: 100, totalCents: 2000, createdAt: new Date("2024-01-12T12:00:00.000Z"), tickets: { create: { showtimeSeatId: secondShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 1800, qrToken: `m10-${crypto.randomUUID()}` } } } });
+    const secondOrder = await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "PAID", orderNumber: `M10-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1800, feesCents: 100, taxCents: 100, totalCents: 2000, placedByEmployeeId: owner.id, createdAt: new Date("2024-01-12T12:00:00.000Z"), tickets: { create: { showtimeSeatId: secondShowing!.showtimeSeats[0]!.id, ticketTypeId: ticketType.id, priceCentsPaid: 1800, qrToken: `m10-${crypto.randomUUID()}` } } } });
     const [firstTicket, secondTicket] = await Promise.all([prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: firstOrder.id } }), prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: secondOrder.id } })]);
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: firstShowing!.id, status: "CLOSED", subtotalCents: 450, taxCents: 50, serviceChargeCents: 0, totalCents: 500, closedAt: new Date("2024-01-10T16:00:00.000Z"), seats: { create: { showtimeSeatId: firstTicket.showtimeSeatId, ticketId: firstTicket.id } } } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "SEAT_LINKED", showtimeId: secondShowing!.id, status: "CLOSED", subtotalCents: 650, taxCents: 50, serviceChargeCents: 0, totalCents: 700, closedAt: new Date("2024-01-12T16:00:00.000Z"), seats: { create: { showtimeSeatId: secondTicket.showtimeSeatId, ticketId: secondTicket.id } } } });
     await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "ONLINE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 750, feesCents: 25, taxCents: 25, totalCents: 800, createdAt: new Date("2024-01-15T12:00:00.000Z") } });
+    await prisma.ticketOrder.create({ data: { locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(), channel: "BOX_OFFICE", status: "REFUNDED", orderNumber: `M10-R-${crypto.randomUUID()}`, checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 350, feesCents: 25, taxCents: 25, totalCents: 400, placedByEmployeeId: owner.id, createdAt: new Date("2024-01-16T12:00:00.000Z") } });
     await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", label: "Refunded reporting fixture", status: "REFUNDED", subtotalCents: 275, taxCents: 25, serviceChargeCents: 0, totalCents: 300, closedAt: new Date("2024-01-15T16:00:00.000Z") } });
 
     const segment = await request(app.getHttpServer()).get(`/api/v1/reports/customer-recency?inactiveSince=${encodeURIComponent(new Date(Date.now() + 86_400_000).toISOString())}&limit=5`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
@@ -7350,14 +7351,15 @@ describe("Milestone 10 management reporting", () => {
     expect(segment.body.preview[0]).toEqual(expect.objectContaining({ id: expect.any(String), name: expect.any(String), email: expect.any(String), lastPurchaseAt: expect.any(String), lastOrderNumber: expect.any(String), lastOrderTotalCents: expect.any(Number) }));
 
     const response = await request(app.getHttpServer()).get(`/api/v1/reports/revenue?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
-    expect(response.body.totals).toMatchObject({ grossRevenueCents: 6366, refundedCents: 1100, ticketRefundedCents: 800, fnbRefundedCents: 300, ticketRevenueCents: 3500, ticketFeesCents: 300, ticketTaxCents: 266, ticketCollectedCents: 4066, fnbRevenueCents: 1200, combinedRevenueCents: 5266, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
+    expect(response.body.totals).toMatchObject({ grossRevenueCents: 6766, refundedCents: 1500, ticketRefundedCents: 1200, fnbRefundedCents: 300, ticketRevenueCents: 3500, ticketFeesCents: 300, ticketTaxCents: 266, ticketCollectedCents: 4066, fnbRevenueCents: 1200, combinedRevenueCents: 5266, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600 });
     expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, ticketRevenueCents: 3500, ticketsSold: 2, fnbRevenueCents: 1200 }]);
     expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1700, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 1800, fnbRevenueCents: 700, ticketsSold: 1 }]);
     expect(response.body.admissionTypes).toEqual([{ ticketTypeId: ticketType.id, name: ticketType.name, ticketsSold: 2, ticketRevenueCents: 3500 }]);
     expect(response.body.salesChannels).toEqual([
-      { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, grossCollectedCents: 2000, refundedCents: 0, netCollectedCents: 2000 },
+      { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 },
       { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, grossCollectedCents: 2866, refundedCents: 800, netCollectedCents: 2066 },
     ]);
+    expect(response.body.salesOperators).toEqual([{ employeeId: owner.id, employeeName: owner.name, ticketsSold: 1, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 }]);
     const csv = await request(app.getHttpServer()).get(`/api/v1/reports/revenue.csv?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
     expect(csv.headers["content-disposition"]).toContain("attend-revenue.csv");
@@ -7370,8 +7372,10 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain(`"Admission type","Tickets sold","Ticket face value (cents)"`);
     expect(csv.text).toContain(`"${ticketType.name}","2","3500"`);
     expect(csv.text).toContain('"Sales channel","Tickets sold","Ticket face value (cents)","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
-    expect(csv.text).toContain('"BOX_OFFICE","1","1800","2000","0","2000"');
+    expect(csv.text).toContain('"BOX_OFFICE","1","1800","2400","400","2000"');
     expect(csv.text).toContain('"ONLINE","1","1700","2866","800","2066"');
+    expect(csv.text).toContain('"Box-office operator","Tickets sold","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
+    expect(csv.text).toContain(`"${owner.name}","1","2400","400","2000"`);
   });
 
   it("reports exact worked minutes and exports payroll-ready CSV", async () => {

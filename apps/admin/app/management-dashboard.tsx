@@ -11,6 +11,7 @@ type RevenueReport = {
   showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   admissionTypes: Array<{ ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>;
   salesChannels: Array<{ channel: "ONLINE" | "BOX_OFFICE"; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
+  salesOperators: Array<{ employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
 };
 type AudienceOriginsReport = {
   totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
@@ -223,6 +224,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
       <h3>By admission type</h3><div className="management-table"><div className="table-row table-head"><span>Admission type</span><span>Tickets</span><span>Ticket face value</span><span>Average ticket</span></div>{revenue.admissionTypes.map((row) => <div className="table-row" key={row.ticketTypeId}><strong>{row.name}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.ticketsSold ? Math.round(row.ticketRevenueCents / row.ticketsSold) : 0)}</span></div>)}</div>
       <h3>By sales channel</h3><div className="management-table"><div className="table-row table-head"><span>Channel</span><span>Tickets</span><span>Refunds</span><span>Net collected</span></div>{revenue.salesChannels.map((row) => <div className="table-row" key={row.channel}><strong>{row.channel === "BOX_OFFICE" ? "Box office" : "Online"}</strong><span>{row.ticketsSold}</span><span>{money(row.refundedCents)}</span><span>{money(row.netCollectedCents)}</span></div>)}</div>
+      <h3>By box-office operator</h3><div className="management-table"><div className="table-row table-head"><span>Operator</span><span>Tickets</span><span>Refunds</span><span>Net collected</span></div>{revenue.salesOperators.map((row) => <div className="table-row" key={row.employeeId}><strong>{row.employeeName}</strong><span>{row.ticketsSold}</span><span>{money(row.refundedCents)}</span><span>{money(row.netCollectedCents)}</span></div>)}</div>
+      {revenue.salesOperators.length === 0 && <p className="dashboard-empty">No staff-assisted ticket sales in this range.</p>}
     </section>}
 
     {audienceOrigins && <section className="panel"><p className="kicker">AUDIENCE</p><h2>Where ticket buyers come from</h2>
