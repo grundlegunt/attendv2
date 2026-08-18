@@ -8,7 +8,7 @@
     "start": "next start -p 3003",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint app --ext .ts,.tsx",
-    "test": "node --test test/admin-navigation.spec.cjs"
+    "test": "node --test test/*.spec.cjs"
   },
   "dependencies": {
     "@cinema/shared": "workspace:*",
