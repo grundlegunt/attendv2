@@ -167,6 +167,61 @@ test("guest checkout details carry into account registration", async ({ page }) 
   ).toBeNull();
 });
 
+test("customer prints one ticket order without the surrounding account page", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.print = () => {
+      (window as unknown as { printedOrderWasScoped: boolean }).printedOrderWasScoped =
+        document.body.classList.contains("ticket-order-printing") &&
+        Boolean(document.querySelector(".ticket-order--printing"));
+      window.dispatchEvent(new Event("afterprint"));
+    };
+  });
+  await page.route("**/api/v1/auth/customers/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        customer: {
+          id: "customer-print",
+          email: "moviegoer@example.com",
+          name: "Moviegoer",
+          isGuest: false,
+        },
+        orders: [{
+          id: "order-print",
+          orderNumber: "AT-PRINT",
+          status: "PAID",
+          totalCents: 1700,
+          currency: "USD",
+          createdAt: "2026-08-17T18:00:00.000Z",
+          locationName: "Meridian Cinema",
+          tickets: [{
+            id: "ticket-print",
+            status: "ISSUED",
+            qrToken: "v1.printable-ticket",
+            priceCentsPaid: 1700,
+            seatLabel: "A1",
+            movieTitle: "Print Test",
+            moviePosterUrl: null,
+            auditoriumName: "Theater 1",
+            startsAt: "2099-08-18T20:00:00.000Z",
+          }],
+        }],
+      }),
+    });
+  });
+
+  await page.goto("http://127.0.0.1:3000/account");
+  await page.getByRole("button", { name: "Print tickets" }).click();
+
+  expect(
+    await page.evaluate(() =>
+      (window as unknown as { printedOrderWasScoped?: boolean }).printedOrderWasScoped,
+    ),
+  ).toBe(true);
+  await expect(page.locator("body")).not.toHaveClass(/ticket-order-printing/);
+});
+
 test("restaurant payment recovery link shows the remaining balance without retrying automatically", async ({ page }) => {
   let paymentRequests = 0;
   await page.route("**/api/v1/public/restaurant-tabs/recovery-token**", async (route) => {

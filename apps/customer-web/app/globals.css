@@ -238,6 +238,37 @@ html[data-branding-status="loading"] body {
   padding: 24px 26px;
   border-bottom: 1px solid var(--color-border);
 }
+
+@media print {
+  body.ticket-order-printing * {
+    visibility: hidden;
+  }
+  body.ticket-order-printing .ticket-order--printing,
+  body.ticket-order-printing .ticket-order--printing * {
+    visibility: visible;
+  }
+  body.ticket-order-printing .ticket-order--printing {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: white;
+    color: black;
+    print-color-adjust: exact;
+  }
+  body.ticket-order-printing .ticket-order--printing button {
+    display: none;
+  }
+  body.ticket-order-printing .ticket-order--printing .ticket-order__header,
+  body.ticket-order-printing .ticket-order--printing .account-ticket {
+    break-inside: avoid;
+    border-color: #999;
+  }
+  body.ticket-order-printing .ticket-order--printing .ticket-order__header p,
+  body.ticket-order-printing .ticket-order--printing .account-ticket p {
+    color: #333;
+  }
+}
 .account-ticket:last-child {
   border-bottom: 0;
 }
