@@ -633,7 +633,7 @@ export class TicketingService {
       include: {
         payment: true,
         location: { include: { organization: true } },
-        tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } },
+        tickets: { include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } },
       },
     });
     if (order && !order.payment && order.giftCardId && order.giftCardCents === order.totalCents) {
@@ -786,6 +786,7 @@ export class TicketingService {
               payment: true,
               tickets: {
                 include: {
+                  ticketType: true,
                   showtimeSeat: {
                     include: { seat: true, showtime: { include: { movie: true, auditorium: true } } },
                   },
@@ -878,6 +879,7 @@ export class TicketingService {
               payment: true,
               tickets: {
                 include: {
+                  ticketType: true,
                   showtimeSeat: {
                     include: { seat: true, showtime: { include: { movie: true, auditorium: true } } },
                   },
@@ -917,6 +919,7 @@ export class TicketingService {
         tickets: {
           where: { status: { in: ["ISSUED", "ADMITTED"] } },
           include: {
+            ticketType: true,
             showtimeSeat: {
               include: {
                 seat: true,
@@ -939,7 +942,7 @@ export class TicketingService {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`);
       const order = await tx.ticketOrder.findUniqueOrThrow({
         where: { id: orderId },
-        include: { payment: true, location: { include: { organization: true } }, tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } },
+        include: { payment: true, location: { include: { organization: true } }, tickets: { include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } },
       });
       if (order.status === TicketOrderStatus.PAID) return order;
       if (order.payment || !order.giftCardId || order.giftCardCents !== order.totalCents) throw TicketingError.conflict("Gift-card-only order is invalid.");
@@ -964,7 +967,7 @@ export class TicketingService {
       await tx.ticket.createMany({ data: holds.map((hold) => { const id = randomUUID(); return { id, ticketOrderId: order.id, showtimeSeatId: hold.showtimeSeatId, ticketTypeId: ticketTypeByHold.get(hold.holdToken)!, priceCentsPaid: perTicketPrice, qrToken: createTicketCredential(id, this.qrCredentialSecret) }; }) });
       await this.createPrepaidOrderAheadTab(tx, order, inventoryIds);
       await tx.seatHold.updateMany({ where: { id: { in: holds.map((hold) => hold.id) }, releasedAt: null }, data: { releasedAt: now } });
-      return tx.ticketOrder.update({ where: { id: order.id }, data: { status: TicketOrderStatus.PAID }, include: { payment: true, location: { include: { organization: true } }, tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } } });
+      return tx.ticketOrder.update({ where: { id: order.id }, data: { status: TicketOrderStatus.PAID }, include: { payment: true, location: { include: { organization: true } }, tickets: { include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } } });
     });
     const diningAuthorization = await this.persistDiningAuthorization(finalized, undefined);
     const receiptDelivery = await this.deliverReceipt(finalized);
@@ -1968,6 +1971,7 @@ export class TicketingService {
     tickets: Array<{
       id: string;
       qrToken: string;
+      ticketType: { name: string };
       showtimeSeat: {
         seat: { label: string };
         showtime: {
@@ -2022,6 +2026,7 @@ export class TicketingService {
           "GENERAL_ADMISSION"
             ? "General admission"
             : ticket.showtimeSeat.seat.label,
+        ticketType: ticket.ticketType.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt,
       })),
       orderAhead: orderAheadLines.length
@@ -2168,6 +2173,7 @@ export class TicketingService {
     tickets: Array<{
       id: string;
       qrToken: string;
+      ticketType: { name: string };
       showtimeSeat: {
         seat: { label: string };
         showtime: {
@@ -2201,6 +2207,7 @@ export class TicketingService {
           "GENERAL_ADMISSION"
             ? "General admission"
             : ticket.showtimeSeat.seat.label,
+        ticketType: ticket.ticketType.name,
         movie: ticket.showtimeSeat.showtime.movie.title,
         auditorium: ticket.showtimeSeat.showtime.auditorium.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt.toISOString(),

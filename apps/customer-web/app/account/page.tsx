@@ -484,6 +484,7 @@ export default function AccountPage() {
                         <p>
                           {ticket.auditoriumName} · Seat {ticket.seatLabel}
                         </p>
+                        <p>{ticket.ticketTypeName}</p>
                         <p>{money(ticket.priceCentsPaid, order.currency)}</p>
                       </div>
                     </div>

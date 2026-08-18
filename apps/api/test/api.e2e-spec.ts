@@ -2521,10 +2521,12 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .expect(201);
     const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
-    await request(app.getHttpServer())
+    const confirmation = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
       .send({})
       .expect(201);
+    expect(confirmation.body.tickets.map((ticket: { ticketType: string }) => ticket.ticketType).sort())
+      .toEqual([adult.name, child.name].sort());
 
     const issued = await prisma.ticket.findMany({
       where: { ticketOrderId: checkout.body.orderId },

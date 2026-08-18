@@ -32,6 +32,7 @@ describe("PostmarkEmailProvider", () => {
           movie: "Test Movie",
           auditorium: "Screen 1",
           seat: "A1",
+          ticketType: "Adult",
           startsAt: new Date("2026-07-29T19:00:00.000Z"),
         }],
         orderAhead: {
@@ -57,6 +58,7 @@ describe("PostmarkEmailProvider", () => {
     ]);
     expect(body.HtmlBody).toContain("Order ahead");
     expect(body.HtmlBody).toContain("Shoestring Fries");
+    expect(body.HtmlBody).toContain("Adult");
     expect(body.TextBody).toContain("Service charge: $0.10");
   });
 

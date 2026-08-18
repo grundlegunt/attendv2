@@ -10,6 +10,7 @@ export interface TicketReceipt {
     movie: string;
     auditorium: string;
     seat: string;
+    ticketType: string;
     startsAt: Date;
   }>;
   orderAhead?: {
