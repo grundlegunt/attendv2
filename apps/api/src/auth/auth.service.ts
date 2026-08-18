@@ -21,6 +21,7 @@ import {
   CustomerAccountResponse,
   AuthenticatedEmployee,
   CustomerLoginRequest,
+  CustomerPasswordChangeRequest,
   CustomerRegisterRequest,
   StaffLoginRequest,
   StaffPasswordChangeRequest,
@@ -367,6 +368,47 @@ export class AuthService {
       data: { refreshTokenVersion: { increment: 1 } },
     });
     if (result.count !== 1) throw AppError.unauthenticated("Session has already been invalidated.");
+  }
+
+  async changeCustomerPassword(
+    customerId: string,
+    input: CustomerPasswordChangeRequest,
+  ): Promise<{ tokens: TokenPair; customer: AuthenticatedCustomer }> {
+    const current = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { authAccount: true },
+    });
+    if (!current?.authAccount?.passwordHash) throw AppError.unauthenticated();
+    if (!(await verifyPassword(current.authAccount.passwordHash, input.currentPassword))) {
+      throw AppError.invalidCredentials("Current password is incorrect.");
+    }
+    if (await verifyPassword(current.authAccount.passwordHash, input.newPassword)) {
+      throw AppError.validationFailed("Choose a password that differs from your current password.");
+    }
+
+    const passwordHash = await hashPassword(input.newPassword);
+    await prisma.$transaction(async (tx) => {
+      await tx.customerAuthAccount.update({
+        where: { customerId },
+        data: { passwordHash, refreshTokenVersion: { increment: 1 } },
+      });
+      await this.audit.record({
+        actorType: "CUSTOMER",
+        actorId: customerId,
+        action: "customer.password_changed",
+        entityType: "Customer",
+        entityId: customerId,
+      }, tx);
+    });
+
+    const customer = await prisma.customer.findUniqueOrThrow({
+      where: { id: customerId },
+      include: { authAccount: true },
+    });
+    return {
+      tokens: this.issueCustomerTokens(customer.id, customer.authAccount!.refreshTokenVersion),
+      customer: this.customerToProfile(customer),
+    };
   }
 
   async customerAccount(customerId: string): Promise<CustomerAccountResponse> {

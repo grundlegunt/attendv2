@@ -3781,6 +3781,45 @@ describe("Customer authentication", () => {
       .expect(200);
   });
 
+  it("changes a customer password, rotates cookies, and invalidates the prior refresh session", async () => {
+    const incorrect = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/change-password")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send({ currentPassword: "wrong-password", newPassword: "customer-password-2" });
+    expect(incorrect.status).toBe(401);
+
+    const priorRefreshCookie = refreshCookie;
+    const changed = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/change-password")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send({ currentPassword: "customer-password-1", newPassword: "customer-password-2" });
+    expect(changed.status).toBe(200);
+    expect(changed.body.customer.email).toBe(email);
+    const cookies = setCookieHeaders(changed);
+    accessCookie = cookiePair(cookies, "attend_customer_access");
+    refreshCookie = cookiePair(cookies, "attend_customer_refresh");
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/refresh")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", priorRefreshCookie)
+      .send()
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ email, password: "customer-password-1" })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ email, password: "customer-password-2" })
+      .expect(200);
+  });
+
   it("rejects a foreign Origin before a cookie-authenticated state change", async () => {
     const protectedMutation = await request(app.getHttpServer())
       .post("/api/v1/customer/restaurant-tabs/00000000-0000-4000-8000-000000000001/tip")

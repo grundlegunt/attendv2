@@ -45,6 +45,12 @@ export const customerLoginRequestSchema = z.object({
 });
 export type CustomerLoginRequest = z.infer<typeof customerLoginRequestSchema>;
 
+export const customerPasswordChangeRequestSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(200),
+}).strict();
+export type CustomerPasswordChangeRequest = z.infer<typeof customerPasswordChangeRequestSchema>;
+
 export const refreshRequestSchema = z.object({
   refreshToken: z.string().min(1),
 });

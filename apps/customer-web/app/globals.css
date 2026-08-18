@@ -202,6 +202,19 @@ html[data-branding-status="loading"] body {
 .account-empty {
   color: var(--color-text-secondary);
 }
+.account-password-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.8fr);
+  gap: 28px;
+  align-items: start;
+}
+.account-password-panel h2 {
+  margin: 5px 0 8px;
+}
+.account-password-panel form {
+  display: grid;
+  gap: 12px;
+}
 .ticket-order {
   border: 1px solid var(--color-border);
   background: var(--color-bg-elevated);
@@ -1738,6 +1751,9 @@ body:has(.signage-shell) .site-header { display: none; }
     justify-items: start;
   }
   .dining-tab-panel {
+    grid-template-columns: 1fr;
+  }
+  .account-password-panel {
     grid-template-columns: 1fr;
   }
   .account-ticket__details {

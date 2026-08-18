@@ -2,6 +2,7 @@ import { Body, Controller, Post, Get, HttpCode, HttpStatus, Param, Req, Res, Use
 import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
+  customerPasswordChangeRequestSchema,
   customerRegisterRequestSchema,
   refreshRequestSchema,
   staffLoginRequestSchema,
@@ -197,5 +198,25 @@ export class AuthController {
     assertTrustedCustomerOrigin(request);
     if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
     return this.authService.resendCustomerReceipt(actor.sub, orderId);
+  }
+
+  @Post("customers/change-password")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async changeCustomerPassword(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(customerPasswordChangeRequestSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
+    const { tokens, customer } = await this.authService.changeCustomerPassword(
+      actor.sub,
+      customerPasswordChangeRequestSchema.parse(body),
+    );
+    setCustomerSessionCookies(response, tokens);
+    return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };
   }
 }
