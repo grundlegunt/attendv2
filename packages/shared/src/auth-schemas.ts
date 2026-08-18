@@ -134,6 +134,7 @@ export interface CustomerTicketSummary {
   qrToken: string;
   priceCentsPaid: number;
   seatLabel: string;
+  ticketTypeName: string;
   movieTitle: string;
   moviePosterUrl: string | null;
   auditoriumName: string;

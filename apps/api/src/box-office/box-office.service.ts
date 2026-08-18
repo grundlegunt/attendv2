@@ -332,7 +332,7 @@ export class BoxOfficeService {
     const order = await prisma.ticketOrder.findUniqueOrThrow({
       where: { id: orderId },
       include: {
-        tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } },
+        tickets: { include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } },
         payment: true,
         cashTransactions: true,
       },
@@ -359,6 +359,7 @@ export class BoxOfficeService {
         movie: ticket.showtimeSeat.showtime.movie.title,
         auditorium: ticket.showtimeSeat.showtime.auditorium.name,
         seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label,
+        ticketType: ticket.ticketType.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt,
       })),
     };
@@ -461,7 +462,7 @@ export class BoxOfficeService {
       include: {
         tickets: {
           where: { status: { in: ["ISSUED", "ADMITTED"] } },
-          include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } },
+          include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } },
         },
       },
     });
@@ -478,6 +479,7 @@ export class BoxOfficeService {
         movie: ticket.showtimeSeat.showtime.movie.title,
         auditorium: ticket.showtimeSeat.showtime.auditorium.name,
         seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label,
+        ticketType: ticket.ticketType.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt,
       })),
     };

@@ -521,6 +521,7 @@ export class AuthService {
             tickets: {
               orderBy: { issuedAt: "asc" },
               include: {
+                ticketType: true,
                 showtimeSeat: {
                   include: {
                     seat: true,
@@ -552,6 +553,7 @@ export class AuthService {
           qrToken: ticket.qrToken,
           priceCentsPaid: ticket.priceCentsPaid,
           seatLabel: ticket.showtimeSeat.seat.label,
+          ticketTypeName: ticket.ticketType.name,
           movieTitle: ticket.showtimeSeat.showtime.movie.title,
           moviePosterUrl: ticket.showtimeSeat.showtime.movie.posterUrl,
           auditoriumName: ticket.showtimeSeat.showtime.auditorium.name,
@@ -715,6 +717,7 @@ export class AuthService {
         tickets: {
           where: { status: { in: ["ISSUED", "ADMITTED"] } },
           include: {
+            ticketType: true,
             showtimeSeat: {
               include: {
                 seat: true,
@@ -743,6 +746,7 @@ export class AuthService {
         seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
           ? "General admission"
           : ticket.showtimeSeat.seat.label,
+        ticketType: ticket.ticketType.name,
         startsAt: ticket.showtimeSeat.showtime.startsAt,
       })),
     };

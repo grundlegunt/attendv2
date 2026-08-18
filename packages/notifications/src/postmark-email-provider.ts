@@ -45,7 +45,8 @@ export class PostmarkEmailProvider implements EmailProvider {
           <section style="margin:24px 0;padding:18px;border:1px solid #ddd;border-radius:8px">
             <h2 style="margin-top:0">${escapeHtml(ticket.movie)}</h2>
             <p>${escapeHtml(ticket.startsAt.toLocaleString("en-US"))}<br>
-            ${escapeHtml(ticket.auditorium)} · Seat ${escapeHtml(ticket.seat)}</p>
+            ${escapeHtml(ticket.auditorium)} · Seat ${escapeHtml(ticket.seat)}<br>
+            ${escapeHtml(ticket.ticketType)}</p>
             <img width="250" height="250" alt="QR ticket for seat ${escapeHtml(ticket.seat)}"
               src="cid:ticket-${ticket.id}">
             <p><small>Ticket ${index + 1} of ${receipt.tickets.length}</small></p>

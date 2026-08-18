@@ -635,6 +635,7 @@ export function TicketCheckout({
                 weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
               })}</p>
               <p>{ticket.auditorium} · Seat {ticket.seat}</p>
+              <p>{ticket.ticketType}</p>
             </div>
             <div className="ticket-qr" aria-label={`Admission QR code for seat ${ticket.seat}`}>
               <QRCodeSVG value={ticket.issuanceToken} size={180} level="M" marginSize={2} />

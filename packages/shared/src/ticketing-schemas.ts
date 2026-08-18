@@ -72,6 +72,7 @@ export interface TicketConfirmationResponse {
     id: string;
     issuanceToken: string;
     seat: string;
+    ticketType: string;
     movie: string;
     auditorium: string;
     startsAt: string;
