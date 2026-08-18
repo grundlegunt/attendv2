@@ -2,6 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type {
+  CustomerAccountResponse,
+  CustomerSessionResponse,
   TicketCheckoutResponse,
   TicketConfirmationResponse,
 } from "@cinema/shared";
@@ -146,6 +148,7 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [accountRecognized, setAccountRecognized] = useState(false);
   const [zipCode, setZipCode] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
@@ -173,8 +176,34 @@ export function TicketCheckout({
   const configLoadingRef = useRef(false);
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
+  const nameDirtyRef = useRef(false);
+  const emailDirtyRef = useRef(false);
 
   const checkoutStorageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
+
+  useEffect(() => {
+    let active = true;
+    async function loadCustomer() {
+      let account: CustomerAccountResponse;
+      try {
+        account = await apiFetch<CustomerAccountResponse>("/auth/customers/me");
+      } catch (error) {
+        if (!(error instanceof ApiRequestError && error.status === 401)) return;
+        try {
+          await apiFetch<CustomerSessionResponse>("/auth/customers/refresh", { method: "POST" });
+          account = await apiFetch<CustomerAccountResponse>("/auth/customers/me");
+        } catch {
+          return;
+        }
+      }
+      if (!active) return;
+      if (!nameDirtyRef.current && account.customer.name) setName(account.customer.name);
+      if (!emailDirtyRef.current && account.customer.email) setEmail(account.customer.email);
+      setAccountRecognized(true);
+    }
+    void loadCustomer();
+    return () => { active = false; };
+  }, []);
 
   const selectedOrderAheadItems = config?.orderAhead.categories.flatMap((category) =>
     category.items.flatMap((item) => {
@@ -541,6 +570,7 @@ export function TicketCheckout({
           </div>
         ))}
         <strong>{money(confirmation.totalCents, confirmation.currency)}</strong>
+        <p><a className="primary-link" href="/account">{accountRecognized ? "View tickets in my account" : "Create an account or view my tickets"}</a></p>
       </section>
     );
   }
@@ -590,9 +620,10 @@ export function TicketCheckout({
           </div>
           <div className="checkout-panel">
             <h3>Receipt</h3>
+            {accountRecognized && <p className="configuration-note">Using your signed-in account details. You can edit them for this order.</p>}
             <label className="field">
               <span>Name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} />
+              <input autoComplete="name" value={name} onChange={(event) => { nameDirtyRef.current = true; setName(event.target.value); }} />
             </label>
             <label className="field">
               <span>Email</span>
@@ -600,7 +631,8 @@ export function TicketCheckout({
                 type="email"
                 required
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+                onChange={(event) => { emailDirtyRef.current = true; setEmail(event.target.value); }}
               />
             </label>
             <label className="field">
