@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { Request } from "express";
-import { createTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
+import { createTicketCheckoutRequestSchema, resendGuestTicketReceiptRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { TicketingService } from "./ticketing.service";
@@ -51,6 +51,17 @@ export class TicketingController {
   @RateLimit({ scope: "checkout" })
   finalize(@Param("orderId") orderId: string) {
     return this.ticketingService.finalizeOrder(orderId);
+  }
+
+  @Post("orders/:orderId/receipt")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
+  resendGuestReceipt(
+    @Param("orderId") orderId: string,
+    @Body(new ZodValidationPipe(resendGuestTicketReceiptRequestSchema)) body: unknown,
+  ) {
+    const parsed = resendGuestTicketReceiptRequestSchema.parse(body);
+    return this.ticketingService.resendGuestReceipt(orderId, parsed.holderKey);
   }
 
   @Post("scans")

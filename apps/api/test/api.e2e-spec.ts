@@ -2521,7 +2521,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     sendReceipt.mockRestore();
   });
 
-  it("retries a failed ticket receipt without issuing duplicate tickets", async () => {
+  it("lets the checkout holder retry a failed guest receipt without issuing duplicate tickets", async () => {
     const holderKey = `ticket-receipt-retry-${crypto.randomUUID()}`;
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
@@ -2548,16 +2548,19 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
       .send({})
       .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
+      .send({ holderKey: "wrong-holder-key-000000" })
+      .expect(404);
     const recoveredDelivery = await request(app.getHttpServer())
-      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({})
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
+      .send({ holderKey })
       .expect(201);
 
     expect(failedDelivery.body.receiptDelivery).toBe("FAILED");
     expect(recoveredDelivery.body).toMatchObject({
-      status: "PAID",
       receiptDelivery: "SENT",
-      tickets: [{ id: failedDelivery.body.tickets[0].id }],
+      email: expect.stringMatching(/^ticket-receipt-retry-.*@example\.test$/),
     });
     expect(
       await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),

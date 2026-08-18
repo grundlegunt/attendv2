@@ -867,6 +867,35 @@ export class TicketingService {
     }
   }
 
+  async resendGuestReceipt(orderId: string, holderKey: string) {
+    const order = await this.prisma.ticketOrder.findFirst({
+      where: {
+        id: orderId,
+        holderKey,
+        status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
+        guestEmail: { not: null },
+      },
+      include: {
+        tickets: {
+          where: { status: { in: ["ISSUED", "ADMITTED"] } },
+          include: {
+            showtimeSeat: {
+              include: {
+                seat: true,
+                showtime: { include: { movie: true, auditorium: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!order || order.tickets.length === 0) {
+      throw TicketingError.notFound("Ticket order was not found.");
+    }
+    const receiptDelivery = await this.deliverReceipt(order);
+    return { receiptDelivery, email: order.guestEmail! };
+  }
+
   private async finalizeGiftCardOnlyOrder(orderId: string) {
     const finalized = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`);

@@ -73,6 +73,13 @@ export interface TicketConfirmationResponse {
   }>;
 }
 
+export const resendGuestTicketReceiptRequestSchema = z.object({
+  holderKey: z.string().min(16).max(200),
+}).strict();
+export type ResendGuestTicketReceiptRequest = z.infer<
+  typeof resendGuestTicketReceiptRequestSchema
+>;
+
 export const scanTicketRequestSchema = z.object({
   credential: z.string().trim().min(1).max(2048),
   expectedShowtimeId: z.string().uuid(),

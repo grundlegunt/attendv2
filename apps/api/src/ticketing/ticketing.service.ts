@@ -141,6 +141,10 @@ export class TicketingService {
     return this.wrap(() => this.domain.finalizeOrder(orderId));
   }
 
+  resendGuestReceipt(orderId: string, holderKey: string) {
+    return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey));
+  }
+
   async scanTicket(input: {
     credential: string;
     expectedShowtimeId: string;
