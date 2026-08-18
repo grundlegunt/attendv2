@@ -9,6 +9,7 @@ type RevenueReport = {
   totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number };
   movies: Array<{ movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
   showtimes: Array<{ showtimeId: string; title: string; startsAt: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>;
+  admissionTypes: Array<{ ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>;
 };
 type AudienceOriginsReport = {
   totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
@@ -219,6 +220,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       <div className="report-export-actions"><button className="primary report-export" onClick={() => void exportRevenue()}>Export revenue CSV</button><button className="secondary report-export" onClick={() => void exportDistributorBoxOffice()}>Export distributor box office</button></div>
       <h3>By movie</h3><div className="management-table"><div className="table-row table-head"><span>Movie</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.movies.map((row) => <div className="table-row" key={row.movieId}><strong>{row.title}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
       <h3>By showtime</h3><div className="management-table"><div className="table-row table-head"><span>Showing</span><span>Tickets</span><span>Ticket face value</span><span>F&B revenue</span></div>{revenue.showtimes.map((row) => <div className="table-row" key={row.showtimeId}><strong>{row.title}<small>{new Date(row.startsAt).toLocaleString()}</small></strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span></div>)}</div>
+      <h3>By admission type</h3><div className="management-table"><div className="table-row table-head"><span>Admission type</span><span>Tickets</span><span>Ticket face value</span><span>Average ticket</span></div>{revenue.admissionTypes.map((row) => <div className="table-row" key={row.ticketTypeId}><strong>{row.name}</strong><span>{row.ticketsSold}</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.ticketsSold ? Math.round(row.ticketRevenueCents / row.ticketsSold) : 0)}</span></div>)}</div>
     </section>}
 
     {audienceOrigins && <section className="panel"><p className="kicker">AUDIENCE</p><h2>Where ticket buyers come from</h2>

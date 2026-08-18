@@ -72,7 +72,7 @@ export class ReportingService {
     const [ticketOrders, tabs] = await Promise.all([
       prisma.ticketOrder.findMany({
         where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
-        include: { tickets: { include: { showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
+        include: { tickets: { include: { ticketType: true, showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
       }),
       prisma.restaurantTab.findMany({
         where: { locationId, closedAt: { gte: range.from, lt: range.to }, status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } },
@@ -82,6 +82,7 @@ export class ReportingService {
 
     const movies = new Map<string, { movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
     const showtimes = new Map<string, { showtimeId: string; movieId: string; title: string; startsAt: Date; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
+    const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const ensureMovie = (movieId: string, title: string) => {
       let row = movies.get(movieId);
       if (!row) { row = { movieId, title, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; movies.set(movieId, row); }
@@ -108,6 +109,10 @@ export class ReportingService {
         const showtime = ticket.showtimeSeat.showtime;
         const revenue = ticket.priceCentsPaid;
         ticketRevenueCents += revenue;
+        const admissionType = admissionTypes.get(ticket.ticketTypeId) ?? { ticketTypeId: ticket.ticketTypeId, name: ticket.ticketType.name, ticketsSold: 0, ticketRevenueCents: 0 };
+        admissionType.ticketsSold += 1;
+        admissionType.ticketRevenueCents += revenue;
+        admissionTypes.set(ticket.ticketTypeId, admissionType);
         const movie = ensureMovie(showtime.movieId, showtime.movie.title);
         movie.ticketRevenueCents += revenue; movie.ticketsSold += 1;
         const showing = ensureShowtime(showtime.id, showtime.movieId, showtime.movie.title, showtime.startsAt);
@@ -139,6 +144,7 @@ export class ReportingService {
       range, totals: { grossRevenueCents: ticketCollectedCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, ticketFeesCents, ticketTaxCents, ticketCollectedCents, fnbRevenueCents, combinedRevenueCents: ticketCollectedCents + fnbRevenueCents, ticketsSold: ticketOrders.filter((order) => order.status !== "REFUNDED").reduce((sum, order) => sum + order.tickets.length, 0), fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0 },
       movies: [...movies.values()].sort((a, b) => a.title.localeCompare(b.title)),
       showtimes: [...showtimes.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
+      admissionTypes: [...admissionTypes.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.name.localeCompare(b.name)),
     };
   }
 
@@ -178,7 +184,9 @@ export class ReportingService {
       row(["Movie", "Tickets sold", "Ticket face value (cents)", "F&B revenue (cents)"]),
       ...report.movies.map((movie) => row([movie.title, movie.ticketsSold, movie.ticketRevenueCents, movie.fnbRevenueCents])), "",
       row(["Showtime", "Starts at", "Tickets sold", "Ticket face value (cents)", "F&B revenue (cents)"]),
-      ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents, showtime.fnbRevenueCents])),
+      ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents, showtime.fnbRevenueCents])), "",
+      row(["Admission type", "Tickets sold", "Ticket face value (cents)"]),
+      ...report.admissionTypes.map((ticketType) => row([ticketType.name, ticketType.ticketsSold, ticketType.ticketRevenueCents])),
     ].join("\n");
   }
 
