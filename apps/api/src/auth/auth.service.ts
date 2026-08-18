@@ -27,6 +27,7 @@ import {
   CustomerPasswordResetConfirm,
   CustomerPasswordResetRequest,
   CustomerRegisterRequest,
+  CustomerProfileUpdateRequest,
   StaffLoginRequest,
   StaffPasswordChangeRequest,
   StaffMfaConfirmRequest,
@@ -554,6 +555,34 @@ export class AuthService {
         })),
       })),
     };
+  }
+
+  async updateCustomerProfile(
+    customerId: string,
+    input: CustomerProfileUpdateRequest,
+  ): Promise<AuthenticatedCustomer> {
+    const current = await prisma.customer.findFirst({
+      where: { id: customerId, authAccount: { isNot: null } },
+    });
+    if (!current) throw AppError.unauthenticated();
+
+    const customer = await prisma.$transaction(async (tx) => {
+      const updated = await tx.customer.update({
+        where: { id: customerId },
+        data: { name: input.name },
+      });
+      await this.audit.record({
+        actorType: "CUSTOMER",
+        actorId: customerId,
+        action: "customer.profile_updated",
+        entityType: "Customer",
+        entityId: customerId,
+        beforeState: { name: current.name },
+        afterState: { name: updated.name },
+      }, tx);
+      return updated;
+    });
+    return this.customerToProfile(customer);
   }
 
   async resendCustomerReceipt(customerId: string, orderId: string) {

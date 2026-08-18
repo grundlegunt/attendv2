@@ -3710,6 +3710,29 @@ describe("Customer authentication", () => {
     expect(account.body.orders).toEqual(expect.any(Array));
   });
 
+  it("lets a signed-in customer update their profile name", async () => {
+    const invalid = await request(app.getHttpServer())
+      .patch("/api/v1/auth/customers/me")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send({ name: "   " });
+    expect(invalid.status).toBe(400);
+
+    const updated = await request(app.getHttpServer())
+      .patch("/api/v1/auth/customers/me")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .send({ name: "  Updated Customer  " });
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({ email, name: "Updated Customer", isGuest: false });
+
+    const account = await request(app.getHttpServer())
+      .get("/api/v1/auth/customers/me")
+      .set("Cookie", accessCookie)
+      .expect(200);
+    expect(account.body.customer.name).toBe("Updated Customer");
+  });
+
   it("lets a customer resend only their own paid ticket order to their account email", async () => {
     const { prisma } = await import("@cinema/database");
     const inventory = await prisma.showtimeSeat.findFirstOrThrow({
