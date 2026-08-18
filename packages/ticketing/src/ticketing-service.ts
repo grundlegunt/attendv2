@@ -451,6 +451,7 @@ export class TicketingService {
     totalCents: number;
     giftCardCents: number;
     currency: string;
+    promotionId: string | null;
     payment: {
       id: string;
       idempotencyKey: string;
@@ -465,6 +466,9 @@ export class TicketingService {
       include: { organization: true },
     });
     const connectedAccountId = location.organization.stripeConnectedAccountId ?? undefined;
+    const promotion = order.promotionId
+      ? await this.prisma.promotion.findUnique({ where: { id: order.promotionId }, select: { code: true, name: true } })
+      : null;
     const paymentCustomer =
       order.diningAuthorizationRequested && order.customerId && order.guestEmail
         ? await this.ensurePaymentCustomer({
@@ -485,11 +489,11 @@ export class TicketingService {
         connectedAccountId,
         paymentIntentId: order.payment.providerPaymentId,
       });
-      return this.presentCheckout(order, intent.clientSecret);
+      return this.presentCheckout(order, promotion, intent.clientSecret);
     }
 
     if (!order.payment) {
-      if (order.giftCardCents === order.totalCents) return this.presentCheckout(order);
+      if (order.giftCardCents === order.totalCents) return this.presentCheckout(order, promotion);
       throw TicketingError.notFound("Ticket order has no payment record.");
     }
 
@@ -529,7 +533,7 @@ export class TicketingService {
         },
         include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
       });
-      return this.presentCheckout(updated, intent.clientSecret);
+      return this.presentCheckout(updated, promotion, intent.clientSecret);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         // A concurrent call for the same order already recorded this
@@ -539,7 +543,7 @@ export class TicketingService {
           where: { id: order.id },
           include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
         });
-        return this.presentCheckout(settled, intent.clientSecret);
+        return this.presentCheckout(settled, promotion, intent.clientSecret);
       }
       throw error;
     }
@@ -1849,6 +1853,7 @@ export class TicketingService {
         attempts: Array<{ attemptNumber: number; status: PaymentAttemptStatus }>;
       } | null;
     },
+    promotion: { code: string; name: string } | null,
     clientSecret?: string,
   ) {
     return {
@@ -1865,6 +1870,7 @@ export class TicketingService {
       totalCents: order.totalCents,
       giftCardCents: order.giftCardCents,
       currency: order.currency,
+      promotion,
       payment: order.payment
         ? {
             id: order.payment.id,

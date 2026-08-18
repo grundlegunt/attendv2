@@ -2099,21 +2099,26 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     } });
     const config = await request(app.getHttpServer()).get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`).expect(200);
 
+    const idempotencyKey = `checkout-${holderKey}`;
+    const checkoutBody = {
+      holdTokens: [hold.holdToken],
+      holderKey,
+      ticketTypeId: config.body.ticketTypes[0].id,
+      email: `${holderKey}@example.test`,
+      promotionCode: promotion.code.toLowerCase(),
+      diningAuthorizationRequested: false,
+    };
     const checkout = await request(app.getHttpServer())
       .post("/api/v1/ticketing/checkouts")
-      .set("Idempotency-Key", `checkout-${holderKey}`)
-      .send({
-        holdTokens: [hold.holdToken],
-        holderKey,
-        ticketTypeId: config.body.ticketTypes[0].id,
-        email: `${holderKey}@example.test`,
-        promotionCode: promotion.code.toLowerCase(),
-        diningAuthorizationRequested: false,
-      })
+      .set("Idempotency-Key", idempotencyKey)
+      .send(checkoutBody)
       .expect(201);
 
     expect(checkout.body.discountCents).toBe(100);
+    expect(checkout.body.promotion).toEqual({ code: promotion.code, name: promotion.name });
     expect(checkout.body.totalCents).toBe(showtime.priceTier.ticketPriceMinor - 100 + showtime.priceTier.feeMinor);
+    const replay = await request(app.getHttpServer()).post("/api/v1/ticketing/checkouts").set("Idempotency-Key", idempotencyKey).send(checkoutBody).expect(201);
+    expect(replay.body).toEqual(expect.objectContaining({ orderId: checkout.body.orderId, promotion: { code: promotion.code, name: promotion.name } }));
     expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.body.orderId } })).toMatchObject({ promotionId: promotion.id, discountCents: 100 });
   });
 

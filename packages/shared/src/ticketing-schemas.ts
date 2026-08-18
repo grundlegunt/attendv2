@@ -44,6 +44,7 @@ export interface TicketCheckoutResponse {
   totalCents: number;
   giftCardCents: number;
   currency: string;
+  promotion: { code: string; name: string } | null;
   payment: {
     id: string;
     providerPaymentId: string | null;
