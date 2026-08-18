@@ -308,9 +308,9 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "Schedule" })).toBeVisible();
-  await page.getByRole("button", { name: /Reports & Finance/ }).click();
+  await page.getByRole("button", { name: /Financial Reports/ }).click();
   await expect(page.getByRole("link", { name: "Revenue Reports" })).toBeHidden();
-  await page.getByRole("button", { name: /Reports & Finance/ }).click();
+  await page.getByRole("button", { name: /Financial Reports/ }).click();
   await page.getByRole("navigation", { name: "Admin sections" }).getByRole("link", { name: "Revenue Reports" }).click();
   await expect(page.getByRole("heading", { name: "Reports & finance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Revenue overview" })).toBeVisible();
