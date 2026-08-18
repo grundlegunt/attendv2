@@ -10,6 +10,7 @@ import type {
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { QRCodeSVG } from "qrcode.react";
 import { downloadTicketCalendar } from "../lib/ticket-calendar";
+import { isCheckoutHoldExpired } from "../lib/checkout-hold";
 
 interface CheckoutConfig {
   currency: string;
@@ -185,6 +186,7 @@ export function TicketCheckout({
   const elementsRef = useRef<StripeElements | null>(null);
   const pendingRef = useRef(false);
   const paymentConfirmedRef = useRef(false);
+  const holdRemainingSecondsRef = useRef(holdRemainingSeconds);
   const configRequestRef = useRef(0);
   const configLoadingRef = useRef(false);
   const ticketTypeById = useMemo(
@@ -203,6 +205,8 @@ export function TicketCheckout({
   const emailDirtyRef = useRef(false);
 
   const checkoutStorageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
+  const holdExpired = isCheckoutHoldExpired(holdRemainingSeconds);
+  holdRemainingSecondsRef.current = holdRemainingSeconds;
 
   useEffect(() => {
     let active = true;
@@ -407,7 +411,7 @@ export function TicketCheckout({
     elements: StripeElements,
     orderId: string,
   ) {
-    if (pendingRef.current) return;
+    if (pendingRef.current || isCheckoutHoldExpired(holdRemainingSecondsRef.current)) return;
     pendingRef.current = true;
     setPending(true);
     setError(null);
@@ -570,7 +574,7 @@ export function TicketCheckout({
 
   async function pay(event: FormEvent) {
     event.preventDefault();
-    if (!checkout || pendingRef.current) return;
+    if (!checkout || pendingRef.current || holdExpired) return;
     if (!checkout.payment?.clientSecret) {
       pendingRef.current = true;
       setPending(true);
@@ -732,10 +736,10 @@ export function TicketCheckout({
         </div>
       </div>
       {error && <div className="error-banner">{error}</div>}
-      {!checkout && holdRemainingSeconds === 0 && (
+      {holdExpired && (
         <div className="checkout-panel hold-expired-panel" role="alert">
           <h3>Your ticket hold has expired</h3>
-          <p>Return to seat selection to check current availability and start a new hold.</p>
+          <p>No payment was submitted. Return to seat selection to check current availability and start a new hold.</p>
           <button className="primary" type="button" onClick={onBack}>
             Choose seats again
           </button>
@@ -746,7 +750,7 @@ export function TicketCheckout({
           {configLoading ? "Retrying checkout…" : "Retry checkout setup"}
         </button>
       )}
-      {!checkout && holdRemainingSeconds > 0 ? (
+      {!checkout && !holdExpired ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
             <h3>Ticket types</h3>
@@ -986,7 +990,7 @@ export function TicketCheckout({
             {pending ? "Preparing secure checkout…" : "Continue to payment"}
           </button>
         </form>
-      ) : checkout ? (
+      ) : checkout && !holdExpired ? (
         <form className="payment-form" onSubmit={pay}>
           <div className="checkout-panel order-total">
             <h3>Order</h3>
@@ -1013,7 +1017,7 @@ export function TicketCheckout({
               </button>
             )}
           </div> : <div className="checkout-panel"><h3>Payment complete</h3><p>Your gift card covers this order. Complete confirmation to receive your tickets.</p></div>}
-          <button className="primary" disabled={pending || (Boolean(checkout.payment?.clientSecret) && !paymentElementReady)}>
+          <button className="primary" disabled={pending || holdExpired || (Boolean(checkout.payment?.clientSecret) && !paymentElementReady)}>
             {pending
               ? "Completing purchase…"
               : !checkout.payment?.clientSecret

@@ -1,0 +1,36 @@
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const Module = require("node:module");
+const { resolve } = require("node:path");
+const { describe, it } = require("node:test");
+const ts = require("typescript");
+
+const helperPath = resolve(__dirname, "../app/lib/checkout-hold.ts");
+const helperSource = readFileSync(helperPath, "utf8");
+const compiled = ts.transpileModule(helperSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  fileName: helperPath,
+});
+const helperModule = new Module(helperPath, module);
+helperModule.filename = helperPath;
+helperModule.paths = module.paths;
+helperModule._compile(compiled.outputText, helperPath);
+const { isCheckoutHoldExpired } = helperModule.exports;
+
+const checkoutSource = readFileSync(resolve(__dirname, "../app/components/ticket-checkout.tsx"), "utf8");
+
+describe("checkout hold expiration", () => {
+  it("treats zero, negative, and invalid countdowns as expired", () => {
+    assert.equal(isCheckoutHoldExpired(1), false);
+    assert.equal(isCheckoutHoldExpired(0), true);
+    assert.equal(isCheckoutHoldExpired(-1), true);
+    assert.equal(isCheckoutHoldExpired(Number.NaN), true);
+  });
+
+  it("guards card and express checkout before confirming payment", () => {
+    assert.match(checkoutSource, /pendingRef\.current \|\| isCheckoutHoldExpired\(holdRemainingSecondsRef\.current\)/);
+    assert.match(checkoutSource, /!checkout \|\| pendingRef\.current \|\| holdExpired/);
+    assert.match(checkoutSource, /disabled=\{pending \|\| holdExpired \|\|/);
+    assert.match(checkoutSource, /No payment was submitted\./);
+  });
+});
