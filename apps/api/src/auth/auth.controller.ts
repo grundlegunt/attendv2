@@ -1,10 +1,11 @@
-import { Body, Controller, Post, Get, HttpCode, HttpStatus, Param, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Get, Patch, HttpCode, HttpStatus, Param, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
   customerPasswordChangeRequestSchema,
   customerPasswordResetConfirmSchema,
   customerPasswordResetRequestSchema,
+  customerProfileUpdateRequestSchema,
   customerRegisterRequestSchema,
   refreshRequestSchema,
   staffLoginRequestSchema,
@@ -216,6 +217,23 @@ export class AuthController {
   async customerMe(@CurrentActor() actor: RequestActor) {
     if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
     return this.authService.customerAccount(actor.sub);
+  }
+
+  @Patch("customers/me")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async updateCustomerProfile(
+    @Req() request: Request,
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(customerProfileUpdateRequestSchema)) body: unknown,
+  ) {
+    assertTrustedCustomerOrigin(request);
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
+    return this.authService.updateCustomerProfile(
+      actor.sub,
+      customerProfileUpdateRequestSchema.parse(body),
+    );
   }
 
   @Post("customers/orders/:orderId/receipt")

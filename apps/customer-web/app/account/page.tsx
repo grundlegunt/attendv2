@@ -67,6 +67,9 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState("");
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [profileName, setProfileName] = useState("");
+  const [profilePending, setProfilePending] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
   const [liveTabId, setLiveTabId] = useState("");
@@ -118,6 +121,10 @@ export default function AccountPage() {
     () => account?.orders.filter((order) => !hasUpcomingTicket(order)) ?? [],
     [account],
   );
+
+  useEffect(() => {
+    if (account?.customer.name) setProfileName(account.customer.name);
+  }, [account?.customer.name]);
 
   async function requestAccount(
     allowRefresh: boolean,
@@ -310,6 +317,28 @@ export default function AccountPage() {
     }
   }
 
+  async function updateProfile(event: FormEvent) {
+    event.preventDefault();
+    setProfilePending(true);
+    setProfileMessage(null);
+    try {
+      const customer = await apiFetch<AuthenticatedCustomer>("/auth/customers/me", {
+        method: "PATCH",
+        body: JSON.stringify({ name: profileName }),
+      });
+      setSession(customer);
+      setAccount((current) => current ? { ...current, customer } : current);
+      setProfileName(customer.name ?? "");
+      setProfileMessage("Profile updated.");
+    } catch (err) {
+      setProfileMessage(
+        err instanceof ApiRequestError ? err.body.message : "Your profile could not be updated.",
+      );
+    } finally {
+      setProfilePending(false);
+    }
+  }
+
   function renderOrders(title: string, orders: CustomerTicketOrderSummary[]) {
     return (
       <section className="account-orders" aria-label={title}>
@@ -488,6 +517,33 @@ export default function AccountPage() {
                 View live tab
               </button>
             </div>
+          </section>
+
+          <section className="content-panel account-password-panel">
+            <div>
+              <span className="eyebrow">ACCOUNT DETAILS</span>
+              <h2>Profile</h2>
+              <p className="secondary-copy">
+                This name appears with your account and ticket communications. Your sign-in email cannot be changed here.
+              </p>
+            </div>
+            <form onSubmit={updateProfile}>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  autoComplete="name"
+                  required
+                  minLength={1}
+                  maxLength={100}
+                  value={profileName}
+                  onChange={(event) => setProfileName(event.target.value)}
+                />
+              </label>
+              <button className="account-secondary-button" disabled={profilePending || !profileName.trim()}>
+                {profilePending ? "Saving…" : "Save profile"}
+              </button>
+              {profileMessage && <p role="status">{profileMessage}</p>}
+            </form>
           </section>
 
           <section className="content-panel account-password-panel">
