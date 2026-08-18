@@ -60,6 +60,10 @@ export default function AccountPage() {
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
   const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
   const [printOrderId, setPrintOrderId] = useState<string | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordPending, setPasswordPending] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
   const [liveTabId, setLiveTabId] = useState("");
@@ -222,6 +226,28 @@ export default function AccountPage() {
   function printOrder(orderId: string) {
     setPrintOrderId(orderId);
     window.requestAnimationFrame(() => window.print());
+  }
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordPending(true);
+    setPasswordMessage(null);
+    try {
+      const response = await apiFetch<CustomerSessionResponse>("/auth/customers/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      setSession(response.customer);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordMessage("Password updated. Your other sessions have been signed out.");
+    } catch (err) {
+      setPasswordMessage(
+        err instanceof ApiRequestError ? err.body.message : "Your password could not be updated.",
+      );
+    } finally {
+      setPasswordPending(false);
+    }
   }
 
   function renderOrders(title: string, orders: CustomerTicketOrderSummary[]) {
@@ -402,6 +428,28 @@ export default function AccountPage() {
                 View live tab
               </button>
             </div>
+          </section>
+
+          <section className="content-panel account-password-panel">
+            <div>
+              <span className="eyebrow">ACCOUNT SECURITY</span>
+              <h2>Change password</h2>
+              <p className="secondary-copy">Updating your password signs out other browser sessions.</p>
+            </div>
+            <form onSubmit={changePassword}>
+              <label className="field">
+                <span>Current password</span>
+                <input type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>New password</span>
+                <input type="password" autoComplete="new-password" required minLength={8} maxLength={200} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+              </label>
+              <button className="account-secondary-button" disabled={passwordPending || newPassword.length < 8}>
+                {passwordPending ? "Updating…" : "Update password"}
+              </button>
+              {passwordMessage && <p role="status">{passwordMessage}</p>}
+            </form>
           </section>
         </div>
       ) : (
