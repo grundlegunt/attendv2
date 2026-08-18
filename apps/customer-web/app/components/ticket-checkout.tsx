@@ -732,12 +732,21 @@ export function TicketCheckout({
         </div>
       </div>
       {error && <div className="error-banner">{error}</div>}
+      {!checkout && holdRemainingSeconds === 0 && (
+        <div className="checkout-panel hold-expired-panel" role="alert">
+          <h3>Your ticket hold has expired</h3>
+          <p>Return to seat selection to check current availability and start a new hold.</p>
+          <button className="primary" type="button" onClick={onBack}>
+            Choose seats again
+          </button>
+        </div>
+      )}
       {!config && error && !checkout && (
         <button className="link" type="button" disabled={configLoading} onClick={() => void loadConfig()}>
           {configLoading ? "Retrying checkout…" : "Retry checkout setup"}
         </button>
       )}
-      {!checkout ? (
+      {!checkout && holdRemainingSeconds > 0 ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
             <h3>Ticket types</h3>
@@ -977,7 +986,7 @@ export function TicketCheckout({
             {pending ? "Preparing secure checkout…" : "Continue to payment"}
           </button>
         </form>
-      ) : (
+      ) : checkout ? (
         <form className="payment-form" onSubmit={pay}>
           <div className="checkout-panel order-total">
             <h3>Order</h3>
@@ -1016,7 +1025,7 @@ export function TicketCheckout({
               : `Pay ${money(checkout.payment?.amountCents ?? checkout.totalCents, checkout.currency)}`}
           </button>
         </form>
-      )}
+      ) : null}
     </section>
   );
 }
