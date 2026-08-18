@@ -222,7 +222,12 @@ html[data-branding-status="loading"] body {
   margin: 0;
   color: var(--color-text-secondary);
 }
-.ticket-order__header > strong {
+.ticket-order__header > div:last-child {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+.ticket-order__header > div:last-child > strong {
   color: var(--color-accent);
   font-size: 1.25rem;
 }
@@ -1697,6 +1702,9 @@ body:has(.signage-shell) .site-header { display: none; }
   .ticket-order__header {
     align-items: stretch;
     flex-direction: column;
+  }
+  .ticket-order__header > div:last-child {
+    justify-items: start;
   }
   .dining-tab-panel {
     grid-template-columns: 1fr;

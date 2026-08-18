@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { prisma, Prisma } from "@cinema/database";
 import {
   hashPassword,
@@ -30,6 +30,8 @@ import {
 import type { RequestActor } from "./types";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
+import { EmailProvider, TicketReceipt } from "@cinema/notifications";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 
 const employeeInclude = {
   authAccount: true,
@@ -82,7 +84,10 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly audit: AuditService) {}
+  constructor(
+    private readonly audit: AuditService,
+    @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
+  ) {}
 
   // ---------------------------------------------------------------------
   // Staff
@@ -415,6 +420,96 @@ export class AuthService {
         })),
       })),
     };
+  }
+
+  async resendCustomerReceipt(customerId: string, orderId: string) {
+    const order = await prisma.ticketOrder.findFirst({
+      where: {
+        id: orderId,
+        customerId,
+        status: { in: ["PAID", "EXCHANGED"] },
+        customer: { authAccount: { isNot: null } },
+      },
+      include: {
+        customer: true,
+        tickets: {
+          where: { status: { in: ["ISSUED", "ADMITTED"] } },
+          include: {
+            showtimeSeat: {
+              include: {
+                seat: true,
+                showtime: { include: { movie: true, auditorium: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!order?.customer?.email || order.tickets.length === 0) {
+      throw AppError.notFound("Receiptable ticket order was not found.");
+    }
+
+    const receipt: TicketReceipt = {
+      to: order.customer.email,
+      guestName: order.customer.name,
+      orderNumber: order.orderNumber,
+      totalCents: order.totalCents,
+      currency: order.currency,
+      tickets: order.tickets.map((ticket) => ({
+        id: ticket.id,
+        credential: ticket.qrToken,
+        movie: ticket.showtimeSeat.showtime.movie.title,
+        auditorium: ticket.showtimeSeat.showtime.auditorium.name,
+        seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
+          ? "General admission"
+          : ticket.showtimeSeat.seat.label,
+        startsAt: ticket.showtimeSeat.showtime.startsAt,
+      })),
+    };
+
+    try {
+      const delivery = await this.emailProvider.sendTicketReceipt(receipt);
+      await prisma.$transaction(async (tx) => {
+        await tx.ticketOrder.update({
+          where: { id: order.id },
+          data: {
+            guestEmail: order.customer!.email,
+            receiptEmailSentAt: new Date(),
+            receiptEmailMessageId: delivery.messageId,
+            receiptEmailClaimedAt: null,
+            receiptEmailError: null,
+          },
+        });
+        await this.audit.record({
+          actorType: "CUSTOMER",
+          actorId: customerId,
+          locationId: order.locationId,
+          action: "ticket_order.receipt_resent",
+          entityType: "TicketOrder",
+          entityId: order.id,
+          afterState: { email: order.customer!.email, messageId: delivery.messageId },
+        }, tx);
+      });
+      return { receiptDelivery: "SENT" as const, email: order.customer.email };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error";
+      await prisma.$transaction(async (tx) => {
+        await tx.ticketOrder.update({
+          where: { id: order.id },
+          data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) },
+        });
+        await this.audit.record({
+          actorType: "CUSTOMER",
+          actorId: customerId,
+          locationId: order.locationId,
+          action: "ticket_order.receipt_resend_failed",
+          entityType: "TicketOrder",
+          entityId: order.id,
+          afterState: { email: order.customer!.email, error: message.slice(0, 1000) },
+        }, tx);
+      });
+      return { receiptDelivery: "FAILED" as const, email: order.customer.email };
+    }
   }
 
   private issueCustomerTokens(customerId: string, tokenVersion: number): TokenPair {
