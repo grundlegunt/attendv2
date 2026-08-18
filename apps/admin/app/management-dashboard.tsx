@@ -12,6 +12,7 @@ type RevenueReport = {
   admissionTypes: Array<{ ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>;
   salesChannels: Array<{ channel: "ONLINE" | "BOX_OFFICE"; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
   salesOperators: Array<{ employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>;
+  concessionTopSellers: Array<{ menuItemId: string; name: string; unitsSold: number; salesCents: number }>;
 };
 type AudienceOriginsReport = {
   totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
@@ -226,6 +227,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       <h3>By sales channel</h3><div className="management-table"><div className="table-row table-head"><span>Channel</span><span>Tickets</span><span>Refunds</span><span>Net collected</span></div>{revenue.salesChannels.map((row) => <div className="table-row" key={row.channel}><strong>{row.channel === "BOX_OFFICE" ? "Box office" : "Online"}</strong><span>{row.ticketsSold}</span><span>{money(row.refundedCents)}</span><span>{money(row.netCollectedCents)}</span></div>)}</div>
       <h3>By box-office operator</h3><div className="management-table"><div className="table-row table-head"><span>Operator</span><span>Tickets</span><span>Refunds</span><span>Net collected</span></div>{revenue.salesOperators.map((row) => <div className="table-row" key={row.employeeId}><strong>{row.employeeName}</strong><span>{row.ticketsSold}</span><span>{money(row.refundedCents)}</span><span>{money(row.netCollectedCents)}</span></div>)}</div>
       {revenue.salesOperators.length === 0 && <p className="dashboard-empty">No staff-assisted ticket sales in this range.</p>}
+      <h3>Top-selling concessions</h3><div className="management-table"><div className="table-row table-head"><span>Item</span><span>Units</span><span>Sales value</span><span>Average unit</span></div>{revenue.concessionTopSellers.map((row) => <div className="table-row" key={row.menuItemId}><strong>{row.name}</strong><span>{row.unitsSold}</span><span>{money(row.salesCents)}</span><span>{money(row.unitsSold ? Math.round(row.salesCents / row.unitsSold) : 0)}</span></div>)}</div>
+      {revenue.concessionTopSellers.length === 0 && <p className="dashboard-empty">No sent concession items in this range.</p>}
     </section>}
 
     {audienceOrigins && <section className="panel"><p className="kicker">AUDIENCE</p><h2>Where ticket buyers come from</h2>
