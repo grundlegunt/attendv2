@@ -37,6 +37,7 @@ describe("ReportingService distributor box-office export", () => {
       salesChannels: [{ channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, grossCollectedCents: 2066, refundedCents: 0, netCollectedCents: 2066 }],
       salesOperators: [],
       concessionTopSellers: [],
+      dailyPerformance: [],
     };
 
     const csv = service.distributorBoxOfficeCsv(report);

@@ -69,7 +69,8 @@ export class ReportingService {
   }
 
   async revenue(locationId: string, range: ReportRange) {
-    const [ticketOrders, tabs, concessionItems] = await Promise.all([
+    const [location, ticketOrders, tabs, concessionItems] = await Promise.all([
+      prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { timezone: true } }),
       prisma.ticketOrder.findMany({
         where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
         include: { placedByEmployee: { select: { id: true, name: true } }, tickets: { include: { ticketType: true, showtimeSeat: { include: { showtime: { include: { movie: true } } } } } } },
@@ -97,6 +98,18 @@ export class ReportingService {
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const salesOperators = new Map<string, { employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const concessionSales = new Map<string, { menuItemId: string; name: string; unitsSold: number; salesCents: number }>();
+    const dailyPerformance = new Map<string, { date: string; ticketsSold: number; ticketCollectedCents: number; fnbRevenueCents: number }>();
+    const businessDate = (value: Date) => {
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: location.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+      const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((entry) => entry.type === type)!.value;
+      return `${part("year")}-${part("month")}-${part("day")}`;
+    };
+    const ensureDay = (value: Date) => {
+      const date = businessDate(value);
+      let row = dailyPerformance.get(date);
+      if (!row) { row = { date, ticketsSold: 0, ticketCollectedCents: 0, fnbRevenueCents: 0 }; dailyPerformance.set(date, row); }
+      return row;
+    };
     const ensureMovie = (movieId: string, title: string) => {
       let row = movies.get(movieId);
       if (!row) { row = { movieId, title, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; movies.set(movieId, row); }
@@ -140,6 +153,9 @@ export class ReportingService {
       ticketFeesCents += order.feesCents;
       ticketTaxCents += order.taxCents;
       ticketCollectedCents += order.totalCents;
+      const orderDay = ensureDay(order.createdAt);
+      orderDay.ticketsSold += order.tickets.length;
+      orderDay.ticketCollectedCents += order.totalCents;
       salesChannel.ticketsSold += order.tickets.length;
       if (salesOperator) salesOperator.ticketsSold += order.tickets.length;
       order.tickets.forEach((ticket) => {
@@ -174,6 +190,7 @@ export class ReportingService {
       fnbRevenueCents += revenue;
       fnbSeatCount += tab.seats.length;
       fnbOrderCount += 1;
+      if (tab.closedAt) ensureDay(tab.closedAt).fnbRevenueCents += revenue;
       if (tab.showtime) {
         ensureMovie(tab.showtime.movieId, tab.showtime.movie.title).fnbRevenueCents += revenue;
         ensureShowtime(tab.showtime.id, tab.showtime.movieId, tab.showtime.movie.title, tab.showtime.startsAt).fnbRevenueCents += revenue;
@@ -197,6 +214,7 @@ export class ReportingService {
       salesChannels: [...salesChannels.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.channel.localeCompare(b.channel)),
       salesOperators: [...salesOperators.values()].sort((a, b) => b.netCollectedCents - a.netCollectedCents || a.employeeName.localeCompare(b.employeeName)),
       concessionTopSellers: [...concessionSales.values()].sort((a, b) => b.unitsSold - a.unitsSold || b.salesCents - a.salesCents || a.name.localeCompare(b.name)),
+      dailyPerformance: [...dailyPerformance.values()].sort((a, b) => a.date.localeCompare(b.date)).map((day) => ({ ...day, combinedRevenueCents: day.ticketCollectedCents + day.fnbRevenueCents, averageTotalSpendPerPatronCents: day.ticketsSold ? Math.round((day.ticketCollectedCents + day.fnbRevenueCents) / day.ticketsSold) : 0 })),
     };
   }
 
@@ -247,6 +265,8 @@ export class ReportingService {
       ...report.salesOperators.map((operator) => row([operator.employeeName, operator.ticketsSold, operator.grossCollectedCents, operator.refundedCents, operator.netCollectedCents])),
       "", row(["Concession item", "Units sold", "Sales value (cents)"]),
       ...report.concessionTopSellers.map((item) => row([item.name, item.unitsSold, item.salesCents])),
+      "", row(["Business date", "Tickets sold", "Ticket collected (cents)", "F&B revenue (cents)", "Net revenue (cents)", "Average total spend per patron (cents)"]),
+      ...report.dailyPerformance.map((day) => row([day.date, day.ticketsSold, day.ticketCollectedCents, day.fnbRevenueCents, day.combinedRevenueCents, day.averageTotalSpendPerPatronCents])),
     ].join("\n");
   }
 
