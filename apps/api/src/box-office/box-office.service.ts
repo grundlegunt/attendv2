@@ -27,6 +27,7 @@ export class BoxOfficeService {
   async customerLookup(locationId: string, query: string) {
     const normalized = query.trim();
     if (normalized.length < 2) throw AppError.validationFailed("Enter at least two characters.");
+    if (normalized.length > 100) throw AppError.validationFailed("Customer searches cannot exceed 100 characters.");
     const customers = await prisma.customer.findMany({
       where: {
         OR: [

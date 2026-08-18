@@ -6624,16 +6624,26 @@ describe("Milestone 9 box office and workforce", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey }).expect(201);
     const cashCents = Math.floor(quote.body.totalCents / 2);
     const cardCents = quote.body.totalCents - cashCents;
+    const customerEmail = `box-office-${crypto.randomUUID()}@example.test`;
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({
         requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey,
         ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
         cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
+        customerName: "Box Office Customer", customerEmail,
       }).expect(201);
     expect(sale.body.status).toBe("PAID");
     expect(sale.body.tickets).toHaveLength(1);
     expect(sale.body.cashTransactions[0]).toMatchObject({ amountCents: cashCents, changeGivenCents: 500 });
     expect(sale.body.payment).toMatchObject({ amountCents: cardCents, status: "SUCCEEDED" });
+
+    const customerLookup = await request(app.getHttpServer())
+      .get(`/api/v1/box-office/customers?q=${encodeURIComponent(customerEmail.slice(0, 18))}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    expect(customerLookup.body).toEqual([expect.objectContaining({ name: "Box Office Customer", email: customerEmail })]);
+    await request(app.getHttpServer()).get(`/api/v1/box-office/customers?q=${"A".repeat(101)}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).expect(400);
 
     const lookup = await request(app.getHttpServer())
       .get(`/api/v1/box-office/orders?q=${encodeURIComponent(sale.body.orderNumber)}`)
@@ -6643,6 +6653,8 @@ describe("Milestone 9 box office and workforce", () => {
       expect.objectContaining({
         id: sale.body.id,
         orderNumber: sale.body.orderNumber,
+        guestName: "Box Office Customer",
+        guestEmail: customerEmail,
         tickets: [expect.objectContaining({ id: sale.body.tickets[0].id, status: "ISSUED" })],
       }),
     ]);

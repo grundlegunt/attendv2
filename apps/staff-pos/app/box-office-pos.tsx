@@ -6,6 +6,7 @@ import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type LiveSeat = Omit<SeatMapSeat, "state"> & { id: string; state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" };
 type Quote = { subtotalCents: number; discountCents: number; feesCents: number; taxCents: number; totalCents: number; currency: string; seats: Array<{label:string}>; promotion: {code:string;name:string}|null };
+type CustomerResult = { id: string; name: string | null; email: string; phone: string | null };
 const DEFAULT_READER_ID = "tmr_box_1";
 
 export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; seatingMode: "RESERVED" | "GENERAL_ADMISSION"; refresh: () => Promise<void> }) {
@@ -14,6 +15,11 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
   const [ticketTypes, setTicketTypes] = useState<Array<{id:string;name:string}>>([]);
   const [ticketTypeId, setTicketTypeId] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [customerResults, setCustomerResults] = useState<CustomerResult[]>([]);
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerSearching, setCustomerSearching] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [holdTokens, setHoldTokens] = useState<string[]>([]);
   const [registerId, setRegisterId] = useState("BOX-1");
@@ -38,6 +44,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
   const drawerRequestRef = useRef(0);
   const pricingRequestRef = useRef(0);
   const giftCardRequestRef = useRef(0);
+  const customerSearchRequestRef = useRef(0);
   const saleActionRequestRef = useRef(0);
   const busyRequestRef = useRef(0);
   const activeHoldsRef = useRef<{ showtimeId: string; tokens: string[] } | null>(null);
@@ -48,13 +55,14 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     const requestId = ++checkoutConfigRequestRef.current;
     pricingRequestRef.current += 1;
     giftCardRequestRef.current += 1;
+    customerSearchRequestRef.current += 1;
     saleActionRequestRef.current += 1;
     busyRequestRef.current += 1;
     busyRef.current = false;
     checkoutAttemptRef.current = null;
     setBusy(false);
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId("");
-    setPromotionCode(""); setCashCents("0"); setCardCents("0"); setCashReceived("0");
+    setPromotionCode(""); setCustomerQuery(""); setCustomerResults([]); setCustomerName(""); setCustomerEmail(""); setCustomerSearching(false); setCashCents("0"); setCardCents("0"); setCashReceived("0");
     setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
     setReaderId(DEFAULT_READER_ID);
     setMessage(null);
@@ -136,10 +144,16 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     checkoutAttemptRef.current = null;
     activeHoldsRef.current = null;
     giftCardRequestRef.current += 1;
+    customerSearchRequestRef.current += 1;
     setSelected([]);
     setQuote(null);
     setHoldTokens([]);
     setPromotionCode("");
+    setCustomerQuery("");
+    setCustomerResults([]);
+    setCustomerName("");
+    setCustomerEmail("");
+    setCustomerSearching(false);
     setCashCents("0");
     setCardCents("0");
     setCashReceived("0");
@@ -258,8 +272,25 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     } finally { finishRequest(busyRequestId); }
   }
 
+  async function searchCustomers() {
+    const query = customerQuery.trim();
+    if (query.length < 2 || query.length > 100) { setMessage("Enter 2 to 100 characters to find a customer."); return; }
+    const requestId = ++customerSearchRequestRef.current;
+    setCustomerSearching(true);
+    setMessage(null);
+    try {
+      const results = await apiFetch<CustomerResult[]>(`/box-office/customers?q=${encodeURIComponent(query)}`, { accessToken });
+      if (requestId !== customerSearchRequestRef.current) return;
+      setCustomerResults(results);
+      if (!results.length) setMessage("No matching ticket customers were found. You can enter new customer details below.");
+    } catch (error) { if (requestId === customerSearchRequestRef.current) { setMessage(errorMessage(error)); setCustomerResults([]); } } finally { if (requestId === customerSearchRequestRef.current) setCustomerSearching(false); }
+  }
+
   async function checkout() {
     if (!quote) return;
+    const normalizedCustomerEmail = customerEmail.trim().toLowerCase();
+    const normalizedCustomerName = customerName.trim();
+    if (normalizedCustomerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedCustomerEmail)) { setMessage("Enter a valid customer email or leave it blank for a walk-up sale."); return; }
     const parsedCashCents = Number(cashCents || 0);
     const parsedCardCents = Number(cardCents || 0);
     const parsedGiftCardCents = Number(giftCardCents || 0);
@@ -349,6 +380,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       giftCardCode: parsedGiftCardCents > 0 ? giftCardCode.trim() : undefined,
       readerId: parsedCardCents > 0 ? readerId.trim() : undefined,
       cashReceivedCents: parsedCashCents > 0 ? parsedCashReceived : undefined,
+      customerEmail: normalizedCustomerEmail || undefined,
+      customerName: normalizedCustomerName || undefined,
     };
     const fingerprint = JSON.stringify(checkoutPayload);
     if (checkoutAttemptRef.current?.fingerprint !== fingerprint) {
@@ -446,6 +479,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
       <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} {isGeneralAdmission ? "ticket(s)" : "seat(s)"}</button></form>
     {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p><p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Promotion{quote.promotion ? ` · ${quote.promotion.name} (${quote.promotion.code})` : ""} −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
+      <section className="customer-attach"><h4>Customer (optional)</h4><p>Attach this sale for lookup and service later, or leave blank for a walk-up customer.</p><div className="customer-attach__search"><label className="field"><span>Find by name, email, or phone</span><input value={customerQuery} maxLength={100} disabled={busy || customerSearching} onChange={(event) => setCustomerQuery(event.target.value)} /></label><button className="secondary" type="button" disabled={busy || customerSearching || customerQuery.trim().length < 2} onClick={() => void searchCustomers()}>{customerSearching ? "Searching…" : "Find customer"}</button></div>{customerResults.length > 0 && <div className="customer-attach__results">{customerResults.map((customer) => <button className="secondary" type="button" key={customer.id} disabled={busy} onClick={() => { setCustomerName(customer.name ?? ""); setCustomerEmail(customer.email); setCustomerQuery(customer.email); setCustomerResults([]); setMessage(null); }}><strong>{customer.name || customer.email}</strong><span>{customer.email}{customer.phone ? ` · ${customer.phone}` : ""}</span></button>)}</div>}<label className="field"><span>Customer name</span><input value={customerName} maxLength={120} disabled={busy} onChange={(event) => setCustomerName(event.target.value)} /></label><label className="field"><span>Customer email</span><input type="email" value={customerEmail} maxLength={320} disabled={busy} onChange={(event) => setCustomerEmail(event.target.value)} /></label>{(customerName || customerEmail) && <button className="secondary" type="button" disabled={busy} onClick={() => { setCustomerName(""); setCustomerEmail(""); setCustomerQuery(""); setCustomerResults([]); }}>Clear customer</button>}</section>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => { setCashCents(event.target.value); setCashReceived("0"); }} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} disabled={busy || Number(cashCents) <= 0} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" step="1" value={cardCents} disabled={busy} onChange={(event) => setCardCents(event.target.value)} /></label>
