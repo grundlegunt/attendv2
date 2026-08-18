@@ -148,6 +148,25 @@ test("signed-in customer details carry into ticket checkout", async ({ page }) =
   await expect(page.getByLabel("Email")).toHaveValue("customer@ridgelinecinema.test");
 });
 
+test("guest checkout details carry into account registration", async ({ page }) => {
+  await page.goto("http://127.0.0.1:3000/showtimes");
+  await page.evaluate(() => {
+    window.sessionStorage.setItem(
+      "attend-account-handoff",
+      JSON.stringify({ email: "new.moviegoer@example.com", name: "New Moviegoer" }),
+    );
+  });
+
+  await page.goto("http://127.0.0.1:3000/account?createAccount=1");
+
+  await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
+  await expect(page.getByLabel("Name")).toHaveValue("New Moviegoer");
+  await expect(page.getByLabel("Email")).toHaveValue("new.moviegoer@example.com");
+  expect(
+    await page.evaluate(() => window.sessionStorage.getItem("attend-account-handoff")),
+  ).toBeNull();
+});
+
 test("restaurant payment recovery link shows the remaining balance without retrying automatically", async ({ page }) => {
   let paymentRequests = 0;
   await page.route("**/api/v1/public/restaurant-tabs/recovery-token**", async (route) => {

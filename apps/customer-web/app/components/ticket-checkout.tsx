@@ -351,6 +351,12 @@ export function TicketCheckout({
       { method: "POST", body: "{}" },
     );
     window.sessionStorage.removeItem(checkoutStorageKey);
+    if (!accountRecognized) {
+      window.sessionStorage.setItem(
+        "attend-account-handoff",
+        JSON.stringify({ email, name }),
+      );
+    }
     setConfirmation(completed);
   }
 
@@ -570,7 +576,7 @@ export function TicketCheckout({
           </div>
         ))}
         <strong>{money(confirmation.totalCents, confirmation.currency)}</strong>
-        <p><a className="primary-link" href="/account">{accountRecognized ? "View tickets in my account" : "Create an account or view my tickets"}</a></p>
+        <p><a className="primary-link" href={accountRecognized ? "/account" : "/account?createAccount=1"}>{accountRecognized ? "View tickets in my account" : "Create an account to save my tickets"}</a></p>
       </section>
     );
   }
