@@ -1970,6 +1970,7 @@ describe("Milestone 2 concurrency-safe seat holds", () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`);
     expect(res.status).toBe(200);
+    expect(res.body.showtime.timezone).toBe("America/Chicago");
     expect(res.body.seats).toHaveLength(96);
     expect(res.body.seats.every((seat: { state: string }) => seat.state === "AVAILABLE")).toBe(true);
     expect(res.body.counts).toEqual({ available: 96, held: 0, sold: 0, blocked: 0 });

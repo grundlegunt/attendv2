@@ -133,6 +133,7 @@ export function TicketCheckout({
   seats,
   movie,
   auditorium,
+  timeZone,
   onBack,
 }: {
   showtimeId: string;
@@ -141,6 +142,7 @@ export function TicketCheckout({
   seats: string[];
   movie: string;
   auditorium: string;
+  timeZone: string;
   onBack: () => void;
 }) {
   const [config, setConfig] = useState<CheckoutConfig | null>(null);
@@ -642,9 +644,10 @@ export function TicketCheckout({
           <div className="confirmation-card digital-ticket" key={ticket.id}>
             <div>
               <h3>{ticket.movie}</h3>
-              <p>{new Date(ticket.startsAt).toLocaleString([], {
+              <p>{new Intl.DateTimeFormat("en-US", {
+                timeZone,
                 weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
-              })}</p>
+              }).format(new Date(ticket.startsAt))}</p>
               <p>{ticket.auditorium} · Seat {ticket.seat}</p>
               <p>{ticket.ticketType}</p>
             </div>
