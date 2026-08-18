@@ -269,6 +269,7 @@ export function SeatPicker({
         }
         movie={availability.showtime.movie.title}
         auditorium={availability.showtime.auditorium.name}
+        startsAt={availability.showtime.startsAt}
         timeZone={availability.showtime.timezone}
         onBack={() => setCheckoutOpen(false)}
       />
