@@ -69,7 +69,7 @@ describe("admin navigation", () => {
 
   it("supports any-of permission destinations without widening other sections", () => {
     const links = visibleAdminNavigation(["menu.edit"]).flatMap((group) => group.items);
-    assert.deepEqual(links.map((item) => item.href), ["/", "/menu", "/taxes"]);
+    assert.deepEqual(links.map((item) => item.href), ["/", "/taxes", "/menu"]);
   });
 
   it("shows the expense ledger only with financial reporting permission", () => {

@@ -11,34 +11,34 @@ export type AdminNavGroup = {
 };
 
 export const adminNavigation: readonly AdminNavGroup[] = [
-  { label: "Overview", items: [{ href: "/", label: "Dashboard", permissions: [] }] },
+  { label: "Dashboard", items: [{ href: "/", label: "Dashboard", permissions: [] }] },
   { label: "Films", items: [
     { href: "/scheduling", label: "Schedule", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
     { href: "/film-series", label: "Film Series", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
   ] },
-  { label: "Cinema Setup", items: [
+  { label: "Setup", items: [
     { href: "/cinema-setup", label: "Auditoriums & Seats", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
-    { href: "/branding", label: "Brand Status", permissions: ["ticket.price.edit"] },
+    { href: "/branding", label: "Branding", permissions: ["ticket.price.edit"] },
     { href: "/location", label: "Location", permissions: ["ticket.price.edit"] },
+    { href: "/taxes", label: "Ticket Prices, Tax & Charges", permissions: ["menu.edit", "ticket.price.edit"], permissionMode: "any" },
   ] },
-  { label: "Operations", items: [
-    { href: "/private-events", label: "Private Events", permissions: ["reports.view"] },
+  { label: "F&B", items: [
     { href: "/menu", label: "Menu", permissions: ["menu.edit"] },
+  ] },
+  { label: "Financial Reports", items: [
+    { href: "/reports", label: "Revenue Overview", permissions: ["reports.view.financial"] },
     { href: "/refunds", label: "Refunds", permissions: ["payment.refund"] },
     { href: "/labor", label: "Labor", permissions: ["reports.view"] },
-  ] },
-  { label: "Reports & Finance", items: [
-    { href: "/reports", label: "Revenue Reports", permissions: ["reports.view.financial"] },
     { href: "/expenses", label: "Expenses", permissions: ["reports.view.financial"] },
+  ] },
+  { label: "Extras", items: [
+    { href: "/private-events", label: "Private Events", permissions: ["reports.view"] },
     { href: "/gift-cards", label: "Gift Cards", permissions: ["payment.refund"] },
-    { href: "/audit-log", label: "Recent Activity", permissions: ["audit.log.view"] },
+    { href: "/promotions", label: "Promos", permissions: ["ticket.price.edit"] },
   ] },
-  { label: "Users & Permissions", items: [
+  { label: "Team", items: [
     { href: "/users", label: "Team Access", permissions: ["employee.edit"] },
-  ] },
-  { label: "Settings", items: [
-    { href: "/promotions", label: "Promotions", permissions: ["ticket.price.edit"] },
-    { href: "/taxes", label: "Ticket Prices, Tax & Charges", permissions: ["menu.edit", "ticket.price.edit"], permissionMode: "any" },
+    { href: "/audit-log", label: "Recent Activity", permissions: ["audit.log.view"] },
   ] },
 ] as const;
 
