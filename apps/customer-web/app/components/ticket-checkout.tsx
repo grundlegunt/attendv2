@@ -13,7 +13,7 @@ import { downloadTicketCalendar } from "../lib/ticket-calendar";
 
 interface CheckoutConfig {
   currency: string;
-  ticketTypes: Array<{ id: string; name: string }>;
+  ticketTypes: Array<{ id: string; name: string; priceAdjustmentMinor: number }>;
   orderAhead: {
     available: boolean;
     categories: Array<{
@@ -711,7 +711,7 @@ export function TicketCheckout({
               >
                 {!config?.ticketTypes.length && <option value="">No ticket types available</option>}
                 {config?.ticketTypes.map((ticketType) => (
-                  <option key={ticketType.id} value={ticketType.id}>{ticketType.name}</option>
+                  <option key={ticketType.id} value={ticketType.id}>{ticketType.name}{ticketType.priceAdjustmentMinor ? ` (${ticketType.priceAdjustmentMinor > 0 ? "+" : ""}${money(ticketType.priceAdjustmentMinor, config.currency)})` : ""}</option>
                 ))}
               </select>
             </label>
@@ -728,7 +728,7 @@ export function TicketCheckout({
                   }))}
                 >
                   {config?.ticketTypes.map((ticketType) => (
-                    <option key={ticketType.id} value={ticketType.id}>{ticketType.name}</option>
+                    <option key={ticketType.id} value={ticketType.id}>{ticketType.name}{ticketType.priceAdjustmentMinor ? ` (${ticketType.priceAdjustmentMinor > 0 ? "+" : ""}${money(ticketType.priceAdjustmentMinor, config.currency)})` : ""}</option>
                   ))}
                 </select>
               </label>

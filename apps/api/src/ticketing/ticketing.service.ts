@@ -47,7 +47,7 @@ export class TicketingService {
                   },
                   ticketTypes: {
                     where: { active: true },
-                    select: { id: true, name: true },
+                    select: { id: true, name: true, priceAdjustmentMinor: true },
                     orderBy: { name: "asc" },
                   },
                   menuCategories: {

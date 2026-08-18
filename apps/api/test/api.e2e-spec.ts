@@ -2492,7 +2492,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .expect(201);
     const showtime = await prisma.showtime.findUniqueOrThrow({
       where: { id: showtimeId },
-      select: { auditorium: { select: { locationId: true } } },
+      select: { auditorium: { select: { locationId: true } }, priceTier: { select: { ticketPriceMinor: true } } },
     });
     const adult = await prisma.ticketType.findFirstOrThrow({
       where: { locationId: showtime.auditorium.locationId, active: true },
@@ -2501,6 +2501,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       data: {
         locationId: showtime.auditorium.locationId,
         name: `Child ${crypto.randomUUID()}`,
+        priceAdjustmentMinor: -200,
       },
     });
     const ticketTypeSelections = [
@@ -2519,6 +2520,10 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
         diningAuthorizationRequested: false,
       })
       .expect(201);
+    expect(checkout.body.subtotalCents).toBe(
+      Math.max(0, showtime.priceTier.ticketPriceMinor + adult.priceAdjustmentMinor) +
+      Math.max(0, showtime.priceTier.ticketPriceMinor + child.priceAdjustmentMinor),
+    );
     const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const confirmation = await request(app.getHttpServer())
@@ -2530,7 +2535,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const issued = await prisma.ticket.findMany({
       where: { ticketOrderId: checkout.body.orderId },
-      select: { showtimeSeatId: true, ticketTypeId: true },
+      select: { showtimeSeatId: true, ticketTypeId: true, priceCentsPaid: true },
     });
     const heldInventory = await prisma.seatHold.findMany({
       where: { holdToken: { in: ticketTypeSelections.map((selection) => selection.holdToken) } },
@@ -2538,7 +2543,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     });
     for (const selection of ticketTypeSelections) {
       const inventoryId = heldInventory.find((hold) => hold.holdToken === selection.holdToken)!.showtimeSeatId;
-      expect(issued).toContainEqual({ showtimeSeatId: inventoryId, ticketTypeId: selection.ticketTypeId });
+      const ticketType = selection.ticketTypeId === adult.id ? adult : child;
+      expect(issued).toContainEqual({ showtimeSeatId: inventoryId, ticketTypeId: selection.ticketTypeId, priceCentsPaid: Math.max(0, showtime.priceTier.ticketPriceMinor + ticketType.priceAdjustmentMinor) });
     }
   });
 

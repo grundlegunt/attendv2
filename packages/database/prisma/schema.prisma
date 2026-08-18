@@ -752,6 +752,7 @@ model TicketType {
   locationId String
   location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
   name       String
+  priceAdjustmentMinor Int @default(0)
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
