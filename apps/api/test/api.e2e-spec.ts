@@ -7355,8 +7355,8 @@ describe("Milestone 10 management reporting", () => {
     expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1700, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 1800, fnbRevenueCents: 700, ticketsSold: 1 }]);
     expect(response.body.admissionTypes).toEqual([{ ticketTypeId: ticketType.id, name: ticketType.name, ticketsSold: 2, ticketRevenueCents: 3500 }]);
     expect(response.body.salesChannels).toEqual([
-      { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, collectedCents: 2000 },
-      { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, collectedCents: 2066 },
+      { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, grossCollectedCents: 2000, refundedCents: 0, netCollectedCents: 2000 },
+      { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, grossCollectedCents: 2866, refundedCents: 800, netCollectedCents: 2066 },
     ]);
     const csv = await request(app.getHttpServer()).get(`/api/v1/reports/revenue.csv?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     expect(csv.headers["content-type"]).toContain("text/csv");
@@ -7369,8 +7369,9 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain(`"${movie!.title}","2","3500","1200"`);
     expect(csv.text).toContain(`"Admission type","Tickets sold","Ticket face value (cents)"`);
     expect(csv.text).toContain(`"${ticketType.name}","2","3500"`);
-    expect(csv.text).toContain('"BOX_OFFICE","1","1800","2000"');
-    expect(csv.text).toContain('"ONLINE","1","1700","2066"');
+    expect(csv.text).toContain('"Sales channel","Tickets sold","Ticket face value (cents)","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
+    expect(csv.text).toContain('"BOX_OFFICE","1","1800","2000","0","2000"');
+    expect(csv.text).toContain('"ONLINE","1","1700","2866","800","2066"');
   });
 
   it("reports exact worked minutes and exports payroll-ready CSV", async () => {
