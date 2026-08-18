@@ -458,6 +458,14 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .schedule-with-inspector, .schedule-with-inspector.inspector-open { grid-template-columns: 1fr; }
   .schedule-inspector { min-height: 0; border-left: 0; }
 }
+@media (max-width: 1400px) {
+  .schedule-inspector form { grid-template-columns: 1fr; }
+  .schedule-inspector .drawer-heading,
+  .schedule-inspector .showtime-inspector-summary,
+  .schedule-inspector .showtime-inspector-fields,
+  .schedule-inspector .calculation-note,
+  .schedule-inspector .showtime-inspector-actions { grid-column: 1; }
+}
 @media (min-width: 1500px) { .admin-shell { padding-right: 24px; padding-left: 24px; } }
 @media (max-width: 760px) {
   .admin-shell { padding: 16px; }
