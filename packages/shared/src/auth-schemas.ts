@@ -138,6 +138,7 @@ export interface CustomerTicketSummary {
   moviePosterUrl: string | null;
   auditoriumName: string;
   startsAt: string;
+  endsAt: string;
 }
 
 export interface CustomerTicketOrderSummary {

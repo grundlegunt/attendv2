@@ -11,6 +11,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { LiveRestaurantTab } from "../components/live-restaurant-tab";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { useCinemaContent } from "../components/customer-branding";
+import { downloadTicketCalendar } from "../lib/ticket-calendar";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 function money(cents: number, currency: string) {
@@ -302,6 +303,22 @@ export default function AccountPage() {
     window.requestAnimationFrame(() => window.print());
   }
 
+  function downloadOrderCalendar(order: CustomerTicketOrderSummary) {
+    downloadTicketCalendar(
+      order.orderNumber,
+      order.tickets
+        .filter((ticket) => !["CANCELED", "REFUNDED"].includes(ticket.status))
+        .map((ticket) => ({
+          id: ticket.id,
+          movie: ticket.movieTitle,
+          auditorium: ticket.auditoriumName,
+          seat: ticket.seatLabel,
+          startsAt: ticket.startsAt,
+          endsAt: ticket.endsAt,
+        })),
+    );
+  }
+
   async function changePassword(event: FormEvent) {
     event.preventDefault();
     setPasswordPending(true);
@@ -434,6 +451,14 @@ export default function AccountPage() {
                     onClick={() => printOrder(order.id)}
                   >
                     Print tickets
+                  </button>
+                  <button
+                    className="account-secondary-button"
+                    type="button"
+                    disabled={!order.tickets.some((ticket) => !["CANCELED", "REFUNDED"].includes(ticket.status))}
+                    onClick={() => downloadOrderCalendar(order)}
+                  >
+                    Add to calendar
                   </button>
                 </div>
               </header>
