@@ -5257,16 +5257,23 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
     const server = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/login")
       .send({ email: `server@${SEED_SUFFIX}`, password: SEED_PASSWORD });
-    const refire = await request(app.getHttpServer())
-      .post(`/api/v1/restaurant-tabs/fulfillment/${ticketId}/refire`)
-      .set("Authorization", `Bearer ${server.body.accessToken}`)
-      .send({});
-    expect(refire.status).toBe(201);
-    expect(refire.body).toMatchObject({
+    const requestId = crypto.randomUUID();
+    const refireRequest = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/fulfillment/${ticketId}/refire`)
+        .set("Authorization", `Bearer ${server.body.accessToken}`)
+        .send({ requestId });
+    const refires = await Promise.all([refireRequest(), refireRequest()]);
+    expect(refires.map((response) => response.status)).toEqual([201, 201]);
+    expect(refires[0].body).toMatchObject({
       status: "NEW",
       refiredFromId: ticketId,
       refireCount: 1,
     });
+    expect(refires[1].body.id).toBe(refires[0].body.id);
+    expect(
+      await prisma.fulfillmentTicket.count({ where: { refiredFromId: ticketId } }),
+    ).toBe(1);
     const original = await prisma.fulfillmentTicket.findUniqueOrThrow({
       where: { id: ticketId },
     });

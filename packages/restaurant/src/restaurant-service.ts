@@ -1029,6 +1029,7 @@ export class RestaurantService {
     ticketId: string;
     locationId: string;
     actorId: string;
+    requestId?: string;
     action: "ACCEPT" | "START" | "READY" | "DELIVER" | "CANCEL" | "VOID" | "REFIRE";
   }) {
     return this.prisma.$transaction(async (tx) => {
@@ -1047,15 +1048,42 @@ export class RestaurantService {
       });
       if (!ticket) throw new RestaurantError("Fulfillment ticket was not found.", "NOT_FOUND");
 
-      const transition = this.fulfillmentTransition(ticket.status, input.action);
       const now = new Date();
       if (input.action === "REFIRE") {
+        if (!input.requestId) {
+          throw new RestaurantError("A refire request id is required.", "INVALID");
+        }
+        const requestFingerprint = JSON.stringify({
+          ticketId: input.ticketId,
+          actorId: input.actorId,
+        });
+        const replay = await tx.fulfillmentTicket.findUnique({
+          where: {
+            refiredFromId_idempotencyKey: {
+              refiredFromId: ticket.id,
+              idempotencyKey: input.requestId,
+            },
+          },
+          include: { items: { include: { menuItem: true } } },
+        });
+        if (replay) {
+          if (replay.requestFingerprint !== requestFingerprint) {
+            throw new RestaurantError(
+              "Refire request id was reused with different details.",
+              "CONFLICT",
+            );
+          }
+          return replay;
+        }
+        this.fulfillmentTransition(ticket.status, input.action);
         const original = await tx.fulfillmentTicket.update({
           where: { id: ticket.id },
           data: { status: "REFIRE", refireCount: { increment: 1 } },
         });
         const refire = await tx.fulfillmentTicket.create({
           data: {
+            idempotencyKey: input.requestId,
+            requestFingerprint,
             restaurantOrderId: ticket.restaurantOrderId,
             kitchenStationId: ticket.kitchenStationId,
             tabLabel: ticket.tabLabel,
@@ -1082,6 +1110,7 @@ export class RestaurantService {
         return refire;
       }
 
+      const transition = this.fulfillmentTransition(ticket.status, input.action);
       const updated = await tx.fulfillmentTicket.update({
         where: { id: ticket.id },
         data: {

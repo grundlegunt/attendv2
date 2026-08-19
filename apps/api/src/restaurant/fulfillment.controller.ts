@@ -8,6 +8,7 @@ import {
   Sse,
   UseGuards,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { Observable } from "rxjs";
 import { Permission } from "@cinema/auth";
 import { fulfillmentTicketTransitionRequestSchema } from "@cinema/shared";
@@ -63,8 +64,10 @@ export class FulfillmentController {
     @Body(new ZodValidationPipe(fulfillmentTicketTransitionRequestSchema))
     body: unknown,
   ) {
+    const parsed = fulfillmentTicketTransitionRequestSchema.parse(body);
     return this.restaurant.transitionFulfillmentTicket({
-      ...fulfillmentTicketTransitionRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.action === "REFIRE" ? (parsed.requestId ?? randomUUID()) : undefined,
       ticketId,
       locationId: this.locationId(actor),
       actorId: actor.sub,

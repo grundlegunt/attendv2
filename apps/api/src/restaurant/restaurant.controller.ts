@@ -15,6 +15,7 @@ import {
   combineRestaurantTabsRequestSchema,
   openSeatLinkedTabsRequestSchema,
   openWalkInTabRequestSchema,
+  refireFulfillmentTicketRequestSchema,
   splitRestaurantTabRequestSchema,
   transferRestaurantOrderRequestSchema,
 } from "@cinema/shared";
@@ -123,9 +124,12 @@ export class RestaurantController {
   refire(
     @CurrentActor() actor: RequestActor,
     @Param("ticketId") ticketId: string,
+    @Body(new ZodValidationPipe(refireFulfillmentTicketRequestSchema)) body: unknown,
   ) {
+    const parsed = refireFulfillmentTicketRequestSchema.parse(body);
     return this.restaurant.transitionFulfillmentTicket({
       ticketId,
+      requestId: parsed.requestId ?? randomUUID(),
       action: "REFIRE",
       locationId: this.locationId(actor),
       actorId: actor.sub,
