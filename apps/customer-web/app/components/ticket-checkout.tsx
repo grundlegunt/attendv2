@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type {
   CustomerAccountResponse,
   CustomerSessionResponse,
@@ -162,7 +162,6 @@ export function TicketCheckout({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [accountRecognized, setAccountRecognized] = useState(false);
-  const [zipCode, setZipCode] = useState("");
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
   const [selectedTicketTypeId, setSelectedTicketTypeId] = useState("");
@@ -189,16 +188,6 @@ export function TicketCheckout({
   const holdRemainingSecondsRef = useRef(holdRemainingSeconds);
   const configRequestRef = useRef(0);
   const configLoadingRef = useRef(false);
-  const ticketTypeById = useMemo(
-    () => new Map(config?.ticketTypes.map((ticketType) => [ticketType.id, ticketType]) ?? []),
-    [config],
-  );
-  const ticketPricePreviewCents = config
-    ? holdTokens.reduce((total, holdToken) => {
-      const ticketType = ticketTypeById.get(ticketTypeByHoldToken[holdToken] ?? "");
-      return total + Math.max(0, config.baseTicketPriceCents + (ticketType?.priceAdjustmentMinor ?? 0));
-    }, 0)
-    : 0;
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
   const nameDirtyRef = useRef(false);
@@ -538,7 +527,6 @@ export function TicketCheckout({
             })),
             email,
             name: name || undefined,
-            zipCode: zipCode.trim() || undefined,
             promotionCode: promotionCode.trim() || undefined,
             giftCardCode: giftCardCode.trim() || undefined,
             diningAuthorizationRequested: diningAuthorization,
@@ -757,60 +745,6 @@ export function TicketCheckout({
       {!checkout && !holdExpired ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
-            <h3>Ticket types</h3>
-            {configLoading && !config ? (
-              <p className="loading-copy" role="status">Loading ticket prices…</p>
-            ) : config ? <>
-              <label className="field">
-              <span>{seats.length === 1 ? "Ticket type" : "Apply one type to all tickets"}</span>
-              <select
-                required
-                value={selectedTicketTypeId}
-                disabled={configLoading || !config?.ticketTypes.length}
-                onChange={(event) => {
-                  const ticketTypeId = event.target.value;
-                  setSelectedTicketTypeId(ticketTypeId);
-                  setTicketTypeByHoldToken(Object.fromEntries(holdTokens.map((holdToken) => [holdToken, ticketTypeId])));
-                }}
-              >
-                {!config.ticketTypes.length && <option value="">No ticket types available</option>}
-                {config.ticketTypes.map((ticketType) => (
-                  <option key={ticketType.id} value={ticketType.id}>{ticketType.name}{ticketType.priceAdjustmentMinor ? ` (${ticketType.priceAdjustmentMinor > 0 ? "+" : ""}${money(ticketType.priceAdjustmentMinor, config.currency)})` : ""}</option>
-                ))}
-              </select>
-              </label>
-            {seats.length > 1 && seats.map((seat, index) => (
-              <label className="field" key={holdTokens[index]}>
-                <span>
-                  {generalAdmission ? `Ticket ${index + 1}` : `Seat ${seat}`}
-                  {config && ticketTypeById.get(ticketTypeByHoldToken[holdTokens[index]!] ?? "") && (
-                    <> · {money(Math.max(0, config.baseTicketPriceCents + ticketTypeById.get(ticketTypeByHoldToken[holdTokens[index]!] ?? "")!.priceAdjustmentMinor), config.currency)}</>
-                  )}
-                </span>
-                <select
-                  required
-                  value={ticketTypeByHoldToken[holdTokens[index]!] ?? ""}
-                  disabled={configLoading || !config?.ticketTypes.length}
-                  onChange={(event) => setTicketTypeByHoldToken((current) => ({
-                    ...current,
-                    [holdTokens[index]!]: event.target.value,
-                  }))}
-                >
-                  {config?.ticketTypes.map((ticketType) => (
-                    <option key={ticketType.id} value={ticketType.id}>{ticketType.name}{ticketType.priceAdjustmentMinor ? ` (${ticketType.priceAdjustmentMinor > 0 ? "+" : ""}${money(ticketType.priceAdjustmentMinor, config.currency)})` : ""}</option>
-                  ))}
-                </select>
-              </label>
-            ))}
-              <p className="order-ahead-estimate">
-                <span>Ticket subtotal</span>
-                <strong>{money(ticketPricePreviewCents, config.currency)}</strong>
-                <small>Service fees, tax, promotions, and gift cards are applied securely at checkout.</small>
-              </p>
-              <small>Choose the admission type that applies to each ticket.</small>
-            </> : null}
-          </div>
-          <div className="checkout-panel">
             <h3>Receipt</h3>
             {accountRecognized && <p className="configuration-note">Using your signed-in account details. You can edit them for this order.</p>}
             <label className="field">
@@ -826,20 +760,6 @@ export function TicketCheckout({
                 autoComplete="email"
                 onChange={(event) => { emailDirtyRef.current = true; setEmail(event.target.value); }}
               />
-            </label>
-            <label className="field">
-              <span>ZIP code (optional)</span>
-              <input
-                value={zipCode}
-                onChange={(event) => setZipCode(event.target.value)}
-                inputMode="numeric"
-                autoComplete="postal-code"
-                pattern="[0-9]{5}(-[0-9]{4})?"
-                maxLength={10}
-              />
-              <small>
-                Helps the cinema understand where its audience comes from. This is not used for billing.
-              </small>
             </label>
             <label className="field">
               <span>Promotion code</span>

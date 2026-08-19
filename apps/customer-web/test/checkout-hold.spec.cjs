@@ -39,4 +39,10 @@ describe("checkout hold expiration", () => {
     assert.match(checkoutSource, /\[confirmation, holdExpired, mountableElements\]/);
     assert.match(checkoutSource, /it will be refunded if tickets cannot be issued\./);
   });
+
+  it("keeps ticket-type and ZIP-code controls out of customer checkout", () => {
+    assert.doesNotMatch(checkoutSource, /<h3>Ticket types<\/h3>/);
+    assert.doesNotMatch(checkoutSource, /ZIP code \(optional\)/);
+    assert.doesNotMatch(checkoutSource, /zipCode:/);
+  });
 });
