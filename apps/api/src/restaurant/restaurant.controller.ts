@@ -7,6 +7,7 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { Permission } from "@cinema/auth";
 import {
   addRestaurantOrderItemRequestSchema,
@@ -96,8 +97,10 @@ export class RestaurantController {
     @Param("orderId") orderId: string,
     @Body(new ZodValidationPipe(addRestaurantOrderItemRequestSchema)) body: unknown,
   ) {
+    const parsed = addRestaurantOrderItemRequestSchema.parse(body);
     return this.restaurant.addOrderItem({
-      ...addRestaurantOrderItemRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.requestId ?? randomUUID(),
       orderId,
       locationId: this.locationId(actor),
     });

@@ -1,0 +1,19 @@
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const { resolve } = require("node:path");
+const { describe, it } = require("node:test");
+
+const source = readFileSync(resolve(__dirname, "../app/restaurant-pos.tsx"), "utf8");
+
+describe("restaurant item request idempotency", () => {
+  it("retains the request identity for an unchanged retry", () => {
+    assert.match(source, /const addItemAttemptRef = useRef/);
+    assert.match(source, /addItemAttemptRef\.current\?\.fingerprint !== fingerprint/);
+    assert.match(source, /requestId: addItemAttemptRef\.current\.requestId/);
+  });
+
+  it("resets definitive failures and completed additions", () => {
+    assert.match(source, /error instanceof ApiRequestError && error\.status < 500/);
+    assert.match(source, /addItemAttemptRef\.current = null/);
+  });
+});

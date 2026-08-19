@@ -611,6 +611,7 @@ export class RestaurantService {
   }
 
   async addOrderItem(input: {
+    requestId: string;
     orderId: string;
     locationId: string;
     menuItemId: string;
@@ -626,11 +627,38 @@ export class RestaurantService {
       const order = await tx.restaurantOrder.findFirst({
         where: {
           id: input.orderId,
-          status: "DRAFT",
           restaurantTab: { locationId: input.locationId },
         },
       });
-      if (!order) throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      if (!order) throw new RestaurantError("Restaurant order was not found.", "NOT_FOUND");
+      const requestFingerprint = JSON.stringify({
+        orderId: input.orderId,
+        menuItemId: input.menuItemId,
+        quantity: input.quantity,
+        modifierIds: [...input.modifierIds].sort(),
+        allergyNotes: input.allergyNotes ?? null,
+        course: input.course ?? null,
+      });
+      const replay = await tx.restaurantOrderItem.findUnique({
+        where: {
+          restaurantOrderId_idempotencyKey: {
+            restaurantOrderId: input.orderId,
+            idempotencyKey: input.requestId,
+          },
+        },
+      });
+      if (replay) {
+        if (replay.requestFingerprint !== requestFingerprint) {
+          throw new RestaurantError(
+            "Restaurant item request id was reused with different details.",
+            "CONFLICT",
+          );
+        }
+        return replay;
+      }
+      if (order.status !== "DRAFT") {
+        throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      }
       const item = await tx.menuItem.findFirst({
         where: {
           id: input.menuItemId,
@@ -679,6 +707,8 @@ export class RestaurantService {
       }
       return tx.restaurantOrderItem.create({
         data: {
+          idempotencyKey: input.requestId,
+          requestFingerprint,
           restaurantOrderId: order.id,
           menuItemId: item.id,
           quantity: input.quantity,
