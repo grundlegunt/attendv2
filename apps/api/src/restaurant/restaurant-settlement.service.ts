@@ -387,7 +387,9 @@ export class RestaurantSettlementService {
         },
       });
       if (!tab) throw AppError.notFound("Restaurant tab was not found.");
-      if (tab.status === "CLOSED") return { tab, payments: [], alreadyClosed: true };
+      if (tab.status === "CLOSED") {
+        throw AppError.conflict("This restaurant tab has already been settled.");
+      }
       if (
         !["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"].includes(
           tab.status,
@@ -503,11 +505,9 @@ export class RestaurantSettlementService {
         tab,
         totals,
         payments,
-        alreadyClosed: false,
       };
     });
 
-    if (reservation.alreadyClosed) return this.tabView({ tabId: input.tabId });
     for (const reserved of reservation.payments) {
       if (reserved.payment.status !== "CREATED") continue;
       let result: ProviderPaymentIntentResult;
