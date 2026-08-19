@@ -1296,10 +1296,36 @@ export class RestaurantService {
   async transferOrder(input: {
     orderId: string;
     targetTabId: string;
+    requestId: string;
     locationId: string;
     actorId: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
+      const replayTransfer = async () => {
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            action: "restaurant_order.transferred",
+            entityType: "RestaurantOrder",
+            entityId: input.orderId,
+            locationId: input.locationId,
+            afterState: { path: ["requestId"], equals: input.requestId },
+          },
+          orderBy: { occurredAt: "desc" },
+        });
+        if (!replay) return null;
+        const details = replay.afterState as Record<string, unknown>;
+        if (replay.actorId !== input.actorId || details.toTabId !== input.targetTabId) {
+          throw new RestaurantError(
+            "Transfer request id was reused with different details.",
+            "CONFLICT",
+          );
+        }
+        return tx.restaurantOrder.findFirstOrThrow({
+          where: { id: input.orderId, restaurantTab: { locationId: input.locationId } },
+        });
+      };
+      const replay = await replayTransfer();
+      if (replay) return replay;
       const existingOrder = await tx.restaurantOrder.findFirst({
         where: { id: input.orderId, restaurantTab: { locationId: input.locationId } },
         select: { restaurantTabId: true },
@@ -1311,6 +1337,8 @@ export class RestaurantService {
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" IN (${Prisma.join(tabIds)}) ORDER BY "id" FOR UPDATE`,
       );
+      const concurrentReplay = await replayTransfer();
+      if (concurrentReplay) return concurrentReplay;
       const order = await tx.restaurantOrder.findFirst({
         where: {
           id: input.orderId,
@@ -1345,7 +1373,11 @@ export class RestaurantService {
         input,
         "restaurant_order.transferred",
         order.id,
-        { fromTabId: order.restaurantTabId, toTabId: target.id },
+        {
+          requestId: input.requestId,
+          fromTabId: order.restaurantTabId,
+          toTabId: target.id,
+        },
         "RestaurantOrder",
       );
       return updated;

@@ -5100,12 +5100,19 @@ describe("Milestone 6 server POS and menus", () => {
       .post(`/api/v1/restaurant-tabs/${source.body.id}/orders`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({});
-    const moved = await request(app.getHttpServer())
-      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/transfer`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ targetTabId: target.body.id });
-    expect(moved.status).toBe(201);
-    expect(moved.body.restaurantTabId).toBe(target.body.id);
+    const requestId = crypto.randomUUID();
+    const moves = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/transfer`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId, targetTabId: target.body.id }),
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/transfer`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId, targetTabId: target.body.id }),
+    ]);
+    expect(moves.map((move) => move.status)).toEqual([201, 201]);
+    expect(moves.every((move) => move.body.restaurantTabId === target.body.id)).toBe(true);
 
     const { prisma } = await import("@cinema/database");
     expect(

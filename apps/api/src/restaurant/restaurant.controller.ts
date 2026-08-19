@@ -180,8 +180,10 @@ export class RestaurantController {
     @Param("orderId") orderId: string,
     @Body(new ZodValidationPipe(transferRestaurantOrderRequestSchema)) body: unknown,
   ) {
+    const parsed = transferRestaurantOrderRequestSchema.parse(body);
     return this.restaurant.transferOrder({
-      ...transferRestaurantOrderRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.requestId ?? randomUUID(),
       orderId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
