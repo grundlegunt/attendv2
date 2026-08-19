@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import type { Response } from "express";
 import { z } from "zod";
 import { Permission } from "@cinema/auth";
@@ -74,8 +74,8 @@ export class ReportingController {
 
   @Post("expenses")
   @RequirePermissions(Permission.ReportsViewFinancial)
-  createExpense(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(expenseSchema)) body: unknown) {
-    return this.reporting.createExpense(this.location(actor), expenseSchema.parse(body));
+  createExpense(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(expenseSchema)) body: unknown) {
+    return this.reporting.createExpense(this.location(actor), actor.sub, expenseSchema.parse(body), requestId);
   }
 
   @Delete("expenses/:expenseId")

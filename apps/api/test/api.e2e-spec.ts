@@ -7533,6 +7533,23 @@ describe("Milestone 9 box office and workforce", () => {
 });
 
 describe("Milestone 10 management reporting", () => {
+  it("records concurrent expense retries once and rejects changed details", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const requestId = crypto.randomUUID();
+    const description = `Replay expense ${crypto.randomUUID()}`;
+    const payload = { category: "OTHER", description, amountCents: 1234, incurredAt: new Date().toISOString() };
+    const submit = () => request(app.getHttpServer()).post("/api/v1/reports/expenses").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send(payload);
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(first.body.id).toBe(replay.body.id);
+    expect(await prisma.expense.count({ where: { locationId: owner.locationId, description } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "expense.created", entityId: first.body.id } })).toBe(1);
+    const conflict = await request(app.getHttpServer()).post("/api/v1/reports/expenses").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send({ ...payload, amountCents: 4321 });
+    expect(conflict.status).toBe(409);
+  });
+
   it("reports exact ticket and F&B revenue per movie and showtime for a known period", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });

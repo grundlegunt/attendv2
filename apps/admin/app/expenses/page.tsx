@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 import { inclusiveReportRange, localDateInputValue } from "../report-range";
@@ -27,6 +27,7 @@ export default function ExpensesPage() {
   const [amount, setAmount] = useState("");
   const [incurredAt, setIncurredAt] = useState(localDateInputValue(today));
   const [notes, setNotes] = useState("");
+  const expenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const query = useMemo(() => new URLSearchParams(inclusiveReportRange(from, through)).toString(), [from, through]);
   const load = useCallback(async () => {
@@ -42,11 +43,15 @@ export default function ExpensesPage() {
     event.preventDefault(); setSaving(true); setError(null);
     const amountCents = Math.round(Number(amount) * 100);
     if (!Number.isFinite(amountCents) || amountCents <= 0) { setError("Enter an expense amount greater than zero."); setSaving(false); return; }
+    const payload = { category, vendor: vendor || undefined, description, amountCents, incurredAt: new Date(`${incurredAt}T12:00:00`).toISOString(), notes: notes || undefined };
+    const fingerprint = JSON.stringify(payload);
+    if (expenseAttemptRef.current?.fingerprint !== fingerprint) expenseAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      await apiFetch("/reports/expenses", { accessToken, method: "POST", body: JSON.stringify({ category, vendor: vendor || undefined, description, amountCents, incurredAt: new Date(`${incurredAt}T12:00:00`).toISOString(), notes: notes || undefined }) });
+      await apiFetch("/reports/expenses", { accessToken, method: "POST", headers: { "Idempotency-Key": expenseAttemptRef.current.requestId }, body: fingerprint });
+      expenseAttemptRef.current = null;
       setVendor(""); setDescription(""); setAmount(""); setNotes("");
       await load();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The expense could not be saved."); }
+    } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) expenseAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The expense could not be saved."); }
     finally { setSaving(false); }
   }
 
