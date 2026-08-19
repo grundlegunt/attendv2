@@ -171,6 +171,7 @@ export interface PublicDiningMenuResponse {
 }
 
 export const splitRestaurantTabRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
   showtimeSeatId: z.string().uuid(),
 });
 

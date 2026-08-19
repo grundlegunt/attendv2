@@ -1186,6 +1186,7 @@ export class RestaurantService {
 
   async splitTab(input: {
     tabId: string;
+    requestId: string;
     showtimeSeatId: string;
     locationId: string;
     actorId: string;
@@ -1194,6 +1195,30 @@ export class RestaurantService {
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${input.tabId} FOR UPDATE`,
       );
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          action: "restaurant_tab.split",
+          entityType: "RestaurantTab",
+          entityId: input.tabId,
+          locationId: input.locationId,
+          afterState: { path: ["requestId"], equals: input.requestId },
+        },
+        orderBy: { occurredAt: "desc" },
+      });
+      if (replay) {
+        const details = replay.afterState as Record<string, unknown>;
+        if (
+          replay.actorId !== input.actorId ||
+          details.showtimeSeatId !== input.showtimeSeatId ||
+          typeof details.targetTabId !== "string"
+        ) {
+          throw new RestaurantError(
+            "Split request id was reused with different details.",
+            "CONFLICT",
+          );
+        }
+        return { sourceTabId: input.tabId, targetTabId: details.targetTabId };
+      }
       const source = await tx.restaurantTab.findFirst({
         where: {
           id: input.tabId,
@@ -1234,6 +1259,7 @@ export class RestaurantService {
         data: { restaurantTabId: target.id },
       });
       await this.auditTabOperation(tx, input, "restaurant_tab.split", source.id, {
+        requestId: input.requestId,
         targetTabId: target.id,
         showtimeSeatId: input.showtimeSeatId,
         paymentAuthorizationInherited: false,
