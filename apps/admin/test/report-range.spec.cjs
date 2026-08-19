@@ -7,6 +7,7 @@ const ts = require("typescript");
 
 const helperPath = resolve(__dirname, "../app/report-range.ts");
 const dashboardPath = resolve(__dirname, "../app/management-dashboard.tsx");
+const expensesPath = resolve(__dirname, "../app/expenses/page.tsx");
 const compiled = ts.transpileModule(readFileSync(helperPath, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   fileName: helperPath,
@@ -54,5 +55,14 @@ describe("Admin report date ranges", () => {
     assert.match(dashboard, /const blob = await apiDownload\(path, \{ accessToken \}\)/);
     assert.match(dashboard, /reason instanceof ApiRequestError \? reason\.body\.message : fallbackMessage/);
     assert.doesNotMatch(dashboard, /await fetch\(`/);
+  });
+
+  it("keeps expense defaults local and uses the shared inclusive range", () => {
+    const expenses = readFileSync(expensesPath, "utf8");
+
+    assert.match(expenses, /localDateInputValue\(today\)/);
+    assert.match(expenses, /new URLSearchParams\(inclusiveReportRange\(from, through\)\)/);
+    assert.doesNotMatch(expenses, /toISOString\(\)\.slice\(0, 10\)/);
+    assert.doesNotMatch(expenses, /const nextDay/);
   });
 });

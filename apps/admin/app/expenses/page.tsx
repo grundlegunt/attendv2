@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
+import { inclusiveReportRange, localDateInputValue } from "../report-range";
 
 const categories = ["FILM_RENTAL", "FOOD_BEVERAGE", "PAYROLL", "OCCUPANCY", "MARKETING", "EQUIPMENT", "MAINTENANCE", "UTILITIES", "INSURANCE", "OTHER"] as const;
 type ExpenseCategory = (typeof categories)[number];
@@ -11,14 +12,11 @@ type ExpenseReport = { totals: { totalExpenseCents: number; count: number; byCat
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const categoryLabel = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-const dateInput = (date: Date) => date.toISOString().slice(0, 10);
-const nextDay = (value: string) => { const date = new Date(`${value}T00:00:00`); date.setDate(date.getDate() + 1); return date.toISOString(); };
-
 export default function ExpensesPage() {
   const { accessToken } = useAdminSession();
   const today = useMemo(() => new Date(), []);
-  const [from, setFrom] = useState(dateInput(new Date(today.getFullYear(), today.getMonth(), 1)));
-  const [through, setThrough] = useState(dateInput(today));
+  const [from, setFrom] = useState(localDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)));
+  const [through, setThrough] = useState(localDateInputValue(today));
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -27,10 +25,10 @@ export default function ExpensesPage() {
   const [vendor, setVendor] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [incurredAt, setIncurredAt] = useState(dateInput(today));
+  const [incurredAt, setIncurredAt] = useState(localDateInputValue(today));
   const [notes, setNotes] = useState("");
 
-  const query = useMemo(() => new URLSearchParams({ from: new Date(`${from}T00:00:00`).toISOString(), to: nextDay(through) }).toString(), [from, through]);
+  const query = useMemo(() => new URLSearchParams(inclusiveReportRange(from, through)).toString(), [from, through]);
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try { setReport(await apiFetch<ExpenseReport>(`/reports/expenses?${query}`, { accessToken })); }
