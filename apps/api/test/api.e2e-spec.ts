@@ -139,6 +139,43 @@ describe("Saved schedule plan publishing", () => {
       .expect(200);
   });
 
+  it("replays concurrent attempts to duplicate a schedule plan", async () => {
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const source = await request(app.getHttpServer())
+      .post("/api/v1/cinema/schedule-plans")
+      .set(auth)
+      .send({
+        name: `Duplicate source ${Date.now()}`,
+        weekStartsAt: "2034-12-11T00:00:00.000Z",
+      })
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const copyName = `Replay-safe copy ${Date.now()}`;
+    const submit = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/cinema/schedule-plans/${source.body.id}/duplicate`)
+        .set(auth)
+        .set("Idempotency-Key", requestId)
+        .send({ name: copyName });
+
+    const [created, replayed] = await Promise.all([submit(), submit()]);
+
+    expect(created.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body.id).toBe(created.body.id);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/schedule-plans/${created.body.id}`)
+      .set(auth)
+      .expect(200);
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/schedule-plans/${source.body.id}`)
+      .set(auth)
+      .expect(200);
+  });
+
   it("requires a fresh validation and atomically publishes a future plan", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);
