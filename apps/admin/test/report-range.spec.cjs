@@ -17,7 +17,7 @@ const helperModule = new Module(helperPath, module);
 helperModule.filename = helperPath;
 helperModule.paths = module.paths;
 helperModule._compile(compiled.outputText, helperPath);
-const { inclusiveReportRange, localDateInputValue } = helperModule.exports;
+const { inclusiveDateCutoff, inclusiveReportRange, localDateInputValue } = helperModule.exports;
 
 describe("Admin report date ranges", () => {
   it("includes the entire selected end date", () => {
@@ -35,6 +35,14 @@ describe("Admin report date ranges", () => {
     assert.equal(localDateInputValue(new Date(range.from)), "2026-08-17");
     assert.equal(localDateInputValue(new Date(new Date(range.to).getTime() - 1)), "2026-08-19");
     assert.throws(() => inclusiveReportRange("2026-08-20", "2026-08-19"));
+  });
+
+  it("includes the final millisecond in a selected cutoff date", () => {
+    const cutoff = new Date(inclusiveDateCutoff("2026-08-18"));
+    const nextDay = new Date(inclusiveReportRange("2026-08-18", "2026-08-18").to);
+
+    assert.equal(nextDay.getTime() - cutoff.getTime(), 1);
+    assert.equal(localDateInputValue(cutoff), "2026-08-18");
   });
 
   it("uses the inclusive range for every management CSV export", () => {
@@ -56,6 +64,13 @@ describe("Admin report date ranges", () => {
     assert.match(dashboard, /const blob = await apiDownload\(path, \{ accessToken \}\)/);
     assert.match(dashboard, /reason instanceof ApiRequestError \? reason\.body\.message : fallbackMessage/);
     assert.doesNotMatch(dashboard, /await fetch\(`/);
+  });
+
+  it("uses the inclusive cutoff for win-back customer previews", () => {
+    const dashboard = readFileSync(dashboardPath, "utf8");
+
+    assert.match(dashboard, /inclusiveDateCutoff\(inactiveSince\)/);
+    assert.doesNotMatch(dashboard, /T23:59:59/);
   });
 
   it("keeps expense defaults local and uses the shared inclusive range", () => {

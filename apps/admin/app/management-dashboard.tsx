@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { apiDownload, apiFetch, ApiRequestError } from "./lib/api-client";
 import { BrandingSummary, CustomerSiteCopyEditor, type BrandingDraft, type BrandingSettings, type CustomerSiteCopy } from "./branding-editor";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
-import { inclusiveReportRange, localDateInputValue } from "./report-range";
+import { inclusiveDateCutoff, inclusiveReportRange, localDateInputValue } from "./report-range";
 
 type RevenueReport = {
   totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number; averageTotalSpendPerPatronCents: number; concessionAttachRatePercent: number };
@@ -160,7 +160,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   }
   async function previewCustomerSegment(event: FormEvent) {
     event.preventDefault(); setError(null);
-    try { setCustomerSegment(await apiFetch<CustomerRecencySegment>(`/reports/customer-recency?inactiveSince=${encodeURIComponent(new Date(`${inactiveSince}T23:59:59`).toISOString())}&limit=25`, { accessToken })); }
+    try { setCustomerSegment(await apiFetch<CustomerRecencySegment>(`/reports/customer-recency?inactiveSince=${encodeURIComponent(inclusiveDateCutoff(inactiveSince))}&limit=25`, { accessToken })); }
     catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The customer segment could not be previewed."); }
   }
 

@@ -31,3 +31,8 @@ export function inclusiveReportRange(from: string, through: string): {
   if (start >= endExclusive) throw new Error("The report start date must be on or before the end date.");
   return { from: start.toISOString(), to: endExclusive.toISOString() };
 }
+
+export function inclusiveDateCutoff(value: string): string {
+  const { to } = inclusiveReportRange(value, value);
+  return new Date(new Date(to).getTime() - 1).toISOString();
+}
