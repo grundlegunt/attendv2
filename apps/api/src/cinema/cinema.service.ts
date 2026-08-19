@@ -1375,29 +1375,85 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     id: string,
     index: number,
     startsAtValue: string,
+    expectedStartsAtValue: string,
+    requestId: string = randomUUID(),
   ) {
     const locationId = this.requireLocation(actor);
-    const plan = await prisma.schedulePlan.findFirst({
-      where: { id, locationId },
-    });
-    if (!plan) throw AppError.notFound("Schedule plan not found.");
-    const snapshot = Array.isArray(plan.snapshotJson)
-      ? [...plan.snapshotJson]
-      : [];
-    if (!Number.isInteger(index) || index < 0 || index >= snapshot.length)
+    if (!Number.isInteger(index) || index < 0) {
       throw AppError.validationFailed("Saved showtime not found in this plan.");
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
     const startsAt = new Date(startsAtValue);
-    const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
-    if (startsAt < plan.weekStartsAt || startsAt >= weekEndsAt)
-      throw AppError.validationFailed(
-        "The showing must stay within this plan's week.",
-      );
-    const existing = snapshot[index];
-    if (!existing || typeof existing !== "object" || Array.isArray(existing))
-      throw AppError.validationFailed("The saved showtime is invalid.");
-    const changed = { ...existing, startsAt: startsAt.toISOString() };
-    snapshot[index] = changed;
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({
+        locationId,
+        planId: id,
+        index,
+        startsAt: startsAtValue,
+        expectedStartsAt: expectedStartsAtValue,
+      }))
+      .digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "schedule_plan.showtime_updated",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The saved-showing update key was already used with different details.",
+          );
+        }
+        const replayedPlan = await tx.schedulePlan.findFirst({
+          where: { id: replay.entityId, locationId },
+          select: {
+            id: true,
+            name: true,
+            weekStartsAt: true,
+            createdAt: true,
+            snapshotJson: true,
+          },
+        });
+        if (!replayedPlan) {
+          throw AppError.conflict("The original saved plan is no longer available.");
+        }
+        return replayedPlan;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      const plan = await tx.schedulePlan.findFirst({
+        where: { id, locationId },
+      });
+      if (!plan) throw AppError.notFound("Schedule plan not found.");
+      const snapshot = Array.isArray(plan.snapshotJson)
+        ? [...plan.snapshotJson]
+        : [];
+      if (index >= snapshot.length) {
+        throw AppError.validationFailed("Saved showtime not found in this plan.");
+      }
+      const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
+      if (startsAt < plan.weekStartsAt || startsAt >= weekEndsAt) {
+        throw AppError.validationFailed(
+          "The showing must stay within this plan's week.",
+        );
+      }
+      const existing = snapshot[index];
+      if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+        throw AppError.validationFailed("The saved showtime is invalid.");
+      }
+      if ((existing as { startsAt?: unknown }).startsAt !== expectedStartsAtValue) {
+        throw AppError.conflict(
+          "This saved showing changed. Refresh the plan before changing its time.",
+        );
+      }
+      const changed = { ...existing, startsAt: startsAt.toISOString() };
+      snapshot[index] = changed;
       const saved = await tx.schedulePlan.update({
         where: { id: plan.id },
         data: { snapshotJson: snapshot as Prisma.InputJsonValue },
@@ -1424,6 +1480,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           afterState: {
             showtime: changed as Prisma.InputJsonValue,
             showtimeIndex: index,
+            requestId,
+            requestFingerprint,
           },
         },
       });

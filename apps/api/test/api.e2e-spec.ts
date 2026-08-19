@@ -234,6 +234,77 @@ describe("Saved schedule plan publishing", () => {
       .expect(200);
   });
 
+  it("replays a saved-showing time change and rejects stale edits", async () => {
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const bootstrap = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set(auth)
+      .expect(200);
+    const movie = bootstrap.body.location.organization.movies[0];
+    const auditorium = bootstrap.body.location.auditoriums[0];
+    const priceTier = bootstrap.body.location.organization.priceTiers[0];
+    const plan = await request(app.getHttpServer())
+      .post("/api/v1/cinema/schedule-plans")
+      .set(auth)
+      .send({
+        name: `Time-change replay ${Date.now()}`,
+        weekStartsAt: "2034-12-25T00:00:00.000Z",
+      })
+      .expect(201);
+    const addShowing = (startsAt: string) =>
+      request(app.getHttpServer())
+        .post(`/api/v1/cinema/schedule-plans/${plan.body.id}/showtimes`)
+        .set(auth)
+        .send({
+          movieId: movie.id,
+          auditoriumId: auditorium.id,
+          priceTierId: priceTier.id,
+          startsAt,
+          onSale: false,
+          presentation: "STANDARD",
+          filmSeriesId: null,
+          format: null,
+        });
+    const originalStartsAt = "2034-12-26T18:00:00.000Z";
+    const changedStartsAt = "2034-12-26T20:00:00.000Z";
+    await addShowing(originalStartsAt).expect(201);
+    await addShowing("2034-12-27T18:00:00.000Z").expect(201);
+    const requestId = crypto.randomUUID();
+    const changeTime = () =>
+      request(app.getHttpServer())
+        .patch(`/api/v1/cinema/schedule-plans/${plan.body.id}/showtimes/0`)
+        .set(auth)
+        .set("Idempotency-Key", requestId)
+        .send({ startsAt: changedStartsAt, expectedStartsAt: originalStartsAt });
+
+    const [changed, replayed] = await Promise.all([changeTime(), changeTime()]);
+
+    expect(changed.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(changed.body.snapshotJson).toHaveLength(2);
+    expect(replayed.body.snapshotJson).toEqual(changed.body.snapshotJson);
+    expect(changed.body.snapshotJson[0].startsAt).toBe(changedStartsAt);
+    expect(changed.body.snapshotJson[1].startsAt).toBe(
+      "2034-12-27T18:00:00.000Z",
+    );
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/schedule-plans/${plan.body.id}/showtimes/0`)
+      .set(auth)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .send({
+        startsAt: "2034-12-26T21:00:00.000Z",
+        expectedStartsAt: originalStartsAt,
+      })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/schedule-plans/${plan.body.id}`)
+      .set(auth)
+      .expect(200);
+  });
+
   it("requires a fresh validation and atomically publishes a future plan", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);
