@@ -187,8 +187,18 @@ export class CinemaController {
   @Delete("schedule-plans/:id/showtimes/:index")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  removeSchedulePlanShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Param("index") index: string) {
-    return this.cinemaService.removeSchedulePlanShowtime(actor, id, Number(index));
+  removeSchedulePlanShowtime(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Param("index") index: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.removeSchedulePlanShowtime(
+      actor,
+      id,
+      Number(index),
+      requestId,
+    );
   }
 
   @Patch("schedule-plans/:id/showtimes/:index")

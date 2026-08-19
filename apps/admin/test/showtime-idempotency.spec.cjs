@@ -12,10 +12,12 @@ test("showtime creation retains stable retry identities", () => {
   assert.match(source, /schedulePlanAttemptRef = useRef/);
   assert.match(source, /duplicatePlanAttemptRef = useRef/);
   assert.match(source, /addPlanShowtimeAttemptRef = useRef/);
+  assert.match(source, /removePlanShowtimeAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": showtimeAttemptRef\.current!/);
   assert.match(source, /"Idempotency-Key": quickShowtimeAttemptRef\.current\.requestId/);
   assert.match(source, /"Idempotency-Key": duplicateDayAttemptRef\.current\.requestId/);
   assert.match(source, /"Idempotency-Key": schedulePlanAttemptRef\.current\.requestId/);
   assert.match(source, /"Idempotency-Key": duplicatePlanAttemptRef\.current\.requestId/);
   assert.match(source, /"Idempotency-Key": addPlanShowtimeAttemptRef\.current\.requestId/);
+  assert.match(source, /"Idempotency-Key": removePlanShowtimeAttemptRef\.current!\.requestId/);
 });

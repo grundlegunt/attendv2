@@ -176,6 +176,64 @@ describe("Saved schedule plan publishing", () => {
       .expect(200);
   });
 
+  it("replays a saved-showing removal without deleting the next item", async () => {
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const bootstrap = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/bootstrap")
+      .set(auth)
+      .expect(200);
+    const movie = bootstrap.body.location.organization.movies[0];
+    const auditorium = bootstrap.body.location.auditoriums[0];
+    const priceTier = bootstrap.body.location.organization.priceTiers[0];
+    const plan = await request(app.getHttpServer())
+      .post("/api/v1/cinema/schedule-plans")
+      .set(auth)
+      .send({
+        name: `Removal replay ${Date.now()}`,
+        weekStartsAt: "2034-12-18T00:00:00.000Z",
+      })
+      .expect(201);
+    const addShowing = (startsAt: string) =>
+      request(app.getHttpServer())
+        .post(`/api/v1/cinema/schedule-plans/${plan.body.id}/showtimes`)
+        .set(auth)
+        .send({
+          movieId: movie.id,
+          auditoriumId: auditorium.id,
+          priceTierId: priceTier.id,
+          startsAt,
+          onSale: false,
+          presentation: "STANDARD",
+          filmSeriesId: null,
+          format: null,
+        });
+    await addShowing("2034-12-19T18:00:00.000Z").expect(201);
+    await addShowing("2034-12-20T18:00:00.000Z").expect(201);
+    const requestId = crypto.randomUUID();
+    const remove = () =>
+      request(app.getHttpServer())
+        .delete(`/api/v1/cinema/schedule-plans/${plan.body.id}/showtimes/0`)
+        .set(auth)
+        .set("Idempotency-Key", requestId);
+
+    const [removed, replayed] = await Promise.all([remove(), remove()]);
+
+    expect(removed.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(removed.body.snapshotJson).toHaveLength(1);
+    expect(replayed.body.snapshotJson).toEqual(removed.body.snapshotJson);
+    expect(removed.body.snapshotJson[0].startsAt).toBe(
+      "2034-12-20T18:00:00.000Z",
+    );
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/schedule-plans/${plan.body.id}`)
+      .set(auth)
+      .expect(200);
+  });
+
   it("requires a fresh validation and atomically publishes a future plan", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);

@@ -230,6 +230,7 @@ export default function AdminPage() {
   const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicatePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const addPlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const removePlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -395,20 +396,34 @@ export default function AdminPage() {
     )
       return;
     setError(null);
+    const fingerprint = `${plan.id}:${index}`;
+    if (removePlanShowtimeAttemptRef.current?.fingerprint !== fingerprint) {
+      removePlanShowtimeAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       const updated = await apiFetch<SchedulePlan>(
         `/cinema/schedule-plans/${plan.id}/showtimes/${index}`,
         {
           accessToken: token ?? undefined,
           method: "DELETE",
+          headers: {
+            "Idempotency-Key": removePlanShowtimeAttemptRef.current!.requestId,
+          },
         },
       );
+      removePlanShowtimeAttemptRef.current = null;
       setSchedulePlans((current) =>
         current.map((candidate) =>
           candidate.id === updated.id ? updated : candidate,
         ),
       );
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        removePlanShowtimeAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
