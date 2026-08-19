@@ -4582,11 +4582,23 @@ describe("Milestone 6 server POS and menus", () => {
       autoSettleAuthorized: false,
     });
 
+    const orderRequestId = crypto.randomUUID();
     const order = await request(app.getHttpServer())
       .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({});
+      .send({ requestId: orderRequestId });
     expect(order.status).toBe(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ requestId: orderRequestId })
+      .expect(201)
+      .expect(({ body }) => expect(body.id).toBe(order.body.id));
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ requestId: orderRequestId, showtimeSeatId: crypto.randomUUID() })
+      .expect(409);
     let burgerRequest: { requestId: string; body: Record<string, unknown>; itemId: string } | null = null;
     for (const item of [burger, cocktail]) {
       const modifierIds = item.modifierGroups

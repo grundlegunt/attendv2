@@ -14,6 +14,7 @@ export const openWalkInTabRequestSchema = z.object({
 });
 
 export const createRestaurantOrderRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
   showtimeSeatId: z.string().uuid().optional(),
 });
 

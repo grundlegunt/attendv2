@@ -576,6 +576,7 @@ export class RestaurantService {
   }
 
   async createOrder(input: {
+    requestId: string;
     tabId: string;
     locationId: string;
     actorId: string;
@@ -589,11 +590,35 @@ export class RestaurantService {
         where: {
           id: input.tabId,
           locationId: input.locationId,
-          status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"] },
         },
         include: { seats: true },
       });
-      if (!tab) throw new RestaurantError("Open restaurant tab was not found.", "NOT_FOUND");
+      if (!tab) throw new RestaurantError("Restaurant tab was not found.", "NOT_FOUND");
+      const requestFingerprint = JSON.stringify({
+        tabId: input.tabId,
+        actorId: input.actorId,
+        showtimeSeatId: input.showtimeSeatId ?? null,
+      });
+      const replay = await tx.restaurantOrder.findUnique({
+        where: {
+          restaurantTabId_idempotencyKey: {
+            restaurantTabId: input.tabId,
+            idempotencyKey: input.requestId,
+          },
+        },
+      });
+      if (replay) {
+        if (replay.requestFingerprint !== requestFingerprint) {
+          throw new RestaurantError(
+            "Restaurant order request id was reused with different details.",
+            "CONFLICT",
+          );
+        }
+        return replay;
+      }
+      if (!["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"].includes(tab.status)) {
+        throw new RestaurantError("Open restaurant tab was not found.", "NOT_FOUND");
+      }
       if (
         input.showtimeSeatId &&
         !tab.seats.some((seat) => seat.showtimeSeatId === input.showtimeSeatId)
@@ -602,6 +627,8 @@ export class RestaurantService {
       }
       return tx.restaurantOrder.create({
         data: {
+          idempotencyKey: input.requestId,
+          requestFingerprint,
           restaurantTabId: tab.id,
           serverEmployeeId: input.actorId,
           showtimeSeatId: input.showtimeSeatId,
