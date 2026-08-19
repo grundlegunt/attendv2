@@ -176,6 +176,7 @@ export const splitRestaurantTabRequestSchema = z.object({
 });
 
 export const transferRestaurantOrderRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
   targetTabId: z.string().uuid(),
 });
 
