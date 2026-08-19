@@ -8,6 +8,7 @@ const ts = require("typescript");
 const helperPath = resolve(__dirname, "../app/report-range.ts");
 const dashboardPath = resolve(__dirname, "../app/management-dashboard.tsx");
 const expensesPath = resolve(__dirname, "../app/expenses/page.tsx");
+const controlsPath = resolve(__dirname, "../app/management-controls.tsx");
 const compiled = ts.transpileModule(readFileSync(helperPath, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   fileName: helperPath,
@@ -64,5 +65,14 @@ describe("Admin report date ranges", () => {
     assert.match(expenses, /new URLSearchParams\(inclusiveReportRange\(from, through\)\)/);
     assert.doesNotMatch(expenses, /toISOString\(\)\.slice\(0, 10\)/);
     assert.doesNotMatch(expenses, /const nextDay/);
+  });
+
+  it("keeps refund-history defaults local and includes the selected end date", () => {
+    const controls = readFileSync(controlsPath, "utf8");
+
+    assert.match(controls, /localDateInputValue\(new Date\(\)\)/);
+    assert.match(controls, /inclusiveReportRange\(historyFrom, historyTo\)/);
+    assert.doesNotMatch(controls, /historyTo[\s\S]{0,100}toISOString\(\)\.slice\(0, 10\)/);
+    assert.doesNotMatch(controls, /new Date\(`\$\{historyTo\}T00:00:00`\)/);
   });
 });
