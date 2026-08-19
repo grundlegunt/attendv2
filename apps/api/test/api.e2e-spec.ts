@@ -188,10 +188,19 @@ describe("Saved schedule plan publishing", () => {
     const startsAt = "2035-01-02T18:00:00.000Z";
     const createdPlan = await request(app.getHttpServer()).post("/api/v1/cinema/schedule-plans").set(auth).send({ name: `Publish test ${Date.now()}`, weekStartsAt }).expect(201);
     const planId = createdPlan.body.id as string;
-    await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/showtimes`).set(auth).send({
-      movieId: movie.id, auditoriumId: auditorium.id, priceTierId: priceTier.id, startsAt,
-      onSale: false, presentation: "STANDARD", filmSeriesId: null, format: null,
-    }).expect(201);
+    const addRequestId = crypto.randomUUID();
+    const addShowing = () => request(app.getHttpServer())
+      .post(`/api/v1/cinema/schedule-plans/${planId}/showtimes`)
+      .set(auth)
+      .set("Idempotency-Key", addRequestId)
+      .send({
+        movieId: movie.id, auditoriumId: auditorium.id, priceTierId: priceTier.id, startsAt,
+        onSale: false, presentation: "STANDARD", filmSeriesId: null, format: null,
+      });
+    const [added, replayedAdd] = await Promise.all([addShowing(), addShowing()]);
+    expect(added.status).toBe(201);
+    expect(replayedAdd.status).toBe(201);
+    expect(replayedAdd.body.snapshotJson).toEqual(added.body.snapshotJson);
 
     const firstCheck = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
     expect(firstCheck.body).toEqual(expect.objectContaining({ valid: true, showtimeCount: 1, expectedUpdatedAt: expect.any(String) }));

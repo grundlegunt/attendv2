@@ -163,8 +163,18 @@ export class CinemaController {
   @Post("schedule-plans/:id/showtimes")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  addSchedulePlanShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Body(new ZodValidationPipe(createShowtimeRequestSchema)) body: unknown) {
-    return this.cinemaService.addSchedulePlanShowtime(actor, id, createShowtimeRequestSchema.parse(body));
+  addSchedulePlanShowtime(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(createShowtimeRequestSchema)) body: unknown,
+  ) {
+    return this.cinemaService.addSchedulePlanShowtime(
+      actor,
+      id,
+      createShowtimeRequestSchema.parse(body),
+      requestId,
+    );
   }
 
   @Patch("schedule-plans/:id")

@@ -1081,8 +1081,15 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     actor: RequestActor,
     id: string,
     input: ShowtimeInput,
+    requestId: string = randomUUID(),
   ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, planId: id, ...input }))
+      .digest("hex");
     const [plan, location] = await Promise.all([
       prisma.schedulePlan.findFirst({ where: { id, locationId } }),
       prisma.location.findUnique({
@@ -1140,9 +1147,6 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       throw AppError.validationFailed(
         "The saved showing contains an unavailable film, auditorium, price tier, or series.",
       );
-    const snapshot = Array.isArray(plan.snapshotJson)
-      ? [...plan.snapshotJson]
-      : [];
     const showtime = {
       movieId: input.movieId,
       auditoriumId: input.auditoriumId,
@@ -1153,15 +1157,53 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       presentation: input.presentation,
       format: input.format ?? null,
     };
-    snapshot.push(showtime);
-    snapshot.sort((left, right) =>
-      String((left as { startsAt?: unknown }).startsAt ?? "").localeCompare(
-        String((right as { startsAt?: unknown }).startsAt ?? ""),
-      ),
-    );
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "schedule_plan.showtime_added",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The saved-showing idempotency key was already used with different details.",
+          );
+        }
+        const replayedPlan = await tx.schedulePlan.findFirst({
+          where: { id: replay.entityId, locationId },
+          select: {
+            id: true,
+            name: true,
+            weekStartsAt: true,
+            createdAt: true,
+            snapshotJson: true,
+          },
+        });
+        if (!replayedPlan) {
+          throw AppError.conflict("The original saved plan is no longer available.");
+        }
+        return replayedPlan;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      const currentPlan = await tx.schedulePlan.findFirst({
+        where: { id, locationId },
+      });
+      if (!currentPlan) throw AppError.notFound("Schedule plan not found.");
+      const snapshot = Array.isArray(currentPlan.snapshotJson)
+        ? [...currentPlan.snapshotJson]
+        : [];
+      snapshot.push(showtime);
+      snapshot.sort((left, right) =>
+        String((left as { startsAt?: unknown }).startsAt ?? "").localeCompare(
+          String((right as { startsAt?: unknown }).startsAt ?? ""),
+        ),
+      );
       const saved = await tx.schedulePlan.update({
-        where: { id: plan.id },
+        where: { id: currentPlan.id },
         data: { snapshotJson: snapshot as Prisma.InputJsonValue },
         select: {
           id: true,
@@ -1177,9 +1219,14 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           actorId: actor.sub,
           action: "schedule_plan.showtime_added",
           entityType: "SchedulePlan",
-          entityId: plan.id,
+          entityId: currentPlan.id,
           locationId,
-          afterState: { showtime, showtimeCount: snapshot.length },
+          afterState: {
+            showtime,
+            showtimeCount: snapshot.length,
+            requestId,
+            requestFingerprint,
+          },
         },
       });
       return saved;
