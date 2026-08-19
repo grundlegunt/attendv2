@@ -49,6 +49,7 @@ type MenuItem = Menu["categories"][number]["items"][number];
 export function MenuManager({ accessToken }: { accessToken: string }) {
   const [menu, setMenu] = useState<Menu | null>(null);
   const [name, setName] = useState("");
+  const itemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [price, setPrice] = useState(0);
@@ -214,25 +215,28 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function createItem(event: FormEvent) {
     event.preventDefault();
+    const body = {
+      menuCategoryId: categoryId,
+      kitchenStationId: stationId,
+      name,
+      description: description || undefined,
+      imageUrl: imageUrl || undefined,
+      priceCents: Math.round(price * 100),
+      chargeCategory,
+      isVegan,
+      isGlutenFree,
+      sortOrder: menu?.categories.find((category) => category.id === categoryId)?.items.length ?? 0,
+    };
+    const fingerprint = JSON.stringify(body);
+    if (itemAttemptRef.current?.fingerprint !== fingerprint) itemAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/restaurant-menu/items", {
         method: "POST",
         accessToken,
-        body: JSON.stringify({
-          menuCategoryId: categoryId,
-          kitchenStationId: stationId,
-          name,
-          description: description || undefined,
-          imageUrl: imageUrl || undefined,
-          priceCents: Math.round(price * 100),
-          chargeCategory,
-          isVegan,
-          isGlutenFree,
-          sortOrder:
-            menu?.categories.find((category) => category.id === categoryId)
-              ?.items.length ?? 0,
-        }),
+        headers: { "Idempotency-Key": itemAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      itemAttemptRef.current = null;
       setImageUrl("");
       setName("");
       setDescription("");
@@ -243,6 +247,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       setMessage("Menu item created.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) itemAttemptRef.current = null;
       setMessage(
         error instanceof ApiRequestError
           ? error.body.message

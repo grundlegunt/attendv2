@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { Permission } from "@cinema/auth";
 import {
   createKitchenStationRequestSchema,
@@ -101,12 +102,14 @@ export class MenuController {
   @RequirePermissions(Permission.MenuEdit)
   item(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createMenuItemRequestSchema)) body: unknown,
   ) {
     return this.restaurant.createMenuItem({
       ...createMenuItemRequestSchema.parse(body),
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
     });
   }
 
