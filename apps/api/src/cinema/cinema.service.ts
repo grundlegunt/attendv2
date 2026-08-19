@@ -1281,19 +1281,61 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     actor: RequestActor,
     id: string,
     index: number,
+    requestId: string = randomUUID(),
   ) {
     const locationId = this.requireLocation(actor);
-    const plan = await prisma.schedulePlan.findFirst({
-      where: { id, locationId },
-    });
-    if (!plan) throw AppError.notFound("Schedule plan not found.");
-    const snapshot = Array.isArray(plan.snapshotJson)
-      ? [...plan.snapshotJson]
-      : [];
-    if (!Number.isInteger(index) || index < 0 || index >= snapshot.length)
+    if (!Number.isInteger(index) || index < 0) {
       throw AppError.validationFailed("Saved showtime not found in this plan.");
-    const [removed] = snapshot.splice(index, 1);
-    const updated = await prisma.$transaction(async (tx) => {
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, planId: id, index }))
+      .digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "schedule_plan.showtime_removed",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The saved-showing removal key was already used with different details.",
+          );
+        }
+        const replayedPlan = await tx.schedulePlan.findFirst({
+          where: { id: replay.entityId, locationId },
+          select: {
+            id: true,
+            name: true,
+            weekStartsAt: true,
+            createdAt: true,
+            snapshotJson: true,
+          },
+        });
+        if (!replayedPlan) {
+          throw AppError.conflict("The original saved plan is no longer available.");
+        }
+        return replayedPlan;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      const plan = await tx.schedulePlan.findFirst({
+        where: { id, locationId },
+      });
+      if (!plan) throw AppError.notFound("Schedule plan not found.");
+      const snapshot = Array.isArray(plan.snapshotJson)
+        ? [...plan.snapshotJson]
+        : [];
+      if (index >= snapshot.length) {
+        throw AppError.validationFailed("Saved showtime not found in this plan.");
+      }
+      const [removed] = snapshot.splice(index, 1);
       const saved = await tx.schedulePlan.update({
         where: { id: plan.id },
         data: { snapshotJson: snapshot as Prisma.InputJsonValue },
@@ -1317,12 +1359,15 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             showtime: removed as Prisma.InputJsonValue,
             showtimeIndex: index,
           },
-          afterState: { showtimeCount: snapshot.length },
+          afterState: {
+            showtimeCount: snapshot.length,
+            requestId,
+            requestFingerprint,
+          },
         },
       });
       return saved;
     });
-    return updated;
   }
 
   async updateSchedulePlanShowtime(
