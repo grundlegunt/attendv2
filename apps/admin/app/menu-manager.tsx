@@ -60,10 +60,12 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [stationId, setStationId] = useState("");
   const [message, setMessage] = useState("");
   const [categoryName, setCategoryName] = useState("");
+  const categoryAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState("");
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [editingCategorySortOrder, setEditingCategorySortOrder] = useState(0);
   const [stationName, setStationName] = useState("");
+  const stationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [stationDisplayType, setStationDisplayType] = useState("KITCHEN");
   const [editingStationId, setEditingStationId] = useState("");
   const [editingStationName, setEditingStationName] = useState("");
@@ -267,19 +269,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function createCategory(event: FormEvent) {
     event.preventDefault();
+    const body = JSON.stringify({
+      name: categoryName,
+      sortOrder: menu?.categories.length ?? 0,
+    });
+    if (categoryAttemptRef.current?.fingerprint !== body) categoryAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/restaurant-menu/categories", {
         method: "POST",
         accessToken,
-        body: JSON.stringify({
-          name: categoryName,
-          sortOrder: menu?.categories.length ?? 0,
-        }),
+        headers: { "Idempotency-Key": categoryAttemptRef.current.requestId },
+        body,
       });
+      categoryAttemptRef.current = null;
       setCategoryName("");
       setMessage("Category created.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) categoryAttemptRef.current = null;
       showError(error, "Category could not be created.");
     }
   }
@@ -304,19 +311,24 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function createStation(event: FormEvent) {
     event.preventDefault();
+    const body = JSON.stringify({
+      name: stationName,
+      displayType: stationDisplayType,
+    });
+    if (stationAttemptRef.current?.fingerprint !== body) stationAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/restaurant-menu/stations", {
         method: "POST",
         accessToken,
-        body: JSON.stringify({
-          name: stationName,
-          displayType: stationDisplayType,
-        }),
+        headers: { "Idempotency-Key": stationAttemptRef.current.requestId },
+        body,
       });
+      stationAttemptRef.current = null;
       setStationName("");
       setMessage("Kitchen station created.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) stationAttemptRef.current = null;
       showError(error, "Station could not be created.");
     }
   }

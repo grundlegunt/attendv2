@@ -10,3 +10,10 @@ test("menu item creation retains a stable retry identity", () => {
   assert.match(source, /"Idempotency-Key": itemAttemptRef\.current\.requestId/);
   assert.match(source, /error\.status < 500/);
 });
+
+test("menu structure creation retains stable retry identities", () => {
+  assert.match(source, /categoryAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": categoryAttemptRef\.current\.requestId/);
+  assert.match(source, /stationAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": stationAttemptRef\.current\.requestId/);
+});
