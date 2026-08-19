@@ -117,8 +117,16 @@ export class CinemaController {
   @Post("schedule-plans")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  createSchedulePlan(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(createSchedulePlanSchema)) body: unknown) {
-    return this.cinemaService.createSchedulePlan(actor, createSchedulePlanSchema.parse(body));
+  createSchedulePlan(
+    @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(createSchedulePlanSchema)) body: unknown,
+  ) {
+    return this.cinemaService.createSchedulePlan(
+      actor,
+      createSchedulePlanSchema.parse(body),
+      requestId,
+    );
   }
 
   @Post("schedule-plans/:id/validate")

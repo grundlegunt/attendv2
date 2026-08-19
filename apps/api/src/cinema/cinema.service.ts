@@ -401,63 +401,104 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
   async createSchedulePlan(
     actor: RequestActor,
     input: { name: string; weekStartsAt: string },
+    requestId: string = randomUUID(),
   ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, ...input }))
+      .digest("hex");
     const weekStartsAt = new Date(input.weekStartsAt);
     const weekEndsAt = new Date(weekStartsAt.getTime() + 7 * 86_400_000);
-    const showtimes = await prisma.showtime.findMany({
-      where: {
-        auditorium: { locationId },
-        startsAt: { gte: weekStartsAt, lt: weekEndsAt },
-      },
-      select: {
-        movieId: true,
-        auditoriumId: true,
-        priceTierId: true,
-        startsAt: true,
-        onSale: true,
-        filmSeriesId: true,
-        presentation: true,
-        format: true,
-      },
-      orderBy: { startsAt: "asc" },
-    });
-    const snapshot = showtimes.map((showtime) => ({
-      ...showtime,
-      startsAt: showtime.startsAt.toISOString(),
-    }));
     try {
-      const plan = await prisma.schedulePlan.create({
-        data: {
-          locationId,
-          name: input.name,
-          weekStartsAt,
-          snapshotJson: snapshot,
-        },
-        select: {
-          id: true,
-          name: true,
-          weekStartsAt: true,
-          createdAt: true,
-          snapshotJson: true,
-        },
-      });
-      await prisma.auditEvent.create({
-        data: {
-          actorType: AuditActorType.EMPLOYEE,
-          actorId: actor.sub,
-          action: "schedule_plan.created",
-          entityType: "SchedulePlan",
-          entityId: plan.id,
-          locationId,
-          afterState: {
-            name: plan.name,
-            weekStartsAt: plan.weekStartsAt.toISOString(),
-            showtimeCount: showtimes.length,
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "schedule_plan.created",
+            afterState: { path: ["requestId"], equals: requestId },
           },
-        },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The schedule-plan idempotency key was already used with different details.",
+            );
+          }
+          const plan = await tx.schedulePlan.findFirst({
+            where: { id: replay.entityId, locationId },
+            select: {
+              id: true,
+              name: true,
+              weekStartsAt: true,
+              createdAt: true,
+              snapshotJson: true,
+            },
+          });
+          if (!plan) {
+            throw AppError.conflict("The original schedule plan is no longer available.");
+          }
+          return plan;
+        }
+        const showtimes = await tx.showtime.findMany({
+          where: {
+            auditorium: { locationId },
+            startsAt: { gte: weekStartsAt, lt: weekEndsAt },
+          },
+          select: {
+            movieId: true,
+            auditoriumId: true,
+            priceTierId: true,
+            startsAt: true,
+            onSale: true,
+            filmSeriesId: true,
+            presentation: true,
+            format: true,
+          },
+          orderBy: { startsAt: "asc" },
+        });
+        const snapshot = showtimes.map((showtime) => ({
+          ...showtime,
+          startsAt: showtime.startsAt.toISOString(),
+        }));
+        const plan = await tx.schedulePlan.create({
+          data: {
+            locationId,
+            name: input.name,
+            weekStartsAt,
+            snapshotJson: snapshot,
+          },
+          select: {
+            id: true,
+            name: true,
+            weekStartsAt: true,
+            createdAt: true,
+            snapshotJson: true,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: AuditActorType.EMPLOYEE,
+            actorId: actor.sub,
+            action: "schedule_plan.created",
+            entityType: "SchedulePlan",
+            entityId: plan.id,
+            locationId,
+            afterState: {
+              name: plan.name,
+              weekStartsAt: plan.weekStartsAt.toISOString(),
+              showtimeCount: showtimes.length,
+              requestId,
+              requestFingerprint,
+            },
+          },
+        });
+        return plan;
       });
-      return plan;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

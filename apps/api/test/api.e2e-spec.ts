@@ -111,6 +111,34 @@ afterAll(async () => {
 });
 
 describe("Saved schedule plan publishing", () => {
+  it("replays concurrent attempts to save the same schedule plan", async () => {
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const requestId = crypto.randomUUID();
+    const body = {
+      name: `Replay-safe plan ${Date.now()}`,
+      weekStartsAt: "2034-12-04T00:00:00.000Z",
+    };
+    const submit = () =>
+      request(app.getHttpServer())
+        .post("/api/v1/cinema/schedule-plans")
+        .set(auth)
+        .set("Idempotency-Key", requestId)
+        .send(body);
+
+    const [created, replayed] = await Promise.all([submit(), submit()]);
+
+    expect(created.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body.id).toBe(created.body.id);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/schedule-plans/${created.body.id}`)
+      .set(auth)
+      .expect(200);
+  });
+
   it("requires a fresh validation and atomically publishes a future plan", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);
