@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { inclusiveReportRange, localDateInputValue } from "./report-range";
 
@@ -208,6 +208,11 @@ export function ManagementControls({
   );
   const [drawerId, setDrawerId] = useState("");
   const [refundQuery, setRefundQuery] = useState("");
+  const [refundPending, setRefundPending] = useState(false);
+  const refundAttemptRef = useRef<{
+    fingerprint: string;
+    requestId: string;
+  } | null>(null);
   const [historyFrom, setHistoryFrom] = useState(() =>
     localDateInputValue(new Date(Date.now() - 30 * 86_400_000)),
   );
@@ -689,8 +694,25 @@ export function ManagementControls({
     id: string,
     cashRequired = false,
   ) {
+    if (refundPending) return;
     if (!window.confirm(`Issue a full ${scope} refund? This cannot be undone.`))
       return;
+    const cashDrawerId = cashRequired && drawerId ? drawerId : undefined;
+    const fingerprint = JSON.stringify({
+      scope,
+      id,
+      reason: refundReason,
+      cashDrawerId,
+    });
+    if (refundAttemptRef.current?.fingerprint !== fingerprint) {
+      refundAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
+    const requestId = refundAttemptRef.current.requestId;
+    let refundApplied = false;
+    setRefundPending(true);
     try {
       const path =
         scope === "ticket"
@@ -700,14 +722,25 @@ export function ManagementControls({
         accessToken,
         method: "POST",
         body: JSON.stringify({
-          requestId: crypto.randomUUID(),
+          requestId,
           reason: refundReason,
-          ...(cashRequired && drawerId ? { cashDrawerId: drawerId } : {}),
+          ...(cashDrawerId ? { cashDrawerId } : {}),
         }),
       });
+      refundApplied = true;
       await refresh();
+      refundAttemptRef.current = null;
     } catch (reason) {
+      if (
+        !refundApplied &&
+        reason instanceof ApiRequestError &&
+        reason.status < 500
+      ) {
+        refundAttemptRef.current = null;
+      }
       showError(reason);
+    } finally {
+      setRefundPending(false);
     }
   }
   function showError(reason: unknown) {
@@ -1486,6 +1519,7 @@ export function ManagementControls({
           historyTo={historyTo}
           onHistoryFromChange={setHistoryFrom}
           onHistoryToChange={setHistoryTo}
+          refundPending={refundPending}
           onRefund={(scope, id, cashRequired) =>
             void refund(scope, id, cashRequired)
           }
@@ -1510,6 +1544,7 @@ function RefundWorkbench({
   onHistoryToChange,
   onSearch,
   onRefund,
+  refundPending,
 }: {
   refunds: Refunds;
   history: Refunds | null;
@@ -1524,6 +1559,7 @@ function RefundWorkbench({
   onHistoryFromChange: (value: string) => void;
   onHistoryToChange: (value: string) => void;
   onSearch: () => void;
+  refundPending: boolean;
   onRefund: (
     scope: "ticket" | "restaurant",
     id: string,
@@ -1641,6 +1677,7 @@ function RefundWorkbench({
               </div>
               <button
                 className={needsAttention ? "primary" : "destructive"}
+                disabled={refundPending}
                 onClick={() => onRefund("ticket", order.id, cashRequired)}
               >
                 {needsAttention ? "Retry refund" : "Full refund"}
@@ -1702,6 +1739,7 @@ function RefundWorkbench({
               </div>
               <button
                 className={needsAttention ? "primary" : "destructive"}
+                disabled={refundPending}
                 onClick={() => onRefund("restaurant", tab.id)}
               >
                 {needsAttention ? "Retry refund" : "Full refund"}
