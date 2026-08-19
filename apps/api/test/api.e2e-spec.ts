@@ -220,6 +220,26 @@ describe("GET /api/v1/health", () => {
   });
 });
 
+describe("Private event inquiries", () => {
+  it("replays concurrent submissions once and rejects key reuse with different details", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const email = `private-event-${crypto.randomUUID()}@example.test`;
+    const payload = { name: "Replay Guest", email, eventType: "Private screening", message: "A safe retry test." };
+    const submit = () => request(app.getHttpServer()).post("/api/v1/cinema/private-event-inquiries").set("Idempotency-Key", requestId).send(payload);
+
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(first.body.id).toBe(replay.body.id);
+    expect(await prisma.privateEventInquiry.count({ where: { email } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "private_event_inquiry.created", entityId: first.body.id } })).toBe(1);
+
+    const conflict = await request(app.getHttpServer()).post("/api/v1/cinema/private-event-inquiries").set("Idempotency-Key", requestId).send({ ...payload, message: "Different details." });
+    expect(conflict.status).toBe(409);
+  });
+});
+
 describe("Staff authentication", () => {
   it("rejects login with an incorrect password", async () => {
     const res = await request(app.getHttpServer())
