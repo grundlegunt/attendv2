@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { inclusiveReportRange, localDateInputValue } from "./report-range";
 
 type Settings = {
   ticketTypes: Array<{
@@ -208,10 +209,10 @@ export function ManagementControls({
   const [drawerId, setDrawerId] = useState("");
   const [refundQuery, setRefundQuery] = useState("");
   const [historyFrom, setHistoryFrom] = useState(() =>
-    new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10),
+    localDateInputValue(new Date(Date.now() - 30 * 86_400_000)),
   );
   const [historyTo, setHistoryTo] = useState(() =>
-    new Date(Date.now() + 86_400_000).toISOString().slice(0, 10),
+    localDateInputValue(new Date()),
   );
   const canConfig = permissions.includes("ticket.price.edit");
   const canMenuConfig = permissions.includes("menu.edit");
@@ -239,7 +240,7 @@ export function ManagementControls({
             : null,
           section === "refunds" && canRefund
             ? apiFetch<Refunds>(
-                `/management/refunds/history?from=${encodeURIComponent(new Date(`${historyFrom}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${historyTo}T00:00:00`).toISOString())}${refundQuery.trim() ? `&query=${encodeURIComponent(refundQuery.trim())}` : ""}`,
+                `/management/refunds/history?${new URLSearchParams({ ...inclusiveReportRange(historyFrom, historyTo), ...(refundQuery.trim() ? { query: refundQuery.trim() } : {}) }).toString()}`,
                 { accessToken },
               )
             : null,
