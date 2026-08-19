@@ -6,6 +6,7 @@ const { describe, it } = require("node:test");
 const ts = require("typescript");
 
 const helperPath = resolve(__dirname, "../app/report-range.ts");
+const dashboardPath = resolve(__dirname, "../app/management-dashboard.tsx");
 const compiled = ts.transpileModule(readFileSync(helperPath, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   fileName: helperPath,
@@ -32,5 +33,17 @@ describe("Admin report date ranges", () => {
     assert.equal(localDateInputValue(new Date(range.from)), "2026-08-17");
     assert.equal(localDateInputValue(new Date(new Date(range.to).getTime() - 1)), "2026-08-19");
     assert.throws(() => inclusiveReportRange("2026-08-20", "2026-08-19"));
+  });
+
+  it("uses the inclusive range for every management CSV export", () => {
+    const dashboard = readFileSync(dashboardPath, "utf8");
+    const exportEndpoints = ["labor.csv", "revenue.csv", "distributor-box-office.csv"];
+
+    for (const endpoint of exportEndpoints) {
+      assert.ok(
+        dashboard.includes(`${endpoint}?\${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`),
+        `${endpoint} must use the shared inclusive report range`,
+      );
+    }
   });
 });
