@@ -227,6 +227,7 @@ export default function AdminPage() {
   const [planName, setPlanName] = useState("");
   const [planWeek, setPlanWeek] = useState(currentWeekStart);
   const [savingPlan, setSavingPlan] = useState(false);
+  const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -271,18 +272,30 @@ export default function AdminPage() {
     event.preventDefault();
     setError(null);
     setSavingPlan(true);
+    const body = JSON.stringify({
+      name: planName.trim(),
+      weekStartsAt: new Date(`${planWeek}T00:00:00`).toISOString(),
+    });
+    if (schedulePlanAttemptRef.current?.fingerprint !== body) {
+      schedulePlanAttemptRef.current = {
+        fingerprint: body,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch("/cinema/schedule-plans", {
         accessToken: token ?? undefined,
         method: "POST",
-        body: JSON.stringify({
-          name: planName.trim(),
-          weekStartsAt: new Date(`${planWeek}T00:00:00`).toISOString(),
-        }),
+        headers: { "Idempotency-Key": schedulePlanAttemptRef.current.requestId },
+        body,
       });
+      schedulePlanAttemptRef.current = null;
       setPlanName("");
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        schedulePlanAttemptRef.current = null;
+      }
       showError(reason);
     } finally {
       setSavingPlan(false);
