@@ -221,6 +221,11 @@ export function TicketService({
     setMessage(null);
   }
 
+  function changeExchangeReason(reason: string) {
+    exchangeRequestIdRef.current = crypto.randomUUID();
+    setExchangeReason(reason);
+  }
+
   async function cancelExchange() {
     await releaseHold();
     setExchangeTicket(null);
@@ -391,7 +396,7 @@ export function TicketService({
           </label>
           <label className="field">
             <span>Reason</span>
-            <input value={exchangeReason} disabled={busy} maxLength={500} required placeholder="Customer requested a different showtime" onChange={(event) => setExchangeReason(event.target.value)} />
+            <input value={exchangeReason} disabled={busy} maxLength={500} required placeholder="Customer requested a different showtime" onChange={(event) => changeExchangeReason(event.target.value)} />
           </label>
           <div className="ticket-exchange__actions">
             <button className="primary" disabled={busy || !exchangePriceMatches || !exchangeSeatId || !exchangeReason.trim()}>
