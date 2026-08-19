@@ -16,6 +16,7 @@ import {
   openSeatLinkedTabsRequestSchema,
   openWalkInTabRequestSchema,
   refireFulfillmentTicketRequestSchema,
+  removeRestaurantOrderItemRequestSchema,
   sendRestaurantOrderRequestSchema,
   splitRestaurantTabRequestSchema,
   transferRestaurantOrderRequestSchema,
@@ -148,11 +149,15 @@ export class RestaurantController {
     @CurrentActor() actor: RequestActor,
     @Param("orderId") orderId: string,
     @Param("orderItemId") orderItemId: string,
+    @Body(new ZodValidationPipe(removeRestaurantOrderItemRequestSchema)) body: unknown,
   ) {
+    const parsed = removeRestaurantOrderItemRequestSchema.parse(body);
     return this.restaurant.removeDraftOrderItem({
       orderId,
       orderItemId,
+      requestId: parsed.requestId ?? randomUUID(),
       locationId: this.locationId(actor),
+      actorId: actor.sub,
     });
   }
 

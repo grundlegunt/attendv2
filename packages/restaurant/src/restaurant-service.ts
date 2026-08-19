@@ -794,12 +794,36 @@ export class RestaurantService {
   async removeDraftOrderItem(input: {
     orderId: string;
     orderItemId: string;
+    requestId: string;
     locationId: string;
+    actorId: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "restaurant_orders" WHERE "id" = ${input.orderId} FOR UPDATE`,
       );
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          action: "restaurant_order_item.removed",
+          locationId: input.locationId,
+          afterState: { path: ["requestId"], equals: input.requestId },
+        },
+        orderBy: { occurredAt: "desc" },
+      });
+      if (replay) {
+        const details = replay.afterState as Record<string, unknown>;
+        if (
+          replay.actorId !== input.actorId ||
+          replay.entityId !== input.orderItemId ||
+          details.orderId !== input.orderId
+        ) {
+          throw new RestaurantError(
+            "Remove-item request id was reused with different details.",
+            "CONFLICT",
+          );
+        }
+        return { removed: true };
+      }
       const item = await tx.restaurantOrderItem.findFirst({
         where: {
           id: input.orderItemId,
@@ -813,6 +837,14 @@ export class RestaurantService {
       });
       if (!item) throw new RestaurantError("Draft order item was not found.", "NOT_FOUND");
       await tx.restaurantOrderItem.delete({ where: { id: item.id } });
+      await this.auditTabOperation(
+        tx,
+        input,
+        "restaurant_order_item.removed",
+        item.id,
+        { requestId: input.requestId, orderId: input.orderId },
+        "RestaurantOrderItem",
+      );
       return { removed: true };
     });
   }

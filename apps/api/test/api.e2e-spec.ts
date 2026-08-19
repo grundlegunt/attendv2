@@ -5073,12 +5073,22 @@ describe("Milestone 6 server POS and menus", () => {
     expect(rejected.items).toEqual([
       expect.objectContaining({ menuItemId: burger.id, status: "DRAFT" }),
     ]);
-    await request(app.getHttpServer())
-      .delete(
-        `/api/v1/restaurant-tabs/orders/${rejected.id}/items/${rejected.items[0]!.id}`,
-      )
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(200);
+    const removeRequestId = crypto.randomUUID();
+    const removals = await Promise.all([
+      request(app.getHttpServer())
+        .delete(
+          `/api/v1/restaurant-tabs/orders/${rejected.id}/items/${rejected.items[0]!.id}`,
+        )
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId: removeRequestId }),
+      request(app.getHttpServer())
+        .delete(
+          `/api/v1/restaurant-tabs/orders/${rejected.id}/items/${rejected.items[0]!.id}`,
+        )
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId: removeRequestId }),
+    ]);
+    expect(removals.map((removal) => removal.status)).toEqual([200, 200]);
     expect(
       await prisma.restaurantOrderItem.count({
         where: { restaurantOrderId: rejected.id },
