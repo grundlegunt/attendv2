@@ -91,6 +91,7 @@ export function RestaurantPos({
   const [guestAccessToken, setGuestAccessToken] = useState("");
   const actionLocks = useRef(new Set<string>());
   const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const addItemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
   const menuPendingRef = useRef(false);
   const tabRefreshRequestRef = useRef(0);
@@ -347,14 +348,31 @@ export function RestaurantPos({
     if (!beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedOrderId = orderId;
+    const modifierIds = selectedModifiers.flatMap(({ ids }) => ids);
+    const fingerprint = JSON.stringify({
+      orderId: requestedOrderId,
+      menuItemId: item.id,
+      modifierIds: [...modifierIds].sort(),
+    });
+    if (addItemAttemptRef.current?.fingerprint !== fingerprint) {
+      addItemAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
-      const modifierIds = selectedModifiers.flatMap(({ ids }) => ids);
       await apiFetch(`/restaurant-tabs/orders/${requestedOrderId}/items`, {
         method: "POST",
         accessToken,
-        body: JSON.stringify({ menuItemId: item.id, quantity: 1, modifierIds }),
+        body: JSON.stringify({
+          requestId: addItemAttemptRef.current.requestId,
+          menuItemId: item.id,
+          quantity: 1,
+          modifierIds,
+        }),
       });
       if (requestId !== tabActionRequestRef.current) return;
+      addItemAttemptRef.current = null;
       setModifierSelections((current) => Object.fromEntries(
         Object.entries(current).filter(([key]) => !key.startsWith(`${item.id}:`)),
       ));
@@ -365,6 +383,9 @@ export function RestaurantPos({
       setExpandedItemId(null);
       setMessage(`${item.name} added.`);
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) {
+        addItemAttemptRef.current = null;
+      }
       if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);

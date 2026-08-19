@@ -1530,6 +1530,8 @@ model RestaurantOrder {
 
 model RestaurantOrderItem {
   id                     String                    @id @default(uuid())
+  idempotencyKey         String?
+  requestFingerprint     String?
   restaurantOrderId      String
   restaurantOrder        RestaurantOrder           @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
   menuItemId             String
@@ -1549,6 +1551,7 @@ model RestaurantOrderItem {
 
   @@index([restaurantOrderId, status])
   @@index([kitchenStationId, status])
+  @@unique([restaurantOrderId, idempotencyKey])
   @@map("restaurant_order_items")
 }
 

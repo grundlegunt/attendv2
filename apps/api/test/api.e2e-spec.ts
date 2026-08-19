@@ -4587,16 +4587,36 @@ describe("Milestone 6 server POS and menus", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({});
     expect(order.status).toBe(201);
+    let burgerRequest: { requestId: string; body: Record<string, unknown>; itemId: string } | null = null;
     for (const item of [burger, cocktail]) {
       const modifierIds = item.modifierGroups
         .filter((group) => group.required)
         .map((group) => group.modifiers[0]!.id);
+      const requestId = crypto.randomUUID();
+      const body = { requestId, menuItemId: item.id, quantity: 1, modifierIds };
       const added = await request(app.getHttpServer())
         .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
         .set("Authorization", `Bearer ${ownerAccessToken}`)
-        .send({ menuItemId: item.id, quantity: 1, modifierIds });
+        .send(body);
       expect(added.status).toBe(201);
+      if (item.id === burger.id) {
+        burgerRequest = { requestId, body, itemId: added.body.id };
+      }
     }
+    const replay = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send(burgerRequest!.body);
+    expect(replay.status).toBe(201);
+    expect(replay.body.id).toBe(burgerRequest!.itemId);
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({
+        ...burgerRequest!.body,
+        menuItemId: cocktail.id,
+      })
+      .expect(409);
     const sent = await request(app.getHttpServer())
       .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)

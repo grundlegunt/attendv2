@@ -18,6 +18,7 @@ export const createRestaurantOrderRequestSchema = z.object({
 });
 
 export const addRestaurantOrderItemRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
   menuItemId: z.string().uuid(),
   quantity: z.number().int().min(1).max(99),
   modifierIds: z.array(z.string().uuid()).default([]),
