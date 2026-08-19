@@ -111,17 +111,21 @@ function ShowtimesContent() {
   }, [menu, moviesForActiveDate]);
 
   useEffect(() => {
+    const controller = new AbortController();
     setProgramError(null);
 
-    apiFetch<NowPlayingResponse>("/cinema/now-playing")
+    apiFetch<NowPlayingResponse>("/cinema/now-playing", { signal: controller.signal })
       .then(setProgram)
-      .catch((err) =>
+      .catch((err) => {
+        if (err instanceof Error && err.name === "AbortError") return;
         setProgramError(
           err instanceof ApiRequestError
             ? err.body.message
             : "Showtimes are unavailable.",
-        ),
-      );
+        );
+      });
+
+    return () => controller.abort();
   }, [loadAttempt]);
 
   return (
