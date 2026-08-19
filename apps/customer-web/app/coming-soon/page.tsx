@@ -22,17 +22,21 @@ function ComingSoonContent() {
   const justAnnounced = searchParams.get("view") === "JUST_ANNOUNCED";
 
   useEffect(() => {
+    const controller = new AbortController();
     setError(null);
 
-    apiFetch<ProgramResponse>("/cinema/now-playing")
+    apiFetch<ProgramResponse>("/cinema/now-playing", { signal: controller.signal })
       .then(setProgram)
-      .catch((reason) =>
+      .catch((reason) => {
+        if (reason instanceof Error && reason.name === "AbortError") return;
         setError(
           reason instanceof ApiRequestError
             ? reason.body.message
             : "Coming soon is unavailable.",
-        ),
-      );
+        );
+      });
+
+    return () => controller.abort();
   }, [loadAttempt]);
 
   const movies = useMemo(() => {
