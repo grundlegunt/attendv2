@@ -137,7 +137,7 @@ export class ManagementController {
   updateService(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Body(new ZodValidationPipe(serviceUpdateSchema)) body: unknown) { return this.management.updateServiceCharge({ ...serviceUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Post("settings/promotions") @RequirePermissions(Permission.TicketPriceEdit)
-  promotion(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(promotionSchema)) body: unknown) { return this.management.createPromotion({ ...promotionSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  promotion(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(promotionSchema)) body: unknown) { return this.management.createPromotion({ ...promotionSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/promotions/:promotionId") @RequirePermissions(Permission.TicketPriceEdit)
   updatePromotion(@CurrentActor() actor: RequestActor, @Param("promotionId") promotionId: string, @Body(new ZodValidationPipe(promotionUpdateSchema)) body: unknown) { return this.management.updatePromotion({ ...promotionUpdateSchema.parse(body), promotionId, locationId: this.location(actor), employeeId: actor.sub }); }
