@@ -6,6 +6,7 @@ import {
   Post,
   UseGuards,
 } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { Permission } from "@cinema/auth";
 import {
   customerPayRestaurantTabRequestSchema,
@@ -118,11 +119,13 @@ export class CustomerRestaurantTabController {
     @Param("tabId") tabId: string,
     @Body(new ZodValidationPipe(restaurantTipRequestSchema)) body: unknown,
   ) {
-    return this.settlement.selectTip(
+    const parsed = restaurantTipRequestSchema.parse(body);
+    return this.settlement.selectTip({
       tabId,
-      this.customerId(actor),
-      restaurantTipRequestSchema.parse(body).tipCents,
-    );
+      customerId: this.customerId(actor),
+      requestId: parsed.requestId ?? randomUUID(),
+      tipCents: parsed.tipCents,
+    });
   }
 
   @Post(":tabId/pay")
@@ -161,9 +164,11 @@ export class PublicRestaurantTabController {
     @Param("token") token: string,
     @Body(new ZodValidationPipe(restaurantTipRequestSchema)) body: unknown,
   ) {
+    const parsed = restaurantTipRequestSchema.parse(body);
     return this.settlement.selectGuestTip(
       token,
-      restaurantTipRequestSchema.parse(body).tipCents,
+      parsed.tipCents,
+      parsed.requestId ?? randomUUID(),
     );
   }
 

@@ -4963,6 +4963,43 @@ describe("Milestone 6 server POS and menus", () => {
     }
   });
 
+  it("replays simultaneous customer tip updates with one audit event", async () => {
+    const { prisma } = await import("@cinema/database");
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: { locationId: true, primaryCustomerId: true },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "WALK_IN",
+        label: "Tip replay",
+        status: "OPEN",
+      },
+    });
+    const access = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-settlement/tabs/${tab.id}/access-link`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({})
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const tips = await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/public/restaurant-tabs/${access.body.token}/tip`)
+        .send({ requestId, tipCents: 250 }),
+      request(app.getHttpServer())
+        .post(`/api/v1/public/restaurant-tabs/${access.body.token}/tip`)
+        .send({ requestId, tipCents: 250 }),
+    ]);
+    expect(tips.map((tip) => tip.status)).toEqual([201, 201]);
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: "restaurant_tab.tip_selected", entityId: tab.id },
+      }),
+    ).toBe(1);
+  });
+
   it("never changes a selected tip after its tab is settled concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
