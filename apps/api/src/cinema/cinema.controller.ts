@@ -324,11 +324,13 @@ export class CinemaController {
   @RequirePermissions(Permission.ShowtimeManage)
   duplicateShowtimeDay(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(duplicateShowtimeDayRequestSchema)) body: unknown,
   ) {
     return this.cinemaService.duplicateShowtimeDay(
       actor,
       body as ReturnType<typeof duplicateShowtimeDayRequestSchema.parse>,
+      requestId,
     );
   }
 

@@ -1872,18 +1872,30 @@ describe("Milestone 1 cinema configuration", () => {
       })
       .expect(201);
 
-    const duplicated = await request(app.getHttpServer())
-      .post("/api/v1/cinema/showtimes/duplicate-day")
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({
-        sourceDate: "2031-02-10",
-        targetDates: ["2031-02-12", "2031-02-13"],
-        saleStatus: "ON_SALE",
-      })
-      .expect(201);
+    const requestId = crypto.randomUUID();
+    const submitDuplicate = () =>
+      request(app.getHttpServer())
+        .post("/api/v1/cinema/showtimes/duplicate-day")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .set("Idempotency-Key", requestId)
+        .send({
+          sourceDate: "2031-02-10",
+          targetDates: ["2031-02-12", "2031-02-13"],
+          saleStatus: "ON_SALE",
+        });
+    const [duplicated, replayed] = await Promise.all([
+      submitDuplicate(),
+      submitDuplicate(),
+    ]);
+
+    expect(duplicated.status).toBe(201);
+    expect(replayed.status).toBe(201);
 
     expect(duplicated.body.createdCount).toBe(2);
     expect(duplicated.body.showtimes).toHaveLength(2);
+    expect(replayed.body.showtimes.map((showtime: { id: string }) => showtime.id)).toEqual(
+      duplicated.body.showtimes.map((showtime: { id: string }) => showtime.id),
+    );
     expect(duplicated.body.showtimes.every((showtime: { onSale: boolean }) => showtime.onSale)).toBe(true);
     expect(
       duplicated.body.showtimes.every(
