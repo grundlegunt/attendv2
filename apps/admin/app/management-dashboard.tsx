@@ -169,7 +169,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       (process.env.NODE_ENV === "production"
         ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
         : "http://localhost:4000/api/v1");
-    const response = await fetch(`${apiUrl}/reports/labor.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const response = await fetch(`${apiUrl}/reports/labor.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!response.ok) { setError("The hours export could not be created."); return; }
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-hours.csv"; anchor.click(); URL.revokeObjectURL(url);
