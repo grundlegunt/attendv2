@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { createHash, randomUUID } from "node:crypto";
 import { Prisma, prisma } from "@cinema/database";
 import { AppError } from "../common/app-error";
 
@@ -48,8 +49,25 @@ export class ReportingService {
     return { range, totals: { totalExpenseCents: rows.reduce((sum, expense) => sum + expense.amountCents, 0), count: rows.length, byCategory }, rows };
   }
 
-  createExpense(locationId: string, input: { category: Prisma.ExpenseCreateInput["category"]; vendor?: string; description: string; amountCents: number; incurredAt: Date; notes?: string }) {
-    return prisma.expense.create({ data: { locationId, ...input, vendor: input.vendor || null, notes: input.notes || null } });
+  async createExpense(locationId: string, employeeId: string, input: { category: Prisma.ExpenseCreateInput["category"]; vendor?: string; description: string; amountCents: number; incurredAt: Date; notes?: string }, suppliedRequestId?: string) {
+    const requestId = suppliedRequestId ?? randomUUID();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const normalized = { locationId, category: input.category, vendor: input.vendor || null, description: input.description, amountCents: input.amountCents, incurredAt: input.incurredAt.toISOString(), notes: input.notes || null };
+    const requestFingerprint = createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId, action: "expense.created", afterState: { path: ["requestId"], equals: requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The expense idempotency key was already used with different details.");
+        const expense = await tx.expense.findUnique({ where: { id: replay.entityId } });
+        if (!expense) throw AppError.conflict("The original expense entry is no longer available.");
+        return expense;
+      }
+      const expense = await tx.expense.create({ data: { locationId, ...input, vendor: input.vendor || null, notes: input.notes || null } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "expense.created", entityType: "Expense", entityId: expense.id, afterState: { requestId, requestFingerprint } } });
+      return expense;
+    });
   }
 
   async deleteExpense(locationId: string, expenseId: string) {
