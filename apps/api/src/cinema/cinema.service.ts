@@ -205,6 +205,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       guestCount?: number;
       message?: string;
     },
+    suppliedRequestId?: string,
   ) {
     const location = locationId
       ? await prisma.location.findFirst({
@@ -241,17 +242,57 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       : null;
     if (preferredDate && Number.isNaN(preferredDate.getTime()))
       throw AppError.validationFailed("Preferred date is invalid.");
-    return prisma.privateEventInquiry.create({
-      data: {
+    const requestId = suppliedRequestId ?? randomUUID();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({
+      locationId: location.id,
+      name,
+      email,
+      phone: input.phone?.trim() || null,
+      eventType,
+      preferredDate: preferredDate?.toISOString() ?? null,
+      guestCount: input.guestCount ?? null,
+      message,
+    })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId: location.id,
+          action: "private_event_inquiry.created",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const replayState = replay.afterState as { requestFingerprint?: string } | null;
+        if (replayState?.requestFingerprint !== requestFingerprint)
+          throw AppError.conflict("The inquiry idempotency key was already used with different details.");
+        const inquiry = await tx.privateEventInquiry.findUnique({ where: { id: replay.entityId } });
+        if (!inquiry) throw AppError.conflict("The original private event inquiry is no longer available.");
+        return inquiry;
+      }
+      const inquiry = await tx.privateEventInquiry.create({
+        data: {
+          locationId: location.id,
+          name,
+          email,
+          phone: input.phone?.trim() || null,
+          eventType,
+          preferredDate,
+          guestCount: input.guestCount,
+          message,
+        },
+      });
+      await tx.auditEvent.create({ data: {
+        actorType: "SYSTEM",
         locationId: location.id,
-        name,
-        email,
-        phone: input.phone?.trim() || null,
-        eventType,
-        preferredDate,
-        guestCount: input.guestCount,
-        message,
-      },
+        action: "private_event_inquiry.created",
+        entityType: "PrivateEventInquiry",
+        entityId: inquiry.id,
+        afterState: { requestId, requestFingerprint },
+      } });
+      return inquiry;
     });
   }
   private expiryTimer?: ReturnType<typeof setInterval>;
