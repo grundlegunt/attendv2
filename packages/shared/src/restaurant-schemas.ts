@@ -180,6 +180,7 @@ export const transferRestaurantOrderRequestSchema = z.object({
 });
 
 export const combineRestaurantTabsRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
   sourceTabId: z.string().uuid(),
 });
 

@@ -195,8 +195,10 @@ export class RestaurantController {
     @Param("targetTabId") targetTabId: string,
     @Body(new ZodValidationPipe(combineRestaurantTabsRequestSchema)) body: unknown,
   ) {
+    const parsed = combineRestaurantTabsRequestSchema.parse(body);
     return this.restaurant.combineTabs({
-      ...combineRestaurantTabsRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.requestId ?? randomUUID(),
       targetTabId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
