@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
-import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "./lib/api-client";
 import { BrandingSummary, CustomerSiteCopyEditor, type BrandingDraft, type BrandingSettings, type CustomerSiteCopy } from "./branding-editor";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
 import { inclusiveReportRange, localDateInputValue } from "./report-range";
@@ -164,15 +164,19 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The customer segment could not be previewed."); }
   }
 
-  async function exportHours() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
-      (process.env.NODE_ENV === "production"
-        ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
-        : "http://localhost:4000/api/v1");
-    const response = await fetch(`${apiUrl}/reports/labor.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!response.ok) { setError("The hours export could not be created."); return; }
-    const url = URL.createObjectURL(await response.blob());
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-hours.csv"; anchor.click(); URL.revokeObjectURL(url);
+  async function downloadReport(path: string, filename: string, fallbackMessage: string) {
+    setError(null);
+    try {
+      const blob = await apiDownload(path, { accessToken });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof ApiRequestError ? reason.body.message : fallbackMessage);
+    }
+  }
+
+  function exportHours() {
+    return downloadReport(`/reports/labor.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, "attend-hours.csv", "The hours export could not be downloaded.");
   }
 
   function editShift(row: LaborRow) {
@@ -195,22 +199,12 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The shift could not be adjusted."); }
   }
 
-  async function exportRevenue() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
-      (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
-    const response = await fetch(`${apiUrl}/reports/revenue.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!response.ok) { setError("The revenue export could not be created."); return; }
-    const url = URL.createObjectURL(await response.blob());
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-revenue.csv"; anchor.click(); URL.revokeObjectURL(url);
+  function exportRevenue() {
+    return downloadReport(`/reports/revenue.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, "attend-revenue.csv", "The revenue export could not be downloaded.");
   }
 
-  async function exportDistributorBoxOffice() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
-      (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
-    const response = await fetch(`${apiUrl}/reports/distributor-box-office.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
-    if (!response.ok) { setError("The distributor box-office report could not be created."); return; }
-    const url = URL.createObjectURL(await response.blob());
-    const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-distributor-box-office.csv"; anchor.click(); URL.revokeObjectURL(url);
+  function exportDistributorBoxOffice() {
+    return downloadReport(`/reports/distributor-box-office.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, "attend-distributor-box-office.csv", "The distributor box-office report could not be downloaded.");
   }
 
   return <section className="management-stack">

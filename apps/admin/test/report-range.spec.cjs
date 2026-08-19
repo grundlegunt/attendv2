@@ -46,4 +46,13 @@ describe("Admin report date ranges", () => {
       );
     }
   });
+
+  it("uses the authenticated download client and reports export failures", () => {
+    const dashboard = readFileSync(dashboardPath, "utf8");
+
+    assert.match(dashboard, /import \{ apiDownload, apiFetch, ApiRequestError \}/);
+    assert.match(dashboard, /const blob = await apiDownload\(path, \{ accessToken \}\)/);
+    assert.match(dashboard, /reason instanceof ApiRequestError \? reason\.body\.message : fallbackMessage/);
+    assert.doesNotMatch(dashboard, /await fetch\(`/);
+  });
 });
