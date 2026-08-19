@@ -817,7 +817,12 @@ export class RestaurantService {
     });
   }
 
-  async sendOrder(input: { orderId: string; locationId: string; actorId: string }) {
+  async sendOrder(input: {
+    orderId: string;
+    requestId: string;
+    locationId: string;
+    actorId: string;
+  }) {
     return this.prisma.$transaction(async (tx) => {
       const existingOrder = await tx.restaurantOrder.findFirst({
         where: { id: input.orderId, restaurantTab: { locationId: input.locationId } },
@@ -835,12 +840,8 @@ export class RestaurantService {
       const order = await tx.restaurantOrder.findFirst({
         where: {
           id: input.orderId,
-          status: "DRAFT",
           restaurantTabId: existingOrder.restaurantTabId,
-          restaurantTab: {
-            locationId: input.locationId,
-            status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"] },
-          },
+          restaurantTab: { locationId: input.locationId },
         },
         include: {
           items: { include: { menuItem: true } },
@@ -854,6 +855,54 @@ export class RestaurantService {
         },
       });
       if (!order) throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      if (order.status !== "DRAFT") {
+        const receipt = await tx.auditEvent.findFirst({
+          where: {
+            action: "restaurant_order.sent",
+            entityType: "RestaurantOrder",
+            entityId: order.id,
+          },
+          orderBy: { occurredAt: "desc" },
+        });
+        const details = receipt?.afterState as Record<string, unknown> | null;
+        if (
+          order.status === "SENT" &&
+          receipt?.actorId === input.actorId &&
+          details?.requestId === input.requestId
+        ) {
+          const fulfillmentTickets = await tx.fulfillmentTicket.findMany({
+            where: { restaurantOrderId: order.id },
+            include: { items: { include: { menuItem: true } } },
+          });
+          const rejectedOrderId =
+            typeof details.rejectedOrderId === "string" ? details.rejectedOrderId : null;
+          const rejectedItems = rejectedOrderId
+            ? await tx.restaurantOrderItem.findMany({
+                where: { restaurantOrderId: rejectedOrderId },
+                include: { menuItem: true },
+              })
+            : [];
+          return {
+            ...order,
+            fulfillmentTickets,
+            rejectedDraft: rejectedOrderId
+              ? {
+                  orderId: rejectedOrderId,
+                  items: rejectedItems.map((item) => ({
+                    id: item.id,
+                    menuItemId: item.menuItemId,
+                    name: item.menuItem.name,
+                    reason: item.menuItem.is86d ? "MENU_ITEM_86D" : "MENU_ITEM_INACTIVE",
+                  })),
+                }
+              : null,
+          };
+        }
+        throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      }
+      if (!["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"].includes(order.restaurantTab.status)) {
+        throw new RestaurantError("Draft restaurant order was not found.", "NOT_FOUND");
+      }
       if (!order.items.length) throw new RestaurantError("An empty order cannot be sent.", "INVALID");
 
       const menuItemIds = [...new Set(order.items.map((item) => item.menuItemId))].sort();
@@ -960,6 +1009,7 @@ export class RestaurantService {
           entityId: order.id,
           locationId: input.locationId,
           afterState: {
+            requestId: input.requestId,
             placedAt: sentAt.toISOString(),
             stationIds: [
               ...new Set(

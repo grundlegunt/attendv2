@@ -28,6 +28,10 @@ export const addRestaurantOrderItemRequestSchema = z.object({
   course: z.string().trim().max(40).optional(),
 });
 
+export const sendRestaurantOrderRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
+});
+
 export const createKitchenStationRequestSchema = z.object({
   name: z.string().trim().min(1).max(80),
   displayType: z.string().trim().min(1).max(40),
