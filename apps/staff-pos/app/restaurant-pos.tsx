@@ -93,6 +93,7 @@ export function RestaurantPos({
   const settlementAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const addItemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const startOrderAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const walkInAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
   const menuPendingRef = useRef(false);
   const tabRefreshRequestRef = useRef(0);
@@ -279,17 +280,31 @@ export function RestaurantPos({
     const actionKey = "open-walk-in";
     if (!beginAction(actionKey)) return;
     const requestId = ++tabActionRequestRef.current;
+    const fingerprint = JSON.stringify({ label: requestedLabel });
+    if (walkInAttemptRef.current?.fingerprint !== fingerprint) {
+      walkInAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       const tab = await apiFetch<{ id: string }>("/restaurant-tabs/walk-in", {
         method: "POST",
         accessToken,
-        body: JSON.stringify({ label: requestedLabel }),
+        body: JSON.stringify({
+          requestId: walkInAttemptRef.current.requestId,
+          label: requestedLabel,
+        }),
       });
       if (requestId !== tabActionRequestRef.current) return;
+      walkInAttemptRef.current = null;
       changeActiveTabId(tab.id);
       setWalkInLabel("");
       setMessage(`Walk-in tab “${requestedLabel}” is open.`);
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) {
+        walkInAttemptRef.current = null;
+      }
       if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);

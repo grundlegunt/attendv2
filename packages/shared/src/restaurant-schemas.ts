@@ -10,6 +10,7 @@ export type OpenSeatLinkedTabsRequest = z.infer<
 >;
 
 export const openWalkInTabRequestSchema = z.object({
+  requestId: z.string().uuid().optional(),
   label: z.string().trim().min(1).max(80),
 });
 

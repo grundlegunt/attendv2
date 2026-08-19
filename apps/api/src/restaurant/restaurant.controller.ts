@@ -70,8 +70,10 @@ export class RestaurantController {
     @Body(new ZodValidationPipe(openWalkInTabRequestSchema)) body: unknown,
   ) {
     const locationId = this.locationId(actor);
+    const parsed = openWalkInTabRequestSchema.parse(body);
     return this.restaurant.openWalkInTab({
-      ...openWalkInTabRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.requestId ?? randomUUID(),
       locationId,
       actorId: actor.sub,
     });
