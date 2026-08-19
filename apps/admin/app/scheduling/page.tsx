@@ -210,6 +210,7 @@ export default function AdminPage() {
   );
   const showtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
@@ -710,15 +711,28 @@ export default function AdminPage() {
     saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE",
   ) {
     setError(null);
-    await apiFetch<{ createdCount: number }>(
-      "/cinema/showtimes/duplicate-day",
-      {
+    const body = JSON.stringify({ sourceDate, targetDates, saleStatus });
+    if (duplicateDayAttemptRef.current?.fingerprint !== body) {
+      duplicateDayAttemptRef.current = {
+        fingerprint: body,
+        requestId: crypto.randomUUID(),
+      };
+    }
+    try {
+      await apiFetch<{ createdCount: number }>("/cinema/showtimes/duplicate-day", {
         accessToken: token ?? undefined,
         method: "POST",
-        body: JSON.stringify({ sourceDate, targetDates, saleStatus }),
-      },
-    );
-    await refresh();
+        headers: { "Idempotency-Key": duplicateDayAttemptRef.current.requestId },
+        body,
+      });
+      duplicateDayAttemptRef.current = null;
+      await refresh();
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        duplicateDayAttemptRef.current = null;
+      }
+      throw reason;
+    }
   }
 
   async function createShowtime(event: FormEvent) {

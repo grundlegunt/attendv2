@@ -2163,8 +2163,22 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
   async duplicateShowtimeDay(
     actor: RequestActor,
     input: DuplicateShowtimeDayInput,
+    requestId: string = randomUUID(),
   ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(
+        JSON.stringify({
+          locationId,
+          sourceDate: input.sourceDate,
+          targetDates: input.targetDates,
+          saleStatus: input.saleStatus,
+        }),
+      )
+      .digest("hex");
     const location = await prisma.location.findUnique({
       where: { id: locationId },
       select: {
@@ -2204,6 +2218,50 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
 
     return prisma.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "showtime.day_duplicated",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as {
+            requestFingerprint?: string;
+            showtimeIds?: string[];
+          } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The duplicate-day idempotency key was already used with different details.",
+            );
+          }
+          const showtimeIds = state.showtimeIds ?? [];
+          const showtimes = await tx.showtime.findMany({
+            where: { id: { in: showtimeIds } },
+            include: {
+              movie: true,
+              auditorium: true,
+              priceTier: true,
+              filmSeries: true,
+            },
+          });
+          const showtimeById = new Map(
+            showtimes.map((showtime) => [showtime.id, showtime]),
+          );
+          const orderedShowtimes = showtimeIds
+            .map((id) => showtimeById.get(id))
+            .filter((showtime): showtime is NonNullable<typeof showtime> => Boolean(showtime));
+          if (orderedShowtimes.length !== showtimeIds.length) {
+            throw AppError.conflict(
+              "One or more showtimes from the original duplicate-day request are no longer available.",
+            );
+          }
+          return {
+            createdCount: orderedShowtimes.length,
+            showtimes: orderedShowtimes,
+          };
+        }
         const auditoriumIds = Array.from(
           new Set(sourceShowtimes.map((showtime) => showtime.auditoriumId)),
         ).sort();
@@ -2306,13 +2364,16 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               targetDates: input.targetDates,
               createdCount: created.length,
               saleStatus: input.saleStatus,
+              requestId,
+              requestFingerprint,
+              showtimeIds: created.map((showtime) => showtime.id),
             },
           },
         });
         return { createdCount: created.length, showtimes: created };
       },
       {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
         maxWait: DUPLICATE_DAY_TRANSACTION_MAX_WAIT_MS,
         timeout: DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS,
       },
