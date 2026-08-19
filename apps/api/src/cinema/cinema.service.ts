@@ -982,44 +982,89 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return { deleted: true };
   }
 
-  async duplicateSchedulePlan(actor: RequestActor, id: string, name: string) {
+  async duplicateSchedulePlan(
+    actor: RequestActor,
+    id: string,
+    name: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
-    const source = await prisma.schedulePlan.findFirst({
-      where: { id, locationId },
-    });
-    if (!source) throw AppError.notFound("Schedule plan not found.");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, sourcePlanId: id, name }))
+      .digest("hex");
     try {
-      const plan = await prisma.schedulePlan.create({
-        data: {
-          locationId,
-          name,
-          weekStartsAt: source.weekStartsAt,
-          snapshotJson: source.snapshotJson as Prisma.InputJsonValue,
-        },
-        select: {
-          id: true,
-          name: true,
-          weekStartsAt: true,
-          createdAt: true,
-          snapshotJson: true,
-        },
-      });
-      await prisma.auditEvent.create({
-        data: {
-          actorType: AuditActorType.EMPLOYEE,
-          actorId: actor.sub,
-          action: "schedule_plan.duplicated",
-          entityType: "SchedulePlan",
-          entityId: plan.id,
-          locationId,
-          afterState: {
-            name: plan.name,
-            weekStartsAt: plan.weekStartsAt.toISOString(),
-            sourcePlanId: source.id,
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "schedule_plan.duplicated",
+            afterState: { path: ["requestId"], equals: requestId },
           },
-        },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The schedule-plan duplication key was already used with different details.",
+            );
+          }
+          const plan = await tx.schedulePlan.findFirst({
+            where: { id: replay.entityId, locationId },
+            select: {
+              id: true,
+              name: true,
+              weekStartsAt: true,
+              createdAt: true,
+              snapshotJson: true,
+            },
+          });
+          if (!plan) {
+            throw AppError.conflict("The original duplicated plan is no longer available.");
+          }
+          return plan;
+        }
+        const source = await tx.schedulePlan.findFirst({
+          where: { id, locationId },
+        });
+        if (!source) throw AppError.notFound("Schedule plan not found.");
+        const plan = await tx.schedulePlan.create({
+          data: {
+            locationId,
+            name,
+            weekStartsAt: source.weekStartsAt,
+            snapshotJson: source.snapshotJson as Prisma.InputJsonValue,
+          },
+          select: {
+            id: true,
+            name: true,
+            weekStartsAt: true,
+            createdAt: true,
+            snapshotJson: true,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: AuditActorType.EMPLOYEE,
+            actorId: actor.sub,
+            action: "schedule_plan.duplicated",
+            entityType: "SchedulePlan",
+            entityId: plan.id,
+            locationId,
+            afterState: {
+              name: plan.name,
+              weekStartsAt: plan.weekStartsAt.toISOString(),
+              sourcePlanId: source.id,
+              requestId,
+              requestFingerprint,
+            },
+          },
+        });
+        return plan;
       });
-      return plan;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&

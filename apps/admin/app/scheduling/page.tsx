@@ -228,6 +228,7 @@ export default function AdminPage() {
   const [planWeek, setPlanWeek] = useState(currentWeekStart);
   const [savingPlan, setSavingPlan] = useState(false);
   const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const duplicatePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -329,18 +330,31 @@ export default function AdminPage() {
       ?.trim();
     if (!name) return;
     setError(null);
+    const body = JSON.stringify({ name });
+    const fingerprint = `${plan.id}:${body}`;
+    if (duplicatePlanAttemptRef.current?.fingerprint !== fingerprint) {
+      duplicatePlanAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       const duplicate = await apiFetch<SchedulePlan>(
         `/cinema/schedule-plans/${plan.id}/duplicate`,
         {
           accessToken: token ?? undefined,
           method: "POST",
-          body: JSON.stringify({ name }),
+          headers: { "Idempotency-Key": duplicatePlanAttemptRef.current.requestId },
+          body,
         },
       );
+      duplicatePlanAttemptRef.current = null;
       setSchedulePlans((current) => [duplicate, ...current]);
       setSelectedPlanId(duplicate.id);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        duplicatePlanAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
