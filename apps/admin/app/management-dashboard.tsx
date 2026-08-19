@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { BrandingSummary, CustomerSiteCopyEditor, type BrandingDraft, type BrandingSettings, type CustomerSiteCopy } from "./branding-editor";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
+import { inclusiveReportRange, localDateInputValue } from "./report-range";
 
 type RevenueReport = {
   totals: { grossRevenueCents: number; refundedCents: number; ticketRefundedCents: number; fnbRefundedCents: number; ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; ticketsSold: number; fnbOrders: number; averageFnbSpendPerOrderCents: number; averageFnbSpendPerSeatCents: number; averageTotalSpendPerPatronCents: number; concessionAttachRatePercent: number };
@@ -33,7 +34,6 @@ type OperatingSettings = { name: string; address: string | null; timezone: strin
 type Settings = BrandingSettings & OperatingSettings & { id: string; merchUrl: string | null; siteCopy: CustomerSiteCopy; taxRules: Array<{ id: string; name: string; ratePermille: number; active: boolean }>; serviceChargeRules: Array<{ id: string; name: string; ratePermille: number | null; flatCents: number | null; active: boolean }>; promotions: Promotion[] };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-const dateInput = (date: Date) => date.toISOString().slice(0, 10);
 const dateTimeInput = (value: string | null) => { if (!value) return ""; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); };
 const emptyPromotion = (): PromotionDraft => ({ code: "", name: "", type: "FIXED_AMOUNT", value: 0, minimumSubtotal: 0, maximumRedemptions: 0, startsAt: "", endsAt: "" });
 const promotionDraft = (item: Promotion): PromotionDraft => ({ code: item.code, name: item.name, type: item.type, value: item.type === "FIXED_AMOUNT" ? (item.amountCents ?? 0) / 100 : item.type === "PERCENTAGE" ? (item.percentageBasisPoints ?? 0) / 100 : 0, minimumSubtotal: (item.minimumSubtotalCents ?? 0) / 100, maximumRedemptions: item.maximumRedemptions ?? 0, startsAt: dateTimeInput(item.startsAt), endsAt: dateTimeInput(item.endsAt) });
@@ -42,8 +42,8 @@ const promotionBody = (draft: PromotionDraft, clearEmpty = false) => ({ code: dr
 type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
 
 export function ManagementDashboard({ accessToken, permissions, section }: { accessToken: string; permissions: string[]; section: ManagementSection }) {
-  const [from, setFrom] = useState(dateInput(new Date(Date.now() - 30 * 86_400_000)));
-  const [to, setTo] = useState(dateInput(new Date(Date.now() + 86_400_000)));
+  const [from, setFrom] = useState(localDateInputValue(new Date(Date.now() - 30 * 86_400_000)));
+  const [to, setTo] = useState(localDateInputValue(new Date()));
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
   const [audienceOrigins, setAudienceOrigins] = useState<AudienceOriginsReport | null>(null);
   const [labor, setLabor] = useState<LaborReport | null>(null);
@@ -58,7 +58,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditActorId, setAuditActorId] = useState("");
   const [promotion, setPromotion] = useState<PromotionDraft>(emptyPromotion);
   const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
-  const [inactiveSince, setInactiveSince] = useState(dateInput(new Date(Date.now() - 365 * 86_400_000)));
+  const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000)));
   const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
@@ -69,12 +69,13 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
   async function refresh(appendAudit = false) {
     setError(null);
-    const range = `from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`;
-    const auditQuery = new URLSearchParams({ limit: "50", offset: appendAudit ? String(audit.length) : "0", from: new Date(`${from}T00:00:00`).toISOString(), to: new Date(`${to}T00:00:00`).toISOString() });
-    if (auditAction.trim()) auditQuery.set("action", auditAction.trim());
-    if (auditEntityType.trim()) auditQuery.set("entityType", auditEntityType.trim());
-    if (auditActorId.trim()) auditQuery.set("actorId", auditActorId.trim());
     try {
+      const reportRange = inclusiveReportRange(from, to);
+      const range = new URLSearchParams(reportRange).toString();
+      const auditQuery = new URLSearchParams({ limit: "50", offset: appendAudit ? String(audit.length) : "0", ...reportRange });
+      if (auditAction.trim()) auditQuery.set("action", auditAction.trim());
+      if (auditEntityType.trim()) auditQuery.set("entityType", auditEntityType.trim());
+      if (auditActorId.trim()) auditQuery.set("actorId", auditActorId.trim());
       const [nextRevenue, nextAudienceOrigins, nextLabor, nextAudit, nextSettings] = await Promise.all([
         section === "reports" && canFinancial ? apiFetch<RevenueReport>(`/reports/revenue?${range}`, { accessToken }) : null,
         section === "reports" && canFinancial ? apiFetch<AudienceOriginsReport>(`/reports/audience-origins?${range}`, { accessToken }) : null,
@@ -197,7 +198,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   async function exportRevenue() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
       (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
-    const response = await fetch(`${apiUrl}/reports/revenue.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const response = await fetch(`${apiUrl}/reports/revenue.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!response.ok) { setError("The revenue export could not be created."); return; }
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-revenue.csv"; anchor.click(); URL.revokeObjectURL(url);
@@ -206,7 +207,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   async function exportDistributorBoxOffice() {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL ??
       (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
-    const response = await fetch(`${apiUrl}/reports/distributor-box-office.csv?from=${encodeURIComponent(new Date(`${from}T00:00:00`).toISOString())}&to=${encodeURIComponent(new Date(`${to}T00:00:00`).toISOString())}`, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const response = await fetch(`${apiUrl}/reports/distributor-box-office.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!response.ok) { setError("The distributor box-office report could not be created."); return; }
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "attend-distributor-box-office.csv"; anchor.click(); URL.revokeObjectURL(url);
@@ -215,7 +216,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   return <section className="management-stack">
     <div className="panel management-heading">
       <div><p className="kicker">MANAGEMENT</p><h2>{section === "reports" ? "Reports & finance" : section === "labor" ? "Labor" : section === "branding" ? "Branding" : section === "location" ? "Location" : section === "promotions" ? "Promotions" : "Audit log"}</h2></div>
-      {(section === "reports" || section === "labor") && <div className="report-range"><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><button className="primary" onClick={() => void refresh()}>Refresh</button></div>}
+      {(section === "reports" || section === "labor") && <div className="report-range"><label>From<input type="date" required value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>Through<input type="date" required value={to} onChange={(event) => setTo(event.target.value)} /></label><button className="primary" onClick={() => void refresh()}>Refresh</button></div>}
       {error && <div className="error-banner">{error}</div>}
     </div>
 
