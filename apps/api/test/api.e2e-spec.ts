@@ -4304,11 +4304,16 @@ describe("Milestone 5 seat-linked dining tabs", () => {
       .get(`/api/v1/restaurant-tabs/${sharedTabId}/summary`)
       .set("Authorization", `Bearer ${ownerAccessToken}`);
     const showtimeSeatId = summary.body.seats[0].showtimeSeatId as string;
-    const split = await request(app.getHttpServer())
-      .post(`/api/v1/restaurant-tabs/${sharedTabId}/split`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ showtimeSeatId });
-    expect(split.status).toBe(201);
+    const requestId = crypto.randomUUID();
+    const splitRequest = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/${sharedTabId}/split`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId, showtimeSeatId });
+    const splits = await Promise.all([splitRequest(), splitRequest()]);
+    expect(splits.map((response) => response.status)).toEqual([201, 201]);
+    expect(splits[1].body.targetTabId).toBe(splits[0].body.targetTabId);
+    const split = splits[0];
 
     const separated = await request(app.getHttpServer())
       .get(`/api/v1/restaurant-tabs/${split.body.targetTabId}/summary`)

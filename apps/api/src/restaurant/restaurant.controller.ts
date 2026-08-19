@@ -163,8 +163,10 @@ export class RestaurantController {
     @Param("tabId") tabId: string,
     @Body(new ZodValidationPipe(splitRestaurantTabRequestSchema)) body: unknown,
   ) {
+    const parsed = splitRestaurantTabRequestSchema.parse(body);
     return this.restaurant.splitTab({
-      ...splitRestaurantTabRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.requestId ?? randomUUID(),
       tabId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
