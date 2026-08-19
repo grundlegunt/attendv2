@@ -137,6 +137,7 @@ export class MenuController {
   modifierGroup(
     @CurrentActor() actor: RequestActor,
     @Param("menuItemId") menuItemId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createModifierGroupRequestSchema)) body: unknown,
   ) {
     return this.restaurant.createModifierGroup({
@@ -144,6 +145,7 @@ export class MenuController {
       menuItemId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
     });
   }
 
@@ -167,6 +169,7 @@ export class MenuController {
   modifier(
     @CurrentActor() actor: RequestActor,
     @Param("modifierGroupId") modifierGroupId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createModifierRequestSchema)) body: unknown,
   ) {
     return this.restaurant.createModifier({
@@ -174,6 +177,7 @@ export class MenuController {
       modifierGroupId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
     });
   }
 

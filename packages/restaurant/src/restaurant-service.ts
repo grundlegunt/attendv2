@@ -326,6 +326,7 @@ export class RestaurantService {
   async createModifierGroup(input: {
     locationId: string;
     actorId: string;
+    requestId: string;
     menuItemId: string;
     name: string;
     selectionType: "SINGLE" | "MULTIPLE";
@@ -334,7 +335,18 @@ export class RestaurantService {
     maxSelections: number | null;
     sortOrder: number;
   }) {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, menuItemId: input.menuItemId, name: input.name, selectionType: input.selectionType, required: input.required, minSelections: input.minSelections, maxSelections: input.maxSelections, sortOrder: input.sortOrder });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "modifier_group.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The modifier-group idempotency key was already used with different details.", "CONFLICT");
+        const group = await tx.modifierGroup.findUnique({ where: { id: replay.entityId } });
+        if (!group) throw new RestaurantError("The original modifier group is no longer available.", "CONFLICT");
+        return group;
+      }
       const item = await tx.menuItem.findFirst({
         where: { id: input.menuItemId, menuCategory: { locationId: input.locationId } },
       });
@@ -362,6 +374,8 @@ export class RestaurantService {
             menuItemId: item.id,
             name: group.name,
             required: group.required,
+            requestId: input.requestId,
+            requestFingerprint,
           },
         },
       });
@@ -425,12 +439,24 @@ export class RestaurantService {
   async createModifier(input: {
     locationId: string;
     actorId: string;
+    requestId: string;
     modifierGroupId: string;
     name: string;
     priceDeltaCents: number;
     sortOrder: number;
   }) {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, modifierGroupId: input.modifierGroupId, name: input.name, priceDeltaCents: input.priceDeltaCents, sortOrder: input.sortOrder });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "modifier.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The modifier idempotency key was already used with different details.", "CONFLICT");
+        const modifier = await tx.modifier.findUnique({ where: { id: replay.entityId } });
+        if (!modifier) throw new RestaurantError("The original modifier is no longer available.", "CONFLICT");
+        return modifier;
+      }
       const group = await tx.modifierGroup.findFirst({
         where: {
           id: input.modifierGroupId,
@@ -458,6 +484,8 @@ export class RestaurantService {
             modifierGroupId: group.id,
             name: modifier.name,
             priceDeltaCents: modifier.priceDeltaCents,
+            requestId: input.requestId,
+            requestFingerprint,
           },
         },
       });
