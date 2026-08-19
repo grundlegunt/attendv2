@@ -309,11 +309,13 @@ export class CinemaController {
   @RequirePermissions(Permission.ShowtimeManage)
   createShowtime(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createShowtimeRequestSchema)) body: unknown,
   ) {
     return this.cinemaService.createShowtime(
       actor,
       body as ReturnType<typeof createShowtimeRequestSchema.parse>,
+      requestId,
     );
   }
 

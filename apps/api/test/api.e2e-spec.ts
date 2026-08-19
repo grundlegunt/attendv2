@@ -1065,6 +1065,21 @@ describe("Milestone 1 cinema configuration", () => {
     firstShowtimeId = res.body.id;
   });
 
+  it("replays concurrent showtime creation with one seat inventory", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const payload = { movieId, auditoriumId, startsAt: "2030-01-03T18:00:00.000Z", onSale: true };
+    const submit = () => request(app.getHttpServer()).post("/api/v1/cinema/showtimes").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send(payload);
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(replay.body.id).toBe(first.body.id);
+    expect(await prisma.showtime.count({ where: { id: first.body.id } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "showtime.created", entityId: first.body.id } })).toBe(1);
+    expect(await prisma.showtimeSeat.count({ where: { showtimeId: first.body.id } })).toBeGreaterThan(0);
+    await prisma.showtime.delete({ where: { id: first.body.id } });
+  });
+
   it("versions an advanced layout without changing seats on an existing showtime", async () => {
     const { prisma } = await import("@cinema/database");
     const before = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });

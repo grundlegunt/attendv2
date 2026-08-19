@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   movieArtworkObjectPosition,
   showtimeWindowsOverlap,
@@ -208,6 +208,8 @@ export default function AdminPage() {
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(
     null,
   );
+  const showtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
@@ -722,6 +724,17 @@ export default function AdminPage() {
   async function createShowtime(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = JSON.stringify({
+      movieId,
+      auditoriumId,
+      priceTierId: priceTierId || undefined,
+      startsAt: new Date(startsAt).toISOString(),
+      onSale,
+      filmSeriesId: filmSeriesId || null,
+      presentation,
+      format: showtimeFormat.trim() || null,
+    });
+    if (!editingShowtimeId && showtimeAttemptRef.current?.fingerprint !== body) showtimeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       await apiFetch(
         editingShowtimeId
@@ -730,22 +743,16 @@ export default function AdminPage() {
         {
           accessToken: token ?? undefined,
           method: editingShowtimeId ? "PATCH" : "POST",
-          body: JSON.stringify({
-            movieId,
-            auditoriumId,
-            priceTierId: priceTierId || undefined,
-            startsAt: new Date(startsAt).toISOString(),
-            onSale,
-            filmSeriesId: filmSeriesId || null,
-            presentation,
-            format: showtimeFormat.trim() || null,
-          }),
+          headers: editingShowtimeId ? undefined : { "Idempotency-Key": showtimeAttemptRef.current!.requestId },
+          body,
         },
       );
+      if (!editingShowtimeId) showtimeAttemptRef.current = null;
       setEditingShowtimeId(null);
       setShowtimeEditorOpen(false);
       await refresh();
     } catch (reason) {
+      if (!editingShowtimeId && reason instanceof ApiRequestError && reason.status < 500) showtimeAttemptRef.current = null;
       showError(reason);
     }
   }
@@ -849,20 +856,25 @@ export default function AdminPage() {
     selectedMovieId: string,
   ) {
     setError(null);
+    const body = JSON.stringify({
+      movieId: selectedMovieId,
+      auditoriumId: auditorium,
+      startsAt: date.toISOString(),
+      onSale: true,
+      presentation: "STANDARD",
+    });
+    if (quickShowtimeAttemptRef.current?.fingerprint !== body) quickShowtimeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/cinema/showtimes", {
         accessToken: token ?? undefined,
         method: "POST",
-        body: JSON.stringify({
-          movieId: selectedMovieId,
-          auditoriumId: auditorium,
-          startsAt: date.toISOString(),
-          onSale: true,
-          presentation: "STANDARD",
-        }),
+        headers: { "Idempotency-Key": quickShowtimeAttemptRef.current.requestId },
+        body,
       });
+      quickShowtimeAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) quickShowtimeAttemptRef.current = null;
       showError(reason);
     }
   }
