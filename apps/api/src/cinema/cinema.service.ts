@@ -955,16 +955,44 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async deleteSchedulePlan(actor: RequestActor, id: string) {
+  async deleteSchedulePlan(
+    actor: RequestActor,
+    id: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
-    const plan = await prisma.schedulePlan.findFirst({
-      where: { id, locationId },
-      select: { id: true, name: true, weekStartsAt: true },
-    });
-    if (!plan) throw AppError.notFound("Schedule plan not found.");
-    await prisma.$transaction([
-      prisma.schedulePlan.delete({ where: { id: plan.id } }),
-      prisma.auditEvent.create({
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, planId: id }))
+      .digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "schedule_plan.deleted",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The schedule-plan deletion key was already used for another plan.",
+          );
+        }
+        return { deleted: true };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      const plan = await tx.schedulePlan.findFirst({
+        where: { id, locationId },
+        select: { id: true, name: true, weekStartsAt: true },
+      });
+      if (!plan) throw AppError.notFound("Schedule plan not found.");
+      await tx.schedulePlan.delete({ where: { id: plan.id } });
+      await tx.auditEvent.create({
         data: {
           actorType: AuditActorType.EMPLOYEE,
           actorId: actor.sub,
@@ -976,10 +1004,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             name: plan.name,
             weekStartsAt: plan.weekStartsAt.toISOString(),
           },
+          afterState: { requestId, requestFingerprint },
         },
-      }),
-    ]);
-    return { deleted: true };
+      });
+      return { deleted: true };
+    });
   }
 
   async duplicateSchedulePlan(

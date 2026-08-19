@@ -217,6 +217,39 @@ describe("Saved schedule plan publishing", () => {
       .expect(200);
   });
 
+  it("replays concurrent attempts to delete a schedule plan", async () => {
+    const { prisma } = await import("@cinema/database");
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const plan = await request(app.getHttpServer())
+      .post("/api/v1/cinema/schedule-plans")
+      .set(auth)
+      .send({
+        name: `Deletion replay ${Date.now()}`,
+        weekStartsAt: "2034-12-18T00:00:00.000Z",
+      })
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const remove = () =>
+      request(app.getHttpServer())
+        .delete(`/api/v1/cinema/schedule-plans/${plan.body.id}`)
+        .set(auth)
+        .set("Idempotency-Key", requestId);
+
+    const [deleted, replayed] = await Promise.all([remove(), remove()]);
+
+    expect(deleted.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(deleted.body).toEqual({ deleted: true });
+    expect(replayed.body).toEqual(deleted.body);
+    expect(
+      await prisma.auditEvent.count({
+        where: { action: "schedule_plan.deleted", entityId: plan.body.id },
+      }),
+    ).toBe(1);
+  });
+
   it("replays a saved-showing removal without deleting the next item", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);

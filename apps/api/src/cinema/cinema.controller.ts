@@ -243,8 +243,12 @@ export class CinemaController {
   @Delete("schedule-plans/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  deleteSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
-    return this.cinemaService.deleteSchedulePlan(actor, id);
+  deleteSchedulePlan(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.deleteSchedulePlan(actor, id, requestId);
   }
 
   @Post("auditoriums")
