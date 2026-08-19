@@ -5313,12 +5313,18 @@ describe("Milestone 7 kitchen and bar fulfillment", () => {
       ["READY", "READY"],
       ["DELIVER", "DELIVERED"],
     ] as const) {
-      const response = await request(app.getHttpServer())
-        .patch(`/api/v1/fulfillment/tickets/${ticketId}`)
-        .set("Authorization", `Bearer ${ownerAccessToken}`)
-        .send({ action });
-      expect(response.status).toBe(200);
-      expect(response.body.status).toBe(expectedStatus);
+      const requestId = crypto.randomUUID();
+      const transition = () =>
+        request(app.getHttpServer())
+          .patch(`/api/v1/fulfillment/tickets/${ticketId}`)
+          .set("Authorization", `Bearer ${ownerAccessToken}`)
+          .send({ action, requestId });
+      const responses = await Promise.all([transition(), transition()]);
+      expect(responses.map((response) => response.status)).toEqual([200, 200]);
+      expect(responses.map((response) => response.body.status)).toEqual([
+        expectedStatus,
+        expectedStatus,
+      ]);
     }
     const { prisma } = await import("@cinema/database");
     expect(await prisma.restaurantOrder.findUniqueOrThrow({ where: { id: orderId } }))
