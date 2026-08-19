@@ -125,13 +125,13 @@ export class ManagementController {
   updateTicketType(@CurrentActor() actor: RequestActor, @Param("ticketTypeId") ticketTypeId: string, @Body(new ZodValidationPipe(ticketTypeUpdateSchema)) body: unknown) { return this.management.updateTicketType({ ...ticketTypeUpdateSchema.parse(body), ticketTypeId, locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Post("settings/tax-rules") @RequirePermissions(Permission.MenuEdit)
-  tax(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  tax(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/tax-rules/:ruleId") @RequirePermissions(Permission.MenuEdit)
   updateTax(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Body(new ZodValidationPipe(taxUpdateSchema)) body: unknown) { return this.management.updateTaxRule({ ...taxUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Post("settings/service-charge-rules") @RequirePermissions(Permission.MenuEdit)
-  service(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(serviceSchema)) body: unknown) { return this.management.createServiceCharge({ ...serviceSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  service(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(serviceSchema)) body: unknown) { return this.management.createServiceCharge({ ...serviceSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/service-charge-rules/:ruleId") @RequirePermissions(Permission.MenuEdit)
   updateService(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Body(new ZodValidationPipe(serviceUpdateSchema)) body: unknown) { return this.management.updateServiceCharge({ ...serviceUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub }); }

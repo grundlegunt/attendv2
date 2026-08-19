@@ -164,6 +164,8 @@ export function ManagementControls({
     appliesTo: "ALL",
     ratePermille: 0,
   });
+  const taxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const chargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [newPriceTier, setNewPriceTier] = useState({
     name: "Standard",
     price: "",
@@ -353,15 +355,21 @@ export function ManagementControls({
   async function createTax(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = { ...tax, active: true };
+    const fingerprint = JSON.stringify(body);
+    if (taxAttemptRef.current?.fingerprint !== fingerprint) taxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/management/settings/tax-rules", {
         accessToken,
         method: "POST",
-        body: JSON.stringify({ ...tax, active: true }),
+        headers: { "Idempotency-Key": taxAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      taxAttemptRef.current = null;
       setTax({ name: "", appliesTo: "ALL", ratePermille: 0 });
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) taxAttemptRef.current = null;
       showError(reason);
     }
   }
@@ -487,15 +495,21 @@ export function ManagementControls({
   async function createCharge(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = { ...charge, active: true, autoApply: true };
+    const fingerprint = JSON.stringify(body);
+    if (chargeAttemptRef.current?.fingerprint !== fingerprint) chargeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/management/settings/service-charge-rules", {
         accessToken,
         method: "POST",
-        body: JSON.stringify({ ...charge, active: true, autoApply: true }),
+        headers: { "Idempotency-Key": chargeAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      chargeAttemptRef.current = null;
       setCharge({ name: "", appliesTo: "ALL", ratePermille: 0 });
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) chargeAttemptRef.current = null;
       showError(reason);
     }
   }

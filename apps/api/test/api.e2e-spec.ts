@@ -1432,6 +1432,27 @@ describe("Milestone 1 cinema configuration", () => {
     expect(serviceAudit.body[0]).toEqual(expect.objectContaining({ action: "service_charge_rule.updated", entityId: serviceCharge.body.id }));
   });
 
+  it("replays concurrent tax and service-charge rule creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const cases = [
+      { path: "tax-rules", action: "tax_rule.created", model: "taxRule", payload: { name: `Replay tax ${crypto.randomUUID()}`, appliesTo: "FOOD", ratePermille: 71, active: true } },
+      { path: "service-charge-rules", action: "service_charge_rule.created", model: "serviceChargeRule", payload: { name: `Replay charge ${crypto.randomUUID()}`, appliesTo: "ALL", flatCents: 250, autoApply: true, active: true } },
+    ] as const;
+    for (const entry of cases) {
+      const requestId = crypto.randomUUID();
+      const submit = () => request(app.getHttpServer()).post(`/api/v1/management/settings/${entry.path}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send(entry.payload);
+      const [first, replay] = await Promise.all([submit(), submit()]);
+      expect(first.status).toBe(201);
+      expect(replay.status).toBe(201);
+      expect(first.body.id).toBe(replay.body.id);
+      const client = prisma[entry.model] as unknown as { count(input: object): Promise<number>; delete(input: object): Promise<unknown> };
+      expect(await client.count({ where: { locationId: owner.locationId, name: entry.payload.name } })).toBe(1);
+      expect(await prisma.auditEvent.count({ where: { action: entry.action, entityId: first.body.id } })).toBe(1);
+      await client.delete({ where: { id: first.body.id } });
+    }
+  });
+
   it("lets managers deactivate and reactivate promotions with an audit trail", async () => {
     const promotion = await request(app.getHttpServer())
       .post("/api/v1/management/settings/promotions")
