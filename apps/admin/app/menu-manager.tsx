@@ -72,6 +72,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingStationDisplayType, setEditingStationDisplayType] = useState("");
   const [modifierItemId, setModifierItemId] = useState("");
   const [modifierGroupName, setModifierGroupName] = useState("");
+  const modifierGroupAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [modifierSelectionType, setModifierSelectionType] = useState<
     "SINGLE" | "MULTIPLE"
   >("SINGLE");
@@ -89,6 +90,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingModifierGroupMax, setEditingModifierGroupMax] = useState<number | "">(1);
   const [editingModifierGroupOrder, setEditingModifierGroupOrder] = useState(0);
   const [modifierName, setModifierName] = useState("");
+  const modifierAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [modifierPrice, setModifierPrice] = useState(0);
   const [editingModifierId, setEditingModifierId] = useState("");
   const [editingModifierName, setEditingModifierName] = useState("");
@@ -353,25 +355,27 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function createModifierGroup(event: FormEvent) {
     event.preventDefault();
+    const body = JSON.stringify({
+      name: modifierGroupName,
+      selectionType: modifierSelectionType,
+      required: modifierRequired,
+      minSelections: modifierMinSelections,
+      maxSelections: modifierMaxSelections === "" ? null : modifierMaxSelections,
+      sortOrder: modifierGroups.filter((group) => group.menuItemId === modifierItemId).length,
+    });
+    const fingerprint = `${modifierItemId}:${body}`;
+    if (modifierGroupAttemptRef.current?.fingerprint !== fingerprint) modifierGroupAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(
         `/restaurant-menu/items/${modifierItemId}/modifier-groups`,
         {
           method: "POST",
           accessToken,
-          body: JSON.stringify({
-            name: modifierGroupName,
-            selectionType: modifierSelectionType,
-            required: modifierRequired,
-            minSelections: modifierMinSelections,
-            maxSelections:
-              modifierMaxSelections === "" ? null : modifierMaxSelections,
-            sortOrder: modifierGroups.filter(
-              (group) => group.menuItemId === modifierItemId,
-            ).length,
-          }),
+          headers: { "Idempotency-Key": modifierGroupAttemptRef.current.requestId },
+          body,
         },
       );
+      modifierGroupAttemptRef.current = null;
       setModifierGroupName("");
       setModifierRequired(false);
       setModifierMinSelections(0);
@@ -379,30 +383,37 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
       setMessage("Modifier group created.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) modifierGroupAttemptRef.current = null;
       showError(error, "Modifier group could not be created.");
     }
   }
 
   async function createModifier(event: FormEvent) {
     event.preventDefault();
+    const body = JSON.stringify({
+      name: modifierName,
+      priceDeltaCents: Math.round(modifierPrice * 100),
+      sortOrder: 0,
+    });
+    const fingerprint = `${modifierGroupId}:${body}`;
+    if (modifierAttemptRef.current?.fingerprint !== fingerprint) modifierAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(
         `/restaurant-menu/modifier-groups/${modifierGroupId}/modifiers`,
         {
           method: "POST",
           accessToken,
-          body: JSON.stringify({
-            name: modifierName,
-            priceDeltaCents: Math.round(modifierPrice * 100),
-            sortOrder: 0,
-          }),
+          headers: { "Idempotency-Key": modifierAttemptRef.current.requestId },
+          body,
         },
       );
+      modifierAttemptRef.current = null;
       setModifierName("");
       setModifierPrice(0);
       setMessage("Modifier created.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) modifierAttemptRef.current = null;
       showError(error, "Modifier could not be created.");
     }
   }

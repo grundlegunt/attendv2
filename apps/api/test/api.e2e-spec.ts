@@ -4650,6 +4650,28 @@ describe("Milestone 6 server POS and menus", () => {
     await prisma.menuItem.delete({ where: { id: first.body.id } });
   });
 
+  it("replays concurrent modifier group and modifier creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const item = await prisma.menuItem.findFirstOrThrow();
+    const groupRequestId = crypto.randomUUID();
+    const groupName = `Replay group ${crypto.randomUUID()}`;
+    const submitGroup = () => request(app.getHttpServer()).post(`/api/v1/restaurant-menu/items/${item.id}/modifier-groups`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", groupRequestId).send({ name: groupName, selectionType: "SINGLE", required: false, minSelections: 0, maxSelections: 1, sortOrder: 99 });
+    const [groupFirst, groupReplay] = await Promise.all([submitGroup(), submitGroup()]);
+    expect(groupFirst.status).toBe(201);
+    expect(groupReplay.body.id).toBe(groupFirst.body.id);
+    expect(await prisma.modifierGroup.count({ where: { name: groupName } })).toBe(1);
+
+    const modifierRequestId = crypto.randomUUID();
+    const modifierName = `Replay modifier ${crypto.randomUUID()}`;
+    const submitModifier = () => request(app.getHttpServer()).post(`/api/v1/restaurant-menu/modifier-groups/${groupFirst.body.id}/modifiers`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", modifierRequestId).send({ name: modifierName, priceDeltaCents: 125, sortOrder: 0 });
+    const [modifierFirst, modifierReplay] = await Promise.all([submitModifier(), submitModifier()]);
+    expect(modifierFirst.status).toBe(201);
+    expect(modifierReplay.body.id).toBe(modifierFirst.body.id);
+    expect(await prisma.modifier.count({ where: { name: modifierName } })).toBe(1);
+    await prisma.modifier.delete({ where: { id: modifierFirst.body.id } });
+    await prisma.modifierGroup.delete({ where: { id: groupFirst.body.id } });
+  });
+
   it("publishes only active, available menu items with dietary tags and movie specials", async () => {
     const { prisma } = await import("@cinema/database");
     const burger = await prisma.menuItem.findFirstOrThrow({ where: { name: "Cheeseburger" } });
