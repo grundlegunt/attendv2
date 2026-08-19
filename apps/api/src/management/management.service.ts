@@ -51,14 +51,24 @@ export class ManagementService {
     return { ...settings, merchUrl: parsedContent.navigation.merchUrl, siteCopy: siteCopyFrom(parsedContent), priceTiers: organization.priceTiers, promotions: location.promotions.map(({ ticketOrders, ...promotion }) => ({ ...promotion, redemptionCount: ticketOrders.length, discountedTicketCount: ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0), totalTicketFaceValueCents: ticketOrders.reduce((sum, order) => sum + order.subtotalCents, 0), totalCollectedCents: ticketOrders.reduce((sum, order) => sum + order.totalCents, 0), totalDiscountCents: ticketOrders.reduce((sum, order) => sum + order.discountCents, 0) })) };
   }
 
-  async createPriceTier(input: { locationId: string; employeeId: string; name: string; ticketPriceMinor: number }) {
+  async createPriceTier(input: { locationId: string; employeeId: string; requestId: string; name: string; ticketPriceMinor: number }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, organization: { select: { ticketFeeMinor: true } } } });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const requestFingerprint = createHash("sha256").update(JSON.stringify({ organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor })).digest("hex");
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "ticket.price_tier_created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The price-group idempotency key was already used with different details.");
+        const tier = await tx.priceTier.findUnique({ where: { id: replay.entityId } });
+        if (!tier) throw AppError.conflict("The original ticket price group is no longer available.");
+        return tier;
+      }
       const duplicate = await tx.priceTier.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
       if (duplicate) throw AppError.conflict("A ticket price group with this name already exists.");
       const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor, appliesOnWeekdays: [] } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { name: tier.name, ticketPriceMinor: tier.ticketPriceMinor, active: tier.active } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { requestId: input.requestId, requestFingerprint, name: tier.name, ticketPriceMinor: tier.ticketPriceMinor, active: tier.active } } });
       return tier;
     });
   }
@@ -83,12 +93,23 @@ export class ManagementService {
     });
   }
 
-  async createTicketType(input: { locationId: string; employeeId: string; name: string; priceAdjustmentMinor: number }) {
+  async createTicketType(input: { locationId: string; employeeId: string; requestId: string; name: string; priceAdjustmentMinor: number }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, name: input.name, priceAdjustmentMinor: input.priceAdjustmentMinor })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "ticket.type_created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The admission-type idempotency key was already used with different details.");
+        const ticketType = await tx.ticketType.findUnique({ where: { id: replay.entityId } });
+        if (!ticketType) throw AppError.conflict("The original admission type is no longer available.");
+        return ticketType;
+      }
       const duplicate = await tx.ticketType.findFirst({ where: { locationId: input.locationId, name: { equals: input.name, mode: "insensitive" } } });
       if (duplicate) throw AppError.conflict("A ticket type with this name already exists.");
       const ticketType = await tx.ticketType.create({ data: { locationId: input.locationId, name: input.name, priceAdjustmentMinor: input.priceAdjustmentMinor } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.type_created", entityType: "TicketType", entityId: ticketType.id, afterState: { name: ticketType.name, priceAdjustmentMinor: ticketType.priceAdjustmentMinor, active: ticketType.active } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.type_created", entityType: "TicketType", entityId: ticketType.id, afterState: { requestId: input.requestId, requestFingerprint, name: ticketType.name, priceAdjustmentMinor: ticketType.priceAdjustmentMinor, active: ticketType.active } } });
       return ticketType;
     });
   }

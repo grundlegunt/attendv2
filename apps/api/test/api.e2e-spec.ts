@@ -1392,6 +1392,25 @@ describe("Milestone 1 cinema configuration", () => {
     expect(audit.body.filter((event: { entityId: string }) => event.entityId === created.body.id)).toHaveLength(2);
   });
 
+  it("replays concurrent price-group and admission-type creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const cases = [
+      { path: "price-tiers", action: "ticket.price_tier_created", model: "priceTier", payload: { name: `Replay price ${crypto.randomUUID()}`, ticketPriceMinor: 1900 } },
+      { path: "ticket-types", action: "ticket.type_created", model: "ticketType", payload: { name: `Replay admission ${crypto.randomUUID()}`, priceAdjustmentMinor: -200 } },
+    ] as const;
+    for (const entry of cases) {
+      const requestId = crypto.randomUUID();
+      const submit = () => request(app.getHttpServer()).post(`/api/v1/management/settings/${entry.path}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send(entry.payload);
+      const [first, replay] = await Promise.all([submit(), submit()]);
+      expect(first.status).toBe(201);
+      expect(replay.status).toBe(201);
+      expect(first.body.id).toBe(replay.body.id);
+      expect(await prisma.auditEvent.count({ where: { action: entry.action, entityId: first.body.id } })).toBe(1);
+      const client = prisma[entry.model] as unknown as { delete(input: object): Promise<unknown> };
+      await client.delete({ where: { id: first.body.id } });
+    }
+  });
+
   it("lets managers update and deactivate restaurant charge rules", async () => {
     const tax = await request(app.getHttpServer())
       .post("/api/v1/management/settings/tax-rules")

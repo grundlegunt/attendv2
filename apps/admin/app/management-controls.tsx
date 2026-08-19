@@ -173,6 +173,8 @@ export function ManagementControls({
   const [newTicketTypeName, setNewTicketTypeName] = useState("");
   const [newTicketTypeAdjustment, setNewTicketTypeAdjustment] =
     useState("0.00");
+  const priceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const ticketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [ticketTypeDrafts, setTicketTypeDrafts] = useState<
     Record<string, string>
   >({});
@@ -376,39 +378,43 @@ export function ManagementControls({
   async function createPrice(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = { name: newPriceTier.name, ticketPriceMinor: Math.round(Number(newPriceTier.price) * 100) };
+    const fingerprint = JSON.stringify(body);
+    if (priceAttemptRef.current?.fingerprint !== fingerprint) priceAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/management/settings/price-tiers", {
         accessToken,
         method: "POST",
-        body: JSON.stringify({
-          name: newPriceTier.name,
-          ticketPriceMinor: Math.round(Number(newPriceTier.price) * 100),
-        }),
+        headers: { "Idempotency-Key": priceAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      priceAttemptRef.current = null;
       setNewPriceTier({ name: "Standard", price: "" });
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) priceAttemptRef.current = null;
       showError(reason);
     }
   }
   async function createTicketType(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = { name: newTicketTypeName, priceAdjustmentMinor: Math.round(Number(newTicketTypeAdjustment) * 100) };
+    const fingerprint = JSON.stringify(body);
+    if (ticketTypeAttemptRef.current?.fingerprint !== fingerprint) ticketTypeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/management/settings/ticket-types", {
         accessToken,
         method: "POST",
-        body: JSON.stringify({
-          name: newTicketTypeName,
-          priceAdjustmentMinor: Math.round(
-            Number(newTicketTypeAdjustment) * 100,
-          ),
-        }),
+        headers: { "Idempotency-Key": ticketTypeAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      ticketTypeAttemptRef.current = null;
       setNewTicketTypeName("");
       setNewTicketTypeAdjustment("0.00");
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) ticketTypeAttemptRef.current = null;
       showError(reason);
     }
   }
