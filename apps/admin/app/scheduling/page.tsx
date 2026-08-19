@@ -232,6 +232,7 @@ export default function AdminPage() {
   const addPlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const removePlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updatePlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const renamePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -366,21 +367,36 @@ export default function AdminPage() {
     const name = window.prompt("Rename this schedule plan:", plan.name)?.trim();
     if (!name || name === plan.name) return;
     setError(null);
+    const body = JSON.stringify({ name, expectedName: plan.name });
+    const fingerprint = `${plan.id}:${body}`;
+    if (renamePlanAttemptRef.current?.fingerprint !== fingerprint) {
+      renamePlanAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       const updated = await apiFetch<SchedulePlan>(
         `/cinema/schedule-plans/${plan.id}`,
         {
           accessToken: token ?? undefined,
           method: "PATCH",
-          body: JSON.stringify({ name }),
+          headers: {
+            "Idempotency-Key": renamePlanAttemptRef.current!.requestId,
+          },
+          body,
         },
       );
+      renamePlanAttemptRef.current = null;
       setSchedulePlans((current) =>
         current.map((candidate) =>
           candidate.id === updated.id ? updated : candidate,
         ),
       );
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        renamePlanAttemptRef.current = null;
+      }
       showError(reason);
     }
   }

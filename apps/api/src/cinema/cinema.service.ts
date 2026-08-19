@@ -1233,38 +1233,92 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async renameSchedulePlan(actor: RequestActor, id: string, name: string) {
+  async renameSchedulePlan(
+    actor: RequestActor,
+    id: string,
+    name: string,
+    expectedName: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
-    const plan = await prisma.schedulePlan.findFirst({
-      where: { id, locationId },
-      select: { id: true, name: true },
-    });
-    if (!plan) throw AppError.notFound("Schedule plan not found.");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, planId: id, name, expectedName }))
+      .digest("hex");
     try {
-      const updated = await prisma.schedulePlan.update({
-        where: { id: plan.id },
-        data: { name },
-        select: {
-          id: true,
-          name: true,
-          weekStartsAt: true,
-          createdAt: true,
-          snapshotJson: true,
-        },
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "schedule_plan.renamed",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The schedule-plan rename key was already used with different details.",
+            );
+          }
+          const replayedPlan = await tx.schedulePlan.findFirst({
+            where: { id: replay.entityId, locationId },
+            select: {
+              id: true,
+              name: true,
+              weekStartsAt: true,
+              createdAt: true,
+              snapshotJson: true,
+            },
+          });
+          if (!replayedPlan) {
+            throw AppError.conflict("The original saved plan is no longer available.");
+          }
+          return replayedPlan;
+        }
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+        const plan = await tx.schedulePlan.findFirst({
+          where: { id, locationId },
+          select: { id: true, name: true },
+        });
+        if (!plan) throw AppError.notFound("Schedule plan not found.");
+        if (plan.name !== expectedName) {
+          throw AppError.conflict(
+            "This schedule plan was renamed elsewhere. Refresh before renaming it again.",
+          );
+        }
+        const updated = await tx.schedulePlan.update({
+          where: { id: plan.id },
+          data: { name },
+          select: {
+            id: true,
+            name: true,
+            weekStartsAt: true,
+            createdAt: true,
+            snapshotJson: true,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: AuditActorType.EMPLOYEE,
+            actorId: actor.sub,
+            action: "schedule_plan.renamed",
+            entityType: "SchedulePlan",
+            entityId: plan.id,
+            locationId,
+            beforeState: { name: plan.name },
+            afterState: {
+              name: updated.name,
+              requestId,
+              requestFingerprint,
+            },
+          },
+        });
+        return updated;
       });
-      await prisma.auditEvent.create({
-        data: {
-          actorType: AuditActorType.EMPLOYEE,
-          actorId: actor.sub,
-          action: "schedule_plan.renamed",
-          entityType: "SchedulePlan",
-          entityId: plan.id,
-          locationId,
-          beforeState: { name: plan.name },
-          afterState: { name: updated.name },
-        },
-      });
-      return updated;
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
