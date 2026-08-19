@@ -4328,8 +4328,8 @@ describe("Milestone 5 seat-linked dining tabs", () => {
 
   it("enforces restaurant permission server-side", async () => {
     const { prisma } = await import("@cinema/database");
-    const location = await prisma.location.findFirstOrThrow();
     const { signTokenPair, Permission } = await import("@cinema/auth");
+    const location = await prisma.location.findFirstOrThrow();
     const doorAccessToken = signTokenPair(
       {
         sub: "00000000-0000-0000-0000-000000000098",
@@ -4612,6 +4612,27 @@ describe("Milestone 5 seat-linked dining tabs", () => {
 });
 
 describe("Milestone 6 server POS and menus", () => {
+  it("replays concurrent menu category and kitchen station creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const categoryRequestId = crypto.randomUUID();
+    const categoryName = `Replay category ${crypto.randomUUID()}`;
+    const submitCategory = () => request(app.getHttpServer()).post("/api/v1/restaurant-menu/categories").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", categoryRequestId).send({ name: categoryName, sortOrder: 99 });
+    const [categoryFirst, categoryReplay] = await Promise.all([submitCategory(), submitCategory()]);
+    expect(categoryFirst.status).toBe(201);
+    expect(categoryReplay.body.id).toBe(categoryFirst.body.id);
+    expect(await prisma.menuCategory.count({ where: { name: categoryName } })).toBe(1);
+
+    const stationRequestId = crypto.randomUUID();
+    const stationName = `Replay station ${crypto.randomUUID()}`;
+    const submitStation = () => request(app.getHttpServer()).post("/api/v1/restaurant-menu/stations").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", stationRequestId).send({ name: stationName, displayType: "KITCHEN" });
+    const [stationFirst, stationReplay] = await Promise.all([submitStation(), submitStation()]);
+    expect(stationFirst.status).toBe(201);
+    expect(stationReplay.body.id).toBe(stationFirst.body.id);
+    expect(await prisma.kitchenStation.count({ where: { name: stationName } })).toBe(1);
+    await prisma.menuCategory.delete({ where: { id: categoryFirst.body.id } });
+    await prisma.kitchenStation.delete({ where: { id: stationFirst.body.id } });
+  });
+
   it("replays concurrent menu item creation once", async () => {
     const { prisma } = await import("@cinema/database");
     const category = await prisma.menuCategory.findFirstOrThrow({ include: { location: true } });

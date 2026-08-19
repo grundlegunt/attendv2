@@ -114,10 +114,22 @@ export class RestaurantService {
   async createKitchenStation(input: {
     locationId: string;
     actorId: string;
+    requestId: string;
     name: string;
     displayType: string;
   }): Promise<KitchenStation> {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, name: input.name, displayType: input.displayType });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "kitchen_station.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The kitchen-station idempotency key was already used with different details.", "CONFLICT");
+        const station = await tx.kitchenStation.findUnique({ where: { id: replay.entityId } });
+        if (!station) throw new RestaurantError("The original kitchen station is no longer available.", "CONFLICT");
+        return station;
+      }
       const station = await tx.kitchenStation.create({
         data: {
           locationId: input.locationId,
@@ -133,7 +145,7 @@ export class RestaurantService {
           entityType: "KitchenStation",
           entityId: station.id,
           locationId: input.locationId,
-          afterState: station,
+          afterState: { ...station, requestId: input.requestId, requestFingerprint },
         },
       });
       return station;
@@ -185,10 +197,22 @@ export class RestaurantService {
   async createMenuCategory(input: {
     locationId: string;
     actorId: string;
+    requestId: string;
     name: string;
     sortOrder: number;
   }): Promise<MenuCategory> {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, name: input.name, sortOrder: input.sortOrder });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "menu_category.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The menu-category idempotency key was already used with different details.", "CONFLICT");
+        const category = await tx.menuCategory.findUnique({ where: { id: replay.entityId } });
+        if (!category) throw new RestaurantError("The original menu category is no longer available.", "CONFLICT");
+        return category;
+      }
       const category = await tx.menuCategory.create({
         data: {
           locationId: input.locationId,
@@ -204,7 +228,7 @@ export class RestaurantService {
           entityType: "MenuCategory",
           entityId: category.id,
           locationId: input.locationId,
-          afterState: category,
+          afterState: { ...category, requestId: input.requestId, requestFingerprint },
         },
       });
       return category;
@@ -1733,6 +1757,16 @@ export class RestaurantService {
         afterState,
       },
     });
+  }
+
+  private requireRequestId(requestId: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw new RestaurantError("Idempotency key must be a UUID.", "INVALID");
+    }
+  }
+
+  private requestFingerprint(payload: Record<string, unknown>) {
+    return createHash("sha256").update(JSON.stringify(payload)).digest("hex");
   }
 
   private fulfillmentTransition(

@@ -46,12 +46,14 @@ export class MenuController {
   @RequirePermissions(Permission.MenuEdit)
   station(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createKitchenStationRequestSchema)) body: unknown,
   ) {
     return this.restaurant.createKitchenStation({
       ...createKitchenStationRequestSchema.parse(body),
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
     });
   }
 
@@ -74,12 +76,14 @@ export class MenuController {
   @RequirePermissions(Permission.MenuEdit)
   category(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createMenuCategoryRequestSchema)) body: unknown,
   ) {
     return this.restaurant.createMenuCategory({
       ...createMenuCategoryRequestSchema.parse(body),
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
     });
   }
 
