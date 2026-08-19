@@ -28,6 +28,10 @@ export const addRestaurantOrderItemRequestSchema = z.object({
   course: z.string().trim().max(40).optional(),
 });
 
+export const removeRestaurantOrderItemRequestSchema = z
+  .object({ requestId: z.string().uuid().optional() })
+  .default({});
+
 export const sendRestaurantOrderRequestSchema = z.object({
   requestId: z.string().uuid().optional(),
 });

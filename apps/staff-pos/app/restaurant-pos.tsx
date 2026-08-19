@@ -95,6 +95,7 @@ export function RestaurantPos({
   const startOrderAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const walkInAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const refireAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const removeItemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const sendOrderAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
   const menuPendingRef = useRef(false);
@@ -432,15 +433,24 @@ export function RestaurantPos({
     if (!orderId || actionLocks.current.size > 0 || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedOrderId = orderId;
+    const fingerprint = JSON.stringify({ orderId: requestedOrderId, orderItemId: item.id });
+    if (removeItemAttemptRef.current?.fingerprint !== fingerprint) {
+      removeItemAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     try {
       await apiFetch(`/restaurant-tabs/orders/${requestedOrderId}/items/${item.id}`, {
         method: "DELETE",
         accessToken,
+        body: JSON.stringify({ requestId: removeItemAttemptRef.current.requestId }),
       });
       if (requestId !== tabActionRequestRef.current) return;
+      removeItemAttemptRef.current = null;
       setBlockedItems((current) => current.filter((candidate) => candidate.id !== item.id));
       setMessage(`${item.name} removed. Add a substitute or send the remaining draft.`);
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) {
+        removeItemAttemptRef.current = null;
+      }
       if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
