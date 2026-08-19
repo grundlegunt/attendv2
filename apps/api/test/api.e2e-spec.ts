@@ -1501,6 +1501,21 @@ describe("Milestone 1 cinema configuration", () => {
     expect(audit.body.filter((event: { entityId: string }) => event.entityId === promotion.body.id)).toHaveLength(2);
   });
 
+  it("replays concurrent promotion creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const code = `REPLAY${crypto.randomUUID().replaceAll("-", "").slice(0, 12)}`;
+    const payload = { code, name: "Replay promotion", type: "FIXED_AMOUNT", amountCents: 500, active: true };
+    const submit = () => request(app.getHttpServer()).post("/api/v1/management/settings/promotions").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send(payload);
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(replay.body.id).toBe(first.body.id);
+    expect(await prisma.promotion.count({ where: { code: code.toUpperCase() } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "promotion.created", entityId: first.body.id } })).toBe(1);
+    await prisma.promotion.delete({ where: { id: first.body.id } });
+  });
+
   it("reports paid promotion redemptions, discounted tickets, and discount totals", async () => {
     const promotion = await request(app.getHttpServer())
       .post("/api/v1/management/settings/promotions")

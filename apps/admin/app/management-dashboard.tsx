@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiDownload, apiFetch, ApiRequestError } from "./lib/api-client";
 import { BrandingSummary, CustomerSiteCopyEditor, type BrandingDraft, type BrandingSettings, type CustomerSiteCopy } from "./branding-editor";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
@@ -57,6 +57,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
   const [promotion, setPromotion] = useState<PromotionDraft>(emptyPromotion);
+  const promotionAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
   const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000)));
   const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
@@ -134,11 +135,14 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     setError(null);
     if (promotion.startsAt && promotion.endsAt && new Date(promotion.startsAt) >= new Date(promotion.endsAt)) { setError("Promotion end time must be after its start time."); return; }
     const body = { ...promotionBody(promotion), active: true };
+    const fingerprint = JSON.stringify(body);
+    if (promotionAttemptRef.current?.fingerprint !== fingerprint) promotionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      await apiFetch("/management/settings/promotions", { accessToken, method: "POST", body: JSON.stringify(body) });
+      await apiFetch("/management/settings/promotions", { accessToken, method: "POST", headers: { "Idempotency-Key": promotionAttemptRef.current.requestId }, body: fingerprint });
+      promotionAttemptRef.current = null;
       setPromotion(emptyPromotion());
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
+    } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) promotionAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
   }
   async function savePromotion(event: FormEvent) {
     event.preventDefault();

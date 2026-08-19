@@ -314,12 +314,23 @@ export class ManagementService {
     });
   }
 
-  async createPromotion(input: { locationId: string; employeeId: string; code: string; name: string; type: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number; percentageBasisPoints?: number; minimumSubtotalCents?: number; maximumRedemptions?: number; active: boolean; startsAt?: Date; endsAt?: Date }) {
+  async createPromotion(input: { locationId: string; employeeId: string; requestId: string; code: string; name: string; type: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number; percentageBasisPoints?: number; minimumSubtotalCents?: number; maximumRedemptions?: number; active: boolean; startsAt?: Date; endsAt?: Date }) {
     if (input.type === "FIXED_AMOUNT" && input.amountCents == null) throw AppError.validationFailed("A fixed promotion requires an amount.");
     if (input.type === "PERCENTAGE" && input.percentageBasisPoints == null) throw AppError.validationFailed("A percentage promotion requires a percentage.");
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, code: input.code.toUpperCase(), name: input.name, type: input.type, amountCents: input.amountCents ?? null, percentageBasisPoints: input.percentageBasisPoints ?? null, minimumSubtotalCents: input.minimumSubtotalCents ?? null, maximumRedemptions: input.maximumRedemptions ?? null, active: input.active, startsAt: input.startsAt?.toISOString() ?? null, endsAt: input.endsAt?.toISOString() ?? null })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "promotion.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The promotion idempotency key was already used with different details.");
+        const promotion = await tx.promotion.findUnique({ where: { id: replay.entityId } });
+        if (!promotion) throw AppError.conflict("The original promotion is no longer available.");
+        return promotion;
+      }
       const promotion = await tx.promotion.create({ data: { locationId: input.locationId, code: input.code.toUpperCase(), name: input.name, type: input.type, amountCents: input.type === "FIXED_AMOUNT" ? input.amountCents : null, percentageBasisPoints: input.type === "PERCENTAGE" ? input.percentageBasisPoints : null, minimumSubtotalCents: input.minimumSubtotalCents, maximumRedemptions: input.maximumRedemptions, active: input.active, startsAt: input.startsAt, endsAt: input.endsAt } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.created", entityType: "Promotion", entityId: promotion.id, afterState: { code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, minimumSubtotalCents: promotion.minimumSubtotalCents, maximumRedemptions: promotion.maximumRedemptions, active: promotion.active } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.created", entityType: "Promotion", entityId: promotion.id, afterState: { requestId: input.requestId, requestFingerprint, code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, minimumSubtotalCents: promotion.minimumSubtotalCents, maximumRedemptions: promotion.maximumRedemptions, active: promotion.active } } });
       return promotion;
     });
   }
