@@ -2016,10 +2016,21 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return this.updateFilmSeries(actor, id, { active: false });
   }
 
-  async createShowtime(actor: RequestActor, input: ShowtimeInput) {
+  async createShowtime(actor: RequestActor, input: ShowtimeInput, requestId: string = randomUUID()) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId, movieId: input.movieId, auditoriumId: input.auditoriumId, priceTierId: input.priceTierId ?? null, startsAt: input.startsAt, onSale: input.onSale, filmSeriesId: input.filmSeriesId ?? null, presentation: input.presentation, format: input.format ?? null })).digest("hex");
     return prisma.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({ where: { locationId, action: "showtime.created", afterState: { path: ["requestId"], equals: requestId } } });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The showtime idempotency key was already used with different details.");
+          const showtime = await tx.showtime.findUnique({ where: { id: replay.entityId }, include: { movie: true, auditorium: true, priceTier: true, filmSeries: true } });
+          if (!showtime) throw AppError.conflict("The original showtime is no longer available.");
+          return showtime;
+        }
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.auditoriumId}))`;
         const auditorium = await tx.auditorium.findFirst({
           where: { id: input.auditoriumId, locationId, active: true },
@@ -2128,6 +2139,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             entityId: showtime.id,
             locationId,
             afterState: {
+              requestId,
+              requestFingerprint,
               movieId: movie.id,
               auditoriumId: auditorium.id,
               startsAt: startsAt.toISOString(),
@@ -2142,7 +2155,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         return showtime;
       },
       {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
       },
     );
   }
