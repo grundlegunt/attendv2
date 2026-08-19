@@ -1330,6 +1330,7 @@ export class RestaurantService {
   async combineTabs(input: {
     targetTabId: string;
     sourceTabId: string;
+    requestId: string;
     locationId: string;
     actorId: string;
   }) {
@@ -1341,6 +1342,26 @@ export class RestaurantService {
       await tx.$queryRaw(
         Prisma.sql`SELECT "id" FROM "restaurant_tabs" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`,
       );
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          action: "restaurant_tab.combined",
+          entityType: "RestaurantTab",
+          entityId: input.targetTabId,
+          locationId: input.locationId,
+          afterState: { path: ["requestId"], equals: input.requestId },
+        },
+        orderBy: { occurredAt: "desc" },
+      });
+      if (replay) {
+        const details = replay.afterState as Record<string, unknown>;
+        if (replay.actorId !== input.actorId || details.sourceTabId !== input.sourceTabId) {
+          throw new RestaurantError(
+            "Combine request id was reused with different details.",
+            "CONFLICT",
+          );
+        }
+        return { targetTabId: input.targetTabId, sourceTabId: input.sourceTabId };
+      }
       const tabs = await tx.restaurantTab.findMany({
         where: {
           id: { in: ids },
@@ -1367,6 +1388,7 @@ export class RestaurantService {
         data: { status: "VOIDED", mergedIntoTabId: target.id },
       });
       await this.auditTabOperation(tx, input, "restaurant_tab.combined", target.id, {
+        requestId: input.requestId,
         sourceTabId: source.id,
       });
       return { targetTabId: target.id, sourceTabId: source.id };

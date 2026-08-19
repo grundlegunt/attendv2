@@ -4437,6 +4437,33 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     expect(finalSource.status).toBe(combined.status === 201 ? "VOIDED" : "OPEN");
   });
 
+  it("replays concurrent combines without applying the move twice", async () => {
+    const target = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Combine replay target" })
+      .expect(201);
+    const source = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Combine replay source" })
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const combine = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/${target.body.id}/combine`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId, sourceTabId: source.body.id });
+
+    const responses = await Promise.all([combine(), combine()]);
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    expect(responses[1].body).toEqual(responses[0].body);
+    const { prisma } = await import("@cinema/database");
+    expect(
+      await prisma.restaurantTab.findUniqueOrThrow({ where: { id: source.body.id } }),
+    ).toMatchObject({ status: "VOIDED", mergedIntoTabId: target.body.id });
+  });
+
   it("never combines a source tab away after settlement closes it", async () => {
     const { prisma } = await import("@cinema/database");
     const target = await request(app.getHttpServer())
