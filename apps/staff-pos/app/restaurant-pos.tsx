@@ -94,6 +94,7 @@ export function RestaurantPos({
   const addItemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const startOrderAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const walkInAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const refireAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
   const menuPendingRef = useRef(false);
   const tabRefreshRequestRef = useRef(0);
@@ -502,15 +503,26 @@ export function RestaurantPos({
     const actionKey = `refire:${ticketId}`;
     if (!beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
+    const fingerprint = JSON.stringify({ ticketId });
+    if (refireAttemptRef.current?.fingerprint !== fingerprint) {
+      refireAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/restaurant-tabs/fulfillment/${ticketId}/refire`, {
         method: "POST",
         accessToken,
-        body: "{}",
+        body: JSON.stringify({ requestId: refireAttemptRef.current.requestId }),
       });
       if (requestId !== tabActionRequestRef.current) return;
+      refireAttemptRef.current = null;
       setMessage("Refire sent to the station.");
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) {
+        refireAttemptRef.current = null;
+      }
       if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);

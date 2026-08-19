@@ -1562,8 +1562,10 @@ model RestaurantOrderItem {
 }
 
 model FulfillmentTicket {
-  id                String                  @id @default(uuid())
-  restaurantOrderId String
+  id                 String                  @id @default(uuid())
+  idempotencyKey     String?
+  requestFingerprint String?
+  restaurantOrderId  String
   restaurantOrder   RestaurantOrder         @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
   kitchenStationId  String
   kitchenStation    KitchenStation          @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
@@ -1590,6 +1592,7 @@ model FulfillmentTicket {
   @@index([kitchenStationId, status, firedAt])
   @@index([restaurantOrderId, status])
   @@index([refiredFromId])
+  @@unique([refiredFromId, idempotencyKey])
   @@map("fulfillment_tickets")
 }
 
