@@ -5,6 +5,7 @@ import {
   Prisma,
   PrismaClient,
 } from "@cinema/database";
+import { createHash } from "node:crypto";
 
 const summaryInclude = Prisma.validator<Prisma.RestaurantTabInclude>()({
   activePaymentMethod: true,
@@ -244,6 +245,7 @@ export class RestaurantService {
   async createMenuItem(input: {
     locationId: string;
     actorId: string;
+    requestId: string;
     menuCategoryId: string;
     kitchenStationId: string;
     name: string;
@@ -255,7 +257,18 @@ export class RestaurantService {
     isGlutenFree: boolean;
     sortOrder: number;
   }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw new RestaurantError("Idempotency key must be a UUID.", "INVALID");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, menuCategoryId: input.menuCategoryId, kitchenStationId: input.kitchenStationId, name: input.name, description: input.description ?? null, imageUrl: input.imageUrl ?? null, priceCents: input.priceCents, chargeCategory: input.chargeCategory, isVegan: input.isVegan, isGlutenFree: input.isGlutenFree, sortOrder: input.sortOrder })).digest("hex");
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "menu_item.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The menu-item idempotency key was already used with different details.", "CONFLICT");
+        const item = await tx.menuItem.findUnique({ where: { id: replay.entityId } });
+        if (!item) throw new RestaurantError("The original menu item is no longer available.", "CONFLICT");
+        return item;
+      }
       await this.requireMenuParents(tx, input);
       const item = await tx.menuItem.create({
         data: {
@@ -279,7 +292,7 @@ export class RestaurantService {
           entityType: "MenuItem",
           entityId: item.id,
           locationId: input.locationId,
-          afterState: item,
+          afterState: { ...item, requestId: input.requestId, requestFingerprint },
         },
       });
       return item;

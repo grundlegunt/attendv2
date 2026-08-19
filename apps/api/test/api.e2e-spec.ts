@@ -4612,6 +4612,23 @@ describe("Milestone 5 seat-linked dining tabs", () => {
 });
 
 describe("Milestone 6 server POS and menus", () => {
+  it("replays concurrent menu item creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const category = await prisma.menuCategory.findFirstOrThrow({ include: { location: true } });
+    const station = await prisma.kitchenStation.findFirstOrThrow({ where: { locationId: category.locationId } });
+    const requestId = crypto.randomUUID();
+    const name = `Replay menu item ${crypto.randomUUID()}`;
+    const payload = { menuCategoryId: category.id, kitchenStationId: station.id, name, priceCents: 875, chargeCategory: "FOOD", isVegan: false, isGlutenFree: false, sortOrder: 99 };
+    const submit = () => request(app.getHttpServer()).post("/api/v1/restaurant-menu/items").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send(payload);
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(first.body.id).toBe(replay.body.id);
+    expect(await prisma.menuItem.count({ where: { name } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "menu_item.created", entityId: first.body.id } })).toBe(1);
+    await prisma.menuItem.delete({ where: { id: first.body.id } });
+  });
+
   it("publishes only active, available menu items with dietary tags and movie specials", async () => {
     const { prisma } = await import("@cinema/database");
     const burger = await prisma.menuItem.findFirstOrThrow({ where: { name: "Cheeseburger" } });
