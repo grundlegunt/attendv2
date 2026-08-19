@@ -1290,6 +1290,8 @@ model CustomerConsent {
 
 model RestaurantTab {
   id                       String                    @id @default(uuid())
+  idempotencyKey           String?
+  requestFingerprint       String?
   locationId               String
   location                 Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
   primaryCustomerId        String?
@@ -1332,6 +1334,7 @@ model RestaurantTab {
 
   @@index([locationId, status, openedAt])
   @@index([showtimeId, status])
+  @@unique([locationId, idempotencyKey])
   @@map("restaurant_tabs")
 }
 

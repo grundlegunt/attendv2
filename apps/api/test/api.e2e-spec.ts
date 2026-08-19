@@ -4570,17 +4570,27 @@ describe("Milestone 6 server POS and menus", () => {
     const burger = items.find((item) => item.name === "Cheeseburger")!;
     const cocktail = items.find((item) => item.name === "Old Fashioned")!;
 
-    const tab = await request(app.getHttpServer())
-      .post("/api/v1/restaurant-tabs/walk-in")
-      .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ label: "Bar guest 12" });
+    const tabRequestId = crypto.randomUUID();
+    const openTab = () =>
+      request(app.getHttpServer())
+        .post("/api/v1/restaurant-tabs/walk-in")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId: tabRequestId, label: "Bar guest 12" });
+    const [tab, tabReplay] = await Promise.all([openTab(), openTab()]);
     expect(tab.status).toBe(201);
+    expect(tabReplay.status).toBe(201);
+    expect(tabReplay.body.id).toBe(tab.body.id);
     expect(tab.body).toMatchObject({
       tabType: "WALK_IN",
       label: "Bar guest 12",
       showtimeId: null,
       autoSettleAuthorized: false,
     });
+    await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ requestId: tabRequestId, label: "Different guest" })
+      .expect(409);
 
     const orderRequestId = crypto.randomUUID();
     const order = await request(app.getHttpServer())

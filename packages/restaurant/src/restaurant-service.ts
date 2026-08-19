@@ -545,34 +545,75 @@ export class RestaurantService {
   }
 
   async openWalkInTab(input: {
+    requestId: string;
     locationId: string;
     actorId: string;
     label: string;
   }) {
-    return this.prisma.$transaction(async (tx) => {
-      const tab = await tx.restaurantTab.create({
-        data: {
-          locationId: input.locationId,
-          tabType: "WALK_IN",
-          label: input.label,
-          status: "OPEN",
-          fulfillmentMode: "SEAT_DELIVERY",
-          autoSettleAuthorized: false,
-        },
-      });
-      await tx.auditEvent.create({
-        data: {
-          actorType: "EMPLOYEE",
-          actorId: input.actorId,
-          action: "restaurant_tab.opened",
-          entityType: "RestaurantTab",
-          entityId: tab.id,
-          locationId: input.locationId,
-          afterState: { tabType: "WALK_IN", label: input.label },
-        },
-      });
-      return tab;
+    const requestFingerprint = JSON.stringify({
+      actorId: input.actorId,
+      label: input.label,
     });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const tab = await tx.restaurantTab.create({
+          data: {
+            locationId: input.locationId,
+            idempotencyKey: input.requestId,
+            requestFingerprint,
+            tabType: "WALK_IN",
+            label: input.label,
+            status: "OPEN",
+            fulfillmentMode: "SEAT_DELIVERY",
+            autoSettleAuthorized: false,
+          },
+        });
+        await tx.auditEvent.create({
+          data: {
+            actorType: "EMPLOYEE",
+            actorId: input.actorId,
+            action: "restaurant_tab.opened",
+            entityType: "RestaurantTab",
+            entityId: tab.id,
+            locationId: input.locationId,
+            afterState: {
+              requestId: input.requestId,
+              tabType: "WALK_IN",
+              label: input.label,
+            },
+          },
+        });
+        return tab;
+      });
+    } catch (error) {
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== "P2002"
+      ) {
+        throw error;
+      }
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const replay = await this.prisma.restaurantTab.findUnique({
+          where: {
+            locationId_idempotencyKey: {
+              locationId: input.locationId,
+              idempotencyKey: input.requestId,
+            },
+          },
+        });
+        if (replay) {
+          if (replay.requestFingerprint !== requestFingerprint) {
+            throw new RestaurantError(
+              "Walk-in tab request id was reused with different details.",
+              "CONFLICT",
+            );
+          }
+          return replay;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10 * (attempt + 1)));
+      }
+      throw error;
+    }
   }
 
   async createOrder(input: {
