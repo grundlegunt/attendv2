@@ -19,4 +19,12 @@ describe("gift card admin resilience", () => {
     assert.match(source, /disabled=\{saving\}/);
     assert.match(source, /await load\(\)/);
   });
+
+  it("uses a fresh request identity when issuance details change", () => {
+    assert.match(source, /function changeIssuanceDetail/);
+    assert.match(source, /issuanceKey\.current = crypto\.randomUUID\(\)/);
+    for (const setter of ["setAmount", "setRecipientName", "setRecipientEmail"]) {
+      assert.match(source, new RegExp(`changeIssuanceDetail\\(${setter},`));
+    }
+  });
 });
