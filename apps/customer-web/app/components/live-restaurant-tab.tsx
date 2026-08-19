@@ -52,6 +52,7 @@ export function LiveRestaurantTab({
   const refreshRequestRef = useRef(0);
   const tabIdentityRef = useRef(0);
   const tipHydratedRef = useRef(false);
+  const tipAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const paymentAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   async function refresh() {
@@ -115,6 +116,10 @@ export function LiveRestaurantTab({
       return;
     }
     const tabIdentity = tabIdentityRef.current;
+    const tipFingerprint = JSON.stringify({ tabId: tab?.id ?? tabId, tipCents: value });
+    if (tipAttemptRef.current?.fingerprint !== tipFingerprint) {
+      tipAttemptRef.current = { fingerprint: tipFingerprint, requestId: crypto.randomUUID() };
+    }
     tipPendingRef.current = true;
     refreshRequestRef.current += 1;
     refreshPendingRef.current = false;
@@ -127,16 +132,23 @@ export function LiveRestaurantTab({
           : `/customer/restaurant-tabs/${tabId}/tip`,
         {
         method: "POST",
-        body: JSON.stringify({ tipCents: value }),
+        body: JSON.stringify({
+          requestId: tipAttemptRef.current.requestId,
+          tipCents: value,
+        }),
         },
       );
       if (tabIdentity !== tabIdentityRef.current) return;
+      tipAttemptRef.current = null;
       setTab(updatedTab);
       setTipCents(value);
       setCustomTipCents(String(value));
       setRefreshError("");
     } catch (error) {
       if (tabIdentity !== tabIdentityRef.current) return;
+      if (error instanceof ApiRequestError && error.status < 500) {
+        tipAttemptRef.current = null;
+      }
       setTipError(
         error instanceof ApiRequestError
           ? error.body.message

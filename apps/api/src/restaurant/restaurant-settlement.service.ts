@@ -57,9 +57,14 @@ export class RestaurantSettlementService {
     return this.tabView({ tabId: grant.tabId, customerId: grant.customerId });
   }
 
-  async selectGuestTip(token: string, tipCents: number) {
+  async selectGuestTip(token: string, tipCents: number, requestId: string) {
     const grant = this.verifyGuestToken(token);
-    return this.selectTip(grant.tabId, grant.customerId, tipCents);
+    return this.selectTip({
+      tabId: grant.tabId,
+      customerId: grant.customerId,
+      requestId,
+      tipCents,
+    });
   }
 
   async payGuest(input: {
@@ -82,34 +87,57 @@ export class RestaurantSettlementService {
     return this.tabView({ tabId, customerId });
   }
 
-  async selectTip(tabId: string, customerId: string, tipCents: number) {
+  async selectTip(input: {
+    tabId: string;
+    customerId: string;
+    requestId: string;
+    tipCents: number;
+  }) {
     await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${tabId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${input.tabId} FOR UPDATE`;
       const tab = await tx.restaurantTab.findFirst({
         where: {
-          id: tabId,
-          primaryCustomerId: customerId,
+          id: input.tabId,
+          primaryCustomerId: input.customerId,
           status: { in: ["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE", "PAYMENT_FAILED"] },
         },
       });
       if (!tab) throw AppError.notFound("Restaurant tab was not found.");
-      await tx.restaurantTab.update({
-        where: { id: tab.id },
-        data: { selectedTipCents: tipCents },
-      });
-      await tx.auditEvent.create({
-        data: {
-          actorType: "CUSTOMER",
-          actorId: customerId,
+      const replay = await tx.auditEvent.findFirst({
+        where: {
           action: "restaurant_tab.tip_selected",
           entityType: "RestaurantTab",
           entityId: tab.id,
           locationId: tab.locationId,
-          afterState: { tipCents },
+          actorId: input.customerId,
+          afterState: { path: ["requestId"], equals: input.requestId },
+        },
+        orderBy: { occurredAt: "desc" },
+      });
+      if (replay) {
+        const details = replay.afterState as Record<string, unknown>;
+        if (details.tipCents !== input.tipCents) {
+          throw AppError.conflict("Tip request id was reused with a different amount.");
+        }
+        return;
+      }
+      await tx.restaurantTab.update({
+        where: { id: tab.id },
+        data: { selectedTipCents: input.tipCents },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: "CUSTOMER",
+          actorId: input.customerId,
+          action: "restaurant_tab.tip_selected",
+          entityType: "RestaurantTab",
+          entityId: tab.id,
+          locationId: tab.locationId,
+          afterState: { requestId: input.requestId, tipCents: input.tipCents },
         },
       });
     });
-    return this.tabView({ tabId, customerId });
+    return this.tabView({ tabId: input.tabId, customerId: input.customerId });
   }
 
   async checksDue(locationId: string, now = new Date()) {
