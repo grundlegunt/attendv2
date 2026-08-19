@@ -229,6 +229,7 @@ export default function AdminPage() {
   const [savingPlan, setSavingPlan] = useState(false);
   const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicatePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const addPlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -454,28 +455,38 @@ export default function AdminPage() {
     event.preventDefault();
     if (!data || !planShowtimeStartsAt) return;
     setError(null);
+    const body = JSON.stringify({
+      movieId: planShowtimeMovieId || data.location.organization.movies[0]?.id,
+      auditoriumId:
+        planShowtimeAuditoriumId || data.location.auditoriums[0]?.id,
+      priceTierId:
+        planShowtimePriceTierId || data.location.organization.priceTiers[0]?.id,
+      startsAt: new Date(planShowtimeStartsAt).toISOString(),
+      onSale: false,
+      presentation: planShowtimePresentation,
+      filmSeriesId: null,
+      format: null,
+    });
+    const fingerprint = `${plan.id}:${body}`;
+    if (addPlanShowtimeAttemptRef.current?.fingerprint !== fingerprint) {
+      addPlanShowtimeAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       const updated = await apiFetch<SchedulePlan>(
         `/cinema/schedule-plans/${plan.id}/showtimes`,
         {
           accessToken: token ?? undefined,
           method: "POST",
-          body: JSON.stringify({
-            movieId:
-              planShowtimeMovieId || data.location.organization.movies[0]?.id,
-            auditoriumId:
-              planShowtimeAuditoriumId || data.location.auditoriums[0]?.id,
-            priceTierId:
-              planShowtimePriceTierId ||
-              data.location.organization.priceTiers[0]?.id,
-            startsAt: new Date(planShowtimeStartsAt).toISOString(),
-            onSale: false,
-            presentation: planShowtimePresentation,
-            filmSeriesId: null,
-            format: null,
-          }),
+          headers: {
+            "Idempotency-Key": addPlanShowtimeAttemptRef.current.requestId,
+          },
+          body,
         },
       );
+      addPlanShowtimeAttemptRef.current = null;
       setSchedulePlans((current) =>
         current.map((candidate) =>
           candidate.id === updated.id ? updated : candidate,
@@ -484,6 +495,9 @@ export default function AdminPage() {
       setPlanShowtimeStartsAt("");
       setPlanShowtimePresentation("STANDARD");
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        addPlanShowtimeAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
