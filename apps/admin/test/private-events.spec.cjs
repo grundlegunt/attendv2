@@ -18,4 +18,11 @@ describe("private-event inquiry management", () => {
     assert.match(source, /The inquiry export could not be downloaded/);
     assert.match(source, /className="error-banner" role="alert"/);
   });
+
+  it("cancels stale queue requests when filters change", () => {
+    assert.match(source, /const controller = new AbortController\(\)/);
+    assert.match(source, /signal: controller\.signal/);
+    assert.match(source, /reason\.name === "AbortError"/);
+    assert.match(source, /controller\.abort\(\)/);
+  });
 });

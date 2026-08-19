@@ -9,7 +9,7 @@ export default function PrivateEventsAdminPage() {
   if (query.trim()) parameters.set("query", query.trim());
   if (statusFilter) parameters.set("status", statusFilter);
   const path = `/management/private-event-inquiries${parameters.size ? `?${parameters}` : ""}`;
-  useEffect(() => { const timer = window.setTimeout(() => { setError(null); void apiFetch<Inquiry[]>(path, { accessToken }).then(setItems).catch((reason) => setError(reason instanceof ApiRequestError ? reason.body.message : "Private-event inquiries could not be loaded.")); }, 250); return () => window.clearTimeout(timer); }, [accessToken, path]);
+  useEffect(() => { const controller = new AbortController(); const timer = window.setTimeout(() => { setError(null); void apiFetch<Inquiry[]>(path, { accessToken, signal: controller.signal }).then(setItems).catch((reason) => { if (reason instanceof Error && reason.name === "AbortError") return; setError(reason instanceof ApiRequestError ? reason.body.message : "Private-event inquiries could not be loaded."); }); }, 250); return () => { window.clearTimeout(timer); controller.abort(); }; }, [accessToken, path]);
   async function status(id: string, next: string) { setError(null); try { await apiFetch(`/management/private-event-inquiries/${id}`, { accessToken, method: "PATCH", body: JSON.stringify({ status: next }) }); setItems((current) => current.map((item) => item.id === id ? { ...item, status: next } : item).filter((item) => !statusFilter || item.status === statusFilter)); } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The inquiry status could not be updated."); } }
   async function exportCsv() {
     setError(null);
