@@ -16,6 +16,7 @@ import {
   openSeatLinkedTabsRequestSchema,
   openWalkInTabRequestSchema,
   refireFulfillmentTicketRequestSchema,
+  sendRestaurantOrderRequestSchema,
   splitRestaurantTabRequestSchema,
   transferRestaurantOrderRequestSchema,
 } from "@cinema/shared";
@@ -112,9 +113,15 @@ export class RestaurantController {
   }
 
   @Post("orders/:orderId/send")
-  sendOrder(@CurrentActor() actor: RequestActor, @Param("orderId") orderId: string) {
+  sendOrder(
+    @CurrentActor() actor: RequestActor,
+    @Param("orderId") orderId: string,
+    @Body(new ZodValidationPipe(sendRestaurantOrderRequestSchema)) body: unknown,
+  ) {
+    const parsed = sendRestaurantOrderRequestSchema.parse(body);
     return this.restaurant.sendOrder({
       orderId,
+      requestId: parsed.requestId ?? randomUUID(),
       locationId: this.locationId(actor),
       actorId: actor.sub,
     });

@@ -4742,6 +4742,44 @@ describe("Milestone 6 server POS and menus", () => {
     }
   });
 
+  it("replays concurrent send-order requests without duplicating kitchen tickets", async () => {
+    const { prisma } = await import("@cinema/database");
+    const cocktail = await prisma.menuItem.findFirstOrThrow({
+      where: { name: "Old Fashioned" },
+    });
+    const tab = await request(app.getHttpServer())
+      .post("/api/v1/restaurant-tabs/walk-in")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ label: "Send replay" });
+    const order = await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/${tab.body.id}/orders`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({});
+    await request(app.getHttpServer())
+      .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/items`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ menuItemId: cocktail.id, quantity: 1, modifierIds: [] })
+      .expect(201);
+
+    const requestId = crypto.randomUUID();
+    const send = () =>
+      request(app.getHttpServer())
+        .post(`/api/v1/restaurant-tabs/orders/${order.body.id}/send`)
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .send({ requestId });
+    const responses = await Promise.all([send(), send()]);
+
+    expect(responses.map((response) => response.status)).toEqual([201, 201]);
+    expect(responses[1].body.fulfillmentTickets[0].id).toBe(
+      responses[0].body.fulfillmentTickets[0].id,
+    );
+    expect(
+      await prisma.fulfillmentTicket.count({
+        where: { restaurantOrderId: order.body.id },
+      }),
+    ).toBe(1);
+  });
+
   it("never adds a draft line after its order is sent concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const cocktail = await prisma.menuItem.findFirstOrThrow({

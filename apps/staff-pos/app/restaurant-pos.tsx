@@ -95,6 +95,7 @@ export function RestaurantPos({
   const startOrderAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const walkInAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const refireAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const sendOrderAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const menuRequestRef = useRef(0);
   const menuPendingRef = useRef(false);
   const tabRefreshRequestRef = useRef(0);
@@ -469,6 +470,10 @@ export function RestaurantPos({
     if (!orderId || actionLocks.current.size > 0 || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedOrderId = orderId;
+    const fingerprint = JSON.stringify({ orderId: requestedOrderId });
+    if (sendOrderAttemptRef.current?.fingerprint !== fingerprint) {
+      sendOrderAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     try {
       const result = await apiFetch<{
         rejectedDraft: null | {
@@ -478,9 +483,10 @@ export function RestaurantPos({
       }>(`/restaurant-tabs/orders/${requestedOrderId}/send`, {
         method: "POST",
         accessToken,
-        body: "{}",
+        body: JSON.stringify({ requestId: sendOrderAttemptRef.current.requestId }),
       });
       if (requestId !== tabActionRequestRef.current) return;
+      sendOrderAttemptRef.current = null;
       setOrderId(result.rejectedDraft?.orderId ?? "");
       setDraftItems([]);
       setBlockedItems(result.rejectedDraft?.items ?? []);
@@ -492,6 +498,9 @@ export function RestaurantPos({
           : "Order sent to its stations.",
       );
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) {
+        sendOrderAttemptRef.current = null;
+      }
       if (requestId === tabActionRequestRef.current) showError(error);
     } finally {
       finishAction(actionKey);
