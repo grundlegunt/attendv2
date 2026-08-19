@@ -26,7 +26,10 @@ import { CinemaService } from "./cinema.service";
 const giftCardBalanceSchema = z.object({ code: z.string().trim().min(20).max(40) }).strict();
 const createSchedulePlanSchema = z.object({ name: z.string().trim().min(1).max(80), weekStartsAt: z.string().datetime() }).strict();
 const duplicateSchedulePlanSchema = z.object({ name: z.string().trim().min(1).max(80) }).strict();
-const renameSchedulePlanSchema = duplicateSchedulePlanSchema;
+const renameSchedulePlanSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  expectedName: z.string().min(1).max(80),
+}).strict();
 const updateSchedulePlanShowtimeSchema = z.object({
   startsAt: z.string().datetime(),
   expectedStartsAt: z.string().datetime(),
@@ -183,8 +186,20 @@ export class CinemaController {
   @Patch("schedule-plans/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  renameSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Body(new ZodValidationPipe(renameSchedulePlanSchema)) body: unknown) {
-    return this.cinemaService.renameSchedulePlan(actor, id, renameSchedulePlanSchema.parse(body).name);
+  renameSchedulePlan(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(renameSchedulePlanSchema)) body: unknown,
+  ) {
+    const input = renameSchedulePlanSchema.parse(body);
+    return this.cinemaService.renameSchedulePlan(
+      actor,
+      id,
+      input.name,
+      input.expectedName,
+      requestId,
+    );
   }
 
   @Delete("schedule-plans/:id/showtimes/:index")

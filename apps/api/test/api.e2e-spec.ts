@@ -176,6 +176,47 @@ describe("Saved schedule plan publishing", () => {
       .expect(200);
   });
 
+  it("replays a schedule-plan rename and rejects a stale name", async () => {
+    const login = await loginOwner();
+    expect(login.status).toBe(200);
+    const auth = { Authorization: `Bearer ${login.body.accessToken}` };
+    const originalName = `Rename source ${Date.now()}`;
+    const renamedName = `Rename target ${Date.now()}`;
+    const plan = await request(app.getHttpServer())
+      .post("/api/v1/cinema/schedule-plans")
+      .set(auth)
+      .send({
+        name: originalName,
+        weekStartsAt: "2034-12-11T00:00:00.000Z",
+      })
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const rename = () =>
+      request(app.getHttpServer())
+        .patch(`/api/v1/cinema/schedule-plans/${plan.body.id}`)
+        .set(auth)
+        .set("Idempotency-Key", requestId)
+        .send({ name: renamedName, expectedName: originalName });
+
+    const [renamed, replayed] = await Promise.all([rename(), rename()]);
+
+    expect(renamed.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(renamed.body.name).toBe(renamedName);
+    expect(replayed.body.id).toBe(renamed.body.id);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/schedule-plans/${plan.body.id}`)
+      .set(auth)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .send({ name: `Stale rename ${Date.now()}`, expectedName: originalName })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .delete(`/api/v1/cinema/schedule-plans/${plan.body.id}`)
+      .set(auth)
+      .expect(200);
+  });
+
   it("replays a saved-showing removal without deleting the next item", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);
@@ -333,7 +374,7 @@ describe("Saved schedule plan publishing", () => {
 
     const firstCheck = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
     expect(firstCheck.body).toEqual(expect.objectContaining({ valid: true, showtimeCount: 1, expectedUpdatedAt: expect.any(String) }));
-    await request(app.getHttpServer()).patch(`/api/v1/cinema/schedule-plans/${planId}`).set(auth).send({ name: `Renamed publish test ${Date.now()}` }).expect(200);
+    await request(app.getHttpServer()).patch(`/api/v1/cinema/schedule-plans/${planId}`).set(auth).set("Idempotency-Key", crypto.randomUUID()).send({ name: `Renamed publish test ${Date.now()}`, expectedName: createdPlan.body.name }).expect(200);
     await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/publish`).set(auth).send({ expectedUpdatedAt: firstCheck.body.expectedUpdatedAt }).expect(409);
 
     const freshCheck = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
