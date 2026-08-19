@@ -1504,6 +1504,8 @@ model Modifier {
 
 model RestaurantOrder {
   id               String                @id @default(uuid())
+  idempotencyKey   String?
+  requestFingerprint String?
   restaurantTabId  String
   restaurantTab    RestaurantTab         @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
   showtimeSeatId   String?
@@ -1525,6 +1527,7 @@ model RestaurantOrder {
   @@index([showtimeSeatId, status])
   @@index([serverEmployeeId, createdAt])
   @@index([ticketOrderId, createdAt])
+  @@unique([restaurantTabId, idempotencyKey])
   @@map("restaurant_orders")
 }
 

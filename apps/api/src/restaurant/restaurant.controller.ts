@@ -83,8 +83,10 @@ export class RestaurantController {
     @Param("tabId") tabId: string,
     @Body(new ZodValidationPipe(createRestaurantOrderRequestSchema)) body: unknown,
   ) {
+    const parsed = createRestaurantOrderRequestSchema.parse(body);
     return this.restaurant.createOrder({
-      ...createRestaurantOrderRequestSchema.parse(body),
+      ...parsed,
+      requestId: parsed.requestId ?? randomUUID(),
       tabId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
