@@ -5805,14 +5805,19 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       tipCents: 0,
       paymentMethodReferenceId: delayedMethod.id,
     });
+    let customerPaymentPending = false;
     for (let attempt = 0; attempt < 50; attempt += 1) {
       const current = await prisma.restaurantTab.findUniqueOrThrow({
         where: { id: tab.id },
         select: { status: true },
       });
-      if (current.status === "SETTLEMENT_PENDING") break;
+      if (current.status === "SETTLEMENT_PENDING") {
+        customerPaymentPending = true;
+        break;
+      }
       await new Promise((resolve) => setTimeout(resolve, 5));
     }
+    expect(customerPaymentPending).toBe(true);
     await prisma.restaurantTab.update({
       where: { id: tab.id },
       data: { checkDroppedAt: new Date(), checkDroppedByEmployeeId: owner.id },
