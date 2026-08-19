@@ -82,6 +82,10 @@ export default function KdsPage() {
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
   const transitioningTicketIdsRef = useRef(new Set<string>());
+  const transitionAttemptRef = useRef<{
+    fingerprint: string;
+    requestId: string;
+  } | null>(null);
   const [transitioningTicketIds, setTransitioningTicketIds] = useState<string[]>([]);
 
   function storeSession(next: ActiveStaffSession) {
@@ -255,14 +259,22 @@ export default function KdsPage() {
     if (transitioningTicketIdsRef.current.has(ticket.id)) return;
     transitioningTicketIdsRef.current.add(ticket.id);
     setTransitioningTicketIds(Array.from(transitioningTicketIdsRef.current));
+    const fingerprint = JSON.stringify({ ticketId: ticket.id, action });
+    if (transitionAttemptRef.current?.fingerprint !== fingerprint) {
+      transitionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     try {
       await apiFetch(`/fulfillment/tickets/${ticket.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, requestId: transitionAttemptRef.current.requestId }),
       });
+      transitionAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        transitionAttemptRef.current = null;
+      }
       setError(reason instanceof ApiRequestError ? reason.body.message : "Status did not update.");
     } finally {
       transitioningTicketIdsRef.current.delete(ticket.id);

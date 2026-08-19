@@ -1099,6 +1099,31 @@ export class RestaurantService {
       if (!ticket) throw new RestaurantError("Fulfillment ticket was not found.", "NOT_FOUND");
 
       const now = new Date();
+      if (input.action !== "REFIRE" && input.requestId) {
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            action: "fulfillment_ticket.status_changed",
+            entityType: "FulfillmentTicket",
+            entityId: ticket.id,
+            locationId: input.locationId,
+            afterState: { path: ["requestId"], equals: input.requestId },
+          },
+          orderBy: { occurredAt: "desc" },
+        });
+        if (replay) {
+          const details = replay.afterState as Record<string, unknown>;
+          if (replay.actorId !== input.actorId || details.action !== input.action) {
+            throw new RestaurantError(
+              "Fulfillment request id was reused with different details.",
+              "CONFLICT",
+            );
+          }
+          return tx.fulfillmentTicket.findUniqueOrThrow({
+            where: { id: ticket.id },
+            include: { items: { include: { menuItem: true } } },
+          });
+        }
+      }
       if (input.action === "REFIRE") {
         if (!input.requestId) {
           throw new RestaurantError("A refire request id is required.", "INVALID");
@@ -1692,7 +1717,7 @@ export class RestaurantService {
 
   private auditFulfillmentTransition(
     tx: Prisma.TransactionClient,
-    input: { locationId: string; actorId: string; action: string },
+    input: { locationId: string; actorId: string; action: string; requestId?: string },
     beforeStatus: FulfillmentTicketStatus,
     afterStatus: FulfillmentTicketStatus,
     entityId: string,
@@ -1711,6 +1736,7 @@ export class RestaurantService {
         locationId: input.locationId,
         beforeState: { status: beforeStatus },
         afterState: {
+          requestId: input.requestId ?? null,
           status: afterStatus,
           action: input.action,
           refireTicketId: refireTicketId ?? null,

@@ -67,7 +67,7 @@ export class FulfillmentController {
     const parsed = fulfillmentTicketTransitionRequestSchema.parse(body);
     return this.restaurant.transitionFulfillmentTicket({
       ...parsed,
-      requestId: parsed.action === "REFIRE" ? (parsed.requestId ?? randomUUID()) : undefined,
+      requestId: parsed.requestId ?? randomUUID(),
       ticketId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
