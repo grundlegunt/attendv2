@@ -1476,6 +1476,34 @@ describe("Milestone 1 cinema configuration", () => {
       .expect(409);
   });
 
+  it("replays concurrent auditorium duplication", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const payload = { name: "Integration Theater copy" };
+    const duplicate = () => request(app.getHttpServer())
+      .post(`/api/v1/cinema/auditoriums/${auditoriumId}/duplicate`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send(payload);
+    const [copy, replayed] = await Promise.all([duplicate(), duplicate()]);
+    expect(copy.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body.id).toBe(copy.body.id);
+    expect(replayed.body.seatMap.seats).toHaveLength(copy.body.seatMap.seats.length);
+    expect(await prisma.auditorium.count({ where: { id: copy.body.id } })).toBe(1);
+    expect(await prisma.auditEvent.count({
+      where: { action: "auditorium.duplicated", entityId: copy.body.id },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .post(`/api/v1/cinema/auditoriums/${auditoriumId}/duplicate`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ name: "Different copy" })
+      .expect(409);
+    await prisma.auditEvent.deleteMany({ where: { entityId: copy.body.id } });
+    await prisma.auditorium.delete({ where: { id: copy.body.id } });
+  });
+
   it("rejects a showtime before the 15-minute cleaning window has passed", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/cinema/showtimes")

@@ -16,3 +16,8 @@ test("auditorium layout saves retain a stable retry identity and version", () =>
   assert.match(source, /"Idempotency-Key": updateAuditoriumAttemptRef\.current\.requestId/);
   assert.match(source, /"If-Match": String\(editingVersion\)/);
 });
+
+test("auditorium duplication retains a stable retry identity", () => {
+  assert.match(source, /duplicateAuditoriumAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": duplicateAuditoriumAttemptRef\.current\.requestId/);
+});
