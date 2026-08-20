@@ -423,11 +423,13 @@ export class CinemaController {
   @RequirePermissions(Permission.ShowtimeManage)
   moveShowtimeGroup(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(moveShowtimeGroupRequestSchema)) body: unknown,
   ) {
     return this.cinemaService.moveShowtimeGroup(
       actor,
       body as ReturnType<typeof moveShowtimeGroupRequestSchema.parse>,
+      requestId,
     );
   }
 

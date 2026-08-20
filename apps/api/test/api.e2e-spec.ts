@@ -1438,6 +1438,52 @@ describe("Milestone 1 cinema configuration", () => {
       .expect(409);
   });
 
+  it("replays a concurrent showtime group move exactly once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const payload = {
+      moves: [
+        {
+          showtimeId: firstShowtimeId,
+          auditoriumId,
+          startsAt: "2030-01-03T18:00:00.000Z",
+        },
+        {
+          showtimeId: secondShowtimeId,
+          auditoriumId,
+          startsAt: "2030-01-04T18:00:00.000Z",
+        },
+      ],
+    };
+    const move = () => request(app.getHttpServer())
+      .patch("/api/v1/cinema/showtimes/group")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send(payload);
+    const [moved, replayed] = await Promise.all([move(), move()]);
+    expect(moved.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(moved.body.showtimes).toHaveLength(2);
+    expect(replayed.body.showtimes).toHaveLength(2);
+    expect(await prisma.auditEvent.count({
+      where: {
+        action: "showtime.group_moved",
+        entityId: { in: [firstShowtimeId, secondShowtimeId] },
+      },
+    })).toBe(2);
+    await request(app.getHttpServer())
+      .patch("/api/v1/cinema/showtimes/group")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({
+        moves: [
+          { ...payload.moves[0], startsAt: "2030-01-03T19:00:00.000Z" },
+          payload.moves[1],
+        ],
+      })
+      .expect(409);
+  });
+
   it("includes the required price tier relation in the admin schedule", async () => {
     const res = await request(app.getHttpServer())
       .get("/api/v1/cinema/admin/bootstrap")
