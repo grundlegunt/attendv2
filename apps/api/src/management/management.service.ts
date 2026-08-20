@@ -447,11 +447,28 @@ export class ManagementService {
     ].join("\n");
   }
 
-  async updatePrivateEventInquiry(locationId: string, employeeId: string, inquiryId: string, status?: string) {
+  async updatePrivateEventInquiry(locationId: string, employeeId: string, inquiryId: string, status: string | undefined, requestId: string) {
     if (!status || !["NEW", "CONTACTED", "BOOKED", "CLOSED"].includes(status)) throw AppError.validationFailed("A valid inquiry status is required.");
-    const inquiry = await prisma.privateEventInquiry.findFirst({ where: { id: inquiryId, locationId } });
-    if (!inquiry) throw AppError.notFound("Private-event inquiry was not found.");
-    return prisma.$transaction(async (tx) => { const updated = await tx.privateEventInquiry.update({ where: { id: inquiry.id }, data: { status } }); await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "private_event_inquiry.status_updated", entityType: "PrivateEventInquiry", entityId: inquiry.id, beforeState: { status: inquiry.status }, afterState: { status } } }); return updated; });
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ inquiryId, status })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId, action: "private_event_inquiry.status_updated", afterState: { path: ["requestId"], equals: requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The inquiry-status idempotency key was already used with different details.");
+        const inquiry = await tx.privateEventInquiry.findFirst({ where: { id: replay.entityId, locationId } });
+        if (!inquiry) throw AppError.conflict("The updated inquiry is no longer available.");
+        return inquiry;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${inquiryId}))`;
+      const inquiry = await tx.privateEventInquiry.findFirst({ where: { id: inquiryId, locationId } });
+      if (!inquiry) throw AppError.notFound("Private-event inquiry was not found.");
+      if (inquiry.status === status) return inquiry;
+      const updated = await tx.privateEventInquiry.update({ where: { id: inquiry.id }, data: { status } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "private_event_inquiry.status_updated", entityType: "PrivateEventInquiry", entityId: inquiry.id, beforeState: { status: inquiry.status }, afterState: { status, requestId, requestFingerprint } } });
+      return updated;
+    });
   }
 
   async giftCards(locationId: string) {

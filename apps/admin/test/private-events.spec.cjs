@@ -25,4 +25,9 @@ describe("private-event inquiry management", () => {
     assert.match(source, /reason\.name === "AbortError"/);
     assert.match(source, /controller\.abort\(\)/);
   });
+
+  it("retains a stable retry identity for status updates", () => {
+    assert.match(source, /statusAttemptRef = useRef/);
+    assert.match(source, /"Idempotency-Key": statusAttemptRef\.current\.requestId/);
+  });
 });
