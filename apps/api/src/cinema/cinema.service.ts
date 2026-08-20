@@ -2225,14 +2225,30 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async permanentlyDeleteMovie(actor: RequestActor, id: string) {
+  async permanentlyDeleteMovie(
+    actor: RequestActor,
+    id: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
       const location = await tx.location.findUnique({
         where: { id: locationId },
         select: { organizationId: true },
       });
       if (!location) throw AppError.notFound("Location not found.");
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "movie.deleted",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) return { deleted: true, id: replay.entityId };
       const movie = await tx.movie.findFirst({
         where: { id, organizationId: location.organizationId, active: false },
       });
@@ -2256,6 +2272,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             title: movie.title,
             runtimeMinutes: movie.runtimeMinutes,
           },
+          afterState: { deleted: true, requestId },
         },
       });
       await tx.movie.delete({ where: { id } });

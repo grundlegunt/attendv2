@@ -2460,11 +2460,23 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .expect(200);
 
-    await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const deleteRequestId = crypto.randomUUID();
+    const permanentlyDelete = () => request(app.getHttpServer())
       .delete(`/api/v1/cinema/movies/${movie.body.id}/permanent`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(200)
-      .expect({ deleted: true, id: movie.body.id });
+      .set("Idempotency-Key", deleteRequestId);
+    const [deleted, replayedDelete] = await Promise.all([
+      permanentlyDelete(),
+      permanentlyDelete(),
+    ]);
+    expect(deleted.status).toBe(200);
+    expect(replayedDelete.status).toBe(200);
+    expect(deleted.body).toEqual({ deleted: true, id: movie.body.id });
+    expect(replayedDelete.body).toEqual(deleted.body);
+    expect(await prisma.auditEvent.count({
+      where: { action: "movie.deleted", entityId: movie.body.id },
+    })).toBe(1);
 
     const bootstrap = await request(app.getHttpServer())
       .get("/api/v1/cinema/admin/bootstrap")
