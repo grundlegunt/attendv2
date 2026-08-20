@@ -1682,6 +1682,47 @@ describe("Milestone 1 cinema configuration", () => {
     expect(await prisma.auditEvent.count({
       where: { action: "film_series.restored", entityId: series.body.id },
     })).toBe(1);
+
+    const storedSeries = await prisma.filmSeries.findUniqueOrThrow({
+      where: { id: series.body.id },
+      select: { organizationId: true },
+    });
+    const activeSeries = await prisma.filmSeries.findMany({
+      where: { organizationId: storedSeries.organizationId, active: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true },
+    });
+    const seriesIds = activeSeries.map((entry) => entry.id).reverse();
+    const reorderRequestId = crypto.randomUUID();
+    const reorder = () => request(app.getHttpServer())
+      .post("/api/v1/cinema/film-series/reorder")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", reorderRequestId)
+      .send({ seriesIds });
+    const [reordered, reorderReplay] = await Promise.all([reorder(), reorder()]);
+    expect(reordered.status).toBe(201);
+    expect(reorderReplay.status).toBe(201);
+    expect(reordered.body).toEqual({ reordered: true });
+    expect(await prisma.auditEvent.count({
+      where: {
+        action: "film_series.reordered",
+        afterState: { path: ["requestId"], equals: reorderRequestId },
+      },
+    })).toBe(1);
+    const storedOrder = await prisma.filmSeries.findMany({
+      where: { id: { in: seriesIds } },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    expect(storedOrder.map((entry) => entry.id)).toEqual(seriesIds);
+    if (seriesIds.length > 1) {
+      await request(app.getHttpServer())
+        .post("/api/v1/cinema/film-series/reorder")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .set("Idempotency-Key", reorderRequestId)
+        .send({ seriesIds: [...seriesIds].reverse() })
+        .expect(409);
+    }
   });
 
   it("lists real on-sale showtimes publicly", async () => {

@@ -469,6 +469,13 @@ export const updateFilmSeriesRequestSchema = createFilmSeriesRequestSchema
     "At least one film-series field is required.",
   );
 
+export const reorderFilmSeriesRequestSchema = z.object({
+  seriesIds: z.array(z.string().uuid()).min(1).max(500),
+}).refine(
+  (value) => new Set(value.seriesIds).size === value.seriesIds.length,
+  "A film series can only appear once in the display order.",
+);
+
 export const showtimePresentationSchema = z.enum([
   "STANDARD",
   "OPEN_CAPTIONS",
