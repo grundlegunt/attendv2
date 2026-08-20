@@ -205,6 +205,7 @@ export function ManagementControls({
   const [newRoleName, setNewRoleName] = useState("");
   const roleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const renameRoleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const rolePermissionsAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleName, setSelectedRoleName] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [employeeRoleDrafts, setEmployeeRoleDrafts] = useState<
@@ -598,14 +599,20 @@ export function ManagementControls({
   }
   async function saveRole() {
     if (!selectedRoleId) return;
+    const body = JSON.stringify({ permissionKeys: selectedPermissions });
+    const fingerprint = `${selectedRoleId}:${body}`;
+    if (rolePermissionsAttemptRef.current?.fingerprint !== fingerprint) rolePermissionsAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/management/roles/${selectedRoleId}/permissions`, {
         accessToken,
         method: "PATCH",
-        body: JSON.stringify({ permissionKeys: selectedPermissions }),
+        headers: { "Idempotency-Key": rolePermissionsAttemptRef.current.requestId },
+        body,
       });
+      rolePermissionsAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) rolePermissionsAttemptRef.current = null;
       showError(reason);
     }
   }

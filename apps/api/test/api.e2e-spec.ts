@@ -1295,11 +1295,16 @@ describe("RBAC permission enforcement", () => {
     expect(created.body.key).toMatch(/^CUSTOM_[A-F0-9]{32}$/);
     expect(await prisma.role.count({ where: { name } })).toBe(1);
     expect(await prisma.auditEvent.count({ where: { action: "role.created", entityId: created.body.id } })).toBe(1);
-    await request(app.getHttpServer())
+    const permissionsRequestId = crypto.randomUUID();
+    const updatePermissions = () => request(app.getHttpServer())
       .patch(`/api/v1/management/roles/${created.body.id}/permissions`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ permissionKeys: ["showtime.manage", "ticket.refund"] })
-      .expect(200);
+      .set("Idempotency-Key", permissionsRequestId)
+      .send({ permissionKeys: ["showtime.manage", "ticket.refund"] });
+    const [permissions, replayedPermissions] = await Promise.all([updatePermissions(), updatePermissions()]);
+    expect(permissions.status).toBe(200);
+    expect(replayedPermissions.body).toEqual(permissions.body);
+    expect(await prisma.auditEvent.count({ where: { action: "role.permissions_updated", entityId: created.body.id } })).toBe(1);
     const people = await request(app.getHttpServer())
       .get("/api/v1/management/people")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
