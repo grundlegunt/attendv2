@@ -222,6 +222,7 @@ export default function AdminPage() {
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
+  const movieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [seatInventory, setSeatInventory] =
     useState<ShowtimeSeatInventory | null>(null);
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(
@@ -730,34 +731,41 @@ export default function AdminPage() {
   async function createMovie(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = JSON.stringify({
+      title: movieTitle,
+      runtimeMinutes: runtime,
+      synopsis: movieSynopsis.trim() || null,
+      rating: movieRating.trim() || null,
+      posterUrl: moviePosterUrl.trim() || null,
+      detailPosterUrl: movieDetailPosterUrl.trim() || null,
+      posterPosition: moviePosterPosition,
+      detailPosterPosition: movieDetailPosterPosition,
+      diningSpecialArtworkUrl: movieDiningSpecialArtworkUrl.trim() || null,
+      diningSpecialTitle: movieDiningSpecialTitle.trim() || null,
+      director: movieDirector.trim() || null,
+      starring: movieStarring.trim() || null,
+      trailerUrl: movieTrailerUrl.trim() || null,
+      releaseYear: movieReleaseYear === "" ? null : movieReleaseYear,
+      distributorName: movieDistributorName.trim() || null,
+      distributorTerms: movieDistributorTerms,
+      pairingMenuItemIds,
+    });
+    if (!editingMovieId && movieAttemptRef.current?.fingerprint !== body) {
+      movieAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    }
     try {
       await apiFetch(
         editingMovieId ? `/cinema/movies/${editingMovieId}` : "/cinema/movies",
         {
           accessToken: token ?? undefined,
           method: editingMovieId ? "PATCH" : "POST",
-          body: JSON.stringify({
-            title: movieTitle,
-            runtimeMinutes: runtime,
-            synopsis: movieSynopsis.trim() || null,
-            rating: movieRating.trim() || null,
-            posterUrl: moviePosterUrl.trim() || null,
-            detailPosterUrl: movieDetailPosterUrl.trim() || null,
-            posterPosition: moviePosterPosition,
-            detailPosterPosition: movieDetailPosterPosition,
-            diningSpecialArtworkUrl:
-              movieDiningSpecialArtworkUrl.trim() || null,
-            diningSpecialTitle: movieDiningSpecialTitle.trim() || null,
-            director: movieDirector.trim() || null,
-            starring: movieStarring.trim() || null,
-            trailerUrl: movieTrailerUrl.trim() || null,
-            releaseYear: movieReleaseYear === "" ? null : movieReleaseYear,
-            distributorName: movieDistributorName.trim() || null,
-            distributorTerms: movieDistributorTerms,
-            pairingMenuItemIds,
-          }),
+          body,
+          ...(!editingMovieId && movieAttemptRef.current
+            ? { headers: { "Idempotency-Key": movieAttemptRef.current.requestId } }
+            : {}),
         },
       );
+      movieAttemptRef.current = null;
       setMovieTitle("");
       setMovieSynopsis("");
       setMovieRating("");
@@ -779,6 +787,9 @@ export default function AdminPage() {
       setMovieEditorOpen(false);
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        movieAttemptRef.current = null;
+      }
       showError(reason);
     }
   }

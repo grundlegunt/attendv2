@@ -1993,13 +1993,44 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async createMovie(actor: RequestActor, input: MovieInput) {
+  async createMovie(
+    actor: RequestActor,
+    input: MovieInput,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, input }))
+      .digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
       const location = await tx.location.findUnique({
         where: { id: locationId },
       });
       if (!location) throw AppError.notFound("Location not found.");
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "movie.created",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The movie idempotency key was already used with different details.",
+          );
+        }
+        const movie = await tx.movie.findFirst({
+          where: { id: replay.entityId, organizationId: location.organizationId },
+        });
+        if (!movie) throw AppError.conflict("The original movie is no longer available.");
+        return movie;
+      }
       await this.validatePairingMenuItems(
         tx,
         locationId,
@@ -2057,6 +2088,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             distributorName: movie.distributorName,
             distributorTerms: movie.distributorTerms,
             pairingMenuItemIds: input.pairingMenuItemIds,
+            requestId,
+            requestFingerprint,
           },
         },
       });

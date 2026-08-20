@@ -316,9 +316,14 @@ export class CinemaController {
   @RequirePermissions(Permission.MovieManage)
   createMovie(
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(createMovieRequestSchema)) body: unknown,
   ) {
-    return this.cinemaService.createMovie(actor, body as ReturnType<typeof createMovieRequestSchema.parse>);
+    return this.cinemaService.createMovie(
+      actor,
+      body as ReturnType<typeof createMovieRequestSchema.parse>,
+      requestId,
+    );
   }
 
   @Patch("movies/:id")
