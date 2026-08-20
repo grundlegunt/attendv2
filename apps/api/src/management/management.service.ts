@@ -288,8 +288,18 @@ export class ManagementService {
     });
   }
 
-  async updateMenuPresentation(input: { locationId: string; employeeId: string; assetUrl: string | null; assetType: "IMAGE" | "PDF" | null }) {
+  async updateMenuPresentation(input: { locationId: string; employeeId: string; requestId: string; assetUrl: string | null; assetType: "IMAGE" | "PDF" | null }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, assetUrl: input.assetUrl, assetType: input.assetType })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "menu.presentation_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string; assetUrl?: string | null; assetType?: "IMAGE" | "PDF" | null } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The menu-presentation idempotency key was already used with different details.");
+        return { assetUrl: state.assetUrl ?? null, assetType: state.assetType ?? null };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
       const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
       const updated = await tx.location.update({
         where: { id: input.locationId },
@@ -299,7 +309,7 @@ export class ManagementService {
         actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
         action: "menu.presentation_updated", entityType: "Location", entityId: input.locationId,
         beforeState: { assetUrl: before.diningMenuAssetUrl, assetType: before.diningMenuAssetType },
-        afterState: { assetUrl: updated.diningMenuAssetUrl, assetType: updated.diningMenuAssetType },
+        afterState: { assetUrl: updated.diningMenuAssetUrl, assetType: updated.diningMenuAssetType, requestId: input.requestId, requestFingerprint },
       } });
       return { assetUrl: updated.diningMenuAssetUrl, assetType: updated.diningMenuAssetType };
     });
