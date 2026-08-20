@@ -1634,8 +1634,15 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async createAuditorium(actor: RequestActor, input: AuditoriumInput) {
+  async createAuditorium(
+    actor: RequestActor,
+    input: AuditoriumInput,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
     const reservedSeats = input.seats ?? [];
     const layoutErrors =
       input.seatingMode === "RESERVED"
@@ -1648,9 +1655,34 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         errors: layoutErrors,
       });
     }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, input }))
+      .digest("hex");
 
     try {
       return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "auditorium.created",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The auditorium idempotency key was already used with different details.",
+            );
+          }
+          const auditorium = await tx.auditorium.findFirst({
+            where: { id: replay.entityId, locationId },
+            include: { seatMap: { include: { seats: true } } },
+          });
+          if (!auditorium) throw AppError.conflict("The original auditorium is no longer available.");
+          return auditorium;
+        }
         const auditorium = await tx.auditorium.create({
           data: {
             locationId,
@@ -1704,6 +1736,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               name: auditorium.name,
               capacity: auditorium.capacity,
               seatingMode: auditorium.seatingMode,
+              requestId,
+              requestFingerprint,
             },
           },
         });

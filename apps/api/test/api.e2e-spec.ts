@@ -1291,21 +1291,38 @@ describe("Milestone 1 cinema configuration", () => {
   let secondShowtimeId: string;
 
   it("creates an auditorium with a validated paired seat map", async () => {
-    const res = await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const payload = {
+      name: "Integration Theater",
+      seatMapName: "Integration paired layout",
+      seats: [
+        { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", tableGroupId: "A-1", tablePosition: "LEFT" },
+        { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD", tableGroupId: "A-1", tablePosition: "RIGHT" },
+      ],
+    };
+    const create = () => request(app.getHttpServer())
       .post("/api/v1/cinema/auditoriums")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({
-        name: "Integration Theater",
-        seatMapName: "Integration paired layout",
-        seats: [
-          { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", tableGroupId: "A-1", tablePosition: "LEFT" },
-          { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD", tableGroupId: "A-1", tablePosition: "RIGHT" },
-        ],
-      });
+      .set("Idempotency-Key", requestId)
+      .send(payload);
+    const [res, replayed] = await Promise.all([create(), create()]);
     expect(res.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body.id).toBe(res.body.id);
     expect(res.body.capacity).toBe(2);
     expect(res.body.seatMap.seats).toHaveLength(2);
     auditoriumId = res.body.id;
+    expect(await prisma.auditorium.count({ where: { id: auditoriumId } })).toBe(1);
+    expect(await prisma.auditEvent.count({
+      where: { action: "auditorium.created", entityId: auditoriumId },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .post("/api/v1/cinema/auditoriums")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ ...payload, name: "Different Theater" })
+      .expect(409);
   });
 
   it("rejects a duplicate seat label before writing the auditorium", async () => {

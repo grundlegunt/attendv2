@@ -11,7 +11,7 @@ import {
   normalizeSeatTableMetadata,
   replaceSeatTypeAtCoordinate,
 } from "./auditorium-layout";
-import { apiFetch } from "./lib/api-client";
+import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Tool =
   | "STANDARD"
@@ -264,6 +264,7 @@ export function AuditoriumBuilder({
   const future = useRef<Array<{ seats: SeatInput[]; layout: SeatMapLayout }>>(
     [],
   );
+  const createAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const preview = useMemo(
     () => (mode === "BASIC" ? basicSeats(rows, seatsPerRow) : seats),
@@ -614,6 +615,23 @@ export function AuditoriumBuilder({
         : renumberAllSeats(seats, finalLayout),
       finalLayout.seatingStyle,
     );
+    const body = JSON.stringify(
+      seatingMode === "GENERAL_ADMISSION"
+        ? { name, seatingMode, capacity: gaCapacity }
+        : {
+            name,
+            seatingMode,
+            seatMapName: `${name} layout`,
+            seats: finalSeats,
+            layout: finalLayout,
+          },
+    );
+    if (!editingId && createAuditoriumAttemptRef.current?.fingerprint !== body) {
+      createAuditoriumAttemptRef.current = {
+        fingerprint: body,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(
         editingId
@@ -622,25 +640,22 @@ export function AuditoriumBuilder({
         {
           accessToken,
           method: editingId ? "PATCH" : "POST",
-          body: JSON.stringify(
-            seatingMode === "GENERAL_ADMISSION"
-              ? { name, seatingMode, capacity: gaCapacity }
-              : {
-                  name,
-                  seatingMode,
-                  seatMapName: `${name} layout`,
-                  seats: finalSeats,
-                  layout: finalLayout,
-                },
-          ),
+          ...(!editingId && createAuditoriumAttemptRef.current
+            ? { headers: { "Idempotency-Key": createAuditoriumAttemptRef.current.requestId } }
+            : {}),
+          body,
         },
       );
+      createAuditoriumAttemptRef.current = null;
       await onSaved(
         editingId
           ? `${name} layout version saved. Existing showtimes keep their original seats.`
           : `${name} created.`,
       );
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        createAuditoriumAttemptRef.current = null;
+      }
       onError(reason);
     }
   }
