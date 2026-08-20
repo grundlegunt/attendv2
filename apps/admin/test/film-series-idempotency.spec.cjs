@@ -16,3 +16,8 @@ test("film series edits retain a stable retry identity and version", () => {
   assert.match(source, /"Idempotency-Key": updateSeriesAttemptRef\.current\.requestId/);
   assert.match(source, /"If-Unmodified-Since": editingSeriesUpdatedAt/);
 });
+
+test("film series archiving retains a stable retry identity", () => {
+  assert.match(source, /archiveSeriesAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": archiveSeriesAttemptRef\.current\.requestId/);
+});

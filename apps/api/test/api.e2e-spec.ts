@@ -1654,6 +1654,20 @@ describe("Milestone 1 cinema configuration", () => {
     expect(movie.showtimes).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: secondShowtimeId, presentation: "Q_AND_A" }),
     ]));
+
+    const archiveRequestId = crypto.randomUUID();
+    const archive = () => request(app.getHttpServer())
+      .delete(`/api/v1/cinema/film-series/${series.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", archiveRequestId);
+    const [archived, archiveReplay] = await Promise.all([archive(), archive()]);
+    expect(archived.status).toBe(200);
+    expect(archiveReplay.status).toBe(200);
+    expect(archiveReplay.body.id).toBe(archived.body.id);
+    expect(archived.body.active).toBe(false);
+    expect(await prisma.auditEvent.count({
+      where: { action: "film_series.archived", entityId: series.body.id },
+    })).toBe(1);
   });
 
   it("lists real on-sale showtimes publicly", async () => {
