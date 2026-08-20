@@ -18,6 +18,11 @@ test("menu structure creation retains stable retry identities", () => {
   assert.match(source, /"Idempotency-Key": stationAttemptRef\.current\.requestId/);
 });
 
+test("menu category updates retain a stable retry identity", () => {
+  assert.match(source, /updateCategoryAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateCategoryAttemptRef\.current\.requestId/);
+});
+
 test("modifier creation retains stable retry identities", () => {
   assert.match(source, /modifierGroupAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": modifierGroupAttemptRef\.current\.requestId/);

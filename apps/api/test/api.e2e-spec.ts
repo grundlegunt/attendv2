@@ -5513,6 +5513,15 @@ describe("Milestone 6 server POS and menus", () => {
     expect(categoryReplay.body.id).toBe(categoryFirst.body.id);
     expect(await prisma.menuCategory.count({ where: { name: categoryName } })).toBe(1);
 
+    const updateRequestId = crypto.randomUUID();
+    const updatedName = `${categoryName} updated`;
+    const updateCategory = () => request(app.getHttpServer()).patch(`/api/v1/restaurant-menu/categories/${categoryFirst.body.id}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", updateRequestId).send({ name: updatedName });
+    const [categoryUpdated, categoryUpdateReplay] = await Promise.all([updateCategory(), updateCategory()]);
+    expect(categoryUpdated.status).toBe(200);
+    expect(categoryUpdateReplay.body).toEqual(categoryUpdated.body);
+    expect(categoryUpdated.body.name).toBe(updatedName);
+    expect(await prisma.auditEvent.count({ where: { action: "menu_category.updated", afterState: { path: ["requestId"], equals: updateRequestId } } })).toBe(1);
+
     const stationRequestId = crypto.randomUUID();
     const stationName = `Replay station ${crypto.randomUUID()}`;
     const submitStation = () => request(app.getHttpServer()).post("/api/v1/restaurant-menu/stations").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", stationRequestId).send({ name: stationName, displayType: "KITCHEN" });

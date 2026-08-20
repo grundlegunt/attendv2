@@ -61,6 +61,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [message, setMessage] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const categoryAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateCategoryAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [editingCategoryId, setEditingCategoryId] = useState("");
   const [editingCategoryName, setEditingCategoryName] = useState("");
   const [editingCategorySortOrder, setEditingCategorySortOrder] = useState(0);
@@ -303,16 +304,22 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     category: Menu["categories"][number],
     changes: { name?: string; sortOrder?: number; active?: boolean },
   ) {
+    const body = JSON.stringify(changes);
+    const fingerprint = `${category.id}:${body}`;
+    if (updateCategoryAttemptRef.current?.fingerprint !== fingerprint) updateCategoryAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/restaurant-menu/categories/${category.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify(changes),
+        headers: { "Idempotency-Key": updateCategoryAttemptRef.current.requestId },
+        body,
       });
+      updateCategoryAttemptRef.current = null;
       setEditingCategoryId("");
       setMessage("Category updated.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) updateCategoryAttemptRef.current = null;
       showError(error, "Category could not be updated.");
     }
   }
