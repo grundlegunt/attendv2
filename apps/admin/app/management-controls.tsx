@@ -200,6 +200,7 @@ export function ManagementControls({
   });
   const employeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateEmployeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const credentialResetAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
   const [selectedRoleName, setSelectedRoleName] = useState("");
@@ -723,22 +724,24 @@ export function ManagementControls({
       )
     )
       return;
+    const body = JSON.stringify(field === "password" ? { password: draft.password } : { pin: removePin ? null : draft.pin });
+    const fingerprint = `${target.id}:${body}`;
+    if (credentialResetAttemptRef.current?.fingerprint !== fingerprint) credentialResetAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/management/employees/${target.id}/credentials`, {
         accessToken,
         method: "PATCH",
-        body: JSON.stringify(
-          field === "password"
-            ? { password: draft.password }
-            : { pin: removePin ? null : draft.pin },
-        ),
+        headers: { "Idempotency-Key": credentialResetAttemptRef.current.requestId },
+        body,
       });
+      credentialResetAttemptRef.current = null;
       setCredentialDrafts((current) => ({
         ...current,
         [target.id]: { password: "", pin: "" },
       }));
       setError(null);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) credentialResetAttemptRef.current = null;
       showError(reason);
     }
   }

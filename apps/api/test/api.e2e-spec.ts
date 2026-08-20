@@ -607,6 +607,25 @@ describe("Staff authentication", () => {
     expect(updated.status).toBe(200);
     expect(replayedUpdate.body).toEqual(updated.body);
     expect(await prisma.auditEvent.count({ where: { action: "employee.access_updated", entityId: first.body.id } })).toBe(1);
+    const credentialsRequestId = crypto.randomUUID();
+    const resetCredentials = () => request(app.getHttpServer())
+      .patch(`/api/v1/management/employees/${first.body.id}/credentials`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", credentialsRequestId)
+      .send({ pin: "1357" });
+    const beforeAccount = await prisma.staffAuthAccount.findUniqueOrThrow({
+      where: { employeeId: first.body.id },
+      select: { refreshTokenVersion: true },
+    });
+    const [reset, replayedReset] = await Promise.all([resetCredentials(), resetCredentials()]);
+    expect(reset.status).toBe(200);
+    expect(replayedReset.body).toEqual(reset.body);
+    const afterAccount = await prisma.staffAuthAccount.findUniqueOrThrow({
+      where: { employeeId: first.body.id },
+      select: { refreshTokenVersion: true },
+    });
+    expect(afterAccount.refreshTokenVersion).toBe(beforeAccount.refreshTokenVersion + 1);
+    expect(await prisma.auditEvent.count({ where: { action: "employee.credentials_reset", entityId: first.body.id } })).toBe(1);
   });
 
   it("forces a manager-reset employee to replace the temporary password and invalidates prior sessions", async () => {
