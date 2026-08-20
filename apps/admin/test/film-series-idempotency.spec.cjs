@@ -27,3 +27,10 @@ test("film series restoration retains a stable retry identity", () => {
   assert.match(source, /film-series\/\$\{series\.id\}\/restore/);
   assert.match(source, /"Idempotency-Key": restoreSeriesAttemptRef\.current\.requestId/);
 });
+
+test("film series reordering is atomic and retains a stable retry identity", () => {
+  assert.match(source, /reorderSeriesAttemptRef = useRef/);
+  assert.match(source, /apiFetch\("\/cinema\/film-series\/reorder"/);
+  assert.match(source, /"Idempotency-Key": reorderSeriesAttemptRef\.current\.requestId/);
+  assert.doesNotMatch(source, /Promise\.all\(reordered\.map/);
+});

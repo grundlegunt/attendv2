@@ -39,6 +39,7 @@ export default function FilmSeriesPage() {
   const updateSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const archiveSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
   const restoreSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
+  const reorderSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   async function refresh() {
     if (!accessToken) return;
@@ -186,17 +187,26 @@ export default function FilmSeriesPage() {
     const [moved] = reordered.splice(sourceIndex, 1);
     if (!moved) return;
     reordered.splice(targetIndex, 0, moved);
+    const body = JSON.stringify({ seriesIds: reordered.map((series) => series.id) });
+    if (reorderSeriesAttemptRef.current?.fingerprint !== body) {
+      reorderSeriesAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    }
     setError(null);
     setNotice(null);
     try {
-      await Promise.all(reordered.map((series, index) => apiFetch(`/cinema/film-series/${series.id}`, {
+      await apiFetch("/cinema/film-series/reorder", {
         accessToken,
-        method: "PATCH",
-        body: JSON.stringify({ sortOrder: index }),
-      })));
+        method: "POST",
+        headers: { "Idempotency-Key": reorderSeriesAttemptRef.current.requestId },
+        body,
+      });
+      reorderSeriesAttemptRef.current = null;
       await refresh();
       setNotice(`${moved.name} display order updated.`);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        reorderSeriesAttemptRef.current = null;
+      }
       showError(reason);
     } finally {
       setDraggedSeriesId(null);

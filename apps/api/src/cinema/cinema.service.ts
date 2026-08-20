@@ -10,6 +10,7 @@ import {
   createShowtimeRequestSchema,
   duplicateShowtimeDayRequestSchema,
   moveShowtimeGroupRequestSchema,
+  reorderFilmSeriesRequestSchema,
   showtimePresentationSchema,
   showtimeWindowsOverlap,
   updateMovieRequestSchema,
@@ -41,6 +42,7 @@ type FilmSeriesInput = ReturnType<typeof createFilmSeriesRequestSchema.parse>;
 type FilmSeriesUpdateInput = ReturnType<
   typeof updateFilmSeriesRequestSchema.parse
 >;
+type FilmSeriesReorderInput = ReturnType<typeof reorderFilmSeriesRequestSchema.parse>;
 type MovieInput = ReturnType<typeof createMovieRequestSchema.parse>;
 type ShowtimeInput = ReturnType<typeof createShowtimeRequestSchema.parse>;
 type DuplicateShowtimeDayInput = ReturnType<
@@ -2750,6 +2752,77 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         },
       });
       return restored;
+    });
+  }
+
+  async reorderFilmSeries(
+    actor: RequestActor,
+    input: FilmSeriesReorderInput,
+    requestId: string = randomUUID(),
+  ) {
+    const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, seriesIds: input.seriesIds }))
+      .digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const location = await tx.location.findUnique({
+        where: { id: locationId },
+        select: { organizationId: true },
+      });
+      if (!location) throw AppError.notFound("Location not found.");
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "film_series.reordered",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The film-series reorder key was already used with a different order.",
+          );
+        }
+        return { reordered: true };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const activeSeries = await tx.filmSeries.findMany({
+        where: { organizationId: location.organizationId, active: true },
+        select: { id: true },
+      });
+      const activeIds = new Set(activeSeries.map((series) => series.id));
+      if (
+        activeIds.size !== input.seriesIds.length ||
+        input.seriesIds.some((id) => !activeIds.has(id))
+      ) {
+        throw AppError.conflict(
+          "The Film Series catalog changed. Refresh before reordering it.",
+        );
+      }
+      await Promise.all(input.seriesIds.map((id, sortOrder) =>
+        tx.filmSeries.update({ where: { id }, data: { sortOrder } }),
+      ));
+      await tx.auditEvent.create({
+        data: {
+          actorType: AuditActorType.EMPLOYEE,
+          actorId: actor.sub,
+          locationId,
+          action: "film_series.reordered",
+          entityType: "FilmSeriesOrder",
+          entityId: location.organizationId,
+          afterState: {
+            seriesIds: input.seriesIds,
+            requestId,
+            requestFingerprint,
+          },
+        },
+      });
+      return { reordered: true };
     });
   }
 

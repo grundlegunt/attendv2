@@ -14,6 +14,7 @@ import {
   showtimeWindowsOverlap,
   updateShowtimeRequestSchema,
   updateFilmSeriesRequestSchema,
+  reorderFilmSeriesRequestSchema,
   type PublicShowtime,
   type SeatMapLayout,
   validateAdvancedSeatLayout,
@@ -256,6 +257,15 @@ describe("cinema programming requests", () => {
       active: false,
     });
     expect(() => updateFilmSeriesRequestSchema.parse({})).toThrow();
+    expect(reorderFilmSeriesRequestSchema.parse({
+      seriesIds: ["00000000-0000-4000-8000-000000000001"],
+    }).seriesIds).toHaveLength(1);
+    expect(() => reorderFilmSeriesRequestSchema.parse({
+      seriesIds: [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000001",
+      ],
+    })).toThrow();
   });
 
   it("does not reset sale or presentation values on an unrelated partial update", () => {

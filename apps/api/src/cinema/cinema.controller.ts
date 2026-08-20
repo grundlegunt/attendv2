@@ -8,6 +8,7 @@ import {
   createShowtimeRequestSchema,
   duplicateShowtimeDayRequestSchema,
   moveShowtimeGroupRequestSchema,
+  reorderFilmSeriesRequestSchema,
   updateMovieRequestSchema,
   duplicateAuditoriumRequestSchema,
   updateAuditoriumLayoutRequestSchema,
@@ -432,6 +433,21 @@ export class CinemaController {
     @Headers("idempotency-key") requestId: string | undefined,
   ) {
     return this.cinemaService.restoreFilmSeries(actor, id, requestId);
+  }
+
+  @Post("film-series/reorder")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  reorderFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Body(new ZodValidationPipe(reorderFilmSeriesRequestSchema)) body: unknown,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.reorderFilmSeries(
+      actor,
+      body as ReturnType<typeof reorderFilmSeriesRequestSchema.parse>,
+      requestId,
+    );
   }
 
   @Post("showtimes")
