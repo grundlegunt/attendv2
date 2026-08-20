@@ -157,7 +157,7 @@ export class ManagementController {
   }
 
   @Patch("private-event-inquiries/:inquiryId") @RequirePermissions(Permission.ReportsView)
-  updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Body(new ZodValidationPipe(inquiryStatusSchema)) body: unknown) { return this.management.updatePrivateEventInquiry(this.location(actor), actor.sub, inquiryId, inquiryStatusSchema.parse(body).status); }
+  updatePrivateEventInquiry(@CurrentActor() actor: RequestActor, @Param("inquiryId") inquiryId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(inquiryStatusSchema)) body: unknown) { return this.management.updatePrivateEventInquiry(this.location(actor), actor.sub, inquiryId, inquiryStatusSchema.parse(body).status, requestId ?? randomUUID()); }
 
   @Get("gift-cards") @RequirePermissions(Permission.PaymentRefund)
   giftCards(@CurrentActor() actor: RequestActor) { return this.management.giftCards(this.location(actor)); }

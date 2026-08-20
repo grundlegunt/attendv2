@@ -1869,6 +1869,24 @@ describe("Milestone 1 cinema configuration", () => {
       });
   });
 
+  it("replays concurrent private-event inquiry status updates once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/cinema/private-event-inquiries")
+      .send({ name: "Status Replay Guest", email: `status-${crypto.randomUUID()}@example.test`, eventType: "Private screening", message: "Please follow up." })
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const submit = () => request(app.getHttpServer())
+      .patch(`/api/v1/management/private-event-inquiries/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ status: "CONTACTED" });
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(200);
+    expect(replay.body).toEqual(first.body);
+    expect(await prisma.auditEvent.count({ where: { action: "private_event_inquiry.status_updated", entityId: created.body.id } })).toBe(1);
+  });
+
   it("lets cinema managers update an organization ticket price", async () => {
     const current = await request(app.getHttpServer())
       .get("/api/v1/management/settings")
