@@ -37,6 +37,7 @@ export default function FilmSeriesPage() {
   const [dragOverSeriesId, setDragOverSeriesId] = useState<string | null>(null);
   const createSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const archiveSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
 
   async function refresh() {
     if (!accessToken) return;
@@ -131,12 +132,23 @@ export default function FilmSeriesPage() {
   async function archiveSeries(series: FilmSeries) {
     if (!window.confirm(`Archive ${series.name}? Existing showtimes will keep their series history.`)) return;
     setError(null);
+    if (archiveSeriesAttemptRef.current?.seriesId !== series.id) {
+      archiveSeriesAttemptRef.current = { seriesId: series.id, requestId: crypto.randomUUID() };
+    }
     try {
-      await apiFetch(`/cinema/film-series/${series.id}`, { accessToken: accessToken ?? undefined, method: "DELETE" });
+      await apiFetch(`/cinema/film-series/${series.id}`, {
+        accessToken: accessToken ?? undefined,
+        method: "DELETE",
+        headers: { "Idempotency-Key": archiveSeriesAttemptRef.current.requestId },
+      });
+      archiveSeriesAttemptRef.current = null;
       if (editingSeriesId === series.id) resetSeriesForm();
       await refresh();
       setNotice(`${series.name} was archived. Existing showtime history was preserved.`);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        archiveSeriesAttemptRef.current = null;
+      }
       showError(reason);
     }
   }

@@ -415,8 +415,12 @@ export class CinemaController {
   @Delete("film-series/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
-  archiveFilmSeries(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
-    return this.cinemaService.archiveFilmSeries(actor, id);
+  archiveFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.archiveFilmSeries(actor, id, requestId);
   }
 
   @Post("showtimes")
