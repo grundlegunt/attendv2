@@ -227,6 +227,7 @@ export default function AdminPage() {
   const movieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const archiveMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const restoreMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [seatInventory, setSeatInventory] =
     useState<ShowtimeSeatInventory | null>(null);
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(
@@ -852,13 +853,26 @@ export default function AdminPage() {
 
   async function restoreMovie(movie: Movie) {
     setError(null);
+    if (restoreMovieAttemptRef.current?.fingerprint !== movie.id) {
+      restoreMovieAttemptRef.current = {
+        fingerprint: movie.id,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/movies/${movie.id}/restore`, {
         accessToken: token ?? undefined,
         method: "POST",
+        headers: {
+          "Idempotency-Key": restoreMovieAttemptRef.current.requestId,
+        },
       });
+      restoreMovieAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        restoreMovieAttemptRef.current = null;
+      }
       showError(reason);
     }
   }

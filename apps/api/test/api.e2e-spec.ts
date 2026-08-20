@@ -2423,10 +2423,22 @@ describe("Milestone 1 cinema configuration", () => {
     expect(archived.body.location.organization.movies.some((item: { id: string }) => item.id === movie.body.id)).toBe(false);
     expect(archived.body.archivedMovies.some((item: { id: string }) => item.id === movie.body.id)).toBe(true);
 
-    await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const restoreRequestId = crypto.randomUUID();
+    const restore = () => request(app.getHttpServer())
       .post(`/api/v1/cinema/movies/${movie.body.id}/restore`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(201);
+      .set("Idempotency-Key", restoreRequestId);
+    const [restoredOnce, replayedRestore] = await Promise.all([
+      restore(),
+      restore(),
+    ]);
+    expect(restoredOnce.status).toBe(201);
+    expect(replayedRestore.status).toBe(201);
+    expect(replayedRestore.body.id).toBe(restoredOnce.body.id);
+    expect(await prisma.auditEvent.count({
+      where: { action: "movie.restored", entityId: movie.body.id },
+    })).toBe(1);
 
     const restored = await request(app.getHttpServer())
       .get("/api/v1/cinema/admin/bootstrap")

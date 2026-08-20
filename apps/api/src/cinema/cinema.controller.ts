@@ -366,8 +366,12 @@ export class CinemaController {
   @Post("movies/:id/restore")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
-  restoreMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
-    return this.cinemaService.restoreMovie(actor, id);
+  restoreMovie(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.restoreMovie(actor, id, requestId);
   }
 
   @Post("film-series")
