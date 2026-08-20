@@ -19,3 +19,8 @@ test("role permission changes retain a stable retry identity", () => {
   assert.match(source, /rolePermissionsAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": rolePermissionsAttemptRef\.current\.requestId/);
 });
+
+test("role deletion retains a stable retry identity", () => {
+  assert.match(source, /deleteRoleAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": deleteRoleAttemptRef\.current\.requestId/);
+});

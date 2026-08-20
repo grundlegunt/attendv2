@@ -731,17 +731,27 @@ export class ManagementService {
     });
   }
 
-  async deleteRole(input: { locationId: string; employeeId: string; roleId: string }) {
+  async deleteRole(input: { locationId: string; employeeId: string; roleId: string; requestId: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ roleId: input.roleId })).digest("hex");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { _count: { select: { employeeRoles: true } } } });
-    if (!role) throw AppError.notFound("Role was not found.");
-    if (!role.key.startsWith("CUSTOM_")) throw AppError.forbidden("Built-in roles cannot be deleted.");
-    if (role._count.employeeRoles > 0) throw AppError.conflict("Remove this role from every employee before deleting it.");
-    await prisma.$transaction(async (tx) => {
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.deleted", entityType: "Role", entityId: role.id, beforeState: { key: role.key, name: role.name } } });
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "role.deleted", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The role-deletion idempotency key was already used with different details.");
+        return { id: replay.entityId, deleted: true };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.roleId}))`;
+      const role = await tx.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { _count: { select: { employeeRoles: true } } } });
+      if (!role) throw AppError.notFound("Role was not found.");
+      if (!role.key.startsWith("CUSTOM_")) throw AppError.forbidden("Built-in roles cannot be deleted.");
+      if (role._count.employeeRoles > 0) throw AppError.conflict("Remove this role from every employee before deleting it.");
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.deleted", entityType: "Role", entityId: role.id, beforeState: { key: role.key, name: role.name }, afterState: { requestId: input.requestId, requestFingerprint, deleted: true } } });
       await tx.role.delete({ where: { id: role.id } });
+      return { id: role.id, deleted: true };
     });
-    return { id: role.id, deleted: true };
   }
 
   async updateRolePermissions(input: { locationId: string; employeeId: string; roleId: string; permissionKeys: string[]; requestId: string }) {

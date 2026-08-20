@@ -1322,11 +1322,16 @@ describe("RBAC permission enforcement", () => {
     expect(replayedRename.body).toEqual(renamedRole.body);
     expect(renamedRole.body.name).toBe(renamed);
     expect(await prisma.auditEvent.count({ where: { action: "role.renamed", entityId: created.body.id } })).toBe(1);
-    await request(app.getHttpServer())
+    const deleteRequestId = crypto.randomUUID();
+    const remove = () => request(app.getHttpServer())
       .delete(`/api/v1/management/roles/${created.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(200)
-      .expect(({ body }) => expect(body).toEqual({ id: created.body.id, deleted: true }));
+      .set("Idempotency-Key", deleteRequestId);
+    const [deleted, replayedDelete] = await Promise.all([remove(), remove()]);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toEqual({ id: created.body.id, deleted: true });
+    expect(replayedDelete.body).toEqual(deleted.body);
+    expect(await prisma.auditEvent.count({ where: { action: "role.deleted", entityId: created.body.id } })).toBe(1);
     const builtInRole = people.body.roles.find((role: { key: string }) => !role.key.startsWith("CUSTOM_"));
     await request(app.getHttpServer())
       .delete(`/api/v1/management/roles/${builtInRole.id}`)
