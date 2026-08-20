@@ -166,7 +166,7 @@ export class ManagementController {
   issueGiftCard(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(giftCardSchema)) body: unknown) { return this.management.issueGiftCard({ ...giftCardSchema.parse(body), requestId: requestId ?? randomUUID(), locationId: this.location(actor), employeeId: actor.sub }); }
 
   @Patch("gift-cards/:giftCardId/status") @RequirePermissions(Permission.PaymentRefund)
-  updateGiftCardStatus(@CurrentActor() actor: RequestActor, @Param("giftCardId") giftCardId: string, @Body(new ZodValidationPipe(giftCardStatusSchema)) body: unknown) { return this.management.updateGiftCardStatus({ ...giftCardStatusSchema.parse(body), giftCardId, locationId: this.location(actor), employeeId: actor.sub }); }
+  updateGiftCardStatus(@CurrentActor() actor: RequestActor, @Param("giftCardId") giftCardId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(giftCardStatusSchema)) body: unknown) { return this.management.updateGiftCardStatus({ ...giftCardStatusSchema.parse(body), giftCardId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }

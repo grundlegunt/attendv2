@@ -27,4 +27,9 @@ describe("gift card admin resilience", () => {
       assert.match(source, new RegExp(`changeIssuanceDetail\\(${setter},`));
     }
   });
+
+  it("retains a stable retry identity for status updates", () => {
+    assert.match(source, /statusAttemptRef = useRef/);
+    assert.match(source, /"Idempotency-Key": statusAttemptRef\.current\.requestId/);
+  });
 });

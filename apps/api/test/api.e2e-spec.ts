@@ -2248,11 +2248,15 @@ describe("Milestone 1 cinema configuration", () => {
     ]);
     expect(await prisma.auditEvent.count({ where: { entityType: "GiftCard", entityId: issued.body.id, action: "gift_card.issued" } })).toBe(1);
 
-    await request(app.getHttpServer())
+    const deactivateRequestId = crypto.randomUUID();
+    const deactivate = () => request(app.getHttpServer())
       .patch(`/api/v1/management/gift-cards/${issued.body.id}/status`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ status: "DEACTIVATED" })
-      .expect(200);
+      .set("Idempotency-Key", deactivateRequestId)
+      .send({ status: "DEACTIVATED" });
+    const [deactivated, replayedDeactivation] = await Promise.all([deactivate(), deactivate()]);
+    expect(deactivated.status).toBe(200);
+    expect(replayedDeactivation.body).toEqual(deactivated.body);
     await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: issued.body.code }).expect(404);
     await request(app.getHttpServer())
       .patch(`/api/v1/management/gift-cards/${issued.body.id}/status`)
