@@ -92,12 +92,14 @@ export class MenuController {
   updateCategory(
     @CurrentActor() actor: RequestActor,
     @Param("menuCategoryId") menuCategoryId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(updateMenuCategoryRequestSchema)) body: unknown,
   ) {
     return this.restaurant.updateMenuCategory({
       menuCategoryId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
       changes: updateMenuCategoryRequestSchema.parse(body),
     });
   }
