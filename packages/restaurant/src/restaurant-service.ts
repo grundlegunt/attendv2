@@ -2,6 +2,7 @@ import {
   FulfillmentTicketStatus,
   KitchenStation,
   MenuCategory,
+  Modifier,
   ModifierGroup,
   Prisma,
   PrismaClient,
@@ -531,6 +532,7 @@ export class RestaurantService {
     locationId: string;
     actorId: string;
     modifierId: string;
+    requestId: string;
     changes: {
       name?: string;
       priceDeltaCents?: number;
@@ -538,7 +540,17 @@ export class RestaurantService {
       sortOrder?: number;
     };
   }) {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, modifierId: input.modifierId, changes: input.changes });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "modifier.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as (Modifier & { requestFingerprint?: string }) | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The modifier update idempotency key was already used with different details.", "CONFLICT");
+        return { id: state.id, modifierGroupId: state.modifierGroupId, name: state.name, priceDeltaCents: state.priceDeltaCents, active: state.active, sortOrder: state.sortOrder, createdAt: new Date(state.createdAt), updatedAt: new Date(state.updatedAt) };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.modifierId}))`;
       const existing = await tx.modifier.findFirst({
         where: {
           id: input.modifierId,
@@ -564,12 +576,7 @@ export class RestaurantService {
             active: existing.active,
             sortOrder: existing.sortOrder,
           },
-          afterState: {
-            name: modifier.name,
-            priceDeltaCents: modifier.priceDeltaCents,
-            active: modifier.active,
-            sortOrder: modifier.sortOrder,
-          },
+          afterState: { ...modifier, requestId: input.requestId, requestFingerprint },
         },
       });
       return modifier;

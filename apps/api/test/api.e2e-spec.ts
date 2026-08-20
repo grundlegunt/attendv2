@@ -5586,6 +5586,15 @@ describe("Milestone 6 server POS and menus", () => {
     expect(modifierFirst.status).toBe(201);
     expect(modifierReplay.body.id).toBe(modifierFirst.body.id);
     expect(await prisma.modifier.count({ where: { name: modifierName } })).toBe(1);
+
+    const modifierUpdateRequestId = crypto.randomUUID();
+    const updatedModifierName = `${modifierName} updated`;
+    const updateModifier = () => request(app.getHttpServer()).patch(`/api/v1/restaurant-menu/modifiers/${modifierFirst.body.id}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", modifierUpdateRequestId).send({ name: updatedModifierName });
+    const [modifierUpdated, modifierUpdateReplay] = await Promise.all([updateModifier(), updateModifier()]);
+    expect(modifierUpdated.status).toBe(200);
+    expect(modifierUpdateReplay.body).toEqual(modifierUpdated.body);
+    expect(modifierUpdated.body.name).toBe(updatedModifierName);
+    expect(await prisma.auditEvent.count({ where: { action: "modifier.updated", afterState: { path: ["requestId"], equals: modifierUpdateRequestId } } })).toBe(1);
     await prisma.modifier.delete({ where: { id: modifierFirst.body.id } });
     await prisma.modifierGroup.delete({ where: { id: groupFirst.body.id } });
   });

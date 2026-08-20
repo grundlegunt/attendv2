@@ -40,6 +40,11 @@ test("modifier group updates retain a stable retry identity", () => {
   assert.match(source, /"Idempotency-Key": updateModifierGroupAttemptRef\.current\.requestId/);
 });
 
+test("modifier updates retain a stable retry identity", () => {
+  assert.match(source, /updateModifierAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateModifierAttemptRef\.current\.requestId/);
+});
+
 test("menu presentation publishing retains a stable retry identity", () => {
   assert.match(source, /menuPresentationAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": menuPresentationAttemptRef\.current\.requestId/);

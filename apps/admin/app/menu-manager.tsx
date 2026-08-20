@@ -94,6 +94,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingModifierGroupOrder, setEditingModifierGroupOrder] = useState(0);
   const [modifierName, setModifierName] = useState("");
   const modifierAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateModifierAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [modifierPrice, setModifierPrice] = useState(0);
   const [editingModifierId, setEditingModifierId] = useState("");
   const [editingModifierName, setEditingModifierName] = useState("");
@@ -501,16 +502,22 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     modifier: MenuItem["modifierGroups"][number]["modifiers"][number],
     changes: { name?: string; priceDeltaCents?: number; active?: boolean },
   ) {
+    const body = JSON.stringify(changes);
+    const fingerprint = `${modifier.id}:${body}`;
+    if (updateModifierAttemptRef.current?.fingerprint !== fingerprint) updateModifierAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/restaurant-menu/modifiers/${modifier.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify(changes),
+        headers: { "Idempotency-Key": updateModifierAttemptRef.current.requestId },
+        body,
       });
+      updateModifierAttemptRef.current = null;
       setEditingModifierId("");
       setMessage("Modifier updated.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) updateModifierAttemptRef.current = null;
       showError(error, "Modifier could not be updated.");
     }
   }
