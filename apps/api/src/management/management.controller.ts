@@ -116,7 +116,7 @@ export class ManagementController {
   createPriceTier(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(priceTierSchema)) body: unknown) { return this.management.createPriceTier({ ...priceTierSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/price-tiers/:priceTierId") @RequirePermissions(Permission.TicketPriceEdit)
-  updatePriceTier(@CurrentActor() actor: RequestActor, @Param("priceTierId") priceTierId: string, @Body(new ZodValidationPipe(priceTierUpdateSchema)) body: unknown) { return this.management.updatePriceTier({ ...priceTierUpdateSchema.parse(body), priceTierId, locationId: this.location(actor), employeeId: actor.sub }); }
+  updatePriceTier(@CurrentActor() actor: RequestActor, @Param("priceTierId") priceTierId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(priceTierUpdateSchema)) body: unknown) { return this.management.updatePriceTier({ ...priceTierUpdateSchema.parse(body), priceTierId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Post("settings/ticket-types") @RequirePermissions(Permission.TicketPriceEdit)
   createTicketType(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(ticketTypeSchema)) body: unknown) { return this.management.createTicketType({ ...ticketTypeSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }

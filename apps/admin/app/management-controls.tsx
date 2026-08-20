@@ -174,6 +174,7 @@ export function ManagementControls({
   const [newTicketTypeAdjustment, setNewTicketTypeAdjustment] =
     useState("0.00");
   const priceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updatePriceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const ticketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [ticketTypeDrafts, setTicketTypeDrafts] = useState<
     Record<string, string>
@@ -448,13 +449,17 @@ export function ManagementControls({
     setError(null);
     setSavedPriceId(null);
     setSavingPriceId(tier.id);
+    const body = JSON.stringify({ name, ticketPriceMinor });
+    const fingerprint = `${tier.id}:${body}`;
+    if (updatePriceAttemptRef.current?.fingerprint !== fingerprint) updatePriceAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       const updated = await apiFetch<Settings["priceTiers"][number]>(
         `/management/settings/price-tiers/${tier.id}`,
         {
           accessToken,
           method: "PATCH",
-          body: JSON.stringify({ name, ticketPriceMinor }),
+          headers: { "Idempotency-Key": updatePriceAttemptRef.current.requestId },
+          body,
         },
       );
       setSettings((current) =>
@@ -476,7 +481,9 @@ export function ManagementControls({
         [updated.id]: updated.name,
       }));
       setSavedPriceId(updated.id);
+      updatePriceAttemptRef.current = null;
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) updatePriceAttemptRef.current = null;
       showError(reason);
     } finally {
       setSavingPriceId(null);
@@ -485,14 +492,20 @@ export function ManagementControls({
   async function togglePriceTier(tier: Settings["priceTiers"][number]) {
     setError(null);
     setSavingPriceId(tier.id);
+    const body = JSON.stringify({ active: !tier.active });
+    const fingerprint = `${tier.id}:${body}`;
+    if (updatePriceAttemptRef.current?.fingerprint !== fingerprint) updatePriceAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/management/settings/price-tiers/${tier.id}`, {
         accessToken,
         method: "PATCH",
-        body: JSON.stringify({ active: !tier.active }),
+        headers: { "Idempotency-Key": updatePriceAttemptRef.current.requestId },
+        body,
       });
+      updatePriceAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) updatePriceAttemptRef.current = null;
       showError(reason);
     } finally {
       setSavingPriceId(null);
