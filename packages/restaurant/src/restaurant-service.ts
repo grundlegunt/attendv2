@@ -156,9 +156,20 @@ export class RestaurantService {
     kitchenStationId: string;
     locationId: string;
     actorId: string;
+    requestId: string;
     changes: { name?: string; displayType?: string; active?: boolean };
   }): Promise<KitchenStation> {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, kitchenStationId: input.kitchenStationId, changes: input.changes });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "kitchen_station.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as (KitchenStation & { requestFingerprint?: string }) | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The kitchen-station update idempotency key was already used with different details.", "CONFLICT");
+        return { id: state.id, locationId: state.locationId, name: state.name, displayType: state.displayType, active: state.active, createdAt: new Date(state.createdAt), updatedAt: new Date(state.updatedAt) };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.kitchenStationId}))`;
       const station = await tx.kitchenStation.findFirst({
         where: { id: input.kitchenStationId, locationId: input.locationId },
       });
@@ -187,7 +198,7 @@ export class RestaurantService {
           entityId: updated.id,
           locationId: input.locationId,
           beforeState: station,
-          afterState: updated,
+          afterState: { ...updated, requestId: input.requestId, requestFingerprint },
         },
       });
       return updated;

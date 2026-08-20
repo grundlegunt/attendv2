@@ -62,12 +62,14 @@ export class MenuController {
   updateStation(
     @CurrentActor() actor: RequestActor,
     @Param("kitchenStationId") kitchenStationId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(updateKitchenStationRequestSchema)) body: unknown,
   ) {
     return this.restaurant.updateKitchenStation({
       kitchenStationId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
       changes: updateKitchenStationRequestSchema.parse(body),
     });
   }
