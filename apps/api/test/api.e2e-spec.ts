@@ -1325,13 +1325,30 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("creates a movie", async () => {
-    const res = await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const payload = { title: "Integration Feature", runtimeMinutes: 120, rating: "PG-13" };
+    const create = () => request(app.getHttpServer())
       .post("/api/v1/cinema/movies")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ title: "Integration Feature", runtimeMinutes: 120, rating: "PG-13" });
+      .set("Idempotency-Key", requestId)
+      .send(payload);
+    const [res, replayed] = await Promise.all([create(), create()]);
     expect(res.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body.id).toBe(res.body.id);
     expect(res.body.runtimeMinutes).toBe(120);
     movieId = res.body.id;
+    expect(await prisma.movie.count({ where: { id: movieId } })).toBe(1);
+    expect(await prisma.auditEvent.count({
+      where: { action: "movie.created", entityId: movieId },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .post("/api/v1/cinema/movies")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ ...payload, runtimeMinutes: 121 })
+      .expect(409);
   });
 
   it("creates a showtime and computes pre-show, film end, and room-ready times", async () => {
