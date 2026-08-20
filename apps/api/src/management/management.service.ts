@@ -377,21 +377,32 @@ export class ManagementService {
     });
   }
 
-  async updatePromotion(input: { locationId: string; employeeId: string; promotionId: string; code?: string; name?: string; type?: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number | null; percentageBasisPoints?: number | null; minimumSubtotalCents?: number | null; maximumRedemptions?: number | null; active?: boolean; startsAt?: Date | null; endsAt?: Date | null }) {
-    const before = await prisma.promotion.findFirst({ where: { id: input.promotionId, locationId: input.locationId } });
-    if (!before) throw AppError.notFound("Promotion was not found.");
-    const type = input.type ?? before.type;
-    const amountCents = input.amountCents === undefined ? before.amountCents : input.amountCents;
-    const percentageBasisPoints = input.percentageBasisPoints === undefined ? before.percentageBasisPoints : input.percentageBasisPoints;
-    if (type === "FIXED_AMOUNT" && amountCents == null) throw AppError.validationFailed("A fixed promotion requires an amount.");
-    if (type === "PERCENTAGE" && percentageBasisPoints == null) throw AppError.validationFailed("A percentage promotion requires a percentage.");
-    const startsAt = input.startsAt === undefined ? before.startsAt : input.startsAt;
-    const endsAt = input.endsAt === undefined ? before.endsAt : input.endsAt;
-    if (startsAt && endsAt && startsAt >= endsAt) throw AppError.validationFailed("Promotion end time must be after its start time.");
+  async updatePromotion(input: { locationId: string; employeeId: string; promotionId: string; requestId: string; code?: string; name?: string; type?: "FIXED_AMOUNT" | "PERCENTAGE" | "COMP"; amountCents?: number | null; percentageBasisPoints?: number | null; minimumSubtotalCents?: number | null; maximumRedemptions?: number | null; active?: boolean; startsAt?: Date | null; endsAt?: Date | null }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ ...input, employeeId: undefined, requestId: undefined })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "promotion.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The promotion idempotency key was already used with different details.");
+        const promotion = await tx.promotion.findFirst({ where: { id: replay.entityId, locationId: input.locationId } });
+        if (!promotion) throw AppError.conflict("The updated promotion is no longer available.");
+        return promotion;
+      }
+      const before = await tx.promotion.findFirst({ where: { id: input.promotionId, locationId: input.locationId } });
+      if (!before) throw AppError.notFound("Promotion was not found.");
+      const type = input.type ?? before.type;
+      const amountCents = input.amountCents === undefined ? before.amountCents : input.amountCents;
+      const percentageBasisPoints = input.percentageBasisPoints === undefined ? before.percentageBasisPoints : input.percentageBasisPoints;
+      if (type === "FIXED_AMOUNT" && amountCents == null) throw AppError.validationFailed("A fixed promotion requires an amount.");
+      if (type === "PERCENTAGE" && percentageBasisPoints == null) throw AppError.validationFailed("A percentage promotion requires a percentage.");
+      const startsAt = input.startsAt === undefined ? before.startsAt : input.startsAt;
+      const endsAt = input.endsAt === undefined ? before.endsAt : input.endsAt;
+      if (startsAt && endsAt && startsAt >= endsAt) throw AppError.validationFailed("Promotion end time must be after its start time.");
       const updated = await tx.promotion.update({ where: { id: before.id }, data: { code: input.code?.toUpperCase(), name: input.name, type, amountCents: type === "FIXED_AMOUNT" ? amountCents : null, percentageBasisPoints: type === "PERCENTAGE" ? percentageBasisPoints : null, minimumSubtotalCents: input.minimumSubtotalCents, maximumRedemptions: input.maximumRedemptions, active: input.active, startsAt, endsAt } });
       const state = (promotion: typeof updated) => ({ code: promotion.code, name: promotion.name, type: promotion.type, amountCents: promotion.amountCents, percentageBasisPoints: promotion.percentageBasisPoints, minimumSubtotalCents: promotion.minimumSubtotalCents, maximumRedemptions: promotion.maximumRedemptions, active: promotion.active, startsAt: promotion.startsAt, endsAt: promotion.endsAt });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.updated", entityType: "Promotion", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "promotion.updated", entityType: "Promotion", entityId: updated.id, beforeState: state(before), afterState: { ...state(updated), requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }

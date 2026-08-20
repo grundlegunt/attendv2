@@ -10,3 +10,8 @@ test("promotion creation retains a stable retry identity", () => {
   assert.match(source, /"Idempotency-Key": promotionAttemptRef\.current\.requestId/);
   assert.match(source, /reason\.status < 500/);
 });
+
+test("promotion updates retain a stable retry identity", () => {
+  assert.match(source, /updatePromotionAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updatePromotionAttemptRef\.current\.requestId/);
+});
