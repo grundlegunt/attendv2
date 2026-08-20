@@ -744,19 +744,30 @@ export class ManagementService {
     return { id: role.id, deleted: true };
   }
 
-  async updateRolePermissions(input: { locationId: string; employeeId: string; roleId: string; permissionKeys: string[] }) {
+  async updateRolePermissions(input: { locationId: string; employeeId: string; roleId: string; permissionKeys: string[]; requestId: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const permissionKeys = [...new Set(input.permissionKeys)].sort();
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ roleId: input.roleId, permissionKeys })).digest("hex");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { rolePermissions: { include: { permission: true } } } });
-    if (!role) throw AppError.notFound("Role was not found.");
     const allowed = new Set(Object.values(PermissionKey));
-    if (input.permissionKeys.some((key) => !allowed.has(key as PermissionKey))) throw AppError.validationFailed("The request contains an unknown permission.");
-    const permissions = await prisma.permission.findMany({ where: { key: { in: [...new Set(input.permissionKeys)] } } });
-    if (permissions.length !== new Set(input.permissionKeys).size) throw AppError.validationFailed("One or more permissions are not available.");
+    if (permissionKeys.some((key) => !allowed.has(key as PermissionKey))) throw AppError.validationFailed("The request contains an unknown permission.");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "role.permissions_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string; permissionKeys?: string[] } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The role-permissions idempotency key was already used with different details.");
+        return { id: replay.entityId, permissionKeys: state.permissionKeys ?? permissionKeys };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.roleId}))`;
+      const role = await tx.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId }, include: { rolePermissions: { include: { permission: true } } } });
+      if (!role) throw AppError.notFound("Role was not found.");
+      const permissions = await tx.permission.findMany({ where: { key: { in: permissionKeys } } });
+      if (permissions.length !== permissionKeys.length) throw AppError.validationFailed("One or more permissions are not available.");
       await tx.rolePermission.deleteMany({ where: { roleId: role.id } });
       await tx.rolePermission.createMany({ data: permissions.map((permission) => ({ roleId: role.id, permissionId: permission.id })) });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.permissions_updated", entityType: "Role", entityId: role.id, beforeState: { permissionKeys: role.rolePermissions.map((entry) => entry.permission.key) }, afterState: { permissionKeys: input.permissionKeys } } });
-      return { id: role.id, permissionKeys: input.permissionKeys };
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.permissions_updated", entityType: "Role", entityId: role.id, beforeState: { permissionKeys: role.rolePermissions.map((entry) => entry.permission.key) }, afterState: { requestId: input.requestId, requestFingerprint, permissionKeys } } });
+      return { id: role.id, permissionKeys };
     });
   }
 }

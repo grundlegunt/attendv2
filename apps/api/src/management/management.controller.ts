@@ -193,7 +193,7 @@ export class ManagementController {
   deleteRole(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string) { return this.management.deleteRole({ locationId: this.location(actor), employeeId: actor.sub, roleId }); }
 
   @Patch("roles/:roleId/permissions") @RequirePermissions(Permission.EmployeePermissionsEdit)
-  role(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Body(new ZodValidationPipe(rolePermissionsSchema)) body: unknown) { return this.management.updateRolePermissions({ ...rolePermissionsSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId }); }
+  role(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(rolePermissionsSchema)) body: unknown) { return this.management.updateRolePermissions({ ...rolePermissionsSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId, requestId: requestId ?? randomUUID() }); }
 
   @Get("refunds") @RequirePermissions(Permission.PaymentRefund)
   refundsList(@CurrentActor() actor: RequestActor, @Query("query") query?: string) { return this.refunds.refundable(this.location(actor), query); }
