@@ -192,12 +192,14 @@ export class MenuController {
   updateModifier(
     @CurrentActor() actor: RequestActor,
     @Param("modifierId") modifierId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(updateModifierRequestSchema)) body: unknown,
   ) {
     return this.restaurant.updateModifier({
       modifierId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
       changes: updateModifierRequestSchema.parse(body),
     });
   }
