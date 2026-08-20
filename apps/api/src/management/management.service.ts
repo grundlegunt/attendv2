@@ -73,10 +73,20 @@ export class ManagementService {
     });
   }
 
-  async updatePriceTier(input: { locationId: string; employeeId: string; priceTierId: string; name?: string; ticketPriceMinor?: number; active?: boolean }) {
+  async updatePriceTier(input: { locationId: string; employeeId: string; priceTierId: string; requestId: string; name?: string; ticketPriceMinor?: number; active?: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const requestFingerprint = createHash("sha256").update(JSON.stringify({ priceTierId: input.priceTierId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, active: input.active })).digest("hex");
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "ticket.price_tier_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The price-group idempotency key was already used with different details.");
+        const tier = await tx.priceTier.findFirst({ where: { id: replay.entityId, organizationId: location.organizationId } });
+        if (!tier) throw AppError.conflict("The updated ticket price group is no longer available.");
+        return tier;
+      }
       const before = await tx.priceTier.findFirst({ where: { id: input.priceTierId, organizationId: location.organizationId } });
       if (!before) throw AppError.notFound("Ticket price group not found.");
       if (input.name && input.name.toLocaleLowerCase() !== before.name.toLocaleLowerCase()) {
@@ -88,7 +98,7 @@ export class ManagementService {
         if (activeCount <= 1) throw AppError.conflict("At least one ticket price group must remain active for scheduling and checkout.");
       }
       const updated = await tx.priceTier.update({ where: { id: before.id }, data: { name: input.name, ticketPriceMinor: input.ticketPriceMinor, active: input.active } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_updated", entityType: "PriceTier", entityId: updated.id, beforeState: { name: before.name, ticketPriceMinor: before.ticketPriceMinor, active: before.active }, afterState: { name: updated.name, ticketPriceMinor: updated.ticketPriceMinor, active: updated.active } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_updated", entityType: "PriceTier", entityId: updated.id, beforeState: { name: before.name, ticketPriceMinor: before.ticketPriceMinor, active: before.active }, afterState: { requestId: input.requestId, requestFingerprint, name: updated.name, ticketPriceMinor: updated.ticketPriceMinor, active: updated.active } } });
       return updated;
     });
   }
