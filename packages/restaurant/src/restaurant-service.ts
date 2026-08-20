@@ -2,6 +2,7 @@ import {
   FulfillmentTicketStatus,
   KitchenStation,
   MenuCategory,
+  ModifierGroup,
   Prisma,
   PrismaClient,
 } from "@cinema/database";
@@ -409,6 +410,7 @@ export class RestaurantService {
     locationId: string;
     actorId: string;
     modifierGroupId: string;
+    requestId: string;
     changes: {
       name?: string;
       selectionType?: "SINGLE" | "MULTIPLE";
@@ -419,7 +421,17 @@ export class RestaurantService {
       sortOrder?: number;
     };
   }) {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, modifierGroupId: input.modifierGroupId, changes: input.changes });
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "modifier_group.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as (ModifierGroup & { requestFingerprint?: string }) | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The modifier-group update idempotency key was already used with different details.", "CONFLICT");
+        return { id: state.id, menuItemId: state.menuItemId, name: state.name, selectionType: state.selectionType, required: state.required, minSelections: state.minSelections, maxSelections: state.maxSelections, active: state.active, sortOrder: state.sortOrder, createdAt: new Date(state.createdAt), updatedAt: new Date(state.updatedAt) };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.modifierGroupId}))`;
       const existing = await tx.modifierGroup.findFirst({
         where: {
           id: input.modifierGroupId,
@@ -451,7 +463,7 @@ export class RestaurantService {
           entityId: group.id,
           locationId: input.locationId,
           beforeState: existing,
-          afterState: group,
+          afterState: { ...group, requestId: input.requestId, requestFingerprint },
         },
       });
       return group;

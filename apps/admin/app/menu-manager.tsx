@@ -75,6 +75,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [modifierItemId, setModifierItemId] = useState("");
   const [modifierGroupName, setModifierGroupName] = useState("");
   const modifierGroupAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateModifierGroupAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [modifierSelectionType, setModifierSelectionType] = useState<
     "SINGLE" | "MULTIPLE"
   >("SINGLE");
@@ -439,37 +440,49 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   }
 
   async function saveModifierGroup(group: (typeof modifierGroups)[number]) {
+    const body = JSON.stringify({
+      name: editingModifierGroupName,
+      selectionType: editingModifierGroupSelectionType,
+      required: editingModifierGroupRequired,
+      minSelections: editingModifierGroupMin,
+      maxSelections: editingModifierGroupMax === "" ? null : editingModifierGroupMax,
+      sortOrder: editingModifierGroupOrder,
+    });
+    const fingerprint = `${group.id}:${body}`;
+    if (updateModifierGroupAttemptRef.current?.fingerprint !== fingerprint) updateModifierGroupAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/restaurant-menu/modifier-groups/${group.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify({
-          name: editingModifierGroupName,
-          selectionType: editingModifierGroupSelectionType,
-          required: editingModifierGroupRequired,
-          minSelections: editingModifierGroupMin,
-          maxSelections: editingModifierGroupMax === "" ? null : editingModifierGroupMax,
-          sortOrder: editingModifierGroupOrder,
-        }),
+        headers: { "Idempotency-Key": updateModifierGroupAttemptRef.current.requestId },
+        body,
       });
+      updateModifierGroupAttemptRef.current = null;
       setEditingModifierGroupId("");
       setMessage("Modifier group updated.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) updateModifierGroupAttemptRef.current = null;
       showError(error, "Modifier group could not be updated.");
     }
   }
 
   async function toggleModifierGroup(group: (typeof modifierGroups)[number]) {
+    const body = JSON.stringify({ active: !group.active });
+    const fingerprint = `${group.id}:${body}`;
+    if (updateModifierGroupAttemptRef.current?.fingerprint !== fingerprint) updateModifierGroupAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/restaurant-menu/modifier-groups/${group.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify({ active: !group.active }),
+        headers: { "Idempotency-Key": updateModifierGroupAttemptRef.current.requestId },
+        body,
       });
+      updateModifierGroupAttemptRef.current = null;
       setMessage(group.active ? "Modifier group retired." : "Modifier group restored.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) updateModifierGroupAttemptRef.current = null;
       showError(error, "Modifier group could not be updated.");
     }
   }
