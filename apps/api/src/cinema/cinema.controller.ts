@@ -400,11 +400,15 @@ export class CinemaController {
     @CurrentActor() actor: RequestActor,
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateFilmSeriesRequestSchema)) body: unknown,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Headers("if-unmodified-since") expectedUpdatedAt: string | undefined,
   ) {
     return this.cinemaService.updateFilmSeries(
       actor,
       id,
       body as ReturnType<typeof updateFilmSeriesRequestSchema.parse>,
+      requestId,
+      expectedUpdatedAt,
     );
   }
 

@@ -10,3 +10,9 @@ test("film series creation retains a stable retry identity", () => {
   assert.match(source, /"Idempotency-Key": createSeriesAttemptRef\.current\.requestId/);
   assert.match(source, /reason instanceof ApiRequestError && reason\.status < 500/);
 });
+
+test("film series edits retain a stable retry identity and version", () => {
+  assert.match(source, /updateSeriesAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateSeriesAttemptRef\.current\.requestId/);
+  assert.match(source, /"If-Unmodified-Since": editingSeriesUpdatedAt/);
+});
