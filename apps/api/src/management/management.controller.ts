@@ -104,7 +104,7 @@ export class ManagementController {
   updateMerch(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(merchSchema)) body: unknown) { return this.management.updateMerch({ ...merchSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/site-copy") @RequirePermissions(Permission.TicketPriceEdit)
-  updateSiteCopy(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(customerSiteCopySchema)) body: unknown) { return this.management.updateSiteCopy({ ...customerSiteCopySchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  updateSiteCopy(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(customerSiteCopySchema)) body: unknown) { return this.management.updateSiteCopy({ ...customerSiteCopySchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/menu-presentation") @RequirePermissions(Permission.MenuEdit)
   updateMenuPresentation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(menuPresentationSchema)) body: unknown) { return this.management.updateMenuPresentation({ ...menuPresentationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

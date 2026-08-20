@@ -1917,6 +1917,26 @@ describe("Milestone 1 cinema configuration", () => {
     expect(await prisma.auditEvent.count({ where: { action: "location.merch_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
   });
 
+  it("replays concurrent customer-site-copy publishing once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const settings = await request(app.getHttpServer())
+      .get("/api/v1/management/settings")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(200);
+    const requestId = crypto.randomUUID();
+    const copy = { ...settings.body.siteCopy, showtimes: { ...settings.body.siteCopy.showtimes, intro: "Reserve your seats for a great night out." } };
+    const publish = () => request(app.getHttpServer())
+      .patch("/api/v1/management/settings/site-copy")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send(copy);
+    const [updated, replayed] = await Promise.all([publish(), publish()]);
+    expect(updated.status).toBe(200);
+    expect(replayed.body).toEqual(updated.body);
+    expect(updated.body.siteCopy.showtimes.intro).toBe(copy.showtimes.intro);
+    expect(await prisma.auditEvent.count({ where: { action: "location.site_copy_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
+  });
+
   it("lets cinema managers update audited operating settings", async () => {
     const current = await request(app.getHttpServer())
       .get("/api/v1/management/settings")
