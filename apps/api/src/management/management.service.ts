@@ -261,9 +261,21 @@ export class ManagementService {
     });
   }
 
-  async updateSiteCopy(input: { locationId: string; employeeId: string } & CustomerSiteCopy) {
+  async updateSiteCopy(input: { locationId: string; employeeId: string; requestId: string } & CustomerSiteCopy) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const { locationId, employeeId, requestId, ...copy } = input;
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId, copy })).digest("hex");
     return prisma.$transaction(async (tx) => {
-      const { locationId, employeeId, ...copy } = input;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId, action: "location.site_copy_updated", afterState: { path: ["requestId"], equals: requestId } } });
+      if (replay) {
+        const replayState = replay.afterState as (CustomerSiteCopy & { requestFingerprint?: string; publishedAt?: string }) | null;
+        if (replayState?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The customer-site-copy idempotency key was already used with different details.");
+        if (!replayState.publishedAt) throw AppError.conflict("The published customer website copy cannot be replayed.");
+        const siteCopy: CustomerSiteCopy = { showtimes: replayState.showtimes, comingSoon: replayState.comingSoon, filmSeries: replayState.filmSeries, dining: replayState.dining, about: replayState.about };
+        return { siteCopy, publishedAt: new Date(replayState.publishedAt) };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${locationId}))`;
       const location = await tx.location.findUniqueOrThrow({ where: { id: locationId }, select: { contentDraft: true, contentPublished: true } });
       const draftResult = cinemaContentSchema.safeParse(location.contentDraft ?? location.contentPublished ?? cinemaContentDefaults);
       const publishedResult = cinemaContentSchema.safeParse(location.contentPublished ?? location.contentDraft ?? cinemaContentDefaults);
@@ -271,7 +283,7 @@ export class ManagementService {
       const published = publishedResult.success ? publishedResult.data : cinemaContentDefaults;
       const publishedAt = new Date();
       await tx.location.update({ where: { id: locationId }, data: { contentDraft: applySiteCopy(draft, copy) as Prisma.InputJsonValue, contentPublished: applySiteCopy(published, copy) as Prisma.InputJsonValue, contentPublishedAt: publishedAt } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "location.site_copy_updated", entityType: "Location", entityId: locationId, beforeState: siteCopyFrom(published) as Prisma.InputJsonValue, afterState: copy as Prisma.InputJsonValue } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "location.site_copy_updated", entityType: "Location", entityId: locationId, beforeState: siteCopyFrom(published) as Prisma.InputJsonValue, afterState: { ...copy, requestId, requestFingerprint, publishedAt: publishedAt.toISOString() } as Prisma.InputJsonValue } });
       return { siteCopy: copy, publishedAt };
     });
   }

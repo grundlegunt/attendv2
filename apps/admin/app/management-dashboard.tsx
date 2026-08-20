@@ -56,6 +56,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const locationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const brandingAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const merchAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const siteCopyAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
@@ -129,10 +130,14 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
   async function saveSiteCopy(copy: CustomerSiteCopy) {
     setError(null);
+    const body = JSON.stringify(copy);
+    if (siteCopyAttemptRef.current?.fingerprint !== body) siteCopyAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
-      await apiFetch("/management/settings/site-copy", { accessToken, method: "PATCH", body: JSON.stringify(copy) });
+      await apiFetch("/management/settings/site-copy", { accessToken, method: "PATCH", headers: { "Idempotency-Key": siteCopyAttemptRef.current.requestId }, body });
+      siteCopyAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) siteCopyAttemptRef.current = null;
       setError(reason instanceof ApiRequestError ? reason.body.message : "The customer website copy could not be published.");
       throw reason;
     }
