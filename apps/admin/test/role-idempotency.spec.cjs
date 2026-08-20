@@ -9,3 +9,8 @@ test("role creation retains a stable retry identity", () => {
   assert.match(source, /roleAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": roleAttemptRef\.current\.requestId/);
 });
+
+test("role renaming retains a stable retry identity", () => {
+  assert.match(source, /renameRoleAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": renameRoleAttemptRef\.current\.requestId/);
+});

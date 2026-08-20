@@ -187,7 +187,7 @@ export class ManagementController {
   createRole(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(roleSchema)) body: unknown) { return this.management.createRole({ ...roleSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("roles/:roleId") @RequirePermissions(Permission.EmployeePermissionsEdit)
-  updateRole(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Body(new ZodValidationPipe(roleSchema)) body: unknown) { return this.management.updateRole({ ...roleSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId }); }
+  updateRole(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(roleSchema)) body: unknown) { return this.management.updateRole({ ...roleSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, roleId, requestId: requestId ?? randomUUID() }); }
 
   @Delete("roles/:roleId") @RequirePermissions(Permission.EmployeePermissionsEdit)
   deleteRole(@CurrentActor() actor: RequestActor, @Param("roleId") roleId: string) { return this.management.deleteRole({ locationId: this.location(actor), employeeId: actor.sub, roleId }); }

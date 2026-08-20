@@ -1306,12 +1306,17 @@ describe("RBAC permission enforcement", () => {
       .expect(200);
     expect(people.body.roles.find((role: { id: string }) => role.id === created.body.id).rolePermissions.map((entry: { permission: { key: string } }) => entry.permission.key).sort()).toEqual(["showtime.manage", "ticket.refund"]);
     const renamed = `${name} renamed`;
-    await request(app.getHttpServer())
+    const renameRequestId = crypto.randomUUID();
+    const rename = () => request(app.getHttpServer())
       .patch(`/api/v1/management/roles/${created.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ name: renamed })
-      .expect(200)
-      .expect(({ body }) => expect(body.name).toBe(renamed));
+      .set("Idempotency-Key", renameRequestId)
+      .send({ name: renamed });
+    const [renamedRole, replayedRename] = await Promise.all([rename(), rename()]);
+    expect(renamedRole.status).toBe(200);
+    expect(replayedRename.body).toEqual(renamedRole.body);
+    expect(renamedRole.body.name).toBe(renamed);
+    expect(await prisma.auditEvent.count({ where: { action: "role.renamed", entityId: created.body.id } })).toBe(1);
     await request(app.getHttpServer())
       .delete(`/api/v1/management/roles/${created.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
