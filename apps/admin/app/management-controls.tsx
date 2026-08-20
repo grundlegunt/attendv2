@@ -203,6 +203,7 @@ export function ManagementControls({
   const credentialResetAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
+  const roleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleName, setSelectedRoleName] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [employeeRoleDrafts, setEmployeeRoleDrafts] = useState<
@@ -610,16 +611,21 @@ export function ManagementControls({
   async function createRole(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = JSON.stringify({ name: newRoleName });
+    if (roleAttemptRef.current?.fingerprint !== body) roleAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       const created = await apiFetch<{ id: string }>("/management/roles", {
         accessToken,
         method: "POST",
-        body: JSON.stringify({ name: newRoleName }),
+        headers: { "Idempotency-Key": roleAttemptRef.current.requestId },
+        body,
       });
+      roleAttemptRef.current = null;
       setNewRoleName("");
       await refresh();
       setSelectedRoleId(created.id);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) roleAttemptRef.current = null;
       showError(reason);
     }
   }

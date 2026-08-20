@@ -1278,15 +1278,23 @@ describe("RBAC permission enforcement", () => {
   });
 
   it("creates a venue-specific role and configures its permissions", async () => {
+    const { prisma } = await import("@cinema/database");
     const name = `Floor manager ${crypto.randomUUID()}`;
-    const created = await request(app.getHttpServer())
+    const requestId = crypto.randomUUID();
+    const create = () => request(app.getHttpServer())
       .post("/api/v1/management/roles")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ name })
-      .expect(201);
+      .set("Idempotency-Key", requestId)
+      .send({ name });
+    const [created, replayed] = await Promise.all([create(), create()]);
 
+    expect(created.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body).toEqual(created.body);
     expect(created.body.name).toBe(name);
     expect(created.body.key).toMatch(/^CUSTOM_[A-F0-9]{32}$/);
+    expect(await prisma.role.count({ where: { name } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "role.created", entityId: created.body.id } })).toBe(1);
     await request(app.getHttpServer())
       .patch(`/api/v1/management/roles/${created.body.id}/permissions`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
