@@ -234,6 +234,7 @@ export default function AdminPage() {
   const updatePlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const renamePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const deletePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const publishPlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -615,6 +616,16 @@ export default function AdminPage() {
     )
       return;
     setPublishingPlan(true);
+    const body = JSON.stringify({
+      expectedUpdatedAt: validation.expectedUpdatedAt,
+    });
+    const fingerprint = `${plan.id}:${body}`;
+    if (publishPlanAttemptRef.current?.fingerprint !== fingerprint) {
+      publishPlanAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       const result = await apiFetch<{
         published: boolean;
@@ -624,16 +635,21 @@ export default function AdminPage() {
       }>(`/cinema/schedule-plans/${plan.id}/publish`, {
         accessToken: token ?? undefined,
         method: "POST",
-        body: JSON.stringify({
-          expectedUpdatedAt: validation.expectedUpdatedAt,
-        }),
+        headers: {
+          "Idempotency-Key": publishPlanAttemptRef.current!.requestId,
+        },
+        body,
       });
+      publishPlanAttemptRef.current = null;
       await refresh();
       setPlanValidation(null);
       window.alert(
         `Schedule published. ${result.preservedCount} preserved, ${result.createdCount} added, ${result.removedCount} replaced.`,
       );
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        publishPlanAttemptRef.current = null;
+      }
       showError(reason);
     } finally {
       setPublishingPlan(false);

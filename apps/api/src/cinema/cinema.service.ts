@@ -670,8 +670,54 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     actor: RequestActor,
     id: string,
     expectedUpdatedAtValue: string,
+    requestId: string = randomUUID(),
   ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({
+        locationId,
+        planId: id,
+        expectedUpdatedAt: expectedUpdatedAtValue,
+      }))
+      .digest("hex");
+    const replayResult = (afterState: unknown) => {
+      const state = afterState as {
+        requestFingerprint?: string;
+        preservedCount?: number;
+        createdCount?: number;
+        removedCount?: number;
+      } | null;
+      if (state?.requestFingerprint !== requestFingerprint) {
+        throw AppError.conflict(
+          "The schedule-plan publish key was already used with different details.",
+        );
+      }
+      if (
+        typeof state.preservedCount !== "number" ||
+        typeof state.createdCount !== "number" ||
+        typeof state.removedCount !== "number"
+      ) {
+        throw AppError.conflict("The original publish result is unavailable.");
+      }
+      return {
+        published: true,
+        preservedCount: state.preservedCount,
+        createdCount: state.createdCount,
+        removedCount: state.removedCount,
+      };
+    };
+    const findReplay = () => prisma.auditEvent.findFirst({
+      where: {
+        locationId,
+        action: "schedule_plan.published",
+        afterState: { path: ["requestId"], equals: requestId },
+      },
+    });
+    const existingReplay = await findReplay();
+    if (existingReplay) return replayResult(existingReplay.afterState);
     const validation = await this.validateSchedulePlan(actor, id);
     if (!validation.valid)
       throw AppError.conflict(
@@ -679,13 +725,25 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         { issues: validation.issues },
       );
     const expectedUpdatedAt = new Date(expectedUpdatedAtValue);
-    if (validation.expectedUpdatedAt !== expectedUpdatedAt.toISOString())
+    if (validation.expectedUpdatedAt !== expectedUpdatedAt.toISOString()) {
+      const completedReplay = await findReplay();
+      if (completedReplay) return replayResult(completedReplay.afterState);
       throw AppError.conflict(
         "This plan changed after it was checked. Check it again before publishing.",
       );
+    }
 
     const publishAttempt = () => prisma.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "schedule_plan.published",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) return replayResult(replay.afterState);
         const plan = await tx.schedulePlan.findFirst({
           where: { id, locationId, updatedAt: expectedUpdatedAt },
         });
@@ -914,6 +972,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               preservedCount: live.length - remove.length,
               createdCount: create.length,
               removedCount: remove.length,
+              requestId,
+              requestFingerprint,
             },
           },
         });

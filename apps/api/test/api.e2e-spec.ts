@@ -380,6 +380,7 @@ describe("Saved schedule plan publishing", () => {
   });
 
   it("requires a fresh validation and atomically publishes a future plan", async () => {
+    const { prisma } = await import("@cinema/database");
     const login = await loginOwner();
     expect(login.status).toBe(200);
     const auth = { Authorization: `Bearer ${login.body.accessToken}` };
@@ -411,8 +412,14 @@ describe("Saved schedule plan publishing", () => {
     await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/publish`).set(auth).send({ expectedUpdatedAt: firstCheck.body.expectedUpdatedAt }).expect(409);
 
     const freshCheck = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/validate`).set(auth).expect(201);
-    const published = await request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/publish`).set(auth).send({ expectedUpdatedAt: freshCheck.body.expectedUpdatedAt }).expect(201);
+    const publishRequestId = crypto.randomUUID();
+    const publish = () => request(app.getHttpServer()).post(`/api/v1/cinema/schedule-plans/${planId}/publish`).set(auth).set("Idempotency-Key", publishRequestId).send({ expectedUpdatedAt: freshCheck.body.expectedUpdatedAt });
+    const [published, replayedPublish] = await Promise.all([publish(), publish()]);
+    expect(published.status).toBe(201);
+    expect(replayedPublish.status).toBe(201);
     expect(published.body).toEqual({ published: true, preservedCount: 0, createdCount: 1, removedCount: 0 });
+    expect(replayedPublish.body).toEqual(published.body);
+    expect(await prisma.auditEvent.count({ where: { action: "schedule_plan.published", entityId: planId } })).toBe(1);
     const refreshed = await request(app.getHttpServer()).get("/api/v1/cinema/admin/bootstrap").set(auth).expect(200);
     const live = refreshed.body.showtimes.find((showtime: { startsAt: string }) => showtime.startsAt === startsAt);
     expect(live).toEqual(expect.objectContaining({ onSale: false, movie: expect.objectContaining({ id: movie.id }), auditorium: expect.objectContaining({ id: auditorium.id }) }));
