@@ -289,13 +289,24 @@ export class ManagementService {
     });
   }
 
-  async updateTaxRule(input: { locationId: string; employeeId: string; ruleId: string; name?: string; appliesTo?: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number; active?: boolean }) {
-    const before = await prisma.taxRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
-    if (!before) throw AppError.notFound("Tax rule was not found.");
+  async updateTaxRule(input: { locationId: string; employeeId: string; ruleId: string; requestId: string; name?: string; appliesTo?: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number; active?: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ ruleId: input.ruleId, name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, active: input.active })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "tax_rule.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The tax-rule idempotency key was already used with different details.");
+        const rule = await tx.taxRule.findFirst({ where: { id: replay.entityId, locationId: input.locationId } });
+        if (!rule) throw AppError.conflict("The updated tax rule is no longer available.");
+        return rule;
+      }
+      const before = await tx.taxRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
+      if (!before) throw AppError.notFound("Tax rule was not found.");
       const updated = await tx.taxRule.update({ where: { id: before.id }, data: { name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, active: input.active } });
       const state = (rule: typeof updated) => ({ name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, active: rule.active });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "tax_rule.updated", entityType: "TaxRule", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "tax_rule.updated", entityType: "TaxRule", entityId: updated.id, beforeState: state(before), afterState: { ...state(updated), requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }

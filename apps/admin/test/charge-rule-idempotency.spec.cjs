@@ -11,3 +11,8 @@ test("tax and service-charge creation retain stable retry identities", () => {
   assert.match(source, /"Idempotency-Key": taxAttemptRef\.current\.requestId/);
   assert.match(source, /"Idempotency-Key": chargeAttemptRef\.current\.requestId/);
 });
+
+test("tax-rule updates retain a stable retry identity", () => {
+  assert.match(source, /updateTaxAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateTaxAttemptRef\.current!\.requestId/);
+});
