@@ -48,6 +48,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [audienceOrigins, setAudienceOrigins] = useState<AudienceOriginsReport | null>(null);
   const [labor, setLabor] = useState<LaborReport | null>(null);
   const [shiftDraft, setShiftDraft] = useState<{ shiftId: string; employeeName: string; clockInAt: string; clockOutAt: string; breakStartAt: string; breakEndAt: string; notes: string } | null>(null);
+  const shiftAdjustmentAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [auditHasMore, setAuditHasMore] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -230,11 +231,15 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     if (shiftDraft.breakEndAt && (!shiftDraft.breakStartAt || new Date(shiftDraft.breakEndAt) <= new Date(shiftDraft.breakStartAt))) { setError("Break end must be after break start."); return; }
     if (shiftDraft.clockOutAt && shiftDraft.breakStartAt && new Date(shiftDraft.breakStartAt) > new Date(shiftDraft.clockOutAt)) { setError("Break start cannot be after clock-out."); return; }
     if (shiftDraft.clockOutAt && shiftDraft.breakEndAt && new Date(shiftDraft.breakEndAt) > new Date(shiftDraft.clockOutAt)) { setError("Break end cannot be after clock-out."); return; }
+    const body = JSON.stringify({ clockInAt: new Date(shiftDraft.clockInAt).toISOString(), clockOutAt: shiftDraft.clockOutAt ? new Date(shiftDraft.clockOutAt).toISOString() : null, breakStartAt: shiftDraft.breakStartAt ? new Date(shiftDraft.breakStartAt).toISOString() : null, breakEndAt: shiftDraft.breakEndAt ? new Date(shiftDraft.breakEndAt).toISOString() : null, notes: shiftDraft.notes });
+    const fingerprint = `${shiftDraft.shiftId}:${body}`;
+    if (shiftAdjustmentAttemptRef.current?.fingerprint !== fingerprint) shiftAdjustmentAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      await apiFetch(`/shifts/${shiftDraft.shiftId}`, { accessToken, method: "PATCH", body: JSON.stringify({ clockInAt: new Date(shiftDraft.clockInAt).toISOString(), clockOutAt: shiftDraft.clockOutAt ? new Date(shiftDraft.clockOutAt).toISOString() : null, breakStartAt: shiftDraft.breakStartAt ? new Date(shiftDraft.breakStartAt).toISOString() : null, breakEndAt: shiftDraft.breakEndAt ? new Date(shiftDraft.breakEndAt).toISOString() : null, notes: shiftDraft.notes }) });
+      await apiFetch(`/shifts/${shiftDraft.shiftId}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": shiftAdjustmentAttemptRef.current.requestId }, body });
+      shiftAdjustmentAttemptRef.current = null;
       setShiftDraft(null);
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The shift could not be adjusted."); }
+    } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) shiftAdjustmentAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The shift could not be adjusted."); }
   }
 
   function exportRevenue() {

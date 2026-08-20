@@ -1,4 +1,5 @@
-import { Body, Controller, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Headers, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { shiftBreakEndRequestSchema, shiftBreakStartRequestSchema, shiftClockInRequestSchema, shiftClockOutRequestSchema, shiftManagerAdjustmentSchema, shiftPinRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -45,8 +46,8 @@ export class WorkforceManagerController {
 
   @Patch(":shiftId")
   @RequirePermissions(Permission.EmployeeEdit)
-  adjust(@CurrentActor() actor: RequestActor, @Param("shiftId") shiftId: string, @Body(new ZodValidationPipe(shiftManagerAdjustmentSchema)) body: unknown) {
+  adjust(@CurrentActor() actor: RequestActor, @Param("shiftId") shiftId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(shiftManagerAdjustmentSchema)) body: unknown) {
     if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
-    return this.workforce.adjustShift({ ...shiftManagerAdjustmentSchema.parse(body), shiftId, locationId: actor.locationId, managerId: actor.sub });
+    return this.workforce.adjustShift({ ...shiftManagerAdjustmentSchema.parse(body), shiftId, locationId: actor.locationId, managerId: actor.sub, requestId: requestId ?? randomUUID() });
   }
 }

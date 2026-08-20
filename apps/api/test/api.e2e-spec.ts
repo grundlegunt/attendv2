@@ -8049,9 +8049,14 @@ describe("Milestone 9 box office and workforce", () => {
     await request(app.getHttpServer()).patch(`/api/v1/shifts/${shift.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ breakEndAt: new Date(new Date(correctedClockOut).getTime() + 60_000).toISOString(), notes: "Invalid correction" }).expect(400);
-    await request(app.getHttpServer()).patch(`/api/v1/shifts/${shift.id}`)
+    const shiftAdjustmentKey = crypto.randomUUID();
+    const adjustShift = () => request(app.getHttpServer()).patch(`/api/v1/shifts/${shift.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({ clockOutAt: correctedClockOut, notes: "Manager correction for E2E verification" }).expect(200);
+      .set("Idempotency-Key", shiftAdjustmentKey)
+      .send({ clockOutAt: correctedClockOut, notes: "Manager correction for E2E verification" });
+    const [adjusted, adjustmentReplay] = await Promise.all([adjustShift(), adjustShift()]);
+    expect(adjusted.status).toBe(200);
+    expect(adjustmentReplay.body).toEqual(adjusted.body);
     expect(await prisma.auditEvent.count({ where: { entityType: "Shift", entityId: shift.id, action: "shift.manager_adjusted" } })).toBe(1);
   });
 

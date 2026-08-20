@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { prisma } from "@cinema/database";
+import { prisma, Shift } from "@cinema/database";
 import { verifyPin } from "@cinema/auth";
 import { AppError } from "../common/app-error";
 
@@ -11,8 +11,17 @@ interface PinInput {
 
 @Injectable()
 export class WorkforceService {
-  async adjustShift(input: { shiftId: string; locationId: string; managerId: string; clockInAt?: string; clockOutAt?: string | null; breakStartAt?: string | null; breakEndAt?: string | null; notes: string }) {
+  async adjustShift(input: { shiftId: string; locationId: string; managerId: string; requestId: string; clockInAt?: string; clockOutAt?: string | null; breakStartAt?: string | null; breakEndAt?: string | null; notes: string }) {
+    if (!input.requestId.trim()) throw AppError.validationFailed("An idempotency key is required.");
+    const requestFingerprint = JSON.stringify({ shiftId: input.shiftId, locationId: input.locationId, clockInAt: input.clockInAt, clockOutAt: input.clockOutAt, breakStartAt: input.breakStartAt, breakEndAt: input.breakEndAt, notes: input.notes });
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "shift.manager_adjusted", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as (Shift & { requestFingerprint?: string }) | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The shift-adjustment idempotency key was already used with different details.");
+        return { id: state.id, employeeId: state.employeeId, locationId: state.locationId, scheduledStartAt: state.scheduledStartAt ? new Date(state.scheduledStartAt) : null, scheduledEndAt: state.scheduledEndAt ? new Date(state.scheduledEndAt) : null, clockInAt: new Date(state.clockInAt), clockOutAt: state.clockOutAt ? new Date(state.clockOutAt) : null, clockInMethod: state.clockInMethod, breakStartAt: state.breakStartAt ? new Date(state.breakStartAt) : null, breakEndAt: state.breakEndAt ? new Date(state.breakEndAt) : null, adjustedByEmployeeId: state.adjustedByEmployeeId, notes: state.notes, createdAt: new Date(state.createdAt), updatedAt: new Date(state.updatedAt) };
+      }
       await tx.$queryRaw`SELECT "id" FROM "shifts" WHERE "id" = ${input.shiftId} FOR UPDATE`;
       const shift = await tx.shift.findFirst({ where: { id: input.shiftId, locationId: input.locationId } });
       if (!shift) throw AppError.notFound("Shift was not found.");
@@ -32,7 +41,7 @@ export class WorkforceService {
         ...(input.breakEndAt !== undefined ? { breakEndAt: input.breakEndAt ? new Date(input.breakEndAt) : null } : {}),
         adjustedByEmployeeId: input.managerId, notes: input.notes,
       } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.managerId, locationId: input.locationId, action: "shift.manager_adjusted", entityType: "Shift", entityId: shift.id, beforeState: shift, afterState: updated } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.managerId, locationId: input.locationId, action: "shift.manager_adjusted", entityType: "Shift", entityId: shift.id, beforeState: shift, afterState: { ...updated, requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }
