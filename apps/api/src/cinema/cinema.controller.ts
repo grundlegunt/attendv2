@@ -145,8 +145,18 @@ export class CinemaController {
   @Post("schedule-plans/:id/publish")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  publishSchedulePlan(@CurrentActor() actor: RequestActor, @Param("id") id: string, @Body(new ZodValidationPipe(publishSchedulePlanSchema)) body: unknown) {
-    return this.cinemaService.publishSchedulePlan(actor, id, publishSchedulePlanSchema.parse(body).expectedUpdatedAt);
+  publishSchedulePlan(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(publishSchedulePlanSchema)) body: unknown,
+  ) {
+    return this.cinemaService.publishSchedulePlan(
+      actor,
+      id,
+      publishSchedulePlanSchema.parse(body).expectedUpdatedAt,
+      requestId,
+    );
   }
 
   @Post("schedule-plans/:id/duplicate")
