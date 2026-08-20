@@ -206,6 +206,7 @@ export function ManagementControls({
   const roleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const renameRoleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const rolePermissionsAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const deleteRoleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleName, setSelectedRoleName] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [employeeRoleDrafts, setEmployeeRoleDrafts] = useState<
@@ -664,16 +665,21 @@ export function ManagementControls({
       )
     )
       return;
+    const fingerprint = selectedRole.id;
+    if (deleteRoleAttemptRef.current?.fingerprint !== fingerprint) deleteRoleAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/management/roles/${selectedRole.id}`, {
         accessToken,
         method: "DELETE",
+        headers: { "Idempotency-Key": deleteRoleAttemptRef.current.requestId },
       });
+      deleteRoleAttemptRef.current = null;
       const fallbackId =
         people?.roles.find((role) => role.id !== selectedRole.id)?.id ?? "";
       setSelectedRoleId(fallbackId);
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) deleteRoleAttemptRef.current = null;
       showError(reason);
     }
   }
