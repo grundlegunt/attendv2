@@ -4803,18 +4803,30 @@ describe("Customer authentication", () => {
       },
     });
 
+    const receiptRequestId = crypto.randomUUID();
+    const receiptsBefore = emailProvider.sent.length;
     const sent = await request(app.getHttpServer())
       .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", receiptRequestId)
       .send();
     expect(sent.status).toBe(200);
     expect(sent.body).toEqual({ receiptDelivery: "SENT", email });
+    await request(app.getHttpServer())
+      .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .set("Idempotency-Key", receiptRequestId)
+      .send()
+      .expect(200);
+    expect(emailProvider.sent).toHaveLength(receiptsBefore + 1);
 
     const blocked = await request(app.getHttpServer())
       .post(`/api/v1/auth/customers/orders/${crypto.randomUUID()}/receipt`)
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", crypto.randomUUID())
       .send();
     expect(blocked.status).toBe(404);
   });

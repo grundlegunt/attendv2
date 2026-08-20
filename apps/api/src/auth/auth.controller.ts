@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, Patch, HttpCode, HttpStatus, Param, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Get, Headers, Patch, HttpCode, HttpStatus, Param, Req, Res, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
@@ -281,10 +281,11 @@ export class AuthController {
     @Req() request: Request,
     @CurrentActor() actor: RequestActor,
     @Param("orderId") orderId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
   ) {
     assertTrustedCustomerOrigin(request);
     if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
-    return this.authService.resendCustomerReceipt(actor.sub, orderId);
+    return this.authService.resendCustomerReceipt(actor.sub, orderId, requestId ?? "");
   }
 
   @Post("customers/change-password")

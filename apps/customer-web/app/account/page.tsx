@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AuthenticatedCustomer,
   CustomerAccountResponse,
@@ -63,6 +63,7 @@ export default function AccountPage() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
   const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
+  const receiptAttemptRef = useRef<Record<string, string>>({});
   const [printOrderId, setPrintOrderId] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -277,13 +278,16 @@ export default function AccountPage() {
   }
 
   async function resendReceipt(order: CustomerTicketOrderSummary) {
+    const requestId = receiptAttemptRef.current[order.id] ?? crypto.randomUUID();
+    receiptAttemptRef.current[order.id] = requestId;
     setReceiptOrderId(order.id);
     setReceiptMessage(null);
     try {
       const result = await apiFetch<{ receiptDelivery: "SENT" | "FAILED"; email: string }>(
         `/auth/customers/orders/${order.id}/receipt`,
-        { method: "POST" },
+        { method: "POST", headers: { "Idempotency-Key": requestId } },
       );
+      if (result.receiptDelivery === "SENT") delete receiptAttemptRef.current[order.id];
       setReceiptMessage(
         result.receiptDelivery === "SENT"
           ? `Tickets for order ${order.orderNumber} were sent to ${result.email}.`
