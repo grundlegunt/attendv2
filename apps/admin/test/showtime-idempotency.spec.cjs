@@ -8,6 +8,7 @@ const source = readFileSync(join(__dirname, "../app/scheduling/page.tsx"), "utf8
 test("showtime creation retains stable retry identities", () => {
   assert.match(source, /showtimeAttemptRef = useRef/);
   assert.match(source, /movieAttemptRef = useRef/);
+  assert.match(source, /updateMovieAttemptRef = useRef/);
   assert.match(source, /updateShowtimeAttemptRef = useRef/);
   assert.match(source, /saleStatusAttemptRef = useRef/);
   assert.match(source, /quickShowtimeAttemptRef = useRef/);
@@ -26,6 +27,7 @@ test("showtime creation retains stable retry identities", () => {
   assert.match(source, /publishPlanAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": showtimeAttemptRef\.current!/);
   assert.match(source, /"Idempotency-Key": movieAttemptRef\.current\.requestId/);
+  assert.match(source, /"Idempotency-Key": updateMovieAttemptRef\.current\.requestId/);
   assert.match(source, /"Idempotency-Key": updateShowtimeAttemptRef\.current!/);
   assert.match(source, /"Idempotency-Key": saleStatusAttemptRef\.current\.requestId/);
   assert.match(source, /"If-Unmodified-Since": editingShowtimeUpdatedAt/);

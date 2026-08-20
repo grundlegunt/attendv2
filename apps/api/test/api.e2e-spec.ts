@@ -1351,6 +1351,33 @@ describe("Milestone 1 cinema configuration", () => {
       .expect(409);
   });
 
+  it("replays a movie update and rejects a stale editor save", async () => {
+    const { prisma } = await import("@cinema/database");
+    const before = await prisma.movie.findUniqueOrThrow({ where: { id: movieId } });
+    const requestId = crypto.randomUUID();
+    const update = () => request(app.getHttpServer())
+      .patch(`/api/v1/cinema/movies/${movieId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .set("If-Unmodified-Since", before.updatedAt.toISOString())
+      .send({ synopsis: "Updated exactly once." });
+    const [updated, replayed] = await Promise.all([update(), update()]);
+    expect(updated.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(replayed.body.id).toBe(updated.body.id);
+    expect(updated.body.synopsis).toBe("Updated exactly once.");
+    expect(await prisma.auditEvent.count({
+      where: { action: "movie.updated", entityId: movieId },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/movies/${movieId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .set("If-Unmodified-Since", before.updatedAt.toISOString())
+      .send({ synopsis: "Stale overwrite." })
+      .expect(409);
+  });
+
   it("creates a showtime and computes pre-show, film end, and room-ready times", async () => {
     const startsAt = "2030-01-01T18:00:00.000Z";
     const res = await request(app.getHttpServer())

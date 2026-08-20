@@ -332,9 +332,17 @@ export class CinemaController {
   updateMovie(
     @CurrentActor() actor: RequestActor,
     @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Headers("if-unmodified-since") expectedUpdatedAt: string | undefined,
     @Body(new ZodValidationPipe(updateMovieRequestSchema)) body: unknown,
   ) {
-    return this.cinemaService.updateMovie(actor, id, body as ReturnType<typeof updateMovieRequestSchema.parse>);
+    return this.cinemaService.updateMovie(
+      actor,
+      id,
+      body as ReturnType<typeof updateMovieRequestSchema.parse>,
+      requestId,
+      expectedUpdatedAt,
+    );
   }
 
   @Delete("movies/:id")

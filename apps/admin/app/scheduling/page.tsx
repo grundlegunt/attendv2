@@ -46,6 +46,7 @@ function auditoriumCapacityLabel(auditorium: Auditorium) {
 }
 interface Movie {
   id: string;
+  updatedAt: string;
   title: string;
   runtimeMinutes: number;
   synopsis?: string | null;
@@ -196,6 +197,7 @@ export default function AdminPage() {
   const [pairingMenuItemIds, setPairingMenuItemIds] = useState<string[]>([]);
   const [pairingMenuSearch, setPairingMenuSearch] = useState("");
   const [editingMovieId, setEditingMovieId] = useState<string | null>(null);
+  const [editingMovieUpdatedAt, setEditingMovieUpdatedAt] = useState<string | null>(null);
   const [movieId, setMovieId] = useState("");
   const [auditoriumId, setAuditoriumId] = useState("");
   const [startsAt, setStartsAt] = useState("");
@@ -223,6 +225,7 @@ export default function AdminPage() {
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const movieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [seatInventory, setSeatInventory] =
     useState<ShowtimeSeatInventory | null>(null);
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(
@@ -753,6 +756,13 @@ export default function AdminPage() {
     if (!editingMovieId && movieAttemptRef.current?.fingerprint !== body) {
       movieAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     }
+    const updateFingerprint = `${editingMovieId}:${editingMovieUpdatedAt}:${body}`;
+    if (editingMovieId && updateMovieAttemptRef.current?.fingerprint !== updateFingerprint) {
+      updateMovieAttemptRef.current = {
+        fingerprint: updateFingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(
         editingMovieId ? `/cinema/movies/${editingMovieId}` : "/cinema/movies",
@@ -762,10 +772,20 @@ export default function AdminPage() {
           body,
           ...(!editingMovieId && movieAttemptRef.current
             ? { headers: { "Idempotency-Key": movieAttemptRef.current.requestId } }
-            : {}),
+            : editingMovieId && updateMovieAttemptRef.current
+              ? {
+                  headers: {
+                    "Idempotency-Key": updateMovieAttemptRef.current.requestId,
+                    ...(editingMovieUpdatedAt
+                      ? { "If-Unmodified-Since": editingMovieUpdatedAt }
+                      : {}),
+                  },
+                }
+              : {}),
         },
       );
       movieAttemptRef.current = null;
+      updateMovieAttemptRef.current = null;
       setMovieTitle("");
       setMovieSynopsis("");
       setMovieRating("");
@@ -784,11 +804,13 @@ export default function AdminPage() {
       setMovieDistributorTerms([]);
       setPairingMenuSearch("");
       setEditingMovieId(null);
+      setEditingMovieUpdatedAt(null);
       setMovieEditorOpen(false);
       await refresh();
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) {
         movieAttemptRef.current = null;
+        updateMovieAttemptRef.current = null;
       }
       showError(reason);
     }
@@ -1365,6 +1387,7 @@ export default function AdminPage() {
 
   function openMovieEditor(movie?: Movie) {
     setEditingMovieId(movie?.id ?? null);
+    setEditingMovieUpdatedAt(movie?.updatedAt ?? null);
     setMovieTitle(movie?.title ?? "");
     setRuntime(movie?.runtimeMinutes ?? 120);
     setMovieSynopsis(movie?.synopsis ?? "");
