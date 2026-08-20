@@ -437,12 +437,16 @@ export class CinemaController {
   updateShowtime(
     @CurrentActor() actor: RequestActor,
     @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Headers("if-unmodified-since") expectedUpdatedAt: string | undefined,
     @Body(new ZodValidationPipe(updateShowtimeRequestSchema)) body: unknown,
   ) {
     return this.cinemaService.updateShowtime(
       actor,
       id,
       body as ReturnType<typeof updateShowtimeRequestSchema.parse>,
+      requestId,
+      expectedUpdatedAt,
     );
   }
 
