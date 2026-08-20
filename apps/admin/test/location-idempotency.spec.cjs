@@ -9,3 +9,8 @@ test("location settings saves retain a stable retry identity", () => {
   assert.match(source, /locationAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": locationAttemptRef\.current\.requestId/);
 });
+
+test("branding saves retain a stable retry identity", () => {
+  assert.match(source, /brandingAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": brandingAttemptRef\.current\.requestId/);
+});

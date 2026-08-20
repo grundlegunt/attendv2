@@ -54,6 +54,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [merchUrl, setMerchUrl] = useState("");
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
   const locationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const brandingAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
@@ -112,10 +113,17 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
 
   async function saveBranding(draft: BrandingDraft) {
     setError(null);
+    const body = JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null });
+    if (brandingAttemptRef.current?.fingerprint !== body) brandingAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
-      await apiFetch("/management/settings/branding", { accessToken, method: "PATCH", body: JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null }) });
+      await apiFetch("/management/settings/branding", { accessToken, method: "PATCH", headers: { "Idempotency-Key": brandingAttemptRef.current.requestId }, body });
+      brandingAttemptRef.current = null;
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved."); throw reason; }
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) brandingAttemptRef.current = null;
+      setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved.");
+      throw reason;
+    }
   }
 
   async function saveSiteCopy(copy: CustomerSiteCopy) {

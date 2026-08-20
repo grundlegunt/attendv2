@@ -1878,12 +1878,18 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("lets authorized cinema managers update location-scoped branding", async () => {
-    const updated = await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const update = () => request(app.getHttpServer())
       .patch("/api/v1/management/settings/branding")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
       .send({ name: "Integration Cinema", logoUrl: "https://example.com/cinema.svg", accentColor: "#123456", backgroundColor: "#101112", textColor: "#fefefe", adminAccentColor: "#654321" });
+    const [updated, replayed] = await Promise.all([update(), update()]);
     expect(updated.status).toBe(200);
+    expect(replayed.body).toEqual(updated.body);
     expect(updated.body).toEqual(expect.objectContaining({ name: "Integration Cinema", customerLogoUrl: "https://example.com/cinema.svg", customerAccentColor: "#123456", adminAccentColor: "#654321" }));
+    expect(await prisma.auditEvent.count({ where: { action: "location.branding_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
   });
 
   it("validates cinema-managed branding colors", async () => {

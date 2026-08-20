@@ -179,8 +179,18 @@ export class ManagementService {
     });
   }
 
-  async updateBranding(input: { locationId: string; employeeId: string; name?: string; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; backgroundGlowColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; adminAccentColor?: string | null; adminAccentMutedColor?: string | null; adminBackgroundColor?: string | null; adminSurfaceColor?: string | null; adminTextColor?: string | null; adminMutedTextColor?: string | null }) {
+  async updateBranding(input: { locationId: string; employeeId: string; requestId: string; name?: string; logoUrl?: string | null; accentColor?: string | null; accentMutedColor?: string | null; backgroundColor?: string | null; backgroundGlowColor?: string | null; surfaceColor?: string | null; textColor?: string | null; mutedTextColor?: string | null; adminAccentColor?: string | null; adminAccentMutedColor?: string | null; adminBackgroundColor?: string | null; adminSurfaceColor?: string | null; adminTextColor?: string | null; adminMutedTextColor?: string | null }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, name: input.name, logoUrl: input.logoUrl, accentColor: input.accentColor, accentMutedColor: input.accentMutedColor, backgroundColor: input.backgroundColor, backgroundGlowColor: input.backgroundGlowColor, surfaceColor: input.surfaceColor, textColor: input.textColor, mutedTextColor: input.mutedTextColor, adminAccentColor: input.adminAccentColor, adminAccentMutedColor: input.adminAccentMutedColor, adminBackgroundColor: input.adminBackgroundColor, adminSurfaceColor: input.adminSurfaceColor, adminTextColor: input.adminTextColor, adminMutedTextColor: input.adminMutedTextColor })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "location.branding_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The branding idempotency key was already used with different details.");
+        return tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
       const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
       const updated = await tx.location.update({ where: { id: input.locationId }, data: {
         name: input.name,
@@ -208,7 +218,7 @@ export class ManagementService {
         adminBackgroundColor: location.adminBackgroundColor, adminSurfaceColor: location.adminSurfaceColor,
         adminTextColor: location.adminTextColor, adminMutedTextColor: location.adminMutedTextColor,
       });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.branding_updated", entityType: "Location", entityId: input.locationId, beforeState: state(before), afterState: state(updated) } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.branding_updated", entityType: "Location", entityId: input.locationId, beforeState: state(before), afterState: { ...state(updated), requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }
