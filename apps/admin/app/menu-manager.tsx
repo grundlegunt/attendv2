@@ -50,6 +50,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [menu, setMenu] = useState<Menu | null>(null);
   const [name, setName] = useState("");
   const itemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const toggle86AttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [price, setPrice] = useState(0);
@@ -272,12 +273,22 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   }
 
   async function toggle86(item: Menu["categories"][number]["items"][number]) {
-    await apiFetch(`/restaurant-menu/items/${item.id}`, {
-      method: "PATCH",
-      accessToken,
-      body: JSON.stringify({ is86d: !item.is86d }),
-    });
-    refresh();
+    const body = JSON.stringify({ is86d: !item.is86d });
+    const fingerprint = `${item.id}:${body}`;
+    if (toggle86AttemptRef.current?.fingerprint !== fingerprint) toggle86AttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    try {
+      await apiFetch(`/restaurant-menu/items/${item.id}`, {
+        method: "PATCH",
+        accessToken,
+        headers: { "Idempotency-Key": toggle86AttemptRef.current.requestId },
+        body,
+      });
+      toggle86AttemptRef.current = null;
+      refresh();
+    } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) toggle86AttemptRef.current = null;
+      showError(error, "Menu item availability could not be updated.");
+    }
   }
 
   async function createCategory(event: FormEvent) {
