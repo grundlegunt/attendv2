@@ -16,3 +16,8 @@ test("employee access updates retain a stable retry identity", () => {
   assert.match(source, /submitEmployeeUpdate\(target\.id, \{ active:/);
   assert.match(source, /submitEmployeeUpdate\(target\.id, \{ roleIds \}\)/);
 });
+
+test("credential resets retain a stable retry identity", () => {
+  assert.match(source, /credentialResetAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": credentialResetAttemptRef\.current\.requestId/);
+});

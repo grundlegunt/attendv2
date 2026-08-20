@@ -649,13 +649,23 @@ export class ManagementService {
     });
   }
 
-  async resetEmployeeCredentials(input: { locationId: string; actorId: string; targetId: string; password?: string; pin?: string | null; resetMfa?: boolean }) {
-    const target = await prisma.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId }, include: { authAccount: true } });
-    if (!target?.authAccount) throw AppError.notFound("Employee credentials were not found.");
+  async resetEmployeeCredentials(input: { locationId: string; actorId: string; targetId: string; requestId: string; password?: string; pin?: string | null; resetMfa?: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ targetId: input.targetId, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, resetMfa: Boolean(input.resetMfa) })).digest("hex");
     const passwordHash = input.password ? await hashPassword(input.password) : undefined;
     const pinHash = typeof input.pin === "string" ? await hashPin(input.pin) : input.pin === null ? null : undefined;
     const resetMfa = Boolean(input.password || input.resetMfa);
-    await prisma.$transaction(async (tx) => {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "employee.credentials_reset", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The credential-reset idempotency key was already used with different details.");
+        return { id: replay.entityId, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password), mfaReset: resetMfa };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.targetId}))`;
+      const target = await tx.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId }, include: { authAccount: true } });
+      if (!target?.authAccount) throw AppError.notFound("Employee credentials were not found.");
       await tx.staffAuthAccount.update({ where: { employeeId: target.id }, data: {
         passwordHash,
         pinHash,
@@ -667,10 +677,10 @@ export class ManagementService {
       await tx.auditEvent.create({ data: {
         actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId,
         action: "employee.credentials_reset", entityType: "Employee", entityId: target.id,
-        afterState: { passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password), mfaReset: resetMfa },
+        afterState: { requestId: input.requestId, requestFingerprint, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, pinRemoved: input.pin === null, mustChangePassword: Boolean(input.password), mfaReset: resetMfa },
       } });
+      return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password), mfaReset: resetMfa };
     });
-    return { id: target.id, passwordReset: Boolean(input.password), pinReset: input.pin !== undefined, mustChangePassword: Boolean(input.password), mfaReset: resetMfa };
   }
 
   async createRole(input: { locationId: string; employeeId: string; name: string }) {
