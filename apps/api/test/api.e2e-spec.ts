@@ -5556,6 +5556,15 @@ describe("Milestone 6 server POS and menus", () => {
     expect(first.body.id).toBe(replay.body.id);
     expect(await prisma.menuItem.count({ where: { name } })).toBe(1);
     expect(await prisma.auditEvent.count({ where: { action: "menu_item.created", entityId: first.body.id } })).toBe(1);
+
+    const updateRequestId = crypto.randomUUID();
+    const updatedName = `${name} updated`;
+    const update = () => request(app.getHttpServer()).patch(`/api/v1/restaurant-menu/items/${first.body.id}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", updateRequestId).send({ name: updatedName });
+    const [updated, updateReplay] = await Promise.all([update(), update()]);
+    expect(updated.status).toBe(200);
+    expect(updateReplay.body).toEqual(updated.body);
+    expect(updated.body.name).toBe(updatedName);
+    expect(await prisma.auditEvent.count({ where: { action: "menu_item.updated", afterState: { path: ["requestId"], equals: updateRequestId } } })).toBe(1);
     await prisma.menuItem.delete({ where: { id: first.body.id } });
   });
 
