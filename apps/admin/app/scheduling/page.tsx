@@ -226,6 +226,7 @@ export default function AdminPage() {
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const movieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const archiveMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [seatInventory, setSeatInventory] =
     useState<ShowtimeSeatInventory | null>(null);
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(
@@ -824,14 +825,27 @@ export default function AdminPage() {
     )
       return;
     setError(null);
+    if (archiveMovieAttemptRef.current?.fingerprint !== movie.id) {
+      archiveMovieAttemptRef.current = {
+        fingerprint: movie.id,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/movies/${movie.id}`, {
         accessToken: token ?? undefined,
         method: "DELETE",
+        headers: {
+          "Idempotency-Key": archiveMovieAttemptRef.current.requestId,
+        },
       });
+      archiveMovieAttemptRef.current = null;
       if (movieId === movie.id) setMovieId("");
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        archiveMovieAttemptRef.current = null;
+      }
       showError(reason);
     }
   }

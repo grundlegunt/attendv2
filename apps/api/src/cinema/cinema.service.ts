@@ -2097,14 +2097,40 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async archiveMovie(actor: RequestActor, id: string) {
+  async archiveMovie(
+    actor: RequestActor,
+    id: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
       const location = await tx.location.findUnique({
         where: { id: locationId },
         select: { organizationId: true },
       });
       if (!location) throw AppError.notFound("Location not found.");
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "movie.archived",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const archived = await tx.movie.findFirst({
+          where: {
+            id: replay.entityId,
+            organizationId: location.organizationId,
+            active: false,
+          },
+        });
+        if (!archived) throw AppError.conflict("The archived movie is no longer available.");
+        return archived;
+      }
       const movie = await tx.movie.findFirst({
         where: { id, organizationId: location.organizationId, active: true },
       });
@@ -2134,7 +2160,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             title: movie.title,
             runtimeMinutes: movie.runtimeMinutes,
           },
-          afterState: { active: false },
+          afterState: { active: false, requestId },
         },
       });
       return archived;
