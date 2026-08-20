@@ -1937,6 +1937,22 @@ describe("Milestone 1 cinema configuration", () => {
     expect(await prisma.auditEvent.count({ where: { action: "location.site_copy_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
   });
 
+  it("replays concurrent menu-presentation publishing once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const presentation = { assetUrl: "https://example.com/menu.pdf", assetType: "PDF" };
+    const publish = () => request(app.getHttpServer())
+      .patch("/api/v1/management/settings/menu-presentation")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send(presentation);
+    const [updated, replayed] = await Promise.all([publish(), publish()]);
+    expect(updated.status).toBe(200);
+    expect(replayed.body).toEqual(updated.body);
+    expect(updated.body).toEqual(presentation);
+    expect(await prisma.auditEvent.count({ where: { action: "menu.presentation_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
+  });
+
   it("lets cinema managers update audited operating settings", async () => {
     const current = await request(app.getHttpServer())
       .get("/api/v1/management/settings")

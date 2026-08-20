@@ -107,7 +107,7 @@ export class ManagementController {
   updateSiteCopy(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(customerSiteCopySchema)) body: unknown) { return this.management.updateSiteCopy({ ...customerSiteCopySchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/menu-presentation") @RequirePermissions(Permission.MenuEdit)
-  updateMenuPresentation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(menuPresentationSchema)) body: unknown) { return this.management.updateMenuPresentation({ ...menuPresentationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  updateMenuPresentation(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(menuPresentationSchema)) body: unknown) { return this.management.updateMenuPresentation({ ...menuPresentationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Get("settings/menu-presentation") @RequirePermissions(Permission.MenuEdit)
   menuPresentation(@CurrentActor() actor: RequestActor) { return this.management.menuPresentation(this.location(actor)); }

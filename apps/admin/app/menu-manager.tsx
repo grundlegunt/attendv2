@@ -114,6 +114,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
   const [menuAssetUrl, setMenuAssetUrl] = useState("");
   const [menuAssetType, setMenuAssetType] = useState<"IMAGE" | "PDF">("IMAGE");
+  const menuPresentationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [savedMenuPresentation, setSavedMenuPresentation] = useState<{
     assetUrl: string;
     assetType: "IMAGE" | "PDF";
@@ -198,21 +199,26 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function saveMenuPresentation(event: FormEvent) {
     event.preventDefault();
+    const body = JSON.stringify({
+      assetUrl: menuAssetUrl.trim() || null,
+      assetType: menuAssetUrl.trim() ? menuAssetType : null,
+    });
+    if (menuPresentationAttemptRef.current?.fingerprint !== body) menuPresentationAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/management/settings/menu-presentation", {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify({
-          assetUrl: menuAssetUrl.trim() || null,
-          assetType: menuAssetUrl.trim() ? menuAssetType : null,
-        }),
+        headers: { "Idempotency-Key": menuPresentationAttemptRef.current.requestId },
+        body,
       });
+      menuPresentationAttemptRef.current = null;
       setSavedMenuPresentation({
         assetUrl: menuAssetUrl.trim(),
         assetType: menuAssetType,
       });
       setMessage(menuAssetUrl.trim() ? "Customer menu presentation published." : "Published menu presentation removed.");
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) menuPresentationAttemptRef.current = null;
       showError(error, "Menu presentation could not be published.");
     }
   }
