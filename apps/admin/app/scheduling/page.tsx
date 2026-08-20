@@ -233,6 +233,7 @@ export default function AdminPage() {
   const removePlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updatePlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const renamePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const deletePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [planShowtimeMovieId, setPlanShowtimeMovieId] = useState("");
   const [planShowtimeAuditoriumId, setPlanShowtimeAuditoriumId] = useState("");
@@ -315,15 +316,29 @@ export default function AdminPage() {
     )
       return;
     setError(null);
+    const fingerprint = plan.id;
+    if (deletePlanAttemptRef.current?.fingerprint !== fingerprint) {
+      deletePlanAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/schedule-plans/${plan.id}`, {
         accessToken: token ?? undefined,
         method: "DELETE",
+        headers: {
+          "Idempotency-Key": deletePlanAttemptRef.current!.requestId,
+        },
       });
+      deletePlanAttemptRef.current = null;
       setSchedulePlans((current) =>
         current.filter((candidate) => candidate.id !== plan.id),
       );
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        deletePlanAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
