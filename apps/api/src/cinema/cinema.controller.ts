@@ -268,10 +268,12 @@ export class CinemaController {
   createAuditorium(
     @CurrentActor() actor: RequestActor,
     @Body(new ZodValidationPipe(createAuditoriumRequestSchema)) body: unknown,
+    @Headers("idempotency-key") requestId: string | undefined,
   ) {
     return this.cinemaService.createAuditorium(
       actor,
       body as ReturnType<typeof createAuditoriumRequestSchema.parse>,
+      requestId,
     );
   }
 
