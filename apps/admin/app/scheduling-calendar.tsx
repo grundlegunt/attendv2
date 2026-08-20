@@ -38,6 +38,7 @@ export interface ScheduleFilmSeries {
 
 export interface CalendarShowtime {
   id: string;
+  updatedAt: string;
   startsAt: string;
   featureStartsAt: string;
   endsAt: string;

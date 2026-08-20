@@ -84,6 +84,7 @@ interface FilmSeries {
 }
 interface Showtime {
   id: string;
+  updatedAt: string;
   startsAt: string;
   featureStartsAt: string;
   endsAt: string;
@@ -208,7 +209,9 @@ export default function AdminPage() {
   const [editingShowtimeId, setEditingShowtimeId] = useState<string | null>(
     null,
   );
+  const [editingShowtimeUpdatedAt, setEditingShowtimeUpdatedAt] = useState<string | null>(null);
   const showtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -872,6 +875,18 @@ export default function AdminPage() {
       format: showtimeFormat.trim() || null,
     });
     if (!editingShowtimeId && showtimeAttemptRef.current?.fingerprint !== body) showtimeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    const updateFingerprint = editingShowtimeId
+      ? `${editingShowtimeId}:${editingShowtimeUpdatedAt}:${body}`
+      : null;
+    if (
+      updateFingerprint &&
+      updateShowtimeAttemptRef.current?.fingerprint !== updateFingerprint
+    ) {
+      updateShowtimeAttemptRef.current = {
+        fingerprint: updateFingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(
         editingShowtimeId
@@ -880,16 +895,28 @@ export default function AdminPage() {
         {
           accessToken: token ?? undefined,
           method: editingShowtimeId ? "PATCH" : "POST",
-          headers: editingShowtimeId ? undefined : { "Idempotency-Key": showtimeAttemptRef.current!.requestId },
+          headers: editingShowtimeId
+            ? {
+                "Idempotency-Key": updateShowtimeAttemptRef.current!.requestId,
+                ...(editingShowtimeUpdatedAt
+                  ? { "If-Unmodified-Since": editingShowtimeUpdatedAt }
+                  : {}),
+              }
+            : { "Idempotency-Key": showtimeAttemptRef.current!.requestId },
           body,
         },
       );
-      if (!editingShowtimeId) showtimeAttemptRef.current = null;
+      if (editingShowtimeId) updateShowtimeAttemptRef.current = null;
+      else showtimeAttemptRef.current = null;
       setEditingShowtimeId(null);
+      setEditingShowtimeUpdatedAt(null);
       setShowtimeEditorOpen(false);
       await refresh();
     } catch (reason) {
-      if (!editingShowtimeId && reason instanceof ApiRequestError && reason.status < 500) showtimeAttemptRef.current = null;
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        if (editingShowtimeId) updateShowtimeAttemptRef.current = null;
+        else showtimeAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
@@ -897,6 +924,7 @@ export default function AdminPage() {
   function editShowtime(showtime: CalendarShowtime) {
     const local = new Date(showtime.startsAt);
     setEditingShowtimeId(showtime.id);
+    setEditingShowtimeUpdatedAt(showtime.updatedAt);
     setMovieId(showtime.movie.id);
     setAuditoriumId(showtime.auditorium.id);
     setStartsAt(dateTimeInputValue(local));

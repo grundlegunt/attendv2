@@ -1412,16 +1412,30 @@ describe("Milestone 1 cinema configuration", () => {
   it("moves a showtime while preserving computed turnover timing", async () => {
     const { prisma } = await import("@cinema/database");
     const before = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
-    const res = await request(app.getHttpServer())
+    const requestId = crypto.randomUUID();
+    const update = () => request(app.getHttpServer())
       .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .set("If-Unmodified-Since", before.updatedAt.toISOString())
       .send({ startsAt: "2030-01-02T18:00:00.000Z" });
+    const [res, replayed] = await Promise.all([update(), update()]);
     expect(res.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(replayed.body.id).toBe(res.body.id);
     expect(res.body.featureStartsAt).toBe("2030-01-02T18:30:00.000Z");
     expect(res.body.roomReadyAt).toBe("2030-01-02T20:45:00.000Z");
     expect(res.body.priceTier.id).toBe(before.priceTierId);
     const after = await prisma.showtime.findUniqueOrThrow({ where: { id: secondShowtimeId } });
     expect(after.priceTierId).toBe(before.priceTierId);
+    expect(await prisma.auditEvent.count({ where: { action: "showtime.updated", entityId: secondShowtimeId } })).toBe(1);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .set("If-Unmodified-Since", before.updatedAt.toISOString())
+      .send({ startsAt: "2030-01-02T19:00:00.000Z" })
+      .expect(409);
   });
 
   it("includes the required price tier relation in the admin schedule", async () => {

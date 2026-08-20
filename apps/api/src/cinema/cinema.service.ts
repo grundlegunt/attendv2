@@ -2763,14 +2763,71 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     actor: RequestActor,
     id: string,
     input: ShowtimeUpdateInput,
+    requestId: string = randomUUID(),
+    expectedUpdatedAtValue?: string,
   ) {
     const locationId = this.requireLocation(actor);
-    return prisma.$transaction(
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const expectedUpdatedAt = expectedUpdatedAtValue
+      ? new Date(expectedUpdatedAtValue)
+      : null;
+    if (expectedUpdatedAt && Number.isNaN(expectedUpdatedAt.getTime())) {
+      throw AppError.validationFailed("The showtime version is invalid.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({
+        locationId,
+        showtimeId: id,
+        input,
+        expectedUpdatedAt: expectedUpdatedAt?.toISOString() ?? null,
+      }))
+      .digest("hex");
+    const updateAttempt = () => prisma.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "showtime.updated",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The showtime-update key was already used with different details.",
+            );
+          }
+          const replayedShowtime = await tx.showtime.findFirst({
+            where: { id: replay.entityId, auditorium: { locationId } },
+            include: {
+              movie: true,
+              auditorium: true,
+              priceTier: true,
+              filmSeries: true,
+            },
+          });
+          if (!replayedShowtime) {
+            throw AppError.conflict("The updated showtime is no longer available.");
+          }
+          return replayedShowtime;
+        }
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
         const existing = await tx.showtime.findFirst({
           where: { id, auditorium: { locationId } },
         });
         if (!existing) throw AppError.notFound("Showtime not found.");
+        if (
+          expectedUpdatedAt &&
+          existing.updatedAt.toISOString() !== expectedUpdatedAt.toISOString()
+        ) {
+          throw AppError.conflict(
+            "This showtime changed in another session. Refresh before saving again.",
+          );
+        }
 
         const auditoriumId = input.auditoriumId ?? existing.auditoriumId;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${auditoriumId}))`;
@@ -2916,12 +2973,27 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               presentation: input.presentation ?? existing.presentation,
               format:
                 input.format === undefined ? existing.format : input.format,
+              requestId,
+              requestFingerprint,
             },
           },
         });
         return showtime;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await updateAttempt();
+      } catch (error) {
+        const serializationFailure =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034";
+        if (!serializationFailure || attempt === 2) throw error;
+      }
+    }
+    throw AppError.conflict(
+      "The showtime update could not be completed. Try again.",
     );
   }
 
