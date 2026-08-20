@@ -449,7 +449,11 @@ export class CinemaController {
   @Delete("showtimes/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)
-  removeShowtime(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
-    return this.cinemaService.removeShowtime(actor, id);
+  removeShowtime(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.removeShowtime(actor, id, requestId);
   }
 }

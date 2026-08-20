@@ -211,6 +211,7 @@ export default function AdminPage() {
   const showtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
@@ -1049,15 +1050,28 @@ export default function AdminPage() {
     )
       return;
     setError(null);
+    if (removeShowtimeAttemptRef.current?.fingerprint !== editingShowtimeId) {
+      removeShowtimeAttemptRef.current = {
+        fingerprint: editingShowtimeId,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/showtimes/${editingShowtimeId}`, {
         accessToken: token ?? undefined,
         method: "DELETE",
+        headers: {
+          "Idempotency-Key": removeShowtimeAttemptRef.current!.requestId,
+        },
       });
+      removeShowtimeAttemptRef.current = null;
       setEditingShowtimeId(null);
       setShowtimeEditorOpen(false);
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        removeShowtimeAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
@@ -1070,17 +1084,30 @@ export default function AdminPage() {
     )
       return;
     setError(null);
+    if (removeShowtimeAttemptRef.current?.fingerprint !== showtime.id) {
+      removeShowtimeAttemptRef.current = {
+        fingerprint: showtime.id,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/showtimes/${showtime.id}`, {
         accessToken: token ?? undefined,
         method: "DELETE",
+        headers: {
+          "Idempotency-Key": removeShowtimeAttemptRef.current!.requestId,
+        },
       });
+      removeShowtimeAttemptRef.current = null;
       if (editingShowtimeId === showtime.id) {
         setEditingShowtimeId(null);
         setShowtimeEditorOpen(false);
       }
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        removeShowtimeAttemptRef.current = null;
+      }
       showError(reason);
     }
   }

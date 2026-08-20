@@ -2105,10 +2105,21 @@ describe("Milestone 1 cinema configuration", () => {
       data: { expiresAt: new Date(Date.now() - 60_000) },
     });
 
-    await request(app.getHttpServer())
+    const removalRequestId = crypto.randomUUID();
+    const removeShowtime = () => request(app.getHttpServer())
       .delete(`/api/v1/cinema/showtimes/${showtime.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(200);
+      .set("Idempotency-Key", removalRequestId);
+    const [removed, replayedRemoval] = await Promise.all([
+      removeShowtime(),
+      removeShowtime(),
+    ]);
+    expect(removed.status).toBe(200);
+    expect(replayedRemoval.status).toBe(200);
+    expect(replayedRemoval.body).toEqual(removed.body);
+    expect(await prisma.auditEvent.count({
+      where: { action: "showtime.removed", entityId: showtime.body.id },
+    })).toBe(1);
     await request(app.getHttpServer())
       .delete(`/api/v1/cinema/movies/${movie.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)

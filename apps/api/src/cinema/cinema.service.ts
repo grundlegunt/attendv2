@@ -3125,9 +3125,37 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async removeShowtime(actor: RequestActor, id: string) {
+  async removeShowtime(
+    actor: RequestActor,
+    id: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, showtimeId: id }))
+      .digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "showtime.removed",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The showtime-removal key was already used for another showing.",
+          );
+        }
+        return { id, removed: true };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
       const showtime = await tx.showtime.findFirst({
         where: { id, auditorium: { locationId } },
         include: { movie: true, auditorium: true },
@@ -3187,7 +3215,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             startsAt: showtime.startsAt.toISOString(),
             onSale: showtime.onSale,
           },
-          afterState: { removed: true },
+          afterState: {
+            removed: true,
+            requestId,
+            requestFingerprint,
+          },
         },
       });
       await tx.showtime.delete({ where: { id } });
