@@ -158,12 +158,14 @@ export class MenuController {
   updateModifierGroup(
     @CurrentActor() actor: RequestActor,
     @Param("modifierGroupId") modifierGroupId: string,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(updateModifierGroupRequestSchema)) body: unknown,
   ) {
     return this.restaurant.updateModifierGroup({
       modifierGroupId,
       locationId: this.locationId(actor),
       actorId: actor.sub,
+      requestId: requestId ?? randomUUID(),
       changes: updateModifierGroupRequestSchema.parse(body),
     });
   }

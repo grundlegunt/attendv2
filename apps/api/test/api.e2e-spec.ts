@@ -5570,6 +5570,15 @@ describe("Milestone 6 server POS and menus", () => {
     expect(groupReplay.body.id).toBe(groupFirst.body.id);
     expect(await prisma.modifierGroup.count({ where: { name: groupName } })).toBe(1);
 
+    const groupUpdateRequestId = crypto.randomUUID();
+    const updatedGroupName = `${groupName} updated`;
+    const updateGroup = () => request(app.getHttpServer()).patch(`/api/v1/restaurant-menu/modifier-groups/${groupFirst.body.id}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", groupUpdateRequestId).send({ name: updatedGroupName });
+    const [groupUpdated, groupUpdateReplay] = await Promise.all([updateGroup(), updateGroup()]);
+    expect(groupUpdated.status).toBe(200);
+    expect(groupUpdateReplay.body).toEqual(groupUpdated.body);
+    expect(groupUpdated.body.name).toBe(updatedGroupName);
+    expect(await prisma.auditEvent.count({ where: { action: "modifier_group.updated", afterState: { path: ["requestId"], equals: groupUpdateRequestId } } })).toBe(1);
+
     const modifierRequestId = crypto.randomUUID();
     const modifierName = `Replay modifier ${crypto.randomUUID()}`;
     const submitModifier = () => request(app.getHttpServer()).post(`/api/v1/restaurant-menu/modifier-groups/${groupFirst.body.id}/modifiers`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", modifierRequestId).send({ name: modifierName, priceDeltaCents: 125, sortOrder: 0 });
