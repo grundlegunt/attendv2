@@ -199,6 +199,7 @@ export function ManagementControls({
     roleId: "",
   });
   const employeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateEmployeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
   const [selectedRoleName, setSelectedRoleName] = useState("");
@@ -655,13 +656,22 @@ export function ManagementControls({
       showError(reason);
     }
   }
+  async function submitEmployeeUpdate(targetId: string, changes: object) {
+    const body = JSON.stringify(changes);
+    const fingerprint = `${targetId}:${body}`;
+    if (updateEmployeeAttemptRef.current?.fingerprint !== fingerprint) updateEmployeeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    try {
+      const updated = await apiFetch(`/management/employees/${targetId}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updateEmployeeAttemptRef.current.requestId }, body });
+      updateEmployeeAttemptRef.current = null;
+      return updated;
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) updateEmployeeAttemptRef.current = null;
+      throw reason;
+    }
+  }
   async function toggleEmployee(target: People["employees"][number]) {
     try {
-      await apiFetch(`/management/employees/${target.id}`, {
-        accessToken,
-        method: "PATCH",
-        body: JSON.stringify({ active: !target.active }),
-      });
+      await submitEmployeeUpdate(target.id, { active: !target.active });
       await refresh();
     } catch (reason) {
       showError(reason);
@@ -674,11 +684,7 @@ export function ManagementControls({
       return;
     }
     try {
-      await apiFetch(`/management/employees/${target.id}`, {
-        accessToken,
-        method: "PATCH",
-        body: JSON.stringify({ name: draft.name, email: draft.email }),
-      });
+      await submitEmployeeUpdate(target.id, { name: draft.name, email: draft.email });
       await refresh();
     } catch (reason) {
       showError(reason);
@@ -691,11 +697,7 @@ export function ManagementControls({
       return;
     }
     try {
-      await apiFetch(`/management/employees/${target.id}`, {
-        accessToken,
-        method: "PATCH",
-        body: JSON.stringify({ roleIds }),
-      });
+      await submitEmployeeUpdate(target.id, { roleIds });
       await refresh();
     } catch (reason) {
       showError(reason);
