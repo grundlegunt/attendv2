@@ -4769,6 +4769,9 @@ describe("Customer authentication", () => {
 
   it("lets a customer resend only their own paid ticket order to their account email", async () => {
     const { prisma } = await import("@cinema/database");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
     const inventory = await prisma.showtimeSeat.findFirstOrThrow({
       where: { tickets: { none: {} } },
       include: {
