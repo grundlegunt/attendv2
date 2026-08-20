@@ -359,8 +359,12 @@ export class CinemaController {
   @Delete("movies/:id/permanent")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
-  permanentlyDeleteMovie(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
-    return this.cinemaService.permanentlyDeleteMovie(actor, id);
+  permanentlyDeleteMovie(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.permanentlyDeleteMovie(actor, id, requestId);
   }
 
   @Post("movies/:id/restore")
