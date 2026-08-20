@@ -2125,11 +2125,15 @@ describe("Milestone 1 cinema configuration", () => {
     expect(promotion.status).toBe(201);
     expect(promotion.body).toEqual(expect.objectContaining({ minimumSubtotalCents: 2500, maximumRedemptions: 20 }));
 
-    const deactivated = await request(app.getHttpServer())
+    const deactivateRequestId = crypto.randomUUID();
+    const deactivate = () => request(app.getHttpServer())
       .patch(`/api/v1/management/settings/promotions/${promotion.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", deactivateRequestId)
       .send({ active: false });
+    const [deactivated, replayedDeactivation] = await Promise.all([deactivate(), deactivate()]);
     expect(deactivated.status).toBe(200);
+    expect(replayedDeactivation.body).toEqual(deactivated.body);
     expect(deactivated.body).toEqual(expect.objectContaining({ active: false, percentageBasisPoints: 1500 }));
 
     const reactivated = await request(app.getHttpServer())

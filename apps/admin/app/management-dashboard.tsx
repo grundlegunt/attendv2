@@ -58,6 +58,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [auditActorId, setAuditActorId] = useState("");
   const [promotion, setPromotion] = useState<PromotionDraft>(emptyPromotion);
   const promotionAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updatePromotionAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
   const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000)));
   const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
@@ -149,18 +150,24 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     if (!promotionEdit) return;
     setError(null);
     if (promotionEdit.draft.startsAt && promotionEdit.draft.endsAt && new Date(promotionEdit.draft.startsAt) >= new Date(promotionEdit.draft.endsAt)) { setError("Promotion end time must be after its start time."); return; }
+    const body = JSON.stringify(promotionBody(promotionEdit.draft, true)); const fingerprint = `${promotionEdit.id}:${body}`;
+    if (updatePromotionAttemptRef.current?.fingerprint !== fingerprint) updatePromotionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      await apiFetch(`/management/settings/promotions/${promotionEdit.id}`, { accessToken, method: "PATCH", body: JSON.stringify(promotionBody(promotionEdit.draft, true)) });
+      await apiFetch(`/management/settings/promotions/${promotionEdit.id}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updatePromotionAttemptRef.current.requestId }, body });
+      updatePromotionAttemptRef.current = null;
       setPromotionEdit(null);
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
+    } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) updatePromotionAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
   }
   async function togglePromotion(item: Settings["promotions"][number]) {
     setError(null);
+    const body = JSON.stringify({ active: !item.active }); const fingerprint = `${item.id}:${body}`;
+    if (updatePromotionAttemptRef.current?.fingerprint !== fingerprint) updatePromotionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      await apiFetch(`/management/settings/promotions/${item.id}`, { accessToken, method: "PATCH", body: JSON.stringify({ active: !item.active }) });
+      await apiFetch(`/management/settings/promotions/${item.id}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updatePromotionAttemptRef.current.requestId }, body });
+      updatePromotionAttemptRef.current = null;
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
+    } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) updatePromotionAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
   }
   async function previewCustomerSegment(event: FormEvent) {
     event.preventDefault(); setError(null);
