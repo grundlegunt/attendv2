@@ -165,6 +165,7 @@ export function ManagementControls({
     ratePermille: 0,
   });
   const taxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateTaxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const chargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [newPriceTier, setNewPriceTier] = useState({
     name: "Standard",
@@ -545,6 +546,9 @@ export function ManagementControls({
     changes: Record<string, boolean>,
   ) {
     setError(null);
+    const body = JSON.stringify(changes);
+    const fingerprint = `${id}:${body}`;
+    if (kind === "tax" && updateTaxAttemptRef.current?.fingerprint !== fingerprint) updateTaxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       const path =
         kind === "tax"
@@ -553,10 +557,13 @@ export function ManagementControls({
       await apiFetch(path, {
         accessToken,
         method: "PATCH",
-        body: JSON.stringify(changes),
+        ...(kind === "tax" ? { headers: { "Idempotency-Key": updateTaxAttemptRef.current!.requestId } } : {}),
+        body,
       });
+      if (kind === "tax") updateTaxAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (kind === "tax" && reason instanceof ApiRequestError && reason.status < 500) updateTaxAttemptRef.current = null;
       showError(reason);
     }
   }

@@ -2044,18 +2044,25 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("lets managers update and deactivate restaurant charge rules", async () => {
+    const { prisma } = await import("@cinema/database");
     const tax = await request(app.getHttpServer())
       .post("/api/v1/management/settings/tax-rules")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({ name: `Integration tax ${Date.now()}`, appliesTo: "FOOD", ratePermille: 90, active: true });
     expect(tax.status).toBe(201);
 
-    const updatedTax = await request(app.getHttpServer())
+    const taxUpdateRequestId = crypto.randomUUID();
+    const updateTax = () => request(app.getHttpServer())
       .patch(`/api/v1/management/settings/tax-rules/${tax.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", taxUpdateRequestId)
       .send({ ratePermille: 95, active: false });
+    const [updatedTax, replayedTax] = await Promise.all([updateTax(), updateTax()]);
     expect(updatedTax.status).toBe(200);
+    expect(replayedTax.status).toBe(200);
+    expect(replayedTax.body).toEqual(updatedTax.body);
     expect(updatedTax.body).toEqual(expect.objectContaining({ ratePermille: 95, active: false }));
+    expect(await prisma.auditEvent.count({ where: { action: "tax_rule.updated", entityId: tax.body.id } })).toBe(1);
 
     const serviceCharge = await request(app.getHttpServer())
       .post("/api/v1/management/settings/service-charge-rules")

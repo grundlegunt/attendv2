@@ -128,7 +128,7 @@ export class ManagementController {
   tax(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/tax-rules/:ruleId") @RequirePermissions(Permission.MenuEdit)
-  updateTax(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Body(new ZodValidationPipe(taxUpdateSchema)) body: unknown) { return this.management.updateTaxRule({ ...taxUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub }); }
+  updateTax(@CurrentActor() actor: RequestActor, @Param("ruleId") ruleId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(taxUpdateSchema)) body: unknown) { return this.management.updateTaxRule({ ...taxUpdateSchema.parse(body), ruleId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Post("settings/service-charge-rules") @RequirePermissions(Permission.MenuEdit)
   service(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(serviceSchema)) body: unknown) { return this.management.createServiceCharge({ ...serviceSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
