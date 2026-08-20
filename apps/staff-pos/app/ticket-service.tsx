@@ -83,6 +83,7 @@ export function TicketService({
   const activeHoldRef = useRef<ActiveHold | null>(null);
   const exchangeRequestIdRef = useRef("");
   const exchangeHolderKeyRef = useRef("");
+  const receiptAttemptRef = useRef<Record<string, { email: string; requestId: string }>>({});
 
   async function releaseHold(hold = activeHoldRef.current) {
     if (!hold) return;
@@ -138,16 +139,21 @@ export function TicketService({
   }
 
   async function resendReceipt(order: TicketOrder) {
-    const email = receiptEmails[order.id]?.trim();
+    const email = receiptEmails[order.id]?.trim().toLowerCase();
     if (!email) return;
+    if (receiptAttemptRef.current[order.id]?.email !== email) {
+      receiptAttemptRef.current[order.id] = { email, requestId: crypto.randomUUID() };
+    }
+    const requestId = receiptAttemptRef.current[order.id]!.requestId;
     setBusy(true);
     setMessage(null);
     try {
       const result = await apiFetch<{ receiptDelivery: "SENT" | "FAILED"; email: string }>(`/box-office/orders/${order.id}/receipt`, {
         accessToken,
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ requestId, email }),
       });
+      if (result.receiptDelivery === "SENT") delete receiptAttemptRef.current[order.id];
       setMessage(result.receiptDelivery === "SENT" ? `Receipt sent to ${result.email}.` : `Receipt delivery to ${result.email} failed. Reprint the tickets instead.`);
     } catch (error) {
       setMessage(errorMessage(error));
@@ -335,7 +341,7 @@ export function TicketService({
             <div className="ticket-service__receipt">
               <label className="field">
                 <span>Receipt email</span>
-                <input type="email" maxLength={320} disabled={busy} value={receiptEmails[order.id] ?? ""} onChange={(event) => setReceiptEmails((current) => ({ ...current, [order.id]: event.target.value }))} />
+                <input type="email" maxLength={320} disabled={busy} value={receiptEmails[order.id] ?? ""} onChange={(event) => { delete receiptAttemptRef.current[order.id]; setReceiptEmails((current) => ({ ...current, [order.id]: event.target.value })); }} />
               </label>
               <button type="button" className="secondary" disabled={busy || !receiptEmails[order.id]?.trim() || !["PAID", "EXCHANGED"].includes(order.status)} onClick={() => void resendReceipt(order)}>Resend tickets</button>
             </div>

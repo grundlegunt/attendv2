@@ -74,7 +74,7 @@ export class BoxOfficeController {
 
   @Post("orders/:orderId/receipt")
   resendReceipt(@CurrentActor() actor: RequestActor, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(ticketReceiptResendRequestSchema)) body: unknown) {
-    return this.boxOffice.resendReceipt({ orderId, email: ticketReceiptResendRequestSchema.parse(body).email, locationId: this.location(actor), employeeId: actor.sub });
+    return this.boxOffice.resendReceipt({ ...ticketReceiptResendRequestSchema.parse(body), orderId, locationId: this.location(actor), employeeId: actor.sub });
   }
 
   @Post("orders/:orderId/refund")
