@@ -53,6 +53,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [settings, setSettings] = useState<Settings | null>(null);
   const [merchUrl, setMerchUrl] = useState("");
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
+  const locationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
@@ -97,10 +98,16 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     event.preventDefault();
     if (!locationDraft) return;
     setError(null);
+    const body = JSON.stringify({ ...locationDraft, address: locationDraft.address?.trim() || null, currency: undefined });
+    if (locationAttemptRef.current?.fingerprint !== body) locationAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
-      await apiFetch("/management/settings/location", { accessToken, method: "PATCH", body: JSON.stringify({ ...locationDraft, address: locationDraft.address?.trim() || null, currency: undefined }) });
+      await apiFetch("/management/settings/location", { accessToken, method: "PATCH", headers: { "Idempotency-Key": locationAttemptRef.current.requestId }, body });
+      locationAttemptRef.current = null;
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Location settings could not be saved."); }
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) locationAttemptRef.current = null;
+      setError(reason instanceof ApiRequestError ? reason.body.message : "Location settings could not be saved.");
+    }
   }
 
   async function saveBranding(draft: BrandingDraft) {

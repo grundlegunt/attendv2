@@ -1913,12 +1913,18 @@ describe("Milestone 1 cinema configuration", () => {
       autoSettleTipBasisPoints: 1800,
       timeClockEnabled: false,
     };
-    const updated = await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const save = () => request(app.getHttpServer())
       .patch("/api/v1/management/settings/location")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
       .send(update);
+    const [updated, replayed] = await Promise.all([save(), save()]);
     expect(updated.status).toBe(200);
+    expect(replayed.body).toEqual(updated.body);
     expect(updated.body).toEqual(expect.objectContaining(update));
+    expect(await prisma.auditEvent.count({ where: { action: "location.settings_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
 
     const audit = await request(app.getHttpServer())
       .get("/api/v1/audit-events?action=location.settings_updated&limit=1")

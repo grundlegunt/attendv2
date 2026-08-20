@@ -95,7 +95,7 @@ export class ManagementController {
   settings(@CurrentActor() actor: RequestActor) { return this.management.settings(this.location(actor)); }
 
   @Patch("settings/location") @RequirePermissions(Permission.TicketPriceEdit)
-  updateLocation(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(locationSchema)) body: unknown) { return this.management.updateLocation({ ...locationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  updateLocation(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(locationSchema)) body: unknown) { return this.management.updateLocation({ ...locationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/branding") @RequirePermissions(Permission.TicketPriceEdit)
   updateBranding(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(brandingSchema)) body: unknown) { return this.management.updateBranding({ ...brandingSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
