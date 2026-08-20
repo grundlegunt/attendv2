@@ -11,3 +11,8 @@ test("expense retries retain one request identity for unchanged details", () => 
   assert.match(source, /"Idempotency-Key": expenseAttemptRef\.current\.requestId/);
   assert.match(source, /reason\.status < 500/);
 });
+
+test("expense deletion retries retain one request identity", () => {
+  assert.match(source, /deleteExpenseAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": deleteExpenseAttemptRef\.current\.requestId/);
+});

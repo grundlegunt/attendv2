@@ -70,10 +70,24 @@ export class ReportingService {
     });
   }
 
-  async deleteExpense(locationId: string, expenseId: string) {
-    const deleted = await prisma.expense.deleteMany({ where: { id: expenseId, locationId } });
-    if (!deleted.count) throw AppError.notFound("Expense entry not found.");
-    return { deleted: true };
+  async deleteExpense(locationId: string, employeeId: string, expenseId: string, suppliedRequestId?: string) {
+    const requestId = suppliedRequestId ?? randomUUID();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId, expenseId })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId, action: "expense.deleted", afterState: { path: ["requestId"], equals: requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The expense-deletion idempotency key was already used for another entry.");
+        return { deleted: true };
+      }
+      const expense = await tx.expense.findFirst({ where: { id: expenseId, locationId } });
+      if (!expense) throw AppError.notFound("Expense entry not found.");
+      await tx.expense.delete({ where: { id: expense.id } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId, action: "expense.deleted", entityType: "Expense", entityId: expense.id, beforeState: expense, afterState: { requestId, requestFingerprint, deleted: true } } });
+      return { deleted: true };
+    });
   }
 
   async customerRecency(locationId: string, inactiveSince: Date, limit: number) {

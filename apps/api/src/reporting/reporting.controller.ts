@@ -80,8 +80,8 @@ export class ReportingController {
 
   @Delete("expenses/:expenseId")
   @RequirePermissions(Permission.ReportsViewFinancial)
-  deleteExpense(@CurrentActor() actor: RequestActor, @Param("expenseId") expenseId: string) {
-    return this.reporting.deleteExpense(this.location(actor), expenseId);
+  deleteExpense(@CurrentActor() actor: RequestActor, @Param("expenseId") expenseId: string, @Headers("idempotency-key") requestId: string | undefined) {
+    return this.reporting.deleteExpense(this.location(actor), actor.sub, expenseId, requestId);
   }
 
   @Get("labor")
