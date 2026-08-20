@@ -55,6 +55,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
   const locationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const brandingAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const merchAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
@@ -140,10 +141,16 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   async function saveMerch(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = JSON.stringify({ merchUrl: merchUrl.trim() || null });
+    if (merchAttemptRef.current?.fingerprint !== body) merchAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
-      await apiFetch("/management/settings/merch", { accessToken, method: "PATCH", body: JSON.stringify({ merchUrl: merchUrl.trim() || null }) });
+      await apiFetch("/management/settings/merch", { accessToken, method: "PATCH", headers: { "Idempotency-Key": merchAttemptRef.current.requestId }, body });
+      merchAttemptRef.current = null;
       await refresh();
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The merchandise shop link could not be saved."); }
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) merchAttemptRef.current = null;
+      setError(reason instanceof ApiRequestError ? reason.body.message : "The merchandise shop link could not be saved.");
+    }
   }
 
   async function createPromotion(event: FormEvent) {

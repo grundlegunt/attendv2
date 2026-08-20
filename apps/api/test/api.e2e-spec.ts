@@ -1901,6 +1901,22 @@ describe("Milestone 1 cinema configuration", () => {
     expect(response.body.code).toBe("VALIDATION_FAILED");
   });
 
+  it("replays concurrent merchandise-link publishing once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const merchUrl = "https://shop.example.com/meridian";
+    const publish = () => request(app.getHttpServer())
+      .patch("/api/v1/management/settings/merch")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ merchUrl });
+    const [updated, replayed] = await Promise.all([publish(), publish()]);
+    expect(updated.status).toBe(200);
+    expect(replayed.body).toEqual(updated.body);
+    expect(updated.body.merchUrl).toBe(merchUrl);
+    expect(await prisma.auditEvent.count({ where: { action: "location.merch_updated", afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
+  });
+
   it("lets cinema managers update audited operating settings", async () => {
     const current = await request(app.getHttpServer())
       .get("/api/v1/management/settings")
