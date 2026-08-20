@@ -204,6 +204,7 @@ export function ManagementControls({
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
   const roleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const renameRoleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleName, setSelectedRoleName] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [employeeRoleDrafts, setEmployeeRoleDrafts] = useState<
@@ -631,14 +632,20 @@ export function ManagementControls({
   }
   async function renameRole() {
     if (!selectedRole?.key.startsWith("CUSTOM_")) return;
+    const body = JSON.stringify({ name: selectedRoleName });
+    const fingerprint = `${selectedRole.id}:${body}`;
+    if (renameRoleAttemptRef.current?.fingerprint !== fingerprint) renameRoleAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/management/roles/${selectedRole.id}`, {
         accessToken,
         method: "PATCH",
-        body: JSON.stringify({ name: selectedRoleName }),
+        headers: { "Idempotency-Key": renameRoleAttemptRef.current.requestId },
+        body,
       });
+      renameRoleAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) renameRoleAttemptRef.current = null;
       showError(reason);
     }
   }

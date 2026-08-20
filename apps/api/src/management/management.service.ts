@@ -705,16 +705,28 @@ export class ManagementService {
     });
   }
 
-  async updateRole(input: { locationId: string; employeeId: string; roleId: string; name: string }) {
+  async updateRole(input: { locationId: string; employeeId: string; roleId: string; name: string; requestId: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ roleId: input.roleId, name: input.name })).digest("hex");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const role = await prisma.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId } });
-    if (!role) throw AppError.notFound("Role was not found.");
-    if (!role.key.startsWith("CUSTOM_")) throw AppError.forbidden("Built-in roles cannot be renamed.");
-    const duplicate = await prisma.role.findFirst({ where: { organizationId: location.organizationId, id: { not: role.id }, name: { equals: input.name, mode: "insensitive" } } });
-    if (duplicate) throw AppError.conflict("A role with that name already exists.");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "role.renamed", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The role-rename idempotency key was already used with different details.");
+        const role = await tx.role.findFirst({ where: { id: replay.entityId, organizationId: location.organizationId } });
+        if (!role) throw AppError.conflict("The renamed role is no longer available.");
+        return role;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.roleId}))`;
+      const role = await tx.role.findFirst({ where: { id: input.roleId, organizationId: location.organizationId } });
+      if (!role) throw AppError.notFound("Role was not found.");
+      if (!role.key.startsWith("CUSTOM_")) throw AppError.forbidden("Built-in roles cannot be renamed.");
+      const duplicate = await tx.role.findFirst({ where: { organizationId: location.organizationId, id: { not: role.id }, name: { equals: input.name, mode: "insensitive" } } });
+      if (duplicate) throw AppError.conflict("A role with that name already exists.");
       const updated = await tx.role.update({ where: { id: role.id }, data: { name: input.name } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.renamed", entityType: "Role", entityId: role.id, beforeState: { name: role.name }, afterState: { name: updated.name } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.renamed", entityType: "Role", entityId: role.id, beforeState: { name: role.name }, afterState: { requestId: input.requestId, requestFingerprint, name: updated.name } } });
       return updated;
     });
   }
