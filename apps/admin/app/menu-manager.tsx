@@ -67,6 +67,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingCategorySortOrder, setEditingCategorySortOrder] = useState(0);
   const [stationName, setStationName] = useState("");
   const stationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateStationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [stationDisplayType, setStationDisplayType] = useState("KITCHEN");
   const [editingStationId, setEditingStationId] = useState("");
   const [editingStationName, setEditingStationName] = useState("");
@@ -352,16 +353,22 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     station: Menu["stations"][number],
     changes: { name?: string; displayType?: string; active?: boolean },
   ) {
+    const body = JSON.stringify(changes);
+    const fingerprint = `${station.id}:${body}`;
+    if (updateStationAttemptRef.current?.fingerprint !== fingerprint) updateStationAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/restaurant-menu/stations/${station.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify(changes),
+        headers: { "Idempotency-Key": updateStationAttemptRef.current.requestId },
+        body,
       });
+      updateStationAttemptRef.current = null;
       setEditingStationId("");
       setMessage("Kitchen station updated.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) updateStationAttemptRef.current = null;
       showError(error, "Station could not be updated.");
     }
   }
