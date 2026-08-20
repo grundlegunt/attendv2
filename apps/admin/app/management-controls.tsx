@@ -167,6 +167,7 @@ export function ManagementControls({
   const taxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateTaxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const chargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateChargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [newPriceTier, setNewPriceTier] = useState({
     name: "Standard",
     price: "",
@@ -549,6 +550,7 @@ export function ManagementControls({
     const body = JSON.stringify(changes);
     const fingerprint = `${id}:${body}`;
     if (kind === "tax" && updateTaxAttemptRef.current?.fingerprint !== fingerprint) updateTaxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    if (kind === "service" && updateChargeAttemptRef.current?.fingerprint !== fingerprint) updateChargeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       const path =
         kind === "tax"
@@ -557,13 +559,15 @@ export function ManagementControls({
       await apiFetch(path, {
         accessToken,
         method: "PATCH",
-        ...(kind === "tax" ? { headers: { "Idempotency-Key": updateTaxAttemptRef.current!.requestId } } : {}),
+        headers: { "Idempotency-Key": kind === "tax" ? updateTaxAttemptRef.current!.requestId : updateChargeAttemptRef.current!.requestId },
         body,
       });
       if (kind === "tax") updateTaxAttemptRef.current = null;
+      if (kind === "service") updateChargeAttemptRef.current = null;
       await refresh();
     } catch (reason) {
       if (kind === "tax" && reason instanceof ApiRequestError && reason.status < 500) updateTaxAttemptRef.current = null;
+      if (kind === "service" && reason instanceof ApiRequestError && reason.status < 500) updateChargeAttemptRef.current = null;
       showError(reason);
     }
   }

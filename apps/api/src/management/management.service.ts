@@ -331,16 +331,27 @@ export class ManagementService {
     });
   }
 
-  async updateServiceCharge(input: { locationId: string; employeeId: string; ruleId: string; name?: string; appliesTo?: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number | null; flatCents?: number | null; autoApply?: boolean; active?: boolean }) {
-    const before = await prisma.serviceChargeRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
-    if (!before) throw AppError.notFound("Service-charge rule was not found.");
-    const ratePermille = input.ratePermille === undefined ? before.ratePermille : input.ratePermille;
-    const flatCents = input.flatCents === undefined ? before.flatCents : input.flatCents;
-    if ((ratePermille == null) === (flatCents == null)) throw AppError.validationFailed("Provide exactly one percentage rate or flat amount.");
+  async updateServiceCharge(input: { locationId: string; employeeId: string; ruleId: string; requestId: string; name?: string; appliesTo?: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number | null; flatCents?: number | null; autoApply?: boolean; active?: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ ruleId: input.ruleId, name: input.name, appliesTo: input.appliesTo, ratePermille: input.ratePermille, flatCents: input.flatCents, autoApply: input.autoApply, active: input.active })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "service_charge_rule.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The service-charge idempotency key was already used with different details.");
+        const rule = await tx.serviceChargeRule.findFirst({ where: { id: replay.entityId, locationId: input.locationId } });
+        if (!rule) throw AppError.conflict("The updated service-charge rule is no longer available.");
+        return rule;
+      }
+      const before = await tx.serviceChargeRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
+      if (!before) throw AppError.notFound("Service-charge rule was not found.");
+      const ratePermille = input.ratePermille === undefined ? before.ratePermille : input.ratePermille;
+      const flatCents = input.flatCents === undefined ? before.flatCents : input.flatCents;
+      if ((ratePermille == null) === (flatCents == null)) throw AppError.validationFailed("Provide exactly one percentage rate or flat amount.");
       const updated = await tx.serviceChargeRule.update({ where: { id: before.id }, data: { name: input.name, appliesTo: input.appliesTo, ratePermille, flatCents, autoApply: input.autoApply, active: input.active } });
       const state = (rule: typeof updated) => ({ name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, flatCents: rule.flatCents, autoApply: rule.autoApply, active: rule.active });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "service_charge_rule.updated", entityType: "ServiceChargeRule", entityId: updated.id, beforeState: state(before), afterState: state(updated) } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "service_charge_rule.updated", entityType: "ServiceChargeRule", entityId: updated.id, beforeState: state(before), afterState: { ...state(updated), requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }
