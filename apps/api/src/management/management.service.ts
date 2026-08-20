@@ -153,8 +153,18 @@ export class ManagementService {
     });
   }
 
-  async updateLocation(input: { locationId: string; employeeId: string; name?: string; address?: string | null; timezone?: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; autoSettleTipBasisPoints?: number }) {
+  async updateLocation(input: { locationId: string; employeeId: string; requestId: string; name?: string; address?: string | null; timezone?: string; timeClockEnabled?: boolean; ticketTaxRateBasisPoints?: number; preShowBufferMinutes?: number; cleaningBufferMinutes?: number; checkDropMinutesBeforeEnd?: number; autoSettleGraceMinutes?: number; autoSettleTipBasisPoints?: number }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, name: input.name, address: input.address, timezone: input.timezone, timeClockEnabled: input.timeClockEnabled, ticketTaxRateBasisPoints: input.ticketTaxRateBasisPoints, preShowBufferMinutes: input.preShowBufferMinutes, cleaningBufferMinutes: input.cleaningBufferMinutes, checkDropMinutesBeforeEnd: input.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: input.autoSettleGraceMinutes, autoSettleTipBasisPoints: input.autoSettleTipBasisPoints })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "location.settings_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The location-settings idempotency key was already used with different details.");
+        return tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
       const before = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
       const updated = await tx.location.update({ where: { id: input.locationId }, data: {
         name: input.name, address: input.address, timezone: input.timezone,
@@ -164,7 +174,7 @@ export class ManagementService {
         autoSettleTipBasisPoints: input.autoSettleTipBasisPoints,
       } });
       const settingsState = (location: typeof updated) => ({ name: location.name, address: location.address, timezone: location.timezone, timeClockEnabled: location.timeClockEnabled, ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, preShowBufferMinutes: location.preShowBufferMinutes, cleaningBufferMinutes: location.cleaningBufferMinutes, checkDropMinutesBeforeEnd: location.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: location.autoSettleGraceMinutes, autoSettleTipBasisPoints: location.autoSettleTipBasisPoints });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.settings_updated", entityType: "Location", entityId: input.locationId, beforeState: settingsState(before), afterState: settingsState(updated) } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "location.settings_updated", entityType: "Location", entityId: input.locationId, beforeState: settingsState(before), afterState: { ...settingsState(updated), requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }
