@@ -683,13 +683,24 @@ export class ManagementService {
     });
   }
 
-  async createRole(input: { locationId: string; employeeId: string; name: string }) {
+  async createRole(input: { locationId: string; employeeId: string; name: string; requestId: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ name: input.name })).digest("hex");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const duplicate = await prisma.role.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
-    if (duplicate) throw AppError.conflict("A role with that name already exists.");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "role.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The role-creation idempotency key was already used with different details.");
+        const role = await tx.role.findFirst({ where: { id: replay.entityId, organizationId: location.organizationId }, include: { rolePermissions: true } });
+        if (!role) throw AppError.conflict("The created role is no longer available.");
+        return role;
+      }
+      const duplicate = await tx.role.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
+      if (duplicate) throw AppError.conflict("A role with that name already exists.");
       const role = await tx.role.create({ data: { organizationId: location.organizationId, key: `CUSTOM_${randomUUID().replaceAll("-", "").toUpperCase()}`, name: input.name } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.created", entityType: "Role", entityId: role.id, afterState: { key: role.key, name: role.name, permissionKeys: [] } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "role.created", entityType: "Role", entityId: role.id, afterState: { requestId: input.requestId, requestFingerprint, key: role.key, name: role.name, permissionKeys: [] } } });
       return { ...role, rolePermissions: [] };
     });
   }
