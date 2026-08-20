@@ -2070,12 +2070,18 @@ describe("Milestone 1 cinema configuration", () => {
       .send({ name: `Integration service ${Date.now()}`, appliesTo: "ALL", ratePermille: 180, autoApply: true, active: true });
     expect(serviceCharge.status).toBe(201);
 
-    const updatedServiceCharge = await request(app.getHttpServer())
+    const serviceUpdateRequestId = crypto.randomUUID();
+    const updateServiceCharge = () => request(app.getHttpServer())
       .patch(`/api/v1/management/settings/service-charge-rules/${serviceCharge.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", serviceUpdateRequestId)
       .send({ autoApply: false, active: false });
+    const [updatedServiceCharge, replayedServiceCharge] = await Promise.all([updateServiceCharge(), updateServiceCharge()]);
     expect(updatedServiceCharge.status).toBe(200);
+    expect(replayedServiceCharge.status).toBe(200);
+    expect(replayedServiceCharge.body).toEqual(updatedServiceCharge.body);
     expect(updatedServiceCharge.body).toEqual(expect.objectContaining({ autoApply: false, active: false }));
+    expect(await prisma.auditEvent.count({ where: { action: "service_charge_rule.updated", entityId: serviceCharge.body.id } })).toBe(1);
 
     const taxAudit = await request(app.getHttpServer())
       .get("/api/v1/audit-events?action=tax_rule.updated&limit=1")
