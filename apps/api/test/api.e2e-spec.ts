@@ -8230,15 +8230,22 @@ describe("Milestone 9 box office and workforce", () => {
     await request(app.getHttpServer()).post(`/api/v1/box-office/tickets/${sale.body.tickets[0].id}/reprint`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({}).expect(201);
     const correctedReceiptEmail = `corrected-${crypto.randomUUID()}@example.test`;
+    const receiptRequestId = crypto.randomUUID();
     const resentReceipt = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/receipt`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ email: correctedReceiptEmail }).expect(201);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: receiptRequestId, email: correctedReceiptEmail }).expect(201);
     expect(resentReceipt.body).toEqual({ receiptDelivery: "SENT", email: correctedReceiptEmail });
     expect(emailProvider.sent).toHaveLength(receiptsBefore + 2);
     expect(emailProvider.sent.at(-1)).toEqual(expect.objectContaining({ to: correctedReceiptEmail, orderNumber: sale.body.orderNumber }));
     await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: sale.body.id } })).resolves.toMatchObject({ guestEmail: correctedReceiptEmail, receiptEmailError: null });
     expect(await prisma.auditEvent.count({ where: { action: "ticket_order.receipt_resent", entityId: sale.body.id, actorId: owner.id } })).toBe(1);
     await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/receipt`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ email: "not-an-email" }).expect(400);
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: receiptRequestId, email: correctedReceiptEmail }).expect(201);
+    expect(emailProvider.sent).toHaveLength(receiptsBefore + 2);
+    expect(await prisma.auditEvent.count({ where: { action: "ticket_order.receipt_resent", entityId: sale.body.id, actorId: owner.id } })).toBe(1);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/receipt`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: receiptRequestId, email: `other-${crypto.randomUUID()}@example.test` }).expect(409);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/receipt`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), email: "not-an-email" }).expect(400);
     const refundRequestId = crypto.randomUUID();
     const refundPayload = { requestId: refundRequestId, reason: "E2E full refund", cashDrawerId: drawer.body.id };
     const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)

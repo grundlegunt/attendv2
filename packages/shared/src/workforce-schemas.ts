@@ -117,5 +117,6 @@ export const ticketExchangeRequestSchema = z.object({
 });
 
 export const ticketReceiptResendRequestSchema = z.object({
+  requestId: z.string().uuid(),
   email: z.string().trim().email().max(320),
 });
