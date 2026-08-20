@@ -223,8 +223,19 @@ export class ManagementService {
     });
   }
 
-  async updateMerch(input: { locationId: string; employeeId: string; merchUrl: string | null }) {
+  async updateMerch(input: { locationId: string; employeeId: string; requestId: string; merchUrl: string | null }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, merchUrl: input.merchUrl })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "location.merch_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string; merchUrl?: string | null; publishedAt?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The merchandise-link idempotency key was already used with different details.");
+        if (!state.publishedAt) throw AppError.conflict("The published merchandise link cannot be replayed.");
+        return { merchUrl: state.merchUrl ?? null, publishedAt: new Date(state.publishedAt) };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
       const location = await tx.location.findUniqueOrThrow({
         where: { id: input.locationId },
         select: { contentDraft: true, contentPublished: true },
@@ -244,7 +255,7 @@ export class ManagementService {
       await tx.auditEvent.create({ data: {
         actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId,
         action: "location.merch_updated", entityType: "Location", entityId: input.locationId,
-        beforeState: { merchUrl: published.navigation.merchUrl }, afterState: { merchUrl: input.merchUrl },
+        beforeState: { merchUrl: published.navigation.merchUrl }, afterState: { merchUrl: input.merchUrl, requestId: input.requestId, requestFingerprint, publishedAt: publishedAt.toISOString() },
       } });
       return { merchUrl: input.merchUrl, publishedAt };
     });

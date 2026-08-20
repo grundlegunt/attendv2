@@ -101,7 +101,7 @@ export class ManagementController {
   updateBranding(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(brandingSchema)) body: unknown) { return this.management.updateBranding({ ...brandingSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/merch") @RequirePermissions(Permission.TicketPriceEdit)
-  updateMerch(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(merchSchema)) body: unknown) { return this.management.updateMerch({ ...merchSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }
+  updateMerch(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(merchSchema)) body: unknown) { return this.management.updateMerch({ ...merchSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/site-copy") @RequirePermissions(Permission.TicketPriceEdit)
   updateSiteCopy(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(customerSiteCopySchema)) body: unknown) { return this.management.updateSiteCopy({ ...customerSiteCopySchema.parse(body), locationId: this.location(actor), employeeId: actor.sub }); }

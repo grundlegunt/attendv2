@@ -14,3 +14,8 @@ test("branding saves retain a stable retry identity", () => {
   assert.match(source, /brandingAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": brandingAttemptRef\.current\.requestId/);
 });
+
+test("merch link saves retain a stable retry identity", () => {
+  assert.match(source, /merchAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": merchAttemptRef\.current\.requestId/);
+});
