@@ -597,6 +597,16 @@ describe("Staff authentication", () => {
     expect(replay.body.id).toBe(first.body.id);
     expect(await prisma.employee.count({ where: { email } })).toBe(1);
     expect(await prisma.auditEvent.count({ where: { action: "employee.created", entityId: first.body.id } })).toBe(1);
+    const updateRequestId = crypto.randomUUID();
+    const update = () => request(app.getHttpServer())
+      .patch(`/api/v1/management/employees/${first.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", updateRequestId)
+      .send({ name: "Updated Replay Employee", roleIds: [role.id] });
+    const [updated, replayedUpdate] = await Promise.all([update(), update()]);
+    expect(updated.status).toBe(200);
+    expect(replayedUpdate.body).toEqual(updated.body);
+    expect(await prisma.auditEvent.count({ where: { action: "employee.access_updated", entityId: first.body.id } })).toBe(1);
   });
 
   it("forces a manager-reset employee to replace the temporary password and invalidates prior sessions", async () => {

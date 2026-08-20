@@ -614,26 +614,37 @@ export class ManagementService {
     });
   }
 
-  async updateEmployee(input: { locationId: string; actorId: string; targetId: string; name?: string; email?: string; active?: boolean; roleIds?: string[] }) {
-    const target = await prisma.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId } });
-    if (!target) throw AppError.notFound("Employee was not found.");
+  async updateEmployee(input: { locationId: string; actorId: string; targetId: string; requestId: string; name?: string; email?: string; active?: boolean; roleIds?: string[] }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     const normalizedEmail = input.email?.toLowerCase();
-    if (normalizedEmail) {
-      const duplicate = await prisma.employee.findFirst({ where: { id: { not: target.id }, email: { equals: normalizedEmail, mode: "insensitive" } } });
-      if (duplicate) throw AppError.conflict("An employee with that email already exists.");
-    }
-    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    if (input.roleIds) {
-      const roleCount = await prisma.role.count({ where: { id: { in: input.roleIds }, organizationId: location.organizationId } });
-      if (roleCount !== new Set(input.roleIds).size) throw AppError.notFound("One or more roles were not found.");
-    }
+    const normalizedRoleIds = input.roleIds ? [...new Set(input.roleIds)].sort() : undefined;
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ targetId: input.targetId, name: input.name, email: normalizedEmail, active: input.active, roleIds: normalizedRoleIds })).digest("hex");
     return prisma.$transaction(async (tx) => {
-      if (input.roleIds) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "employee.access_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The employee-update idempotency key was already used with different details.");
+        const employee = await tx.employee.findFirst({ where: { id: replay.entityId, locationId: input.locationId } });
+        if (!employee) throw AppError.conflict("The updated employee is no longer available.");
+        return employee;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.targetId}))`;
+      const target = await tx.employee.findFirst({ where: { id: input.targetId, locationId: input.locationId } });
+      if (!target) throw AppError.notFound("Employee was not found.");
+      if (normalizedEmail) {
+        const duplicate = await tx.employee.findFirst({ where: { id: { not: target.id }, email: { equals: normalizedEmail, mode: "insensitive" } } });
+        if (duplicate) throw AppError.conflict("An employee with that email already exists.");
+      }
+      if (normalizedRoleIds) {
+        const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId } });
+        const roleCount = await tx.role.count({ where: { id: { in: normalizedRoleIds }, organizationId: location.organizationId } });
+        if (roleCount !== normalizedRoleIds.length) throw AppError.notFound("One or more roles were not found.");
         await tx.employeeRole.deleteMany({ where: { employeeId: target.id, locationId: input.locationId } });
-        await tx.employeeRole.createMany({ data: [...new Set(input.roleIds)].map((roleId) => ({ employeeId: target.id, roleId, locationId: input.locationId })) });
+        await tx.employeeRole.createMany({ data: normalizedRoleIds.map((roleId) => ({ employeeId: target.id, roleId, locationId: input.locationId })) });
       }
       const updated = await tx.employee.update({ where: { id: target.id }, data: { name: input.name, email: normalizedEmail, active: input.active } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId, action: "employee.access_updated", entityType: "Employee", entityId: target.id, beforeState: { name: target.name, email: target.email, active: target.active }, afterState: { name: updated.name, email: updated.email, active: updated.active, roleIds: input.roleIds } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.actorId, locationId: input.locationId, action: "employee.access_updated", entityType: "Employee", entityId: target.id, beforeState: { name: target.name, email: target.email, active: target.active }, afterState: { requestId: input.requestId, requestFingerprint, name: updated.name, email: updated.email, active: updated.active, roleIds: normalizedRoleIds } } });
       return updated;
     });
   }

@@ -9,3 +9,10 @@ test("employee creation retains a stable retry identity", () => {
   assert.match(source, /employeeAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": employeeAttemptRef\.current\.requestId/);
 });
+
+test("employee access updates retain a stable retry identity", () => {
+  assert.match(source, /updateEmployeeAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateEmployeeAttemptRef\.current\.requestId/);
+  assert.match(source, /submitEmployeeUpdate\(target\.id, \{ active:/);
+  assert.match(source, /submitEmployeeUpdate\(target\.id, \{ roleIds \}\)/);
+});
