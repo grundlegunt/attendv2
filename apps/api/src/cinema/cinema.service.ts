@@ -2211,18 +2211,71 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async updateMovie(actor: RequestActor, id: string, input: MovieUpdateInput) {
+  async updateMovie(
+    actor: RequestActor,
+    id: string,
+    input: MovieUpdateInput,
+    requestId: string = randomUUID(),
+    expectedUpdatedAtValue?: string,
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const expectedUpdatedAt = expectedUpdatedAtValue
+      ? new Date(expectedUpdatedAtValue)
+      : null;
+    if (expectedUpdatedAt && Number.isNaN(expectedUpdatedAt.getTime())) {
+      throw AppError.validationFailed("The movie version is invalid.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({
+        locationId,
+        movieId: id,
+        input,
+        expectedUpdatedAt: expectedUpdatedAt?.toISOString() ?? null,
+      }))
+      .digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
       const location = await tx.location.findUnique({
         where: { id: locationId },
         select: { organizationId: true },
       });
       if (!location) throw AppError.notFound("Location not found.");
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "movie.updated",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict(
+            "The movie-update key was already used with different details.",
+          );
+        }
+        const movie = await tx.movie.findFirst({
+          where: { id: replay.entityId, organizationId: location.organizationId },
+        });
+        if (!movie) throw AppError.conflict("The updated movie is no longer available.");
+        return movie;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
       const existing = await tx.movie.findFirst({
         where: { id, organizationId: location.organizationId, active: true },
       });
       if (!existing) throw AppError.notFound("Movie not found.");
+      if (
+        expectedUpdatedAt &&
+        existing.updatedAt.toISOString() !== expectedUpdatedAt.toISOString()
+      ) {
+        throw AppError.conflict(
+          "This movie changed in another session. Refresh before saving again.",
+        );
+      }
       const { pairingMenuItemIds, distributorTerms, ...movieFields } = input;
       if (pairingMenuItemIds)
         await this.validatePairingMenuItems(tx, locationId, pairingMenuItemIds);
@@ -2290,6 +2343,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             distributorName: movie.distributorName,
             distributorTerms: movie.distributorTerms,
             ...(pairingMenuItemIds ? { pairingMenuItemIds } : {}),
+            requestId,
+            requestFingerprint,
           },
         },
       });

@@ -19,6 +19,7 @@ function auditoriumCapacityLabel(auditorium: ScheduleAuditorium) {
 
 export interface ScheduleMovie {
   id: string;
+  updatedAt: string;
   title: string;
   runtimeMinutes: number;
   synopsis?: string | null;
