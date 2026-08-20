@@ -423,6 +423,17 @@ export class CinemaController {
     return this.cinemaService.archiveFilmSeries(actor, id, requestId);
   }
 
+  @Post("film-series/:id/restore")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  restoreFilmSeries(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.restoreFilmSeries(actor, id, requestId);
+  }
+
   @Post("showtimes")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)

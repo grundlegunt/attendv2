@@ -38,6 +38,7 @@ export default function FilmSeriesPage() {
   const createSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const archiveSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
+  const restoreSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
 
   async function refresh() {
     if (!accessToken) return;
@@ -156,15 +157,22 @@ export default function FilmSeriesPage() {
   async function restoreSeries(series: FilmSeries) {
     setError(null);
     setNotice(null);
+    if (restoreSeriesAttemptRef.current?.seriesId !== series.id) {
+      restoreSeriesAttemptRef.current = { seriesId: series.id, requestId: crypto.randomUUID() };
+    }
     try {
-      await apiFetch(`/cinema/film-series/${series.id}`, {
+      await apiFetch(`/cinema/film-series/${series.id}/restore`, {
         accessToken: accessToken ?? undefined,
-        method: "PATCH",
-        body: JSON.stringify({ active: true }),
+        method: "POST",
+        headers: { "Idempotency-Key": restoreSeriesAttemptRef.current.requestId },
       });
+      restoreSeriesAttemptRef.current = null;
       await refresh();
       setNotice(`${series.name} was restored and is available when scheduling showtimes.`);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        restoreSeriesAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
