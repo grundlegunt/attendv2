@@ -21,6 +21,7 @@ export default function GiftCardsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const issuanceKey = useRef(crypto.randomUUID());
+  const statusAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true); setError(null);
@@ -64,11 +65,16 @@ export default function GiftCardsPage() {
 
   async function updateStatus(card: GiftCard) {
     setError(null);
+    const status = card.status === "ACTIVE" ? "DEACTIVATED" : "ACTIVE";
+    const body = JSON.stringify({ status });
+    const fingerprint = `${card.id}:${body}`;
+    if (statusAttemptRef.current?.fingerprint !== fingerprint) statusAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      const status = card.status === "ACTIVE" ? "DEACTIVATED" : "ACTIVE";
-      await apiFetch(`/management/gift-cards/${card.id}/status`, { accessToken, method: "PATCH", body: JSON.stringify({ status }) });
+      await apiFetch(`/management/gift-cards/${card.id}/status`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": statusAttemptRef.current.requestId }, body });
+      statusAttemptRef.current = null;
       setCards((current) => current.map((item) => item.id === card.id ? { ...item, status } : item));
     } catch (requestError) {
+      if (requestError instanceof ApiRequestError && requestError.status < 500) statusAttemptRef.current = null;
       setError(requestError instanceof ApiRequestError ? requestError.body.message : "Gift card status could not be updated.");
     }
   }

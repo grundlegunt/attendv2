@@ -536,14 +536,26 @@ export class ManagementService {
     return { ...giftCard, code };
   }
 
-  async updateGiftCardStatus(input: { locationId: string; employeeId: string; giftCardId: string; status: "ACTIVE" | "DEACTIVATED" }) {
-    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
-    const card = await prisma.giftCard.findFirst({ where: { id: input.giftCardId, organizationId: location.organizationId }, select: { id: true, status: true } });
-    if (!card) throw AppError.notFound("Gift card was not found.");
-    if (card.status === input.status) return prisma.giftCard.findUniqueOrThrow({ where: { id: card.id }, select: { id: true, status: true } });
+  async updateGiftCardStatus(input: { locationId: string; employeeId: string; giftCardId: string; requestId: string; status: "ACTIVE" | "DEACTIVATED" }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ giftCardId: input.giftCardId, status: input.status })).digest("hex");
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "gift_card.status_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The gift-card status idempotency key was already used with different details.");
+        const card = await tx.giftCard.findUnique({ where: { id: replay.entityId }, select: { id: true, status: true } });
+        if (!card) throw AppError.conflict("The updated gift card is no longer available.");
+        return card;
+      }
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.giftCardId}))`;
+      const card = await tx.giftCard.findFirst({ where: { id: input.giftCardId, organizationId: location.organizationId }, select: { id: true, status: true } });
+      if (!card) throw AppError.notFound("Gift card was not found.");
+      if (card.status === input.status) return card;
       const updated = await tx.giftCard.update({ where: { id: card.id }, data: { status: input.status }, select: { id: true, status: true } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "gift_card.status_updated", entityType: "GiftCard", entityId: card.id, beforeState: { status: card.status }, afterState: { status: updated.status } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "gift_card.status_updated", entityType: "GiftCard", entityId: card.id, beforeState: { status: card.status }, afterState: { status: updated.status, requestId: input.requestId, requestFingerprint } } });
       return updated;
     });
   }
