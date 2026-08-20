@@ -21,3 +21,8 @@ test("auditorium duplication retains a stable retry identity", () => {
   assert.match(source, /duplicateAuditoriumAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": duplicateAuditoriumAttemptRef\.current\.requestId/);
 });
+
+test("auditorium deactivation retains a stable retry identity", () => {
+  assert.match(source, /deactivateAuditoriumAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": deactivateAuditoriumAttemptRef\.current\.requestId/);
+});
