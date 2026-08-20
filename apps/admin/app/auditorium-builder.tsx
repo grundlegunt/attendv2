@@ -267,6 +267,7 @@ export function AuditoriumBuilder({
   );
   const createAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const duplicateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const preview = useMemo(
     () => (mode === "BASIC" ? basicSeats(rows, seatsPerRow) : seats),
@@ -690,14 +691,27 @@ export function AuditoriumBuilder({
       `${name} copy`,
     );
     if (!copyName) return;
+    const body = JSON.stringify({ name: copyName });
+    const fingerprint = `${editingId}:${body}`;
+    if (duplicateAuditoriumAttemptRef.current?.fingerprint !== fingerprint) {
+      duplicateAuditoriumAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/auditoriums/${editingId}/duplicate`, {
         accessToken,
         method: "POST",
-        body: JSON.stringify({ name: copyName }),
+        headers: { "Idempotency-Key": duplicateAuditoriumAttemptRef.current.requestId },
+        body,
       });
+      duplicateAuditoriumAttemptRef.current = null;
       await onSaved(`${copyName} created from ${name}.`);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        duplicateAuditoriumAttemptRef.current = null;
+      }
       onError(reason);
     }
   }

@@ -303,11 +303,13 @@ export class CinemaController {
     @CurrentActor() actor: RequestActor,
     @Param("id") id: string,
     @Body(new ZodValidationPipe(duplicateAuditoriumRequestSchema)) body: unknown,
+    @Headers("idempotency-key") requestId: string | undefined,
   ) {
     return this.cinemaService.duplicateAuditorium(
       actor,
       id,
       body as ReturnType<typeof duplicateAuditoriumRequestSchema.parse>,
+      requestId,
     );
   }
 
