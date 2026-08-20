@@ -8589,6 +8589,13 @@ describe("Milestone 10 management reporting", () => {
     expect(await prisma.auditEvent.count({ where: { action: "expense.created", entityId: first.body.id } })).toBe(1);
     const conflict = await request(app.getHttpServer()).post("/api/v1/reports/expenses").set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", requestId).send({ ...payload, amountCents: 4321 });
     expect(conflict.status).toBe(409);
+    const deleteRequestId = crypto.randomUUID();
+    const remove = () => request(app.getHttpServer()).delete(`/api/v1/reports/expenses/${first.body.id}`).set("Authorization", `Bearer ${ownerAccessToken}`).set("Idempotency-Key", deleteRequestId);
+    const [deleted, deleteReplay] = await Promise.all([remove(), remove()]);
+    expect(deleted.status).toBe(200);
+    expect(deleteReplay.body).toEqual({ deleted: true });
+    expect(await prisma.expense.count({ where: { id: first.body.id } })).toBe(0);
+    expect(await prisma.auditEvent.count({ where: { action: "expense.deleted", entityId: first.body.id } })).toBe(1);
   });
 
   it("reports exact ticket and F&B revenue per movie and showtime for a known period", async () => {

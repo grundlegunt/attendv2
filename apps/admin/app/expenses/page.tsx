@@ -28,6 +28,7 @@ export default function ExpensesPage() {
   const [incurredAt, setIncurredAt] = useState(localDateInputValue(today));
   const [notes, setNotes] = useState("");
   const expenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const deleteExpenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const query = useMemo(() => new URLSearchParams(inclusiveReportRange(from, through)).toString(), [from, through]);
   const load = useCallback(async () => {
@@ -58,8 +59,9 @@ export default function ExpensesPage() {
   async function removeExpense(expense: Expense) {
     if (!window.confirm(`Delete ${expense.description}?`)) return;
     setError(null);
-    try { await apiFetch(`/reports/expenses/${expense.id}`, { accessToken, method: "DELETE" }); await load(); }
-    catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The expense could not be deleted."); }
+    if (deleteExpenseAttemptRef.current?.fingerprint !== expense.id) deleteExpenseAttemptRef.current = { fingerprint: expense.id, requestId: crypto.randomUUID() };
+    try { await apiFetch(`/reports/expenses/${expense.id}`, { accessToken, method: "DELETE", headers: { "Idempotency-Key": deleteExpenseAttemptRef.current.requestId } }); deleteExpenseAttemptRef.current = null; await load(); }
+    catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) deleteExpenseAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The expense could not be deleted."); }
   }
 
   async function downloadCsv() {
