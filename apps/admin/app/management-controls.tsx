@@ -176,6 +176,7 @@ export function ManagementControls({
   const priceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updatePriceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const ticketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateTicketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [ticketTypeDrafts, setTicketTypeDrafts] = useState<
     Record<string, string>
   >({});
@@ -424,14 +425,20 @@ export function ManagementControls({
     changes: { name?: string; priceAdjustmentMinor?: number; active?: boolean },
   ) {
     setError(null);
+    const body = JSON.stringify(changes);
+    const fingerprint = `${ticketType.id}:${body}`;
+    if (updateTicketTypeAttemptRef.current?.fingerprint !== fingerprint) updateTicketTypeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/management/settings/ticket-types/${ticketType.id}`, {
         accessToken,
         method: "PATCH",
-        body: JSON.stringify(changes),
+        headers: { "Idempotency-Key": updateTicketTypeAttemptRef.current.requestId },
+        body,
       });
+      updateTicketTypeAttemptRef.current = null;
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) updateTicketTypeAttemptRef.current = null;
       showError(reason);
     }
   }
