@@ -580,6 +580,25 @@ describe("Staff authentication", () => {
     expect(res.body.email).toBe(`owner@${SEED_SUFFIX}`);
   });
 
+  it("replays concurrent employee creation once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const people = await request(app.getHttpServer()).get("/api/v1/management/people").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
+    const role = people.body.roles.find((item: { key: string }) => item.key === "SERVER");
+    const email = `employee-replay-${crypto.randomUUID()}@${SEED_SUFFIX}`;
+    const requestId = crypto.randomUUID();
+    const submit = () => request(app.getHttpServer())
+      .post("/api/v1/management/employees")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ name: "Replay Employee", email, password: SEED_PASSWORD, pin: "2468", roleIds: [role.id] });
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(201);
+    expect(replay.status).toBe(201);
+    expect(replay.body.id).toBe(first.body.id);
+    expect(await prisma.employee.count({ where: { email } })).toBe(1);
+    expect(await prisma.auditEvent.count({ where: { action: "employee.created", entityId: first.body.id } })).toBe(1);
+  });
+
   it("forces a manager-reset employee to replace the temporary password and invalidates prior sessions", async () => {
     const people = await request(app.getHttpServer()).get("/api/v1/management/people").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
     const serverRole = people.body.roles.find((role: { key: string }) => role.key === "SERVER");

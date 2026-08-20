@@ -198,6 +198,7 @@ export function ManagementControls({
     pin: "",
     roleId: "",
   });
+  const employeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
   const [selectedRoleName, setSelectedRoleName] = useState("");
@@ -574,21 +575,20 @@ export function ManagementControls({
   async function createEmployee(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const body = JSON.stringify({ name: employee.name, email: employee.email, password: employee.password, pin: employee.pin || undefined, roleIds: [employee.roleId] });
+    if (employeeAttemptRef.current?.fingerprint !== body) employeeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       await apiFetch("/management/employees", {
         accessToken,
         method: "POST",
-        body: JSON.stringify({
-          name: employee.name,
-          email: employee.email,
-          password: employee.password,
-          pin: employee.pin || undefined,
-          roleIds: [employee.roleId],
-        }),
+        headers: { "Idempotency-Key": employeeAttemptRef.current.requestId },
+        body,
       });
+      employeeAttemptRef.current = null;
       setEmployee({ name: "", email: "", password: "", pin: "", roleId: "" });
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) employeeAttemptRef.current = null;
       showError(reason);
     }
   }

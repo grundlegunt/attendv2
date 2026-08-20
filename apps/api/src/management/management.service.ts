@@ -589,15 +589,27 @@ export class ManagementService {
     return method;
   }
 
-  async createEmployee(input: { locationId: string; employeeId: string; name: string; email: string; password: string; pin?: string; roleIds: string[] }) {
+  async createEmployee(input: { locationId: string; employeeId: string; requestId: string; name: string; email: string; password: string; pin?: string; roleIds: string[] }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId } });
-    const roleCount = await prisma.role.count({ where: { id: { in: input.roleIds }, organizationId: location.organizationId } });
-    if (roleCount !== new Set(input.roleIds).size) throw AppError.notFound("One or more roles were not found.");
+    const normalizedRoleIds = [...new Set(input.roleIds)].sort();
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, name: input.name, email: input.email.toLowerCase(), roleIds: normalizedRoleIds, hasPin: Boolean(input.pin) })).digest("hex");
+    const roleCount = await prisma.role.count({ where: { id: { in: normalizedRoleIds }, organizationId: location.organizationId } });
+    if (roleCount !== normalizedRoleIds.length) throw AppError.notFound("One or more roles were not found.");
     const passwordHash = await hashPassword(input.password);
     const pinHash = input.pin ? await hashPin(input.pin) : undefined;
     return prisma.$transaction(async (tx) => {
-      const employee = await tx.employee.create({ data: { locationId: input.locationId, name: input.name, email: input.email.toLowerCase(), authAccount: { create: { passwordHash, pinHash } }, employeeRoles: { create: [...new Set(input.roleIds)].map((roleId) => ({ roleId, locationId: input.locationId })) } }, select: { id: true, name: true, email: true, active: true } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "employee.created", entityType: "Employee", entityId: employee.id, afterState: { name: employee.name, email: employee.email, roleIds: input.roleIds } } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "employee.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The employee idempotency key was already used with different details.");
+        const employee = await tx.employee.findFirst({ where: { id: replay.entityId, locationId: input.locationId }, select: { id: true, name: true, email: true, active: true } });
+        if (!employee) throw AppError.conflict("The created employee is no longer available.");
+        return employee;
+      }
+      const employee = await tx.employee.create({ data: { locationId: input.locationId, name: input.name, email: input.email.toLowerCase(), authAccount: { create: { passwordHash, pinHash } }, employeeRoles: { create: normalizedRoleIds.map((roleId) => ({ roleId, locationId: input.locationId })) } }, select: { id: true, name: true, email: true, active: true } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "employee.created", entityType: "Employee", entityId: employee.id, afterState: { requestId: input.requestId, requestFingerprint, name: employee.name, email: employee.email, roleIds: normalizedRoleIds } } });
       return employee;
     });
   }
