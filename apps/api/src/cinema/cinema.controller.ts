@@ -384,10 +384,12 @@ export class CinemaController {
   createFilmSeries(
     @CurrentActor() actor: RequestActor,
     @Body(new ZodValidationPipe(createFilmSeriesRequestSchema)) body: unknown,
+    @Headers("idempotency-key") requestId: string | undefined,
   ) {
     return this.cinemaService.createFilmSeries(
       actor,
       body as ReturnType<typeof createFilmSeriesRequestSchema.parse>,
+      requestId,
     );
   }
 
