@@ -249,6 +249,7 @@ export function AuditoriumBuilder({
   const [rows, setRows] = useState(8);
   const [seatsPerRow, setSeatsPerRow] = useState(12);
   const [editingId, setEditingId] = useState("");
+  const [editingVersion, setEditingVersion] = useState<number | null>(null);
   const [layout, setLayout] = useState<SeatMapLayout>(baseLayout());
   const [seats, setSeats] = useState<SeatInput[]>(
     () => template("center-aisle").seats,
@@ -265,6 +266,7 @@ export function AuditoriumBuilder({
     [],
   );
   const createAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const preview = useMemo(
     () => (mode === "BASIC" ? basicSeats(rows, seatsPerRow) : seats),
@@ -334,6 +336,7 @@ export function AuditoriumBuilder({
     setEditingId(id);
     const room = auditoriums.find((candidate) => candidate.id === id);
     if (!room) return;
+    setEditingVersion(room.seatMap?.version ?? null);
     setName(room.name);
     setSeatingMode(room.seatingMode ?? "RESERVED");
     setGaCapacity(room.capacity);
@@ -366,6 +369,7 @@ export function AuditoriumBuilder({
 
   function startNewAuditorium() {
     setEditingId("");
+    setEditingVersion(null);
     setName(`Theater ${auditoriums.length + 1}`);
     setSeatingMode("RESERVED");
     setGaCapacity(100);
@@ -632,8 +636,15 @@ export function AuditoriumBuilder({
         requestId: crypto.randomUUID(),
       };
     }
+    const updateFingerprint = `${editingId}:${editingVersion}:${body}`;
+    if (editingId && updateAuditoriumAttemptRef.current?.fingerprint !== updateFingerprint) {
+      updateAuditoriumAttemptRef.current = {
+        fingerprint: updateFingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
-      await apiFetch(
+      const saved = await apiFetch<AuditoriumSummary>(
         editingId
           ? `/cinema/auditoriums/${editingId}/layout`
           : "/cinema/auditoriums",
@@ -642,11 +653,22 @@ export function AuditoriumBuilder({
           method: editingId ? "PATCH" : "POST",
           ...(!editingId && createAuditoriumAttemptRef.current
             ? { headers: { "Idempotency-Key": createAuditoriumAttemptRef.current.requestId } }
-            : {}),
+            : editingId && updateAuditoriumAttemptRef.current
+              ? {
+                  headers: {
+                    "Idempotency-Key": updateAuditoriumAttemptRef.current.requestId,
+                    ...(editingVersion !== null
+                      ? { "If-Match": String(editingVersion) }
+                      : {}),
+                  },
+                }
+              : {}),
           body,
         },
       );
       createAuditoriumAttemptRef.current = null;
+      updateAuditoriumAttemptRef.current = null;
+      if (editingId) setEditingVersion(saved.seatMap?.version ?? null);
       await onSaved(
         editingId
           ? `${name} layout version saved. Existing showtimes keep their original seats.`
@@ -655,6 +677,7 @@ export function AuditoriumBuilder({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) {
         createAuditoriumAttemptRef.current = null;
+        updateAuditoriumAttemptRef.current = null;
       }
       onError(reason);
     }

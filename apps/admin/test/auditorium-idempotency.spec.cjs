@@ -10,3 +10,9 @@ test("auditorium creation retains a stable retry identity", () => {
   assert.match(source, /"Idempotency-Key": createAuditoriumAttemptRef\.current\.requestId/);
   assert.match(source, /reason instanceof ApiRequestError && reason\.status < 500/);
 });
+
+test("auditorium layout saves retain a stable retry identity and version", () => {
+  assert.match(source, /updateAuditoriumAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateAuditoriumAttemptRef\.current\.requestId/);
+  assert.match(source, /"If-Match": String\(editingVersion\)/);
+});

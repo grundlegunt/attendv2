@@ -284,11 +284,15 @@ export class CinemaController {
     @CurrentActor() actor: RequestActor,
     @Param("id") id: string,
     @Body(new ZodValidationPipe(updateAuditoriumLayoutRequestSchema)) body: unknown,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Headers("if-match") expectedVersion: string | undefined,
   ) {
     return this.cinemaService.updateAuditoriumLayout(
       actor,
       id,
       body as ReturnType<typeof updateAuditoriumLayoutRequestSchema.parse>,
+      requestId,
+      expectedVersion,
     );
   }
 

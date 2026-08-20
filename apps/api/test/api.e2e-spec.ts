@@ -1428,28 +1428,52 @@ describe("Milestone 1 cinema configuration", () => {
   it("versions an advanced layout without changing seats on an existing showtime", async () => {
     const { prisma } = await import("@cinema/database");
     const before = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
-    const res = await request(app.getHttpServer())
+    const requestId = crypto.randomUUID();
+    const payload = {
+      name: "Integration Theater",
+      seatMapName: "Integration advanced layout",
+      layout: {
+        mode: "ADVANCED", canvas: { width: 12, height: 8 }, screenPosition: "TOP", seatingStyle: "SINGLE",
+        levels: [{ id: "main", name: "Main floor", sortOrder: 0 }], sections: [],
+        elements: [{ id: "center-aisle", type: "AISLE", levelId: "main", x: 1, y: 0, width: 1, height: 2 }],
+      },
+      seats: [
+        { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "ADA", levelKey: "main" },
+        { label: "A2", rowLabel: "A", number: 2, x: 2, y: 0, type: "COMPANION", levelKey: "main" },
+      ],
+    };
+    const update = () => request(app.getHttpServer())
       .patch(`/api/v1/cinema/auditoriums/${auditoriumId}/layout`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({
-        name: "Integration Theater",
-        seatMapName: "Integration advanced layout",
-        layout: {
-          mode: "ADVANCED", canvas: { width: 12, height: 8 }, screenPosition: "TOP", seatingStyle: "SINGLE",
-          levels: [{ id: "main", name: "Main floor", sortOrder: 0 }], sections: [],
-          elements: [{ id: "center-aisle", type: "AISLE", levelId: "main", x: 1, y: 0, width: 1, height: 2 }],
-        },
-        seats: [
-          { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "ADA", levelKey: "main" },
-          { label: "A2", rowLabel: "A", number: 2, x: 2, y: 0, type: "COMPANION", levelKey: "main" },
-        ],
-      });
+      .set("Idempotency-Key", requestId)
+      .set("If-Match", "1")
+      .send(payload);
+    const [res, replayed] = await Promise.all([update(), update()]);
     expect(res.status).toBe(200);
+    expect(replayed.status).toBe(200);
+    expect(replayed.body.id).toBe(res.body.id);
     expect(res.body.seatMap.version).toBe(2);
     expect(res.body.seatMap.seats.every((seat: { layoutVersion: number }) => seat.layoutVersion === 2)).toBe(true);
     const after = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
     expect(after.map((seat) => seat.seatId)).toEqual(before.map((seat) => seat.seatId));
     expect(await prisma.seat.count({ where: { seatMap: { auditoriumId }, layoutVersion: 1, active: false } })).toBe(2);
+    expect(await prisma.auditEvent.count({
+      where: { action: "auditorium.layout_version_created", entityId: auditoriumId },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/auditoriums/${auditoriumId}/layout`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .set("If-Match", "1")
+      .send({ ...payload, name: "Different layout details" })
+      .expect(409);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/auditoriums/${auditoriumId}/layout`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .set("If-Match", "1")
+      .send(payload)
+      .expect(409);
   });
 
   it("rejects a showtime before the 15-minute cleaning window has passed", async () => {

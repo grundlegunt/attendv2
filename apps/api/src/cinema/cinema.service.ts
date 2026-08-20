@@ -1760,8 +1760,19 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     actor: RequestActor,
     id: string,
     input: AuditoriumLayoutUpdateInput,
+    requestId: string = randomUUID(),
+    expectedVersionValue?: string,
   ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const expectedVersion = expectedVersionValue === undefined
+      ? null
+      : Number(expectedVersionValue);
+    if (expectedVersion !== null && (!Number.isInteger(expectedVersion) || expectedVersion < 0)) {
+      throw AppError.validationFailed("The auditorium layout version is invalid.");
+    }
     const reservedSeats = input.seats ?? [];
     const layoutErrors =
       input.seatingMode === "GENERAL_ADMISSION"
@@ -1771,9 +1782,48 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       throw AppError.validationFailed("The seat layout is invalid.", {
         errors: layoutErrors,
       });
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, auditoriumId: id, input, expectedVersion }))
+      .digest("hex");
 
     try {
       return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: {
+              in: [
+                "auditorium.layout_version_created",
+                "auditorium.general_admission_configured",
+              ],
+            },
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The auditorium-layout key was already used with different details.",
+            );
+          }
+          const updated = await tx.auditorium.findFirst({
+            where: { id: replay.entityId, locationId, active: true },
+            include: {
+              seatMap: {
+                include: {
+                  seats: {
+                    where: { active: true },
+                    orderBy: [{ y: "asc" }, { x: "asc" }],
+                  },
+                },
+              },
+            },
+          });
+          if (!updated) throw AppError.conflict("The updated auditorium is no longer available.");
+          return updated;
+        }
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
         const auditorium = await tx.auditorium.findFirst({
           where: { id, locationId, active: true },
@@ -1814,6 +1864,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               afterState: {
                 capacity: updated.capacity,
                 seatingMode: updated.seatingMode,
+                requestId,
+                requestFingerprint,
               },
             },
           });
@@ -1830,6 +1882,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             },
           }));
         const beforeVersion = seatMap.version;
+        if (expectedVersion !== null && beforeVersion !== expectedVersion) {
+          throw AppError.conflict(
+            "This auditorium layout changed in another session. Refresh before saving again.",
+          );
+        }
         const nextVersion = beforeVersion + 1;
         await tx.seat.updateMany({
           where: { seatMapId: seatMap.id, active: true },
@@ -1899,6 +1956,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               capacity: reservedSeats.length,
               mode: input.layout!.mode,
               seatingMode: "RESERVED",
+              requestId,
+              requestFingerprint,
             },
           },
         });
