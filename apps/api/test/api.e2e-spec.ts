@@ -1605,6 +1605,36 @@ describe("Milestone 1 cinema configuration", () => {
       .send({ ...payload, description: "Different details." })
       .expect(409);
 
+    const updateRequestId = crypto.randomUUID();
+    const updatePayload = { description: "A managed repertory program with encores." };
+    const update = () => request(app.getHttpServer())
+      .patch(`/api/v1/cinema/film-series/${series.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", updateRequestId)
+      .set("If-Unmodified-Since", series.body.updatedAt)
+      .send(updatePayload);
+    const [updated, updateReplay] = await Promise.all([update(), update()]);
+    expect(updated.status).toBe(200);
+    expect(updateReplay.status).toBe(200);
+    expect(updateReplay.body.id).toBe(updated.body.id);
+    expect(await prisma.auditEvent.count({
+      where: { action: "film_series.updated", entityId: series.body.id },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/film-series/${series.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", updateRequestId)
+      .set("If-Unmodified-Since", series.body.updatedAt)
+      .send({ description: "Different update details." })
+      .expect(409);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/cinema/film-series/${series.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .set("If-Unmodified-Since", series.body.updatedAt)
+      .send({ artworkUrl: "https://example.com/stale-artwork.jpg" })
+      .expect(409);
+
     const assigned = await request(app.getHttpServer())
       .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
@@ -1616,7 +1646,7 @@ describe("Milestone 1 cinema configuration", () => {
     const publicSeries = res.body.series.find((entry: { id: string }) => entry.id === series.body.id);
     expect(publicSeries).toEqual(expect.objectContaining({
       name: "Public Classics",
-      description: "A managed repertory program.",
+      description: "A managed repertory program with encores.",
       artworkUrl: "https://example.com/public-classics.jpg",
     }));
     const movie = publicSeries.movies.find((entry: { id: string }) => entry.id === movieId);

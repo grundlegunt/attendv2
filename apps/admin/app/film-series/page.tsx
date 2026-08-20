@@ -6,6 +6,7 @@ import { apiFetch, ApiRequestError } from "../lib/api-client";
 
 interface FilmSeries {
   id: string;
+  updatedAt: string;
   name: string;
   description: string | null;
   artworkUrl: string | null;
@@ -30,10 +31,12 @@ export default function FilmSeriesPage() {
   const [seriesArtworkUrl, setSeriesArtworkUrl] = useState("");
   const [seriesArtworkError, setSeriesArtworkError] = useState(false);
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
+  const [editingSeriesUpdatedAt, setEditingSeriesUpdatedAt] = useState<string | null>(null);
   const [seriesSaving, setSeriesSaving] = useState(false);
   const [draggedSeriesId, setDraggedSeriesId] = useState<string | null>(null);
   const [dragOverSeriesId, setDragOverSeriesId] = useState<string | null>(null);
   const createSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const updateSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   async function refresh() {
     if (!accessToken) return;
@@ -52,6 +55,7 @@ export default function FilmSeriesPage() {
 
   function resetSeriesForm() {
     setEditingSeriesId(null);
+    setEditingSeriesUpdatedAt(null);
     setSeriesName("");
     setSeriesDescription("");
     setSeriesArtworkUrl("");
@@ -60,6 +64,7 @@ export default function FilmSeriesPage() {
 
   function editSeries(series: FilmSeries) {
     setEditingSeriesId(series.id);
+    setEditingSeriesUpdatedAt(series.updatedAt);
     setSeriesName(series.name);
     setSeriesDescription(series.description ?? "");
     setSeriesArtworkUrl(series.artworkUrl ?? "");
@@ -83,6 +88,10 @@ export default function FilmSeriesPage() {
     if (!editingSeriesId && createSeriesAttemptRef.current?.fingerprint !== body) {
       createSeriesAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     }
+    const updateFingerprint = `${editingSeriesId}:${editingSeriesUpdatedAt}:${body}`;
+    if (editingSeriesId && updateSeriesAttemptRef.current?.fingerprint !== updateFingerprint) {
+      updateSeriesAttemptRef.current = { fingerprint: updateFingerprint, requestId: crypto.randomUUID() };
+    }
     setSeriesSaving(true);
     try {
       await apiFetch(editingSeriesId ? `/cinema/film-series/${editingSeriesId}` : "/cinema/film-series", {
@@ -90,10 +99,20 @@ export default function FilmSeriesPage() {
         method: editingSeriesId ? "PATCH" : "POST",
         ...(!editingSeriesId && createSeriesAttemptRef.current
           ? { headers: { "Idempotency-Key": createSeriesAttemptRef.current.requestId } }
-          : {}),
+          : editingSeriesId && updateSeriesAttemptRef.current
+            ? {
+                headers: {
+                  "Idempotency-Key": updateSeriesAttemptRef.current.requestId,
+                  ...(editingSeriesUpdatedAt
+                    ? { "If-Unmodified-Since": editingSeriesUpdatedAt }
+                    : {}),
+                },
+              }
+            : {}),
         body,
       });
       createSeriesAttemptRef.current = null;
+      updateSeriesAttemptRef.current = null;
       const action = editingSeriesId ? "updated" : "created";
       resetSeriesForm();
       await refresh();
@@ -101,6 +120,7 @@ export default function FilmSeriesPage() {
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) {
         createSeriesAttemptRef.current = null;
+        updateSeriesAttemptRef.current = null;
       }
       showError(reason);
     } finally {
