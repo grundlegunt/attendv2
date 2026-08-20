@@ -2441,15 +2441,46 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       throw AppError.notFound("One or more pairing menu items were not found.");
   }
 
-  async createFilmSeries(actor: RequestActor, input: FilmSeriesInput) {
+  async createFilmSeries(
+    actor: RequestActor,
+    input: FilmSeriesInput,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, input }))
+      .digest("hex");
     try {
       return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
         const location = await tx.location.findUnique({
           where: { id: locationId },
           select: { organizationId: true },
         });
         if (!location) throw AppError.notFound("Location not found.");
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "film_series.created",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The film series idempotency key was already used with different details.",
+            );
+          }
+          const filmSeries = await tx.filmSeries.findFirst({
+            where: { id: replay.entityId, organizationId: location.organizationId },
+          });
+          if (!filmSeries) throw AppError.conflict("The original film series is no longer available.");
+          return filmSeries;
+        }
         const filmSeries = await tx.filmSeries.create({
           data: {
             organizationId: location.organizationId,
@@ -2474,7 +2505,12 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             action: "film_series.created",
             entityType: "FilmSeries",
             entityId: filmSeries.id,
-            afterState: { name: filmSeries.name, active: filmSeries.active },
+            afterState: {
+              name: filmSeries.name,
+              active: filmSeries.active,
+              requestId,
+              requestFingerprint,
+            },
           },
         });
         return filmSeries;

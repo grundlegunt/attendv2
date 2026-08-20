@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 
@@ -33,6 +33,7 @@ export default function FilmSeriesPage() {
   const [seriesSaving, setSeriesSaving] = useState(false);
   const [draggedSeriesId, setDraggedSeriesId] = useState<string | null>(null);
   const [dragOverSeriesId, setDragOverSeriesId] = useState<string | null>(null);
+  const createSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   async function refresh() {
     if (!accessToken) return;
@@ -78,18 +79,29 @@ export default function FilmSeriesPage() {
       setError("Sign in again before adding a film series.");
       return;
     }
+    const body = JSON.stringify({ name, description: seriesDescription.trim() || null, artworkUrl: seriesArtworkUrl.trim() || null });
+    if (!editingSeriesId && createSeriesAttemptRef.current?.fingerprint !== body) {
+      createSeriesAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    }
     setSeriesSaving(true);
     try {
       await apiFetch(editingSeriesId ? `/cinema/film-series/${editingSeriesId}` : "/cinema/film-series", {
         accessToken,
         method: editingSeriesId ? "PATCH" : "POST",
-        body: JSON.stringify({ name, description: seriesDescription.trim() || null, artworkUrl: seriesArtworkUrl.trim() || null }),
+        ...(!editingSeriesId && createSeriesAttemptRef.current
+          ? { headers: { "Idempotency-Key": createSeriesAttemptRef.current.requestId } }
+          : {}),
+        body,
       });
+      createSeriesAttemptRef.current = null;
       const action = editingSeriesId ? "updated" : "created";
       resetSeriesForm();
       await refresh();
       setNotice(`Film series ${action}. It is now available when scheduling a showtime.`);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        createSeriesAttemptRef.current = null;
+      }
       showError(reason);
     } finally {
       setSeriesSaving(false);

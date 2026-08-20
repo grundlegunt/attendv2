@@ -1578,15 +1578,32 @@ describe("Milestone 1 cinema configuration", () => {
   });
 
   it("lists active film series with their explicitly assigned future showtimes", async () => {
-    const series = await request(app.getHttpServer())
+    const { prisma } = await import("@cinema/database");
+    const requestId = crypto.randomUUID();
+    const payload = {
+      name: "Public Classics",
+      description: "A managed repertory program.",
+      artworkUrl: "https://example.com/public-classics.jpg",
+    };
+    const create = () => request(app.getHttpServer())
       .post("/api/v1/cinema/film-series")
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .send({
-        name: "Public Classics",
-        description: "A managed repertory program.",
-        artworkUrl: "https://example.com/public-classics.jpg",
-      });
+      .set("Idempotency-Key", requestId)
+      .send(payload);
+    const [series, replayed] = await Promise.all([create(), create()]);
     expect(series.status).toBe(201);
+    expect(replayed.status).toBe(201);
+    expect(replayed.body.id).toBe(series.body.id);
+    expect(await prisma.filmSeries.count({ where: { id: series.body.id } })).toBe(1);
+    expect(await prisma.auditEvent.count({
+      where: { action: "film_series.created", entityId: series.body.id },
+    })).toBe(1);
+    await request(app.getHttpServer())
+      .post("/api/v1/cinema/film-series")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ ...payload, description: "Different details." })
+      .expect(409);
 
     const assigned = await request(app.getHttpServer())
       .patch(`/api/v1/cinema/showtimes/${secondShowtimeId}`)
