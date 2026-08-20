@@ -2694,6 +2694,65 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async restoreFilmSeries(
+    actor: RequestActor,
+    id: string,
+    requestId: string = randomUUID(),
+  ) {
+    const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const location = await tx.location.findUnique({
+        where: { id: locationId },
+        select: { organizationId: true },
+      });
+      if (!location) throw AppError.notFound("Location not found.");
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "film_series.restored",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const restored = await tx.filmSeries.findFirst({
+          where: {
+            id: replay.entityId,
+            organizationId: location.organizationId,
+            active: true,
+          },
+        });
+        if (!restored) throw AppError.conflict("The restored film series is no longer available.");
+        return restored;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
+      const existing = await tx.filmSeries.findFirst({
+        where: { id, organizationId: location.organizationId, active: false },
+      });
+      if (!existing) throw AppError.notFound("Archived film series not found.");
+      const restored = await tx.filmSeries.update({
+        where: { id },
+        data: { active: true },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: AuditActorType.EMPLOYEE,
+          actorId: actor.sub,
+          locationId,
+          action: "film_series.restored",
+          entityType: "FilmSeries",
+          entityId: id,
+          beforeState: { name: existing.name, active: false },
+          afterState: { name: restored.name, active: true, requestId },
+        },
+      });
+      return restored;
+    });
+  }
+
   async createShowtime(actor: RequestActor, input: ShowtimeInput, requestId: string = randomUUID()) {
     const locationId = this.requireLocation(actor);
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");

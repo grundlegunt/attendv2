@@ -21,3 +21,9 @@ test("film series archiving retains a stable retry identity", () => {
   assert.match(source, /archiveSeriesAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": archiveSeriesAttemptRef\.current\.requestId/);
 });
+
+test("film series restoration retains a stable retry identity", () => {
+  assert.match(source, /restoreSeriesAttemptRef = useRef/);
+  assert.match(source, /film-series\/\$\{series\.id\}\/restore/);
+  assert.match(source, /"Idempotency-Key": restoreSeriesAttemptRef\.current\.requestId/);
+});
