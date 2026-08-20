@@ -100,6 +100,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingModifierName, setEditingModifierName] = useState("");
   const [editingModifierPrice, setEditingModifierPrice] = useState(0);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
+  const updateItemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
@@ -548,32 +549,34 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   async function saveItem(event: FormEvent) {
     event.preventDefault();
     if (!editingItem) return;
+    const body = JSON.stringify({
+      name: editName,
+      description: editDescription || null,
+      imageUrl: editImageUrl || null,
+      priceCents: Math.round(editPrice * 100),
+      chargeCategory: editChargeCategory,
+      ...(editCategoryId !== originalEditCategoryId ? { menuCategoryId: editCategoryId } : {}),
+      ...(editStationId !== originalEditStationId ? { kitchenStationId: editStationId } : {}),
+      sortOrder: editSortOrder,
+      active: editActive,
+      isVegan: editIsVegan,
+      isGlutenFree: editIsGlutenFree,
+    });
+    const fingerprint = `${editingItem.id}:${body}`;
+    if (updateItemAttemptRef.current?.fingerprint !== fingerprint) updateItemAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
       await apiFetch(`/restaurant-menu/items/${editingItem.id}`, {
         method: "PATCH",
         accessToken,
-        body: JSON.stringify({
-          name: editName,
-          description: editDescription || null,
-          imageUrl: editImageUrl || null,
-          priceCents: Math.round(editPrice * 100),
-          chargeCategory: editChargeCategory,
-          ...(editCategoryId !== originalEditCategoryId
-            ? { menuCategoryId: editCategoryId }
-            : {}),
-          ...(editStationId !== originalEditStationId
-            ? { kitchenStationId: editStationId }
-            : {}),
-          sortOrder: editSortOrder,
-          active: editActive,
-          isVegan: editIsVegan,
-          isGlutenFree: editIsGlutenFree,
-        }),
+        headers: { "Idempotency-Key": updateItemAttemptRef.current.requestId },
+        body,
       });
+      updateItemAttemptRef.current = null;
       setEditingItem(null);
       setMessage("Menu item updated.");
       refresh();
     } catch (error) {
+      if (error instanceof ApiRequestError && error.status < 500) updateItemAttemptRef.current = null;
       showError(error, "Menu item could not be updated.");
     }
   }

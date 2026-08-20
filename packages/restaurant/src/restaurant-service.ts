@@ -2,6 +2,7 @@ import {
   FulfillmentTicketStatus,
   KitchenStation,
   MenuCategory,
+  MenuItem,
   Modifier,
   ModifierGroup,
   Prisma,
@@ -587,6 +588,7 @@ export class RestaurantService {
     locationId: string;
     actorId: string;
     menuItemId: string;
+    requestId: string;
     changes: {
       name?: string;
       description?: string | null;
@@ -602,7 +604,18 @@ export class RestaurantService {
       kitchenStationId?: string;
     };
   }) {
+    this.requireRequestId(input.requestId);
+    const requestFingerprint = this.requestFingerprint({ locationId: input.locationId, menuItemId: input.menuItemId, changes: input.changes });
+    const action = input.changes.is86d === undefined ? "menu_item.updated" : "menu_item.86_changed";
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action, afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as (MenuItem & { requestFingerprint?: string }) | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw new RestaurantError("The menu-item update idempotency key was already used with different details.", "CONFLICT");
+        return { id: state.id, menuCategoryId: state.menuCategoryId, kitchenStationId: state.kitchenStationId, name: state.name, description: state.description, imageUrl: state.imageUrl, priceCents: state.priceCents, chargeCategory: state.chargeCategory, isVegan: state.isVegan, isGlutenFree: state.isGlutenFree, active: state.active, is86d: state.is86d, sortOrder: state.sortOrder, createdAt: new Date(state.createdAt), updatedAt: new Date(state.updatedAt) };
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.menuItemId}))`;
       const existing = await tx.menuItem.findFirst({
         where: { id: input.menuItemId, menuCategory: { locationId: input.locationId } },
       });
@@ -638,12 +651,12 @@ export class RestaurantService {
         data: {
           actorType: "EMPLOYEE",
           actorId: input.actorId,
-          action: input.changes.is86d === undefined ? "menu_item.updated" : "menu_item.86_changed",
+          action,
           entityType: "MenuItem",
           entityId: updated.id,
           locationId: input.locationId,
           beforeState: existing,
-          afterState: updated,
+          afterState: { ...updated, requestId: input.requestId, requestFingerprint },
         },
       });
       return updated;
