@@ -212,6 +212,7 @@ export default function AdminPage() {
   const [editingShowtimeUpdatedAt, setEditingShowtimeUpdatedAt] = useState<string | null>(null);
   const showtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const saleStatusAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -1054,16 +1055,37 @@ export default function AdminPage() {
   async function changeSaleStatus() {
     if (!editingShowtimeId) return;
     setError(null);
+    const nextOnSale = !onSale;
+    const fingerprint = `${editingShowtimeId}:${editingShowtimeUpdatedAt}:${nextOnSale}`;
+    if (saleStatusAttemptRef.current?.fingerprint !== fingerprint) {
+      saleStatusAttemptRef.current = {
+        fingerprint,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
-      const nextOnSale = !onSale;
-      await apiFetch(`/cinema/showtimes/${editingShowtimeId}`, {
+      const updated = await apiFetch<CalendarShowtime>(
+        `/cinema/showtimes/${editingShowtimeId}`,
+        {
         accessToken: token ?? undefined,
         method: "PATCH",
         body: JSON.stringify({ onSale: nextOnSale }),
-      });
+          headers: {
+            "Idempotency-Key": saleStatusAttemptRef.current.requestId,
+            ...(editingShowtimeUpdatedAt
+              ? { "If-Unmodified-Since": editingShowtimeUpdatedAt }
+              : {}),
+          },
+        },
+      );
+      saleStatusAttemptRef.current = null;
       setOnSale(nextOnSale);
+      setEditingShowtimeUpdatedAt(updated.updatedAt);
       await refresh();
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        saleStatusAttemptRef.current = null;
+      }
       showError(reason);
     }
   }
