@@ -268,6 +268,7 @@ export function AuditoriumBuilder({
   const createAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const deactivateAuditoriumAttemptRef = useRef<{ auditoriumId: string; requestId: string } | null>(null);
 
   const preview = useMemo(
     () => (mode === "BASIC" ? basicSeats(rows, seatsPerRow) : seats),
@@ -724,12 +725,21 @@ export function AuditoriumBuilder({
       )
     )
       return;
+    if (deactivateAuditoriumAttemptRef.current?.auditoriumId !== editingId) {
+      deactivateAuditoriumAttemptRef.current = {
+        auditoriumId: editingId,
+        requestId: crypto.randomUUID(),
+      };
+    }
     try {
       await apiFetch(`/cinema/auditoriums/${editingId}`, {
         accessToken,
         method: "DELETE",
+        headers: { "Idempotency-Key": deactivateAuditoriumAttemptRef.current.requestId },
       });
+      deactivateAuditoriumAttemptRef.current = null;
       setEditingId("");
+      setEditingVersion(null);
       setName("Theater 1");
       setSeatingMode("RESERVED");
       setGaCapacity(100);
@@ -740,6 +750,9 @@ export function AuditoriumBuilder({
         `${name} was deactivated. Historical records were preserved.`,
       );
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        deactivateAuditoriumAttemptRef.current = null;
+      }
       onError(reason);
     }
   }

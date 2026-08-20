@@ -2080,9 +2080,34 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async deactivateAuditorium(actor: RequestActor, id: string) {
+  async deactivateAuditorium(
+    actor: RequestActor,
+    id: string,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
     return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "auditorium.deactivated",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const deactivated = await tx.auditorium.findFirst({
+          where: { id: replay.entityId, locationId, active: false },
+        });
+        if (!deactivated) {
+          throw AppError.conflict("The original auditorium deactivation can no longer be replayed.");
+        }
+        return deactivated;
+      }
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${id}))`;
       const auditorium = await tx.auditorium.findFirst({
         where: { id, locationId, active: true },
       });
@@ -2112,7 +2137,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             name: auditorium.name,
             capacity: auditorium.capacity,
           },
-          afterState: { active: false },
+          afterState: { active: false, requestId },
         },
       });
       return deactivated;

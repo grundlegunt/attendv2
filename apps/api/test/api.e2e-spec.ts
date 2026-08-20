@@ -2424,10 +2424,22 @@ describe("Milestone 1 cinema configuration", () => {
     expect(await prisma.auditEvent.count({
       where: { action: "movie.archived", entityId: movie.body.id },
     })).toBe(1);
-    await request(app.getHttpServer())
+    const deactivateRequestId = crypto.randomUUID();
+    const deactivate = () => request(app.getHttpServer())
       .delete(`/api/v1/cinema/auditoriums/${auditorium.body.id}`)
       .set("Authorization", `Bearer ${ownerAccessToken}`)
-      .expect(200);
+      .set("Idempotency-Key", deactivateRequestId);
+    const [deactivated, replayedDeactivation] = await Promise.all([
+      deactivate(),
+      deactivate(),
+    ]);
+    expect(deactivated.status).toBe(200);
+    expect(replayedDeactivation.status).toBe(200);
+    expect(replayedDeactivation.body.id).toBe(deactivated.body.id);
+    expect(deactivated.body.active).toBe(false);
+    expect(await prisma.auditEvent.count({
+      where: { action: "auditorium.deactivated", entityId: auditorium.body.id },
+    })).toBe(1);
 
     const bootstrap = await request(app.getHttpServer())
       .get("/api/v1/cinema/admin/bootstrap")

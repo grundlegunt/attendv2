@@ -316,8 +316,12 @@ export class CinemaController {
   @Delete("auditoriums/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.AuditoriumManage)
-  deactivateAuditorium(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
-    return this.cinemaService.deactivateAuditorium(actor, id);
+  deactivateAuditorium(
+    @CurrentActor() actor: RequestActor,
+    @Param("id") id: string,
+    @Headers("idempotency-key") requestId: string | undefined,
+  ) {
+    return this.cinemaService.deactivateAuditorium(actor, id, requestId);
   }
 
   @Post("movies")
