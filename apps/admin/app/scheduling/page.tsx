@@ -216,6 +216,9 @@ export default function AdminPage() {
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const moveShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const groupMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const undoMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
@@ -1225,6 +1228,10 @@ export default function AdminPage() {
         startsAt: nextStartsAt.toISOString(),
       },
     ];
+    const fingerprint = JSON.stringify(move[0]);
+    if (moveShowtimeAttemptRef.current?.fingerprint !== fingerprint) {
+      moveShowtimeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     applyLocalMoves(move);
     try {
       await apiFetch(`/cinema/showtimes/${showtime.id}`, {
@@ -1236,9 +1243,16 @@ export default function AdminPage() {
           startsAt: nextStartsAt.toISOString(),
           onSale: showtime.onSale,
         }),
+        headers: {
+          "Idempotency-Key": moveShowtimeAttemptRef.current.requestId,
+        },
       });
+      moveShowtimeAttemptRef.current = null;
       setUndoMoves(rollback);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        moveShowtimeAttemptRef.current = null;
+      }
       applyLocalMoves(rollback);
       showError(reason);
     }
@@ -1262,15 +1276,26 @@ export default function AdminPage() {
         startsAt: startsAt.toISOString(),
       }),
     );
+    const fingerprint = JSON.stringify(requestedMoves);
+    if (groupMoveAttemptRef.current?.fingerprint !== fingerprint) {
+      groupMoveAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     applyLocalMoves(requestedMoves);
     try {
       await apiFetch("/cinema/showtimes/group", {
         accessToken: token ?? undefined,
         method: "PATCH",
         body: JSON.stringify({ moves: requestedMoves }),
+        headers: {
+          "Idempotency-Key": groupMoveAttemptRef.current.requestId,
+        },
       });
+      groupMoveAttemptRef.current = null;
       setUndoMoves(rollback);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        groupMoveAttemptRef.current = null;
+      }
       applyLocalMoves(rollback);
       showError(reason);
     }
@@ -1285,6 +1310,10 @@ export default function AdminPage() {
         undoMoves.some((move) => move.showtimeId === showtime.id),
       ),
     );
+    const fingerprint = JSON.stringify(undoMoves);
+    if (undoMoveAttemptRef.current?.fingerprint !== fingerprint) {
+      undoMoveAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }
     applyLocalMoves(undoMoves);
     try {
       if (undoMoves.length === 1) {
@@ -1296,16 +1325,26 @@ export default function AdminPage() {
             auditoriumId: move.auditoriumId,
             startsAt: move.startsAt,
           }),
+          headers: {
+            "Idempotency-Key": undoMoveAttemptRef.current.requestId,
+          },
         });
       } else {
         await apiFetch("/cinema/showtimes/group", {
           accessToken: token ?? undefined,
           method: "PATCH",
           body: JSON.stringify({ moves: undoMoves }),
+          headers: {
+            "Idempotency-Key": undoMoveAttemptRef.current.requestId,
+          },
         });
       }
+      undoMoveAttemptRef.current = null;
       setUndoMoves(null);
     } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) {
+        undoMoveAttemptRef.current = null;
+      }
       applyLocalMoves(rollback);
       showError(reason);
     } finally {

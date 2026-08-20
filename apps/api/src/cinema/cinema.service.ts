@@ -2997,10 +2997,52 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  async moveShowtimeGroup(actor: RequestActor, input: MoveShowtimeGroupInput) {
+  async moveShowtimeGroup(
+    actor: RequestActor,
+    input: MoveShowtimeGroupInput,
+    requestId: string = randomUUID(),
+  ) {
     const locationId = this.requireLocation(actor);
-    return prisma.$transaction(
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requestFingerprint = createHash("sha256")
+      .update(JSON.stringify({ locationId, moves: input.moves }))
+      .digest("hex");
+    const moveAttempt = () => prisma.$transaction(
       async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+        const replay = await tx.auditEvent.findFirst({
+          where: {
+            locationId,
+            action: "showtime.group_moved",
+            afterState: { path: ["requestId"], equals: requestId },
+          },
+        });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) {
+            throw AppError.conflict(
+              "The showtime-move key was already used with different details.",
+            );
+          }
+          const showtimes = await tx.showtime.findMany({
+            where: {
+              id: { in: input.moves.map((move) => move.showtimeId) },
+              auditorium: { locationId },
+            },
+            include: {
+              movie: true,
+              auditorium: true,
+              priceTier: true,
+              filmSeries: true,
+            },
+          });
+          if (showtimes.length !== input.moves.length) {
+            throw AppError.conflict("One or more moved showtimes are no longer available.");
+          }
+          return { showtimes };
+        }
         const ids = input.moves.map((move) => move.showtimeId);
         const existing = await tx.showtime.findMany({
           where: { id: { in: ids }, auditorium: { locationId } },
@@ -3187,6 +3229,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
                 startsAt: move.startsAt.toISOString(),
                 roomReadyAt: move.roomReadyAt.toISOString(),
                 groupSize: proposed.length,
+                requestId,
+                requestFingerprint,
               },
             },
           });
@@ -3195,6 +3239,17 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await moveAttempt();
+      } catch (error) {
+        const serializationFailure =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034";
+        if (!serializationFailure || attempt === 2) throw error;
+      }
+    }
+    throw AppError.conflict("The showtime move could not be completed. Try again.");
   }
 
   async removeShowtime(
