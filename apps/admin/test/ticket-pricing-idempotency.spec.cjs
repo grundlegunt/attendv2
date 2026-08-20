@@ -16,3 +16,8 @@ test("price-group updates use a stable retry identity", () => {
   assert.match(source, /updatePriceAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": updatePriceAttemptRef\.current\.requestId/);
 });
+
+test("admission-type updates use a stable retry identity", () => {
+  assert.match(source, /updateTicketTypeAttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": updateTicketTypeAttemptRef\.current\.requestId/);
+});

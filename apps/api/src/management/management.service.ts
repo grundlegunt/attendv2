@@ -124,9 +124,19 @@ export class ManagementService {
     });
   }
 
-  async updateTicketType(input: { locationId: string; employeeId: string; ticketTypeId: string; name?: string; priceAdjustmentMinor?: number; active?: boolean }) {
+  async updateTicketType(input: { locationId: string; employeeId: string; ticketTypeId: string; requestId: string; name?: string; priceAdjustmentMinor?: number; active?: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     return prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.locationId}))`;
+      const requestFingerprint = createHash("sha256").update(JSON.stringify({ ticketTypeId: input.ticketTypeId, name: input.name, priceAdjustmentMinor: input.priceAdjustmentMinor, active: input.active })).digest("hex");
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "ticket.type_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The admission-type idempotency key was already used with different details.");
+        const ticketType = await tx.ticketType.findFirst({ where: { id: replay.entityId, locationId: input.locationId } });
+        if (!ticketType) throw AppError.conflict("The updated admission type is no longer available.");
+        return ticketType;
+      }
       const before = await tx.ticketType.findFirst({ where: { id: input.ticketTypeId, locationId: input.locationId } });
       if (!before) throw AppError.notFound("Ticket type not found.");
       if (input.name && input.name.toLocaleLowerCase() !== before.name.toLocaleLowerCase()) {
@@ -138,7 +148,7 @@ export class ManagementService {
         if (activeCount <= 1) throw AppError.conflict("At least one ticket type must remain active for checkout.");
       }
       const updated = await tx.ticketType.update({ where: { id: before.id }, data: { name: input.name, priceAdjustmentMinor: input.priceAdjustmentMinor, active: input.active } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.type_updated", entityType: "TicketType", entityId: updated.id, beforeState: { name: before.name, priceAdjustmentMinor: before.priceAdjustmentMinor, active: before.active }, afterState: { name: updated.name, priceAdjustmentMinor: updated.priceAdjustmentMinor, active: updated.active } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.type_updated", entityType: "TicketType", entityId: updated.id, beforeState: { name: before.name, priceAdjustmentMinor: before.priceAdjustmentMinor, active: before.active }, afterState: { requestId: input.requestId, requestFingerprint, name: updated.name, priceAdjustmentMinor: updated.priceAdjustmentMinor, active: updated.active } } });
       return updated;
     });
   }

@@ -122,7 +122,7 @@ export class ManagementController {
   createTicketType(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(ticketTypeSchema)) body: unknown) { return this.management.createTicketType({ ...ticketTypeSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/ticket-types/:ticketTypeId") @RequirePermissions(Permission.TicketPriceEdit)
-  updateTicketType(@CurrentActor() actor: RequestActor, @Param("ticketTypeId") ticketTypeId: string, @Body(new ZodValidationPipe(ticketTypeUpdateSchema)) body: unknown) { return this.management.updateTicketType({ ...ticketTypeUpdateSchema.parse(body), ticketTypeId, locationId: this.location(actor), employeeId: actor.sub }); }
+  updateTicketType(@CurrentActor() actor: RequestActor, @Param("ticketTypeId") ticketTypeId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(ticketTypeUpdateSchema)) body: unknown) { return this.management.updateTicketType({ ...ticketTypeUpdateSchema.parse(body), ticketTypeId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Post("settings/tax-rules") @RequirePermissions(Permission.MenuEdit)
   tax(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(taxSchema)) body: unknown) { return this.management.createTaxRule({ ...taxSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }

@@ -2021,6 +2021,28 @@ describe("Milestone 1 cinema configuration", () => {
     await prisma.priceTier.delete({ where: { id: created.body.id } });
   });
 
+  it("replays a concurrent admission-type update once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/management/settings/ticket-types")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .send({ name: `Admission update replay ${crypto.randomUUID()}`, priceAdjustmentMinor: -100 })
+      .expect(201);
+    const requestId = crypto.randomUUID();
+    const submit = () => request(app.getHttpServer())
+      .patch(`/api/v1/management/settings/ticket-types/${created.body.id}`)
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send({ priceAdjustmentMinor: -150 });
+    const [first, replay] = await Promise.all([submit(), submit()]);
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(first.body).toEqual(replay.body);
+    expect(first.body.priceAdjustmentMinor).toBe(-150);
+    expect(await prisma.auditEvent.count({ where: { action: "ticket.type_updated", entityId: created.body.id } })).toBe(1);
+    await prisma.ticketType.delete({ where: { id: created.body.id } });
+  });
+
   it("lets managers update and deactivate restaurant charge rules", async () => {
     const tax = await request(app.getHttpServer())
       .post("/api/v1/management/settings/tax-rules")
