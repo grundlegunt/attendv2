@@ -16,6 +16,11 @@ test("menu item updates retain a stable retry identity", () => {
   assert.match(source, /"Idempotency-Key": updateItemAttemptRef\.current\.requestId/);
 });
 
+test("menu item 86 toggles retain a stable retry identity", () => {
+  assert.match(source, /toggle86AttemptRef = useRef/);
+  assert.match(source, /"Idempotency-Key": toggle86AttemptRef\.current\.requestId/);
+});
+
 test("menu structure creation retains stable retry identities", () => {
   assert.match(source, /categoryAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": categoryAttemptRef\.current\.requestId/);
