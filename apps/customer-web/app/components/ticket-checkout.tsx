@@ -420,7 +420,7 @@ export function TicketCheckout({
   async function finalizeOrder(orderId: string) {
     const completed = await apiFetch<TicketConfirmationResponse>(
       `/ticketing/orders/${orderId}/finalize`,
-      { method: "POST", body: "{}" },
+      { method: "POST", body: JSON.stringify({ holderKey }) },
     );
     window.sessionStorage.removeItem(checkoutStorageKey);
     if (!accountRecognized) {

@@ -3193,6 +3193,15 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .set("Idempotency-Key", idempotencyKey)
       .send({ holderKey: `wrong-holder-${crypto.randomUUID()}` })
       .expect(404);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+      .send({ holderKey: `wrong-holder-${crypto.randomUUID()}` })
+      .expect(404);
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+      .send({ holderKey })
+      .expect(402);
   });
 
   it("applies and refunds a gift card during online checkout", async () => {
@@ -3213,7 +3222,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { TestPaymentProvider } = await import("@cinema/payments");
     const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
-    await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({}).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({ holderKey }).expect(201);
     expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(0);
 
     await request(app.getHttpServer()).post(`/api/v1/management/refunds/ticket-orders/${checkout.body.orderId}`)
@@ -3236,7 +3245,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(checkout.body.giftCardCents).toBe(checkout.body.totalCents);
     expect(checkout.body.payment).toBeNull();
 
-    const finalized = await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({}).expect(201);
+    const finalized = await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({ holderKey }).expect(201);
     expect(finalized.body.status).toBe("PAID");
     expect(finalized.body.tickets).toHaveLength(1);
     const giftCard = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: { where: { type: "REDEMPTION" } } } });
@@ -3296,7 +3305,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const finalized = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
-      .send({})
+      .send({ holderKey })
       .expect(201);
 
     expect(finalized.body.status).toBe("PAID");
@@ -3352,10 +3361,10 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const [first, second] = await Promise.all([
       request(app.getHttpServer())
         .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
-        .send({}),
+        .send({ holderKey }),
       request(app.getHttpServer())
         .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
-        .send({}),
+        .send({ holderKey }),
     ]);
 
     expect(first.status).toBe(201);
@@ -3525,10 +3534,10 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const first = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     const replay = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(first.status).toBe(201);
     expect(replay.status).toBe(201);
     expect(first.body.status).toBe("PAID");
@@ -3601,7 +3610,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const confirmation = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
-      .send({})
+      .send({ holderKey })
       .expect(201);
     expect(confirmation.body.tickets.map((ticket: { ticketType: string }) => ticket.ticketType).sort())
       .toEqual([adult.name, child.name].sort());
@@ -3646,7 +3655,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const finalized = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({})
+      .send({ holderKey })
       .expect(201);
 
     expect(finalized.body).toMatchObject({
@@ -3693,7 +3702,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const failedDelivery = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({})
+      .send({ holderKey })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
@@ -3751,10 +3760,10 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const [first, second] = await Promise.all([
       request(app.getHttpServer())
         .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-        .send({}),
+        .send({ holderKey }),
       request(app.getHttpServer())
         .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-        .send({}),
+        .send({ holderKey }),
     ]);
 
     expect(first.status).toBe(201);
@@ -3801,7 +3810,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const claimed = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({})
+      .send({ holderKey })
       .expect(201);
     expect(claimed.body.receiptDelivery).toBe("NOT_REQUESTED");
     expect(sendReceipt).not.toHaveBeenCalled();
@@ -3812,7 +3821,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     });
     const recovered = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({})
+      .send({ holderKey })
       .expect(201);
 
     expect(recovered.body.receiptDelivery).toBe("SENT");
@@ -3883,13 +3892,13 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     provider.setIntentStatus(checkout.payment.providerPaymentId, "FAILED");
     const declined = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(declined.status).toBe(402);
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const retried = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(retried.status).toBe(201);
     expect(retried.body.status).toBe("PAID");
   });
@@ -3913,7 +3922,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
     const payment = await prisma.payment.findFirstOrThrow({
       where: { ticketOrderId: checkout.orderId },
@@ -3946,7 +3955,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
     expect(
       await prisma.auditEvent.count({
@@ -3981,7 +3990,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
 
     const afterFailure = await prisma.payment.findFirstOrThrow({
@@ -4094,7 +4103,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const mismatched = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(mismatched.status).toBe(409);
     expect(mismatched.body.code).toBe("CONFLICT");
     expect(mismatched.body.details?.reason).toBe("PAYMENT_VERIFICATION_FAILED");
@@ -4118,7 +4127,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const healed = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(healed.status).toBe(201);
     expect(healed.body.status).toBe("PAID");
 
@@ -4148,7 +4157,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const first = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(first.status).toBe(409);
 
     const afterFirstRefund = await prisma.payment.findFirstOrThrow({
@@ -4164,7 +4173,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     // to SUCCEEDED.
     const second = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(second.status).toBe(409);
 
     const afterSecond = await prisma.payment.findFirstOrThrow({
@@ -4198,10 +4207,10 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const [first, second] = await Promise.all([
       request(app.getHttpServer())
         .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-        .send({}),
+        .send({ holderKey }),
       request(app.getHttpServer())
         .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-        .send({}),
+        .send({ holderKey }),
     ]);
     expect(first.status).toBe(409);
     expect(second.status).toBe(409);
@@ -4259,7 +4268,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const finalize = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(finalize.status).toBe(201);
     expect(finalize.body.status).toBe("PAID");
 
@@ -4313,7 +4322,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
 
     const payment = await prisma.payment.findFirstOrThrow({
@@ -4357,7 +4366,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
 
     const pending = await prisma.payment.findFirstOrThrow({
@@ -4427,7 +4436,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
 
     const pending = await prisma.payment.findFirstOrThrow({
@@ -4509,7 +4518,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
 
     const afterFailure = await prisma.payment.findFirstOrThrow({
@@ -4615,7 +4624,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     // webhook must not have left it stuck in some unrecoverable state.
     const finalize = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(finalize.status).toBe(201);
     expect(finalize.body.status).toBe("PAID");
   });
@@ -4642,7 +4651,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
 
     const result = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(result.status).toBe(409);
 
     const pending = await prisma.payment.findFirstOrThrow({
@@ -4710,7 +4719,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const finalize = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(finalize.status).toBe(201);
     expect(finalize.body.status).toBe("PAID");
 
@@ -4754,7 +4763,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const finalize = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(finalize.status).toBe(201);
     expect(finalize.body.status).toBe("PAID");
 
@@ -5384,7 +5393,7 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const confirmation = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
-      .send({});
+      .send({ holderKey });
     expect(confirmation.status).toBe(201);
     expect(confirmation.body.diningAuthorization)
       .toBe(authorizeDining ? "AUTHORIZED" : "DECLINED");

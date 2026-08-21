@@ -929,6 +929,20 @@ export class TicketingService {
     }
   }
 
+  async finalizeGuestOrder(orderId: string, holderKey: string) {
+    if (!holderKey || holderKey.length < 16) {
+      throw TicketingError.validation("A valid checkout session is required.");
+    }
+    const order = await this.prisma.ticketOrder.findUnique({
+      where: { id: orderId },
+      select: { holderKey: true },
+    });
+    if (!order || order.holderKey !== holderKey) {
+      throw TicketingError.notFound("Ticket order was not found.");
+    }
+    return this.finalizeOrder(orderId);
+  }
+
   async resendGuestReceipt(orderId: string, holderKey: string) {
     const order = await this.prisma.ticketOrder.findFirst({
       where: {
