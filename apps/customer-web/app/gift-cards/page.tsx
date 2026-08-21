@@ -12,6 +12,7 @@ type StripeElement = { mount(target: HTMLElement): void; unmount(): void; on(eve
 type StripeElements = { create(type: "payment"): StripeElement };
 type StripeClient = { elements(options: { clientSecret: string; appearance?: Record<string, unknown> }): StripeElements; confirmPayment(options: { elements: StripeElements; redirect: "if_required"; confirmParams: { receipt_email: string } }): Promise<{ error?: { message?: string } }> };
 const PURCHASE_STORAGE_KEY = "attend-gift-card-purchase";
+const PAYMENT_STATUS_POLL_LIMIT = 10;
 
 function money(cents: number, currency: string) { return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100); }
 function stripeFactory() { return (window as unknown as { Stripe?: (key: string, options?: { stripeAccount?: string }) => StripeClient }).Stripe; }
@@ -50,8 +51,13 @@ export default function GiftCardsPage() {
     apiFetch<Purchase>("/gift-card-purchases/resume", { method: "POST", headers: { "Idempotency-Key": storedKey }, body: "{}" })
       .then(async (initialResume) => {
         let resumed = initialResume;
+        let processingPolls = 0;
         while (active && resumed.payment.status === "PROCESSING") {
           setPurchase(resumed);
+          if (processingPolls >= PAYMENT_STATUS_POLL_LIMIT) {
+            throw new Error("Payment is still processing. Please wait a moment, then refresh this page.");
+          }
+          processingPolls += 1;
           await new Promise((resolve) => window.setTimeout(resolve, 2_000));
           if (!active) return;
           resumed = await apiFetch<Purchase>("/gift-card-purchases/resume", { method: "POST", headers: { "Idempotency-Key": storedKey }, body: "{}" });

@@ -91,6 +91,8 @@ interface StripeClient {
   }): Promise<{ error?: { message?: string } }>;
 }
 
+const PAYMENT_STATUS_POLL_LIMIT = 10;
+
 declare global {
   interface Window {
     Stripe?: (
@@ -359,9 +361,15 @@ export function TicketCheckout({
       body: JSON.stringify({ holderKey }),
     }).then(async (initialResume) => {
       let resumed = initialResume;
+      let processingPolls = 0;
       while (active && resumed.payment?.status === "PROCESSING") {
         paymentConfirmedRef.current = true;
         setPaymentConfirmed(true);
+        if (processingPolls >= PAYMENT_STATUS_POLL_LIMIT) {
+          setCheckout(resumed);
+          throw new Error("Payment is still processing. Please wait a moment, then refresh this page.");
+        }
+        processingPolls += 1;
         await new Promise((resolve) => window.setTimeout(resolve, 2_000));
         if (!active) return;
         resumed = await apiFetch<TicketCheckoutResponse>("/ticketing/checkouts/resume", {
