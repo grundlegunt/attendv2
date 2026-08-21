@@ -8,16 +8,37 @@ export interface StoredPlatformSession {
 
 let refreshInFlight: Promise<StoredPlatformSession | null> | null = null;
 
+function isPlatformSession(value: unknown): value is StoredPlatformSession {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const session = value as Partial<StoredPlatformSession>;
+  const role = session.user?.role;
+  return typeof session.accessToken === "string"
+    && typeof session.refreshToken === "string"
+    && typeof session.user?.id === "string"
+    && typeof session.user.name === "string"
+    && typeof session.user.email === "string"
+    && Boolean(role && ["OWNER", "OPERATOR", "VIEWER"].includes(role));
+}
+
+async function readJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export function readPlatformSession(storageKey: string): StoredPlatformSession | null {
   const stored = window.sessionStorage.getItem(storageKey);
   if (!stored) return null;
   try {
-    const value = JSON.parse(stored) as Partial<StoredPlatformSession>;
-    const role = value.user?.role;
-    if (typeof value.accessToken !== "string" || typeof value.refreshToken !== "string" || typeof value.user?.id !== "string" || typeof value.user.name !== "string" || typeof value.user.email !== "string" || !role || !["OWNER", "OPERATOR", "VIEWER"].includes(role)) {
+    const value: unknown = JSON.parse(stored);
+    if (!isPlatformSession(value)) {
       throw new Error("Stored Attend Master session is incompatible.");
     }
-    return value as StoredPlatformSession;
+    return value;
   } catch {
     window.sessionStorage.removeItem(storageKey);
     return null;
@@ -41,7 +62,11 @@ async function platformResponse(apiBaseUrl: string, storageKey: string, path: st
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken: session.refreshToken }),
         })
-        .then(async (refreshed) => refreshed.ok ? await refreshed.json() as StoredPlatformSession : null)
+        .then(async (refreshed) => {
+          if (!refreshed.ok) return null;
+          const value = await readJson(refreshed);
+          return isPlatformSession(value) ? value : null;
+        })
         .finally(() => { refreshInFlight = null; });
       const next = await refreshInFlight;
       if (next) {
@@ -53,15 +78,23 @@ async function platformResponse(apiBaseUrl: string, storageKey: string, path: st
     }
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(typeof body.message === "string" ? body.message : "Request failed.");
+    const body = await readJson(response);
+    const message = body && typeof body === "object" && !Array.isArray(body)
+      && typeof (body as { message?: unknown }).message === "string"
+      && (body as { message: string }).message.trim()
+      ? (body as { message: string }).message
+      : response.statusText.trim() || `Request failed with status ${response.status}.`;
+    throw new Error(message);
   }
   return response;
 }
 
 export async function platformRequest<T>(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string): Promise<T> {
   const response = await platformResponse(apiBaseUrl, storageKey, path, init, accessToken);
-  return response.json() as Promise<T>;
+  if (response.status === 204) return undefined as T;
+  const body = await readJson(response);
+  if (body === null) throw new Error("The server returned an invalid response. Please try again.");
+  return body as T;
 }
 
 export async function platformDownload(apiBaseUrl: string, storageKey: string, path: string, accessToken: string) {
