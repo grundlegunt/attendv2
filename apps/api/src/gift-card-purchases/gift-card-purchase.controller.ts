@@ -19,8 +19,12 @@ export class GiftCardPurchaseController {
   }
 
   @Post(":purchaseId/finalize")
-  finalize(@Param("purchaseId") purchaseId: string) { return this.purchases.finalize(purchaseId); }
+  finalize(@Param("purchaseId") purchaseId: string, @Headers("idempotency-key") purchaseKey: string | undefined) {
+    return this.purchases.finalize(purchaseId, purchaseKey ?? "");
+  }
 
   @Post(":purchaseId/delivery")
-  deliver(@Param("purchaseId") purchaseId: string) { return this.purchases.deliver(purchaseId); }
+  deliver(@Param("purchaseId") purchaseId: string, @Headers("idempotency-key") purchaseKey: string | undefined) {
+    return this.purchases.deliverAuthorized(purchaseId, purchaseKey ?? "");
+  }
 }

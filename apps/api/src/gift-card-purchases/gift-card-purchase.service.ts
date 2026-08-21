@@ -111,8 +111,9 @@ export class GiftCardPurchaseService {
     return prisma.giftCardPurchase.findUniqueOrThrow({ where: { id }, include: { payment: true, location: { include: { organization: true } } } });
   }
 
-  async finalize(purchaseId: string) {
+  async finalize(purchaseId: string, purchaseKey: string) {
     const purchase = await this.purchaseWithPayment(purchaseId);
+    this.assertPurchaseAccess(purchase.idempotencyKey, purchaseKey);
     if (!purchase.payment.providerPaymentId) throw AppError.notFound("Gift card purchase was not found.");
     const intent = await this.provider.retrievePaymentIntent({ connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, paymentIntentId: purchase.payment.providerPaymentId });
     if (intent.status !== "SUCCEEDED") throw AppError.paymentRequired(intent.failureMessage ?? "Payment has not completed.");
@@ -152,6 +153,22 @@ export class GiftCardPurchaseService {
       const message = error instanceof Error ? error.message : "Unknown delivery error";
       await prisma.$transaction([prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { status: "DELIVERY_FAILED", deliveryClaimedAt: null, deliveryError: message } }), prisma.auditEvent.create({ data: { actorType: "SYSTEM", locationId: purchase.locationId, action: "gift_card.delivery_failed", entityType: "GiftCardPurchase", entityId: purchase.id, afterState: { recipientEmail: purchase.recipientEmail, error: message } } })]);
       return { status: "DELIVERY_FAILED" };
+    }
+  }
+
+  async deliverAuthorized(purchaseId: string, purchaseKey: string) {
+    const purchase = await prisma.giftCardPurchase.findUnique({
+      where: { id: purchaseId },
+      select: { idempotencyKey: true },
+    });
+    if (!purchase) throw AppError.notFound("Gift card purchase was not found.");
+    this.assertPurchaseAccess(purchase.idempotencyKey, purchaseKey);
+    return this.deliver(purchaseId);
+  }
+
+  private assertPurchaseAccess(expectedKey: string, purchaseKey: string) {
+    if (purchaseKey.length < 16 || expectedKey !== purchaseKey) {
+      throw AppError.notFound("Gift card purchase was not found.");
     }
   }
 
