@@ -5117,6 +5117,17 @@ describe("Customer authentication", () => {
       expect.stringMatching(/^attend_customer_refresh=;.*Expires=/),
     ]));
 
+    const replay = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/logout")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", `${accessCookie}; ${refreshCookie}`)
+      .send();
+    expect(replay.status).toBe(204);
+    expect(setCookieHeaders(replay)).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^attend_customer_access=;.*Expires=/),
+      expect.stringMatching(/^attend_customer_refresh=;.*Expires=/),
+    ]));
+
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/refresh")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
