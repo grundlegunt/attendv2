@@ -19,3 +19,12 @@ test("gift-card checkout stops polling while preserving the resumable purchase",
   assert.match(giftCards, /setPurchase\(resumed\)/);
   assert.match(giftCards, /Payment is still processing\. Please wait a moment, then refresh this page\./);
 });
+
+test("ticket checkout re-enables confirmation when processing becomes retryable", () => {
+  const retryableBranch = checkout.match(
+    /if \(resumed\.payment\?\.clientSecret\) \{([\s\S]*?)await initializePayment\(resumed\);/,
+  );
+  assert.ok(retryableBranch);
+  assert.match(retryableBranch[1], /paymentConfirmedRef\.current = false/);
+  assert.match(retryableBranch[1], /setPaymentConfirmed\(false\)/);
+});
