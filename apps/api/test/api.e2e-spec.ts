@@ -595,8 +595,9 @@ describe("Staff authentication", () => {
       .post("/api/v1/auth/staff/mfa/setup")
       .set("Authorization", `Bearer ${ownerAccessToken}`);
     try {
-      const first = await beginSetup().expect(200);
-      const replay = await beginSetup().expect(200);
+      const [first, replay] = await Promise.all([beginSetup(), beginSetup()]);
+      expect(first.status).toBe(200);
+      expect(replay.status).toBe(200);
       expect(replay.body).toEqual(first.body);
       expect(first.body.secret).toEqual(expect.any(String));
       expect(first.body.uri).toContain(encodeURIComponent(`owner@${SEED_SUFFIX}`));
