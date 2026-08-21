@@ -11,6 +11,44 @@ export class ApiRequestError extends Error {
   }
 }
 
+function fallbackError(status: number, statusText: string): ApiErrorBody {
+  return {
+    code: "INTERNAL_ERROR",
+    message: statusText.trim() || `Request failed with status ${status}.`,
+  };
+}
+
+function parseErrorBody(text: string, status: number, statusText: string): ApiErrorBody {
+  if (!text) return fallbackError(status, statusText);
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (
+      parsed
+      && typeof parsed === "object"
+      && !Array.isArray(parsed)
+      && typeof (parsed as { code?: unknown }).code === "string"
+      && typeof (parsed as { message?: unknown }).message === "string"
+      && (parsed as { message: string }).message.trim()
+    ) {
+      return parsed as ApiErrorBody;
+    }
+  } catch {
+    // Gateways can return an HTML/text outage response instead of the API shape.
+  }
+  return fallbackError(status, statusText);
+}
+
+function parseSuccessBody<T>(text: string, status: number): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new ApiRequestError(status, {
+      code: "INTERNAL_ERROR",
+      message: "The server returned an invalid response. Please try again.",
+    });
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init?: RequestInit & { accessToken?: string },
@@ -22,10 +60,10 @@ export async function apiFetch<T>(
   const res = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
 
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({ code: "INTERNAL_ERROR", message: res.statusText }))) as ApiErrorBody;
+    const body = parseErrorBody(await res.text(), res.status, res.statusText);
     throw new ApiRequestError(res.status, body);
   }
 
   if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return parseSuccessBody<T>(await res.text(), res.status);
 }
