@@ -31,14 +31,27 @@ export default function GiftCardsPage() {
   const [pending, setPending] = useState(false);
   const [code, setCode] = useState("");
   const [balance, setBalance] = useState<Balance | null>(null);
+  const [balancePending, setBalancePending] = useState(false);
   const [error, setError] = useState("");
   const [configError, setConfigError] = useState("");
   const [configAttempt, setConfigAttempt] = useState(0);
   const paymentRef = useRef<HTMLDivElement>(null);
   const purchaseKey = useRef<string | null>(null);
   const resumeAttempted = useRef(false);
+  const balanceRequestRef = useRef<AbortController | null>(null);
 
-  useEffect(() => { setConfigError(""); apiFetch<Config>("/gift-card-purchases/config").then(setConfig).catch(() => setConfigError("Gift card purchasing is temporarily unavailable.")); }, [configAttempt]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setConfig(null);
+    setConfigError("");
+    apiFetch<Config>("/gift-card-purchases/config", { signal: controller.signal })
+      .then(setConfig)
+      .catch(() => {
+        if (!controller.signal.aborted) setConfigError("Gift card purchasing is temporarily unavailable.");
+      });
+    return () => controller.abort();
+  }, [configAttempt]);
+  useEffect(() => () => balanceRequestRef.current?.abort(), []);
   useEffect(() => { if (!elements || !paymentRef.current) return; const element = elements.create("payment"); element.on("ready", () => setPaymentReady(true)); element.mount(paymentRef.current); return () => element.unmount(); }, [elements]);
   useEffect(() => {
     if (!config || resumeAttempted.current) return;
@@ -110,7 +123,38 @@ export default function GiftCardsPage() {
       window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY);
     } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
   }
-  async function checkBalance(event: FormEvent) { event.preventDefault(); setError(""); setBalance(null); try { setBalance(await apiFetch<Balance>("/cinema/gift-cards/balance", { method: "POST", body: JSON.stringify({ code }) })); } catch (reason) { setError(failure(reason)); } }
+  async function checkBalance(event: FormEvent) {
+    event.preventDefault();
+    if (balanceRequestRef.current) return;
+    const controller = new AbortController();
+    balanceRequestRef.current = controller;
+    setBalancePending(true);
+    setError("");
+    setBalance(null);
+    try {
+      const next = await apiFetch<Balance>("/cinema/gift-cards/balance", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+        signal: controller.signal,
+      });
+      if (balanceRequestRef.current === controller) setBalance(next);
+    } catch (reason) {
+      if (!controller.signal.aborted) setError(failure(reason));
+    } finally {
+      if (balanceRequestRef.current === controller) {
+        balanceRequestRef.current = null;
+        setBalancePending(false);
+      }
+    }
+  }
+  function changeBalanceCode(value: string) {
+    balanceRequestRef.current?.abort();
+    balanceRequestRef.current = null;
+    setBalancePending(false);
+    setBalance(null);
+    setError("");
+    setCode(value.toUpperCase());
+  }
 
-  return <main className="cinema-shell route-page"><section className="route-heading"><span className="eyebrow">GIFT CARDS</span><h1>Give a night at the movies</h1><p>Purchase a gift card for delivery to someone special, or check an existing balance.</p></section>{confirmation ? <section className="content-panel"><h2>Gift card purchased</h2><p>{money(confirmation.amountCents, confirmation.currency)} is ready for {recipientEmail}.</p>{confirmation.code && <div className="configuration-note"><strong>{confirmation.code}</strong><p>Save this code now. Email delivery will also send it to the recipient.</p></div>}</section> : !purchase ? <form className="private-event-form content-panel" onSubmit={startPurchase}><h2>Purchase a gift card</h2><label>Amount<input type="number" min="5" max="1000" step="0.01" required value={amount} onChange={(event) => changePurchaseDetail(setAmount, event.target.value)} /></label><label>Your email<input type="email" required value={buyerEmail} onChange={(event) => changePurchaseDetail(setBuyerEmail, event.target.value)} /></label><label>Recipient name<input value={recipientName} maxLength={120} onChange={(event) => changePurchaseDetail(setRecipientName, event.target.value)} /></label><label>Recipient email<input type="email" required value={recipientEmail} onChange={(event) => changePurchaseDetail(setRecipientEmail, event.target.value)} /></label><label>Message<textarea maxLength={500} value={message} onChange={(event) => changePurchaseDetail(setMessage, event.target.value)} /></label><button className="primary" disabled={pending || !config?.payment.ready}>{pending ? "Preparing checkout…" : "Continue to payment"}</button>{configError && <><p className="error-banner">{configError}</p><button className="primary" type="button" onClick={() => setConfigAttempt((attempt) => attempt + 1)}>Retry gift card setup</button></>}</form> : <form className="content-panel" onSubmit={pay}><h2>Secure payment</h2><p>{money(purchase.amountCents, purchase.currency)} gift card for {recipientEmail}</p><div ref={paymentRef} /><button className="primary" disabled={pending || !paymentReady}>{pending ? "Completing purchase…" : `Pay ${money(purchase.amountCents, purchase.currency)}`}</button></form>}{error && <p className="error-banner">{error}</p>}<form className="private-event-form content-panel" onSubmit={checkBalance}><h2>Check a balance</h2><label>Gift card code<input required minLength={20} maxLength={40} autoComplete="off" value={code} onChange={(event) => setCode(event.target.value.toUpperCase())} placeholder="ATGC-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" /></label><button className="primary">Check balance</button>{balance && <div className="configuration-note"><strong>{money(balance.balanceCents, balance.currency)}</strong><p>Available on gift card ending in {balance.codeLast4}.</p></div>}</form></main>;
+  return <main className="cinema-shell route-page"><section className="route-heading"><span className="eyebrow">GIFT CARDS</span><h1>Give a night at the movies</h1><p>Purchase a gift card for delivery to someone special, or check an existing balance.</p></section>{confirmation ? <section className="content-panel"><h2>Gift card purchased</h2><p>{money(confirmation.amountCents, confirmation.currency)} is ready for {recipientEmail}.</p>{confirmation.code && <div className="configuration-note"><strong>{confirmation.code}</strong><p>Save this code now. Email delivery will also send it to the recipient.</p></div>}</section> : !purchase ? <form className="private-event-form content-panel" onSubmit={startPurchase}><h2>Purchase a gift card</h2><label>Amount<input type="number" min="5" max="1000" step="0.01" required value={amount} onChange={(event) => changePurchaseDetail(setAmount, event.target.value)} /></label><label>Your email<input type="email" required value={buyerEmail} onChange={(event) => changePurchaseDetail(setBuyerEmail, event.target.value)} /></label><label>Recipient name<input value={recipientName} maxLength={120} onChange={(event) => changePurchaseDetail(setRecipientName, event.target.value)} /></label><label>Recipient email<input type="email" required value={recipientEmail} onChange={(event) => changePurchaseDetail(setRecipientEmail, event.target.value)} /></label><label>Message<textarea maxLength={500} value={message} onChange={(event) => changePurchaseDetail(setMessage, event.target.value)} /></label><button className="primary" disabled={pending || !config?.payment.ready}>{pending ? "Preparing checkout…" : "Continue to payment"}</button>{configError && <><p className="error-banner">{configError}</p><button className="primary" type="button" onClick={() => setConfigAttempt((attempt) => attempt + 1)}>Retry gift card setup</button></>}</form> : <form className="content-panel" onSubmit={pay}><h2>Secure payment</h2><p>{money(purchase.amountCents, purchase.currency)} gift card for {recipientEmail}</p><div ref={paymentRef} /><button className="primary" disabled={pending || !paymentReady}>{pending ? "Completing purchase…" : `Pay ${money(purchase.amountCents, purchase.currency)}`}</button></form>}{error && <p className="error-banner">{error}</p>}<form className="private-event-form content-panel" onSubmit={checkBalance}><h2>Check a balance</h2><label>Gift card code<input required minLength={20} maxLength={40} autoComplete="off" value={code} onChange={(event) => changeBalanceCode(event.target.value)} placeholder="ATGC-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" /></label><button className="primary" disabled={balancePending}>{balancePending ? "Checking balance…" : "Check balance"}</button>{balance && <div className="configuration-note"><strong>{money(balance.balanceCents, balance.currency)}</strong><p>Available on gift card ending in {balance.codeLast4}.</p></div>}</form></main>;
 }
