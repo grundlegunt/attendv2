@@ -5216,20 +5216,57 @@ describe("Customer authentication", () => {
       .expect(202, { accepted: true });
     expect(emailProvider.sentCustomerPasswordResets).toHaveLength(deliveriesBefore);
 
+    const { AuthService } = await import("../src/auth/auth.service");
+    const auth = app.get(AuthService);
+    const failedRequestId = crypto.randomUUID();
+    const failedDelivery = jest
+      .spyOn(emailProvider, "sendCustomerPasswordReset")
+      .mockRejectedValueOnce(new Error("Email provider unavailable"));
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/password-reset/request")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", failedRequestId)
+      .send({ email })
+      .expect(202, { accepted: true });
+    await expect(
+      prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } }),
+    ).resolves.toMatchObject({
+      passwordResetRequestId: failedRequestId,
+      passwordResetEmailSentAt: null,
+      passwordResetEmailClaimedAt: null,
+      passwordResetEmailError: "Email provider unavailable",
+    });
+    failedDelivery.mockRestore();
+    await expect(auth.reconcileCustomerPasswordResetEmails()).resolves.toEqual({
+      scanned: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(
+      prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } }),
+    ).resolves.toMatchObject({
+      passwordResetEmailSentAt: expect.any(Date),
+      passwordResetEmailClaimedAt: null,
+      passwordResetEmailError: null,
+      passwordResetEmailMessageId: expect.any(String),
+    });
+
     const resetRequestId = crypto.randomUUID();
-    await request(app.getHttpServer())
-      .post("/api/v1/auth/customers/password-reset/request")
-      .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .set("Idempotency-Key", resetRequestId)
-      .send({ email: email.toUpperCase() })
-      .expect(202, { accepted: true });
-    await request(app.getHttpServer())
-      .post("/api/v1/auth/customers/password-reset/request")
-      .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .set("Idempotency-Key", resetRequestId)
-      .send({ email: email.toUpperCase() })
-      .expect(202, { accepted: true });
-    expect(emailProvider.sentCustomerPasswordResets).toHaveLength(deliveriesBefore + 1);
+    await Promise.all([
+      request(app.getHttpServer())
+        .post("/api/v1/auth/customers/password-reset/request")
+        .set("Origin", CUSTOMER_WEB_ORIGIN)
+        .set("Idempotency-Key", resetRequestId)
+        .send({ email: email.toUpperCase() })
+        .expect(202, { accepted: true }),
+      request(app.getHttpServer())
+        .post("/api/v1/auth/customers/password-reset/request")
+        .set("Origin", CUSTOMER_WEB_ORIGIN)
+        .set("Idempotency-Key", resetRequestId)
+        .send({ email: email.toUpperCase() })
+        .expect(202, { accepted: true }),
+    ]);
+    expect(emailProvider.sentCustomerPasswordResets).toHaveLength(deliveriesBefore + 2);
     expect(await prisma.auditEvent.count({
       where: { action: "customer.password_reset_requested", afterState: { path: ["requestId"], equals: resetRequestId } },
     })).toBe(1);

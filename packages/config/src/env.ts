@@ -100,6 +100,11 @@ const envSchema = z.object({
   // safely.
   TICKET_RECEIPT_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
 
+  // How often unsent customer password-reset emails are retried. Reset tokens
+  // are generated only when a leased delivery attempt begins and are never
+  // persisted.
+  CUSTOMER_AUTH_EMAIL_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
+
   // How often the API checks for seat-linked restaurant tabs whose automatic
   // settlement time has arrived. Set to 0 in tests that invoke the sweep
   // explicitly.
