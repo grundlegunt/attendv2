@@ -78,6 +78,7 @@ export default function AccountPage() {
   const [emailChangePassword, setEmailChangePassword] = useState("");
   const emailChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [emailChangeToken, setEmailChangeToken] = useState("");
+  const emailConfirmationAttemptRef = useRef<{ token: string; requestId: string } | null>(null);
   const [emailChangePending, setEmailChangePending] = useState(false);
   const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
@@ -408,13 +409,16 @@ export default function AccountPage() {
 
   async function confirmEmailChange(event: FormEvent) {
     event.preventDefault();
+    if (emailConfirmationAttemptRef.current?.token !== emailChangeToken) emailConfirmationAttemptRef.current = { token: emailChangeToken, requestId: crypto.randomUUID() };
     setEmailChangePending(true);
     setEmailChangeMessage(null);
     try {
       await apiFetch<{ changed: true }>("/auth/customers/email-change/confirm", {
         method: "POST",
+        headers: { "Idempotency-Key": emailConfirmationAttemptRef.current.requestId },
         body: JSON.stringify({ token: emailChangeToken }),
       });
+      emailConfirmationAttemptRef.current = null;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setEmailChangeToken("");
       setSession(null);
@@ -422,6 +426,7 @@ export default function AccountPage() {
       setMode("login");
       setRecoveryMessage("Email updated. Sign in with your new address.");
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status < 500) emailConfirmationAttemptRef.current = null;
       setEmailChangeMessage(
         err instanceof ApiRequestError ? err.body.message : "The email change could not be confirmed.",
       );

@@ -673,7 +673,8 @@ export class AuthService {
     }
   }
 
-  async confirmCustomerEmailChange(input: CustomerEmailChangeConfirm): Promise<void> {
+  async confirmCustomerEmailChange(input: CustomerEmailChangeConfirm, requestId: string): Promise<void> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid email confirmation idempotency key is required.");
     let payload;
     try {
       payload = verifyCustomerEmailChangeToken(input.token, loadEnv().JWT_REFRESH_SECRET);
@@ -683,19 +684,23 @@ export class AuthService {
       }
       throw error;
     }
-    const customer = await prisma.customer.findUnique({
-      where: { id: payload.sub },
-      include: { authAccount: true },
-    });
-    if (!customer?.authAccount || customer.authAccount.refreshTokenVersion !== payload.tokenVersion) {
-      throw AppError.validationFailed("This email verification link is invalid or expired.");
-    }
-    if (await prisma.customer.findUnique({ where: { email: payload.newEmail } })) {
-      throw AppError.conflict("That email address cannot be used.");
-    }
-
     try {
       await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "customers" WHERE "id" = ${payload.sub} FOR UPDATE`;
+        const customer = await tx.customer.findUnique({ where: { id: payload.sub }, include: { authAccount: true } });
+        if (!customer?.authAccount) throw AppError.validationFailed("This email verification link is invalid or expired.");
+        const completed = await tx.auditEvent.findMany({
+          where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.email_changed", entityType: "Customer", entityId: customer.id },
+          select: { afterState: true },
+        });
+        const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+        if (replay) {
+          if (replay.email !== payload.newEmail || customer.email !== payload.newEmail) throw AppError.conflict("The email confirmation request id was already used with different details.");
+          return;
+        }
+        if (customer.authAccount.refreshTokenVersion !== payload.tokenVersion) throw AppError.validationFailed("This email verification link is invalid or expired.");
+        const existing = await tx.customer.findFirst({ where: { email: payload.newEmail, id: { not: customer.id } } });
+        if (existing) throw AppError.conflict("That email address cannot be used.");
         const authUpdate = await tx.customerAuthAccount.updateMany({
           where: { customerId: customer.id, refreshTokenVersion: payload.tokenVersion },
           data: { refreshTokenVersion: { increment: 1 } },
@@ -714,7 +719,7 @@ export class AuthService {
           entityType: "Customer",
           entityId: customer.id,
           beforeState: { email: customer.email },
-          afterState: { email: payload.newEmail },
+          afterState: { requestId, email: payload.newEmail },
         }, tx);
       });
     } catch (error) {

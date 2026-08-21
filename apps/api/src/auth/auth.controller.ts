@@ -267,11 +267,13 @@ export class AuthController {
   async confirmCustomerEmailChange(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerEmailChangeConfirmSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
     await this.authService.confirmCustomerEmailChange(
       customerEmailChangeConfirmSchema.parse(body),
+      requestId ?? "",
     );
     clearCustomerSessionCookies(response);
     return { changed: true };
