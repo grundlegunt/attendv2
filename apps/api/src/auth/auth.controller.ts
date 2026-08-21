@@ -133,11 +133,13 @@ export class AuthController {
   async customerRegister(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerRegisterRequestSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
     const { tokens, customer } = await this.authService.customerRegister(
       body as ReturnType<typeof customerRegisterRequestSchema.parse>,
+      requestId ?? "",
     );
     setCustomerSessionCookies(response, tokens);
     return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };
