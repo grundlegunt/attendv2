@@ -7708,7 +7708,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
       typeof TestEmailProvider
     >;
-    jest
+    const sendReceipt = jest
       .spyOn(emailProvider, "sendRestaurantReceipt")
       .mockRejectedValueOnce(new Error("Email provider unavailable"));
 
@@ -7732,6 +7732,26 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
         },
       }),
     ).toBe(1);
+    sendReceipt.mockRestore();
+    await expect(settlement.reconcileFailedReceiptDeliveries()).resolves.toEqual({
+      scanned: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    const deliveredReceipt = await prisma.restaurantReceipt.findUniqueOrThrow({
+      where: { restaurantTabId: tab.id },
+    });
+    expect(deliveredReceipt).toMatchObject({
+      emailSentAt: expect.any(Date),
+      emailClaimedAt: null,
+      emailError: null,
+      emailMessageId: expect.any(String),
+    });
+    expect(
+      emailProvider.sentRestaurantReceipts.filter(
+        (receipt) => receipt.receiptNumber === deliveredReceipt.receiptNumber,
+      ),
+    ).toHaveLength(1);
   });
 
   it("runs fallback once, does not retry a failed card, and surfaces attention", async () => {
