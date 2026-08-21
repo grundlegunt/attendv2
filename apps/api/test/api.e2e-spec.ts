@@ -580,6 +580,31 @@ describe("Staff authentication", () => {
     expect(res.body.email).toBe(`owner@${SEED_SUFFIX}`);
   });
 
+  it("reuses an unfinished MFA setup secret when the response must be retried", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findUniqueOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const previousMfa = await prisma.staffAuthAccount.findUniqueOrThrow({
+      where: { employeeId: owner.id },
+      select: { mfaEnabled: true, mfaSecretEncrypted: true },
+    });
+    await prisma.staffAuthAccount.update({
+      where: { employeeId: owner.id },
+      data: { mfaEnabled: false, mfaSecretEncrypted: null },
+    });
+    const beginSetup = () => request(app.getHttpServer())
+      .post("/api/v1/auth/staff/mfa/setup")
+      .set("Authorization", `Bearer ${ownerAccessToken}`);
+    try {
+      const first = await beginSetup().expect(200);
+      const replay = await beginSetup().expect(200);
+      expect(replay.body).toEqual(first.body);
+      expect(first.body.secret).toEqual(expect.any(String));
+      expect(first.body.uri).toContain(encodeURIComponent(`owner@${SEED_SUFFIX}`));
+    } finally {
+      await prisma.staffAuthAccount.update({ where: { employeeId: owner.id }, data: previousMfa });
+    }
+  });
+
   it("replays concurrent employee creation once", async () => {
     const { prisma } = await import("@cinema/database");
     const people = await request(app.getHttpServer()).get("/api/v1/management/people").set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
