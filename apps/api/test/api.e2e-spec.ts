@@ -3206,6 +3206,21 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       totalCents: checkout.body.totalCents,
     }));
     expect(resumed.body.payment.clientSecret).toBeTruthy();
+    expect(resumed.body).toEqual(expect.objectContaining({
+      email: "reload-recovery@example.test",
+      name: "Reload Recovery",
+    }));
+
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
+    const paidResume = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts/resume")
+      .set("Idempotency-Key", idempotencyKey)
+      .send({ holderKey })
+      .expect(201);
+    expect(paidResume.body.payment.status).toBe("SUCCEEDED");
 
     await request(app.getHttpServer())
       .post("/api/v1/ticketing/checkouts/resume")
@@ -3217,10 +3232,11 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
       .send({ holderKey: `wrong-holder-${crypto.randomUUID()}` })
       .expect(404);
-    await request(app.getHttpServer())
+    const finalized = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
       .send({ holderKey })
-      .expect(402);
+      .expect(201);
+    expect(finalized.body.status).toBe("PAID");
   });
 
   it("applies and refunds a gift card during online checkout", async () => {

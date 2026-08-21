@@ -51,6 +51,8 @@ export interface TicketCheckoutResponse {
   orderId: string;
   orderNumber: string;
   status: string;
+  email: string | null;
+  name: string | null;
   subtotalCents: number;
   discountCents: number;
   feesCents: number;
