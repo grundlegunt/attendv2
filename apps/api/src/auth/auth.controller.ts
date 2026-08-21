@@ -228,6 +228,7 @@ export class AuthController {
   async updateCustomerProfile(
     @Req() request: Request,
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerProfileUpdateRequestSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
@@ -235,6 +236,7 @@ export class AuthController {
     return this.authService.updateCustomerProfile(
       actor.sub,
       customerProfileUpdateRequestSchema.parse(body),
+      requestId ?? "",
     );
   }
 

@@ -70,6 +70,7 @@ export default function AccountPage() {
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
+  const profileAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [profilePending, setProfilePending] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
@@ -348,18 +349,23 @@ export default function AccountPage() {
 
   async function updateProfile(event: FormEvent) {
     event.preventDefault();
+    const fingerprint = JSON.stringify({ name: profileName.trim() });
+    if (profileAttemptRef.current?.fingerprint !== fingerprint) profileAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setProfilePending(true);
     setProfileMessage(null);
     try {
       const customer = await apiFetch<AuthenticatedCustomer>("/auth/customers/me", {
         method: "PATCH",
-        body: JSON.stringify({ name: profileName }),
+        headers: { "Idempotency-Key": profileAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      profileAttemptRef.current = null;
       setSession(customer);
       setAccount((current) => current ? { ...current, customer } : current);
       setProfileName(customer.name ?? "");
       setProfileMessage("Profile updated.");
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status < 500) profileAttemptRef.current = null;
       setProfileMessage(
         err instanceof ApiRequestError ? err.body.message : "Your profile could not be updated.",
       );
