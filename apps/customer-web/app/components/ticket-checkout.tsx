@@ -378,10 +378,26 @@ export function TicketCheckout({
       body: JSON.stringify({ holderKey }),
     }).then(async (resumed) => {
       if (!active) return;
+      setEmail(resumed.email ?? "");
+      setName(resumed.name ?? "");
       setCheckout(resumed);
       if (resumed.payment?.status === "SUCCEEDED") {
         paymentConfirmedRef.current = true;
         setPaymentConfirmed(true);
+        const completed = await apiFetch<TicketConfirmationResponse>(
+          `/ticketing/orders/${resumed.orderId}/finalize`,
+          { method: "POST", body: JSON.stringify({ holderKey }) },
+        );
+        if (!active) return;
+        window.sessionStorage.removeItem(checkoutStorageKey);
+        if (!accountRecognized) {
+          window.sessionStorage.setItem(
+            "attend-account-handoff",
+            JSON.stringify({ email: resumed.email ?? "", name: resumed.name ?? "" }),
+          );
+        }
+        setConfirmation(completed);
+        return;
       }
       if (resumed.payment?.clientSecret) await initializePayment(resumed);
     }).catch((requestError) => {

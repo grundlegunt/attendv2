@@ -543,7 +543,7 @@ export class TicketingService {
         connectedAccountId,
         paymentIntentId: order.payment.providerPaymentId,
       });
-      return this.presentCheckout(order, promotion, intent.clientSecret);
+      return this.presentCheckout(order, promotion, intent.clientSecret, intent.status);
     }
 
     if (!order.payment) {
@@ -587,7 +587,7 @@ export class TicketingService {
         },
         include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
       });
-      return this.presentCheckout(updated, promotion, intent.clientSecret);
+      return this.presentCheckout(updated, promotion, intent.clientSecret, intent.status);
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
         // A concurrent call for the same order already recorded this
@@ -597,7 +597,7 @@ export class TicketingService {
           where: { id: order.id },
           include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
         });
-        return this.presentCheckout(settled, promotion, intent.clientSecret);
+        return this.presentCheckout(settled, promotion, intent.clientSecret, intent.status);
       }
       throw error;
     }
@@ -1943,6 +1943,8 @@ export class TicketingService {
       id: string;
       orderNumber: string;
       status: TicketOrderStatus;
+      guestEmail: string | null;
+      guestName: string | null;
       subtotalCents: number;
       discountCents: number;
       feesCents: number;
@@ -1963,11 +1965,14 @@ export class TicketingService {
     },
     promotion: { code: string; name: string } | null,
     clientSecret?: string,
+    providerStatus?: string,
   ) {
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
       status: order.status,
+      email: order.guestEmail,
+      name: order.guestName,
       subtotalCents: order.subtotalCents,
       discountCents: order.discountCents,
       feesCents: order.feesCents,
@@ -1983,7 +1988,7 @@ export class TicketingService {
         ? {
             id: order.payment.id,
             providerPaymentId: order.payment.providerPaymentId,
-            status: order.payment.status,
+            status: providerStatus ?? order.payment.status,
             amountCents: order.payment.amountCents,
             clientSecret,
             attemptNumber: order.payment.attempts[0]?.attemptNumber ?? 0,
