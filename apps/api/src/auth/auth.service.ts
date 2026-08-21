@@ -251,17 +251,28 @@ export class AuthService {
     return employeeToProfile(employee);
   }
 
-  async changeStaffPassword(employeeId: string, input: StaffPasswordChangeRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
-    const current = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
-    if (!current?.active || !current.authAccount) throw AppError.unauthenticated();
-    if (!(await verifyPassword(current.authAccount.passwordHash, input.currentPassword))) throw AppError.invalidCredentials("Current password is incorrect.");
-    if (await verifyPassword(current.authAccount.passwordHash, input.newPassword)) throw AppError.validationFailed("Choose a password that differs from the temporary password.");
-    const passwordHash = await hashPassword(input.newPassword);
-    await prisma.$transaction(async (tx) => {
-      await tx.staffAuthAccount.update({ where: { employeeId }, data: { passwordHash, mustChangePassword: false, refreshTokenVersion: { increment: 1 } } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId: current.locationId, action: "employee.password_changed", entityType: "Employee", entityId: employeeId, afterState: { mustChangePassword: false } } });
+  async changeStaffPassword(employeeId: string, input: StaffPasswordChangeRequest, requestId: string): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid password-change idempotency key is required.");
+    const employee = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "employeeId" FROM "staff_auth_accounts" WHERE "employeeId" = ${employeeId} FOR UPDATE`;
+      const current = await tx.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+      if (!current?.active || !current.authAccount) throw AppError.unauthenticated();
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "EMPLOYEE", actorId: employeeId, action: "employee.password_changed", entityType: "Employee", entityId: employeeId },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) {
+        if (!(await verifyPassword(current.authAccount.passwordHash, input.newPassword))) throw AppError.conflict("The password-change request id was already used with different details.");
+        return current;
+      }
+      if (!(await verifyPassword(current.authAccount.passwordHash, input.currentPassword))) throw AppError.invalidCredentials("Current password is incorrect.");
+      if (await verifyPassword(current.authAccount.passwordHash, input.newPassword)) throw AppError.validationFailed("Choose a password that differs from the temporary password.");
+      const passwordHash = await hashPassword(input.newPassword);
+      const authAccount = await tx.staffAuthAccount.update({ where: { employeeId }, data: { passwordHash, mustChangePassword: false, refreshTokenVersion: { increment: 1 } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId: current.locationId, action: "employee.password_changed", entityType: "Employee", entityId: employeeId, afterState: { mustChangePassword: false, requestId } } });
+      return { ...current, authAccount };
     });
-    const employee = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId }, include: employeeInclude });
     return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
   }
 

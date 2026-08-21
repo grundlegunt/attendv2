@@ -1,7 +1,7 @@
 "use client";
 
 import { adminBrandingDefaults, adminUiDefaults, type AdminUiConfig, type AuthenticatedEmployee, type AuthTokenResponse } from "@cinema/shared";
-import { FormEvent, createContext, useContext, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { FormEvent, createContext, useContext, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string; refreshToken?: string; expiresInSeconds?: number; supportSession?: boolean };
@@ -23,6 +23,7 @@ export function useAdminUi() { return useContext(AdminUiContext); }
 export function AdminSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
+  const passwordChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -104,9 +105,12 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   async function changePassword(event: FormEvent) {
     event.preventDefault(); setError(null);
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
+    const body = JSON.stringify({ currentPassword, newPassword });
+    if (passwordChangeAttemptRef.current?.fingerprint !== body) passwordChangeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
-      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken: session!.accessToken, method: "POST", body: JSON.stringify({ currentPassword, newPassword }) });
+      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken: session!.accessToken, method: "POST", headers: { "Idempotency-Key": passwordChangeAttemptRef.current.requestId }, body });
       const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
+      passwordChangeAttemptRef.current = null;
       storeSession(next); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
   }

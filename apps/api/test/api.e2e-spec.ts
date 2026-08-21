@@ -660,14 +660,26 @@ describe("Staff authentication", () => {
     expect(temporary.body.employee.permissions).toEqual([]);
     await request(app.getHttpServer()).get("/api/v1/audit-events").set("Authorization", `Bearer ${temporary.body.accessToken}`).expect(403);
 
-    const changed = await request(app.getHttpServer()).post("/api/v1/auth/staff/change-password").set("Authorization", `Bearer ${temporary.body.accessToken}`).send({ currentPassword: "TemporaryPassword123!", newPassword: SEED_PASSWORD }).expect(200);
+    const { prisma } = await import("@cinema/database");
+    const beforePasswordChange = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: server.body.id } });
+    const passwordChangeRequestId = crypto.randomUUID();
+    const changePassword = () => request(app.getHttpServer())
+      .post("/api/v1/auth/staff/change-password")
+      .set("Authorization", `Bearer ${temporary.body.accessToken}`)
+      .set("Idempotency-Key", passwordChangeRequestId)
+      .send({ currentPassword: "TemporaryPassword123!", newPassword: SEED_PASSWORD });
+    const changed = await changePassword().expect(200);
+    const replayedChange = await changePassword().expect(200);
     expect(changed.body.employee.mustChangePassword).toBe(false);
     expect(changed.body.employee.permissions.length).toBeGreaterThan(0);
+    expect(replayedChange.body.employee).toEqual(changed.body.employee);
+    const afterPasswordChange = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: server.body.id } });
+    expect(afterPasswordChange.refreshTokenVersion).toBe(beforePasswordChange.refreshTokenVersion + 1);
+    expect(await prisma.auditEvent.count({ where: { action: "employee.password_changed", entityId: server.body.id } })).toBe(1);
     await request(app.getHttpServer()).post("/api/v1/auth/staff/refresh").send({ refreshToken: temporary.body.refreshToken }).expect(401);
     await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: updatedEmail, password: SEED_PASSWORD }).expect(200);
 
     await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ pin: "1234" }).expect(200);
-    const { prisma } = await import("@cinema/database");
     await prisma.staffAuthAccount.update({ where: { employeeId: server.body.id }, data: { mfaEnabled: true, mfaSecretEncrypted: "test-encrypted-secret" } });
     await request(app.getHttpServer()).patch(`/api/v1/management/employees/${server.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ resetMfa: true }).expect(200).expect(({ body }) => expect(body.mfaReset).toBe(true));
     const resetAccount = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: server.body.id } });
