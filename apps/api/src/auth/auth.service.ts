@@ -567,13 +567,26 @@ export class AuthService {
   async updateCustomerProfile(
     customerId: string,
     input: CustomerProfileUpdateRequest,
+    requestId: string,
   ): Promise<AuthenticatedCustomer> {
-    const current = await prisma.customer.findFirst({
-      where: { id: customerId, authAccount: { isNot: null } },
-    });
-    if (!current) throw AppError.unauthenticated();
+    if (requestId.length < 16) throw AppError.validationFailed("A valid profile-update idempotency key is required.");
+    const requestFingerprint = JSON.stringify({ name: input.name });
 
     const customer = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "customers" WHERE "id" = ${customerId} FOR UPDATE`;
+      const current = await tx.customer.findFirst({
+        where: { id: customerId, authAccount: { isNot: null } },
+      });
+      if (!current) throw AppError.unauthenticated();
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "CUSTOMER", actorId: customerId, action: "customer.profile_updated", entityType: "Customer", entityId: customerId },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) {
+        if (replay.requestFingerprint !== requestFingerprint) throw AppError.conflict("The profile-update request id was already used with different details.");
+        return current;
+      }
       const updated = await tx.customer.update({
         where: { id: customerId },
         data: { name: input.name },
@@ -585,7 +598,7 @@ export class AuthService {
         entityType: "Customer",
         entityId: customerId,
         beforeState: { name: current.name },
-        afterState: { name: updated.name },
+        afterState: { requestId, requestFingerprint, name: updated.name },
       }, tx);
       return updated;
     });

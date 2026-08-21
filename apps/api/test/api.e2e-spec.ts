@@ -4745,20 +4745,34 @@ describe("Customer authentication", () => {
   });
 
   it("lets a signed-in customer update their profile name", async () => {
+    const { prisma } = await import("@cinema/database");
     const invalid = await request(app.getHttpServer())
       .patch("/api/v1/auth/customers/me")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", crypto.randomUUID())
       .send({ name: "   " });
     expect(invalid.status).toBe(400);
 
+    const requestId = crypto.randomUUID();
     const updated = await request(app.getHttpServer())
       .patch("/api/v1/auth/customers/me")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", requestId)
       .send({ name: "  Updated Customer  " });
     expect(updated.status).toBe(200);
     expect(updated.body).toMatchObject({ email, name: "Updated Customer", isGuest: false });
+    await request(app.getHttpServer())
+      .patch("/api/v1/auth/customers/me")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .set("Idempotency-Key", requestId)
+      .send({ name: "Updated Customer" })
+      .expect(200);
+    expect(await prisma.auditEvent.count({
+      where: { action: "customer.profile_updated", afterState: { path: ["requestId"], equals: requestId } },
+    })).toBe(1);
 
     const account = await request(app.getHttpServer())
       .get("/api/v1/auth/customers/me")
