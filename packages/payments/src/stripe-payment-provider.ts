@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { createStripeClient } from "./stripe-client";
 import {
   ProviderDefinitiveError,
   type CreatePaymentIntentArgs,
@@ -42,7 +43,7 @@ export class StripePaymentProvider implements PaymentProvider {
   ) {
     if (!secretKey) throw new Error("StripePaymentProvider requires a secretKey.");
     if (!webhookSecret) throw new Error("StripePaymentProvider requires a webhookSecret.");
-    this.client = stripeClient ?? new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" as Stripe.LatestApiVersion });
+    this.client = stripeClient ?? createStripeClient(secretKey);
   }
 
   async createCustomer(args: CreateProviderCustomerArgs) {
