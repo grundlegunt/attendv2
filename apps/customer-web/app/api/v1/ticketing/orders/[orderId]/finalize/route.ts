@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { finalizeTicketOrderRequestSchema } from "@cinema/shared";
 import {
   checkoutRouteError,
   getTicketingService,
@@ -7,12 +8,13 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ orderId: string }> },
 ) {
   try {
     const { orderId } = await context.params;
-    return NextResponse.json(await getTicketingService().finalizeOrder(orderId));
+    const body = finalizeTicketOrderRequestSchema.parse(await request.json());
+    return NextResponse.json(await getTicketingService().finalizeGuestOrder(orderId, body.holderKey));
   } catch (error) {
     const known = checkoutRouteError(error);
     if (known) {

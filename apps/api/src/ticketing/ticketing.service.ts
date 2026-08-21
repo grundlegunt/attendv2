@@ -147,6 +147,10 @@ export class TicketingService {
     return this.wrap(() => this.domain.finalizeOrder(orderId));
   }
 
+  finalizeGuestOrder(orderId: string, holderKey: string) {
+    return this.wrap(() => this.domain.finalizeGuestOrder(orderId, holderKey));
+  }
+
   resendGuestReceipt(orderId: string, holderKey: string) {
     return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey));
   }

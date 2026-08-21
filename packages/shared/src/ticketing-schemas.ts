@@ -43,6 +43,10 @@ export type ResumeTicketCheckoutRequest = z.infer<
   typeof resumeTicketCheckoutRequestSchema
 >;
 
+export const finalizeTicketOrderRequestSchema = z.object({
+  holderKey: z.string().min(16).max(200),
+}).strict();
+
 export interface TicketCheckoutResponse {
   orderId: string;
   orderNumber: string;
