@@ -400,7 +400,11 @@ export function TicketCheckout({
         setConfirmation(completed);
         return;
       }
-      if (resumed.payment?.clientSecret) await initializePayment(resumed);
+      if (resumed.payment?.clientSecret) {
+        paymentConfirmedRef.current = false;
+        setPaymentConfirmed(false);
+        await initializePayment(resumed);
+      }
     }).catch((requestError) => {
       if (!active) return;
       if (requestError instanceof ApiRequestError && requestError.status === 404) {
