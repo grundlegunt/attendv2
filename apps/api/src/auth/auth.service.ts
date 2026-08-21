@@ -424,7 +424,8 @@ export class AuthService {
     }
   }
 
-  async resetCustomerPassword(input: CustomerPasswordResetConfirm): Promise<void> {
+  async resetCustomerPassword(input: CustomerPasswordResetConfirm, requestId: string): Promise<void> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid password-reset idempotency key is required.");
     let payload;
     try {
       payload = verifyCustomerPasswordResetToken(input.token, loadEnv().JWT_REFRESH_SECRET);
@@ -434,22 +435,22 @@ export class AuthService {
       }
       throw error;
     }
-    const customer = await prisma.customer.findUnique({
-      where: { id: payload.sub },
-      include: { authAccount: true },
-    });
-    if (
-      !customer?.authAccount?.passwordHash ||
-      customer.authAccount.refreshTokenVersion !== payload.tokenVersion
-    ) {
-      throw AppError.validationFailed("This password reset link is invalid or expired.");
-    }
-    if (await verifyPassword(customer.authAccount.passwordHash, input.newPassword)) {
-      throw AppError.validationFailed("Choose a password that differs from your current password.");
-    }
-
-    const passwordHash = await hashPassword(input.newPassword);
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "customerId" FROM "customer_auth_accounts" WHERE "customerId" = ${payload.sub} FOR UPDATE`;
+      const customer = await tx.customer.findUnique({ where: { id: payload.sub }, include: { authAccount: true } });
+      if (!customer?.authAccount?.passwordHash) throw AppError.validationFailed("This password reset link is invalid or expired.");
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.password_reset", entityType: "Customer", entityId: customer.id },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) {
+        if (!(await verifyPassword(customer.authAccount.passwordHash, input.newPassword))) throw AppError.conflict("The password-reset request id was already used with different details.");
+        return;
+      }
+      if (customer.authAccount.refreshTokenVersion !== payload.tokenVersion) throw AppError.validationFailed("This password reset link is invalid or expired.");
+      if (await verifyPassword(customer.authAccount.passwordHash, input.newPassword)) throw AppError.validationFailed("Choose a password that differs from your current password.");
+      const passwordHash = await hashPassword(input.newPassword);
       const result = await tx.customerAuthAccount.updateMany({
         where: { customerId: customer.id, refreshTokenVersion: payload.tokenVersion },
         data: { passwordHash, refreshTokenVersion: { increment: 1 } },
@@ -463,6 +464,7 @@ export class AuthService {
         action: "customer.password_reset",
         entityType: "Customer",
         entityId: customer.id,
+        afterState: { requestId },
       }, tx);
     });
   }

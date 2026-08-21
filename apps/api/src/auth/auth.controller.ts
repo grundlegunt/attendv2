@@ -181,11 +181,13 @@ export class AuthController {
   @RateLimit({ scope: "auth" })
   async resetCustomerPassword(
     @Req() request: Request,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerPasswordResetConfirmSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
     await this.authService.resetCustomerPassword(
       customerPasswordResetConfirmSchema.parse(body),
+      requestId ?? "",
     );
     return { reset: true };
   }

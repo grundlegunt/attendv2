@@ -52,6 +52,7 @@ export default function AccountPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [resetToken, setResetToken] = useState("");
+  const passwordResetAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -240,12 +241,16 @@ export default function AccountPage() {
       setError("Passwords do not match.");
       return;
     }
+    const fingerprint = JSON.stringify({ token: resetToken, newPassword: password });
+    if (passwordResetAttemptRef.current?.fingerprint !== fingerprint) passwordResetAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setLoading(true);
     try {
       await apiFetch<{ reset: true }>("/auth/customers/password-reset/confirm", {
         method: "POST",
-        body: JSON.stringify({ token: resetToken, newPassword: password }),
+        headers: { "Idempotency-Key": passwordResetAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      passwordResetAttemptRef.current = null;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setResetToken("");
       setPassword("");
@@ -253,6 +258,7 @@ export default function AccountPage() {
       setMode("login");
       setRecoveryMessage("Password updated. You can sign in now.");
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status < 500) passwordResetAttemptRef.current = null;
       setError(
         err instanceof ApiRequestError ? err.body.message : "Please try again.",
       );
