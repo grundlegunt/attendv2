@@ -2508,6 +2508,16 @@ describe("Milestone 1 cinema configuration", () => {
         recipientName: "Movie Fan", recipientEmail: "recipient@example.test", message: "Enjoy the show!",
       }).expect(201);
     expect(purchase.body).toMatchObject({ amountCents: 3500, currency: "USD", recipientEmail: "recipient@example.test", payment: { providerPaymentId: expect.any(String), clientSecret: expect.any(String) } });
+    const resumed = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases/resume")
+      .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
+    expect(resumed.body).toEqual(expect.objectContaining({
+      purchaseId: purchase.body.purchaseId,
+      buyerEmail: "buyer@example.test",
+      recipientEmail: "recipient@example.test",
+      payment: expect.objectContaining({ clientSecret: expect.any(String) }),
+    }));
+    await request(app.getHttpServer()).post("/api/v1/gift-card-purchases/resume")
+      .set("Idempotency-Key", `wrong-${crypto.randomUUID()}`).send({}).expect(404);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const { TestPaymentProvider } = await import("@cinema/payments");
     const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
