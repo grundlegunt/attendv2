@@ -182,8 +182,12 @@ export class AuthService {
     if (!employee?.active || !employee.authAccount) throw AppError.unauthenticated();
     if (employee.authAccount.mustChangePassword) throw AppError.forbidden("Change your temporary password before setting up MFA.");
     if (employee.authAccount.mfaEnabled) throw AppError.conflict("MFA is already enabled.");
-    const secret = createMfaSecret();
-    await prisma.staffAuthAccount.update({ where: { employeeId }, data: { mfaSecretEncrypted: encryptMfaSecret(secret, loadEnv().JWT_REFRESH_SECRET) } });
+    const secret = employee.authAccount.mfaSecretEncrypted
+      ? decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET)
+      : createMfaSecret();
+    if (!employee.authAccount.mfaSecretEncrypted) {
+      await prisma.staffAuthAccount.update({ where: { employeeId }, data: { mfaSecretEncrypted: encryptMfaSecret(secret, loadEnv().JWT_REFRESH_SECRET) } });
+    }
     return { secret, uri: createMfaUri(secret, employee.email, "Attend Admin") };
   }
 
