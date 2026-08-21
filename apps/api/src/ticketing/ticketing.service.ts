@@ -139,6 +139,10 @@ export class TicketingService {
     return this.wrap(() => this.domain.createCheckout(input));
   }
 
+  resumeCheckout(input: { checkoutIdempotencyKey: string; holderKey: string }) {
+    return this.wrap(() => this.domain.resumeCheckout(input));
+  }
+
   finalizeOrder(orderId: string) {
     return this.wrap(() => this.domain.finalizeOrder(orderId));
   }
