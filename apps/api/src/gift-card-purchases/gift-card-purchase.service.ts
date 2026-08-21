@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { PaymentAttemptStatus, PaymentPurpose, PaymentStatus, Prisma, prisma } from "@cinema/database";
-import type { PaymentProvider } from "@cinema/payments";
+import type { PaymentProvider, VerifiedProviderEvent } from "@cinema/payments";
 import { createHash, randomBytes } from "node:crypto";
 import { decryptMfaSecret, encryptMfaSecret } from "@cinema/auth";
 import type { EmailProvider } from "@cinema/notifications";
@@ -181,6 +181,37 @@ export class GiftCardPurchaseService {
     if (!purchase) throw AppError.notFound("Gift card purchase was not found.");
     this.assertPurchaseAccess(purchase.idempotencyKey, purchaseKey);
     return this.deliver(purchaseId);
+  }
+
+  async processVerifiedWebhook(event: VerifiedProviderEvent) {
+    const duplicate = await prisma.processedWebhookEvent.findUnique({
+      where: { provider_providerEventId: { provider: this.provider.name, providerEventId: event.id } },
+    });
+    if (duplicate) return { duplicate: true };
+    if (!event.paymentIntentId || !["payment_intent.succeeded", "payment_intent.payment_failed", "payment_intent.requires_action"].includes(event.type)) {
+      return this.recordProcessedWebhook(event.id);
+    }
+    const purchase = await prisma.giftCardPurchase.findFirst({
+      where: { id: event.metadata?.giftCardPurchaseId, payment: { provider: this.provider.name, providerPaymentId: event.paymentIntentId } },
+      select: { id: true, idempotencyKey: true },
+    });
+    if (!purchase) throw AppError.notFound("Gift card purchase was not found.");
+    if (event.type === "payment_intent.succeeded") {
+      await this.finalize(purchase.id, purchase.idempotencyKey);
+    } else {
+      await this.resume(purchase.idempotencyKey);
+    }
+    return this.recordProcessedWebhook(event.id);
+  }
+
+  private async recordProcessedWebhook(providerEventId: string) {
+    try {
+      await prisma.processedWebhookEvent.create({ data: { provider: this.provider.name, providerEventId } });
+      return { duplicate: false };
+    } catch (error) {
+      if (isUniqueConstraintError(error)) return { duplicate: true };
+      throw error;
+    }
   }
 
   private assertPurchaseAccess(expectedKey: string, purchaseKey: string) {

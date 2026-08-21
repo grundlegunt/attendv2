@@ -2552,6 +2552,40 @@ describe("Milestone 1 cinema configuration", () => {
     await request(app.getHttpServer()).post("/api/v1/cinema/gift-cards/balance").send({ code: finalized.body.code }).expect(201);
   });
 
+  it("fulfills a paid online gift card from a replay-safe webhook", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const idempotencyKey = `gift-card-webhook-${crypto.randomUUID()}`;
+    const purchase = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases")
+      .set("Idempotency-Key", idempotencyKey).send({
+        locationId: owner.locationId, amountCents: 4200, buyerEmail: "webhook-buyer@example.test",
+        recipientName: "Webhook Recipient", recipientEmail: "webhook-recipient@example.test",
+      }).expect(201);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TestPaymentProvider } = await import("@cinema/payments");
+    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
+    const raw = Buffer.from(JSON.stringify({
+      id: `evt_gift_card_${crypto.randomUUID()}`,
+      type: "payment_intent.succeeded",
+      paymentIntentId: purchase.body.payment.providerPaymentId,
+      metadata: { giftCardPurchaseId: purchase.body.purchaseId },
+    }));
+    const signature = provider.signWebhook(raw);
+    const deliver = () => request(app.getHttpServer()).post("/api/v1/ticketing/webhooks/stripe")
+      .set("Stripe-Signature", signature).set("Content-Type", "application/json").send(raw.toString());
+    const first = await deliver().expect(201);
+    const duplicate = await deliver().expect(201);
+    expect(first.body.duplicate).toBe(false);
+    expect(duplicate.body.duplicate).toBe(true);
+    expect(await prisma.giftCard.count({ where: { purchase: { id: purchase.body.purchaseId } } })).toBe(1);
+    expect(await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.body.purchaseId } })).toMatchObject({ status: "DELIVERED", deliveredAt: expect.any(Date) });
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const email = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    expect(email.sentGiftCards.filter((message) => message.to === "webhook-recipient@example.test")).toHaveLength(1);
+  });
+
   it("reuses one online gift card purchase when identical requests arrive concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });

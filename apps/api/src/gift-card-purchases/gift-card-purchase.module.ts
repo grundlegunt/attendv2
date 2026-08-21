@@ -5,5 +5,5 @@ import { RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { GiftCardPurchaseController } from "./gift-card-purchase.controller";
 import { GiftCardPurchaseService } from "./gift-card-purchase.service";
 
-@Module({ imports: [PaymentsModule, NotificationsModule], controllers: [GiftCardPurchaseController], providers: [GiftCardPurchaseService, RequestRateLimitGuard] })
+@Module({ imports: [PaymentsModule, NotificationsModule], controllers: [GiftCardPurchaseController], providers: [GiftCardPurchaseService, RequestRateLimitGuard], exports: [GiftCardPurchaseService] })
 export class GiftCardPurchaseModule {}

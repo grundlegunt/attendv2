@@ -13,6 +13,7 @@ import { PAYMENT_PROVIDER } from "../payments/payments.module";
 import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 import { loadEnv } from "@cinema/config/env";
 import { createHash } from "node:crypto";
+import { GiftCardPurchaseService } from "../gift-card-purchases/gift-card-purchase.service";
 
 @Injectable()
 export class TicketingService {
@@ -21,6 +22,7 @@ export class TicketingService {
   constructor(
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
     @Inject(EMAIL_PROVIDER) emailProvider: EmailProvider,
+    private readonly giftCardPurchases: GiftCardPurchaseService,
   ) {
     this.domain = new TicketingDomainService(
       prisma,
@@ -263,6 +265,9 @@ export class TicketingService {
       event = this.provider.verifyWebhookSignature({ rawBody, signatureHeader });
     } catch {
       throw AppError.forbidden("Webhook signature is invalid.");
+    }
+    if (event.metadata?.giftCardPurchaseId) {
+      return this.wrap(() => this.giftCardPurchases.processVerifiedWebhook(event));
     }
     return this.wrap(() => this.domain.processVerifiedWebhook(event));
   }
