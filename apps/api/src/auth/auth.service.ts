@@ -442,38 +442,124 @@ export class AuthService {
   async requestCustomerPasswordReset(input: CustomerPasswordResetRequest, requestId: string): Promise<void> {
     if (requestId.length < 16) throw AppError.validationFailed("A valid password-reset request idempotency key is required.");
     const normalizedEmail = input.email.toLowerCase();
-    await prisma.$transaction(async (tx) => {
+    const customerId = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${normalizedEmail})::bigint)`;
       const customer = await tx.customer.findUnique({ where: { email: normalizedEmail }, include: { authAccount: true } });
-      if (!customer?.email || !customer.authAccount?.passwordHash) return;
+      if (!customer?.email || !customer.authAccount?.passwordHash) return null;
       const completed = await tx.auditEvent.findMany({
         where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.password_reset_requested", entityType: "Customer", entityId: customer.id },
         select: { afterState: true },
       });
-      if (completed.some(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) && (afterState as Record<string, unknown>).requestId === requestId)) return;
+      if (completed.some(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) && (afterState as Record<string, unknown>).requestId === requestId)) return null;
+      if (customer.authAccount.passwordResetRequestId === requestId) return customer.id;
+      await tx.customerAuthAccount.update({
+        where: { customerId: customer.id },
+        data: {
+          passwordResetRequestId: requestId,
+          passwordResetEmailClaimedAt: null,
+          passwordResetEmailSentAt: null,
+          passwordResetEmailMessageId: null,
+          passwordResetEmailError: null,
+        },
+      });
+      return customer.id;
+    });
+    if (customerId) await this.deliverCustomerPasswordResetEmail(customerId, requestId);
+  }
 
-      const env = loadEnv();
-      const token = signCustomerPasswordResetToken({ sub: customer.id, tokenVersion: customer.authAccount.refreshTokenVersion, purpose: "customer-password-reset" }, env.JWT_REFRESH_SECRET);
-      const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
-      try {
-        const delivery = await this.emailProvider.sendCustomerPasswordReset({
-          to: customer.email, customerName: customer.name,
-          resetUrl: `${customerWebUrl}/account#resetPassword=${encodeURIComponent(token)}`,
-          expiresInMinutes: 30,
+  private async deliverCustomerPasswordResetEmail(customerId: string, requestId: string) {
+    const now = new Date();
+    const claim = await prisma.customerAuthAccount.updateMany({
+      where: {
+        customerId,
+        passwordResetRequestId: requestId,
+        passwordResetEmailSentAt: null,
+        OR: [
+          { passwordResetEmailClaimedAt: null },
+          { passwordResetEmailClaimedAt: { lt: new Date(now.getTime() - 60_000) } },
+        ],
+      },
+      data: { passwordResetEmailClaimedAt: now, passwordResetEmailError: null },
+    });
+    if (claim.count === 0) return "NOT_REQUESTED" as const;
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: { authAccount: true },
+    });
+    if (!customer?.email || !customer.authAccount?.passwordHash || customer.authAccount.passwordResetRequestId !== requestId) {
+      return "NOT_REQUESTED" as const;
+    }
+    const env = loadEnv();
+    const token = signCustomerPasswordResetToken({ sub: customer.id, tokenVersion: customer.authAccount.refreshTokenVersion, purpose: "customer-password-reset" }, env.JWT_REFRESH_SECRET);
+    const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
+    try {
+      const delivery = await this.emailProvider.sendCustomerPasswordReset({
+        to: customer.email, customerName: customer.name,
+        resetUrl: `${customerWebUrl}/account#resetPassword=${encodeURIComponent(token)}`,
+        expiresInMinutes: 30,
+      });
+      const recorded = await prisma.$transaction(async (tx) => {
+        const updated = await tx.customerAuthAccount.updateMany({
+          where: { customerId, passwordResetRequestId: requestId },
+          data: {
+            passwordResetEmailSentAt: new Date(),
+            passwordResetEmailMessageId: delivery.messageId,
+            passwordResetEmailClaimedAt: null,
+            passwordResetEmailError: null,
+          },
         });
+        if (updated.count === 0) return false;
         await this.audit.record({
           actorType: "CUSTOMER", actorId: customer.id, action: "customer.password_reset_requested",
           entityType: "Customer", entityId: customer.id,
           afterState: { requestId, messageId: delivery.messageId },
         }, tx);
-      } catch (error) {
-        await this.audit.record({
-          actorType: "SYSTEM", action: "customer.password_reset_delivery_failed",
-          entityType: "Customer", entityId: customer.id,
-          afterState: { requestId, error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000) },
-        }, tx);
-      }
+        return true;
+      });
+      return recorded ? "SENT" as const : "NOT_REQUESTED" as const;
+    } catch (error) {
+      const message = (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000);
+      await prisma.$transaction([
+        prisma.customerAuthAccount.updateMany({
+          where: { customerId, passwordResetRequestId: requestId },
+          data: { passwordResetEmailClaimedAt: null, passwordResetEmailError: message },
+        }),
+        prisma.auditEvent.create({
+          data: {
+            actorType: "SYSTEM", action: "customer.password_reset_delivery_failed",
+            entityType: "Customer", entityId: customer.id,
+            afterState: { requestId, error: message },
+          },
+        }),
+      ]);
+      return "FAILED" as const;
+    }
+  }
+
+  async reconcileCustomerPasswordResetEmails(limit = 25) {
+    const staleClaimedAt = new Date(Date.now() - 60_000);
+    const accounts = await prisma.customerAuthAccount.findMany({
+      where: {
+        passwordHash: { not: null },
+        passwordResetRequestId: { not: null },
+        passwordResetEmailSentAt: null,
+        OR: [
+          { passwordResetEmailClaimedAt: null },
+          { passwordResetEmailClaimedAt: { lt: staleClaimedAt } },
+        ],
+      },
+      select: { customerId: true, passwordResetRequestId: true },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
     });
+    let delivered = 0;
+    let failed = 0;
+    for (const account of accounts) {
+      const result = await this.deliverCustomerPasswordResetEmail(account.customerId, account.passwordResetRequestId!);
+      if (result === "SENT") delivered += 1;
+      else if (result === "FAILED") failed += 1;
+    }
+    return { scanned: accounts.length, delivered, failed };
   }
 
   async resetCustomerPassword(input: CustomerPasswordResetConfirm, requestId: string): Promise<void> {
