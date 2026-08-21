@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { loadStripeScript } from "../lib/stripe-loader";
 
 type Balance = { codeLast4: string; balanceCents: number; currency: string };
 type Config = { locationId: string; currency: string; payment: { ready: boolean; publishableKey: string | null; connectedAccountId: string | null } };
@@ -14,7 +15,6 @@ const PURCHASE_STORAGE_KEY = "attend-gift-card-purchase";
 
 function money(cents: number, currency: string) { return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100); }
 function stripeFactory() { return (window as unknown as { Stripe?: (key: string, options?: { stripeAccount?: string }) => StripeClient }).Stripe; }
-async function loadStripe() { if (stripeFactory()) return; await new Promise<void>((resolve, reject) => { const script = document.createElement("script"); script.src = "https://js.stripe.com/v3/"; script.async = true; script.onload = () => resolve(); script.onerror = () => reject(new Error("Stripe could not load.")); document.head.appendChild(script); }); }
 
 export default function GiftCardsPage() {
   const [config, setConfig] = useState<Config | null>(null);
@@ -64,7 +64,7 @@ export default function GiftCardsPage() {
           return;
         }
         if (!resumed.payment.clientSecret) throw new Error("A secure payment session could not be resumed.");
-        await loadStripe(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
+        await loadStripeScript(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
         setPurchase(resumed);
         setElements(factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined }).elements({ clientSecret: resumed.payment.clientSecret, appearance: { theme: "night" } }));
       })
@@ -89,7 +89,7 @@ export default function GiftCardsPage() {
       window.sessionStorage.setItem(PURCHASE_STORAGE_KEY, purchaseKey.current);
       const created = await apiFetch<Purchase>("/gift-card-purchases", { method: "POST", headers: { "Idempotency-Key": purchaseKey.current }, body: JSON.stringify({ locationId: config.locationId, amountCents: Math.round(Number(amount) * 100), buyerEmail, recipientName: recipientName || undefined, recipientEmail, message: message || undefined }) });
       if (!created.payment.clientSecret) throw new Error("A secure payment session could not be created.");
-      await loadStripe(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
+      await loadStripeScript(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
       const stripe = factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined });
       setPurchase(created); setElements(stripe.elements({ clientSecret: created.payment.clientSecret, appearance: { theme: "night" } }));
     } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
