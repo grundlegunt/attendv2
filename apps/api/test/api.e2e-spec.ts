@@ -36,10 +36,18 @@ const SEED_PASSWORD = "DevPassword123!";
 const CUSTOMER_WEB_ORIGIN = "http://localhost:3000";
 const OWNER_MFA_SECRET = "AAAAAAAAAAAAAAAA";
 
-async function loginOwner() {
+async function beginOwnerLogin() {
   return request(app.getHttpServer())
     .post("/api/v1/auth/staff/login")
     .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD });
+}
+
+async function loginOwner() {
+  const login = await beginOwnerLogin();
+  if (!login.body.mfaRequired) return login;
+  return request(app.getHttpServer())
+    .post("/api/v1/auth/staff/mfa/verify")
+    .send({ challengeToken: login.body.challengeToken, code: authenticator.generate(OWNER_MFA_SECRET) });
 }
 
 async function loginPlatformOwner() {
@@ -552,7 +560,7 @@ describe("Staff authentication", () => {
     expect(res.body.refreshToken).toEqual(expect.any(String));
     expect(res.body.employee.roles).toContain("OWNER");
     expect(res.body.employee.permissions).toContain("audit.log.view");
-    expect(res.body.employee).toMatchObject({ mfaEnabled: false, mfaSetupRequired: false });
+    expect(res.body.employee).toMatchObject({ mfaEnabled: true, mfaSetupRequired: false });
     expect(res.body.mfaRequired).toBeUndefined();
 
     ownerAccessToken = res.body.accessToken;
@@ -616,8 +624,20 @@ describe("Staff authentication", () => {
       const confirmedAccount = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: owner.id } });
       expect(confirmedAccount.refreshTokenVersion).toBe(previousMfa.refreshTokenVersion + 1);
       expect(await prisma.auditEvent.count({ where: { action: "employee.mfa_enabled", entityId: owner.id } })).toBe(auditCount + 1);
+      const challengedLogin = await beginOwnerLogin();
+      expect(challengedLogin.status).toBe(200);
+      expect(challengedLogin.body).toEqual(expect.objectContaining({ mfaRequired: true, challengeToken: expect.any(String) }));
+      expect(challengedLogin.body.accessToken).toBeUndefined();
+      const verified = await request(app.getHttpServer())
+        .post("/api/v1/auth/staff/mfa/verify")
+        .send({ challengeToken: challengedLogin.body.challengeToken, code: authenticator.generate(first.body.secret) })
+        .expect(200);
+      expect(verified.body.accessToken).toEqual(expect.any(String));
     } finally {
-      await prisma.staffAuthAccount.update({ where: { employeeId: owner.id }, data: previousMfa });
+      await prisma.staffAuthAccount.update({
+        where: { employeeId: owner.id },
+        data: previousMfa,
+      });
     }
   });
 

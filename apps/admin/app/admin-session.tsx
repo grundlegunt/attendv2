@@ -5,7 +5,7 @@ import { FormEvent, createContext, useContext, useEffect, useMemo, useRef, useSt
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type Session = { employee: AuthenticatedEmployee; accessToken: string; refreshToken?: string; expiresInSeconds?: number; supportSession?: boolean };
-type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
+type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
 type PublicAdminBranding = { name: string; logoUrl: string | null; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type AdminSessionValue = Session & { signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
@@ -30,6 +30,8 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
 
   function storeSession(next: Session) {
@@ -38,7 +40,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   }
 
   async function refreshSession(refreshToken: string) {
-    const response = await apiFetch<StaffLoginResponse>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken }) });
+    const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken }) });
     const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
     storeSession(next);
     return next;
@@ -95,11 +97,20 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     event.preventDefault(); setError(null);
     try {
       const response = await apiFetch<StaffLoginResponse>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      if ("mfaRequired" in response) { setMfaChallengeToken(response.challengeToken); setPassword(""); return; }
       const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
       storeSession(next); setCurrentPassword(password); setPassword("");
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
     }
+  }
+
+  async function verifyMfa(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    try {
+      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
+      storeSession(response); setMfaChallengeToken(null); setMfaCode("");
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The code could not be verified."); }
   }
 
   async function changePassword(event: FormEvent) {
@@ -139,6 +150,11 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--showtime-remove-control": adminUi.removeControlColor, "--showtime-duplicate-control": adminUi.duplicateControlColor,
   } as CSSProperties;
   if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
+  if (mfaChallengeToken) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={verifyMfa}>
+    <p className="kicker">TWO-STEP VERIFICATION</p><h1>Authenticator code</h1><p className="muted">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}
+    <label>Authenticator code<input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></label>
+    <button className="primary">Verify and sign in</button>
+  </form></main></div>;
   if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><section className="login-layout">
     <div className="login-identity">
       <div className="login-monogram" aria-hidden="true">A</div>

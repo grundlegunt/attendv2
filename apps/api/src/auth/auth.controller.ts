@@ -57,6 +57,7 @@ export class AuthController {
     const result = await this.authService.staffLogin(
       body as ReturnType<typeof staffLoginRequestSchema.parse>,
     );
+    if ("mfaRequired" in result) return result;
     const { tokens, employee } = result;
     return { ...toTokenResponse(tokens), employee };
   }
