@@ -2565,6 +2565,9 @@ describe("Milestone 1 cinema configuration", () => {
     const { TestPaymentProvider } = await import("@cinema/payments");
     const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
     provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
+    const payment = await prisma.payment.findFirstOrThrow({ where: { providerPaymentId: purchase.body.payment.providerPaymentId } });
+    await prisma.paymentAttempt.deleteMany({ where: { paymentId: payment.id } });
+    await prisma.payment.update({ where: { id: payment.id }, data: { providerPaymentId: null, status: "CREATED" } });
     const raw = Buffer.from(JSON.stringify({
       id: `evt_gift_card_${crypto.randomUUID()}`,
       type: "payment_intent.succeeded",
@@ -2578,6 +2581,8 @@ describe("Milestone 1 cinema configuration", () => {
     const duplicate = await deliver().expect(201);
     expect(first.body.duplicate).toBe(false);
     expect(duplicate.body.duplicate).toBe(true);
+    expect(await prisma.payment.findUniqueOrThrow({ where: { id: payment.id } })).toMatchObject({ providerPaymentId: purchase.body.payment.providerPaymentId, status: "SUCCEEDED" });
+    expect(await prisma.paymentAttempt.count({ where: { paymentId: payment.id } })).toBe(1);
     expect(await prisma.giftCard.count({ where: { purchase: { id: purchase.body.purchaseId } } })).toBe(1);
     expect(await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.body.purchaseId } })).toMatchObject({ status: "DELIVERED", deliveredAt: expect.any(Date) });
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
