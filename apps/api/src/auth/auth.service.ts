@@ -395,49 +395,41 @@ export class AuthService {
     if (result.count !== 1) throw AppError.unauthenticated("Session has already been invalidated.");
   }
 
-  async requestCustomerPasswordReset(input: CustomerPasswordResetRequest): Promise<void> {
-    const customer = await prisma.customer.findUnique({
-      where: { email: input.email.toLowerCase() },
-      include: { authAccount: true },
-    });
-    if (!customer?.email || !customer.authAccount?.passwordHash) return;
+  async requestCustomerPasswordReset(input: CustomerPasswordResetRequest, requestId: string): Promise<void> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid password-reset request idempotency key is required.");
+    const normalizedEmail = input.email.toLowerCase();
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${normalizedEmail})::bigint)`;
+      const customer = await tx.customer.findUnique({ where: { email: normalizedEmail }, include: { authAccount: true } });
+      if (!customer?.email || !customer.authAccount?.passwordHash) return;
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.password_reset_requested", entityType: "Customer", entityId: customer.id },
+        select: { afterState: true },
+      });
+      if (completed.some(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) && (afterState as Record<string, unknown>).requestId === requestId)) return;
 
-    const env = loadEnv();
-    const token = signCustomerPasswordResetToken(
-      {
-        sub: customer.id,
-        tokenVersion: customer.authAccount.refreshTokenVersion,
-        purpose: "customer-password-reset",
-      },
-      env.JWT_REFRESH_SECRET,
-    );
-    const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
-    try {
-      const delivery = await this.emailProvider.sendCustomerPasswordReset({
-        to: customer.email,
-        customerName: customer.name,
-        resetUrl: `${customerWebUrl}/account#resetPassword=${encodeURIComponent(token)}`,
-        expiresInMinutes: 30,
-      });
-      await this.audit.record({
-        actorType: "CUSTOMER",
-        actorId: customer.id,
-        action: "customer.password_reset_requested",
-        entityType: "Customer",
-        entityId: customer.id,
-        afterState: { messageId: delivery.messageId },
-      });
-    } catch (error) {
-      await this.audit.record({
-        actorType: "SYSTEM",
-        action: "customer.password_reset_delivery_failed",
-        entityType: "Customer",
-        entityId: customer.id,
-        afterState: {
-          error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000),
-        },
-      });
-    }
+      const env = loadEnv();
+      const token = signCustomerPasswordResetToken({ sub: customer.id, tokenVersion: customer.authAccount.refreshTokenVersion, purpose: "customer-password-reset" }, env.JWT_REFRESH_SECRET);
+      const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
+      try {
+        const delivery = await this.emailProvider.sendCustomerPasswordReset({
+          to: customer.email, customerName: customer.name,
+          resetUrl: `${customerWebUrl}/account#resetPassword=${encodeURIComponent(token)}`,
+          expiresInMinutes: 30,
+        });
+        await this.audit.record({
+          actorType: "CUSTOMER", actorId: customer.id, action: "customer.password_reset_requested",
+          entityType: "Customer", entityId: customer.id,
+          afterState: { requestId, messageId: delivery.messageId },
+        }, tx);
+      } catch (error) {
+        await this.audit.record({
+          actorType: "SYSTEM", action: "customer.password_reset_delivery_failed",
+          entityType: "Customer", entityId: customer.id,
+          afterState: { requestId, error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000) },
+        }, tx);
+      }
+    });
   }
 
   async resetCustomerPassword(input: CustomerPasswordResetConfirm, requestId: string): Promise<void> {

@@ -214,11 +214,9 @@ test("customer prints one ticket order without the surrounding account page", as
   await page.goto("http://127.0.0.1:3000/account");
   await page.getByRole("button", { name: "Print tickets" }).click();
 
-  expect(
-    await page.evaluate(() =>
-      (window as unknown as { printedOrderWasScoped?: boolean }).printedOrderWasScoped,
-    ),
-  ).toBe(true);
+  await expect.poll(() => page.evaluate(() =>
+    (window as unknown as { printedOrderWasScoped?: boolean }).printedOrderWasScoped,
+  )).toBe(true);
   await expect(page.locator("body")).not.toHaveClass(/ticket-order-printing/);
 });
 
