@@ -116,9 +116,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
   @RateLimit({ scope: "auth", identity: "actor" })
-  async changeStaffPassword(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(staffPasswordChangeRequestSchema)) body: unknown) {
+  async changeStaffPassword(
+    @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(staffPasswordChangeRequestSchema)) body: unknown,
+  ) {
     if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
-    const { tokens, employee } = await this.authService.changeStaffPassword(actor.sub, staffPasswordChangeRequestSchema.parse(body));
+    const { tokens, employee } = await this.authService.changeStaffPassword(actor.sub, staffPasswordChangeRequestSchema.parse(body), requestId ?? "");
     return { ...toTokenResponse(tokens), employee };
   }
 

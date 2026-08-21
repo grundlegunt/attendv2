@@ -91,6 +91,7 @@ export default function StaffLoginPage() {
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
   const authRequestRef = useRef(false);
+  const passwordChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   function beginAuthRequest() {
     if (authRequestRef.current) return false;
@@ -275,8 +276,11 @@ export default function StaffLoginPage() {
     if (!beginAuthRequest()) return;
     const requestedCurrentPassword = currentPassword;
     const requestedNewPassword = newPassword;
+    const body = JSON.stringify({ currentPassword: requestedCurrentPassword, newPassword: requestedNewPassword });
+    if (passwordChangeAttemptRef.current?.fingerprint !== body) passwordChangeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
-      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", body: JSON.stringify({ currentPassword: requestedCurrentPassword, newPassword: requestedNewPassword }) });
+      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", headers: { "Idempotency-Key": passwordChangeAttemptRef.current.requestId }, body });
+      passwordChangeAttemptRef.current = null;
       storeSession(res); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
     } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
     finally { finishAuthRequest(); }
