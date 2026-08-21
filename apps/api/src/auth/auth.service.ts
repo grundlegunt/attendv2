@@ -15,6 +15,7 @@ import {
   createMfaUri,
   decryptMfaSecret,
   encryptMfaSecret,
+  signMfaChallenge,
   verifyMfaChallenge,
   verifyMfaCode,
   Permission,
@@ -79,8 +80,8 @@ function employeeToProfile(employee: EmployeeWithRoles): AuthenticatedEmployee {
     permissions: employee.authAccount?.mustChangePassword ? [] : flattenEmployeePermissions(employee),
     timeClockEnabled: employee.location.timeClockEnabled,
     mustChangePassword: employee.authAccount?.mustChangePassword ?? false,
-    mfaEnabled: false,
-    mfaSetupRequired: false,
+    mfaEnabled: employee.authAccount?.mfaEnabled ?? false,
+    mfaSetupRequired: Boolean(employee.authAccount?.mfaSecretEncrypted && !employee.authAccount.mfaEnabled),
     adminBranding: {
       accentColor: employee.location.adminAccentColor,
       accentMutedColor: employee.location.adminAccentMutedColor,
@@ -103,7 +104,7 @@ export class AuthService {
   // Staff
   // ---------------------------------------------------------------------
 
-  async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+  async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee } | { mfaRequired: true; challengeToken: string }> {
     const employee = await prisma.employee.findUnique({
       where: { email: input.email.toLowerCase() },
       include: employeeInclude,
@@ -116,6 +117,10 @@ export class AuthService {
     const passwordOk = await verifyPassword(employee.authAccount.passwordHash, input.password);
     if (!passwordOk) {
       throw AppError.invalidCredentials();
+    }
+
+    if (employee.authAccount.mfaEnabled) {
+      return { mfaRequired: true, challengeToken: signMfaChallenge(employee.id, loadEnv().JWT_ACCESS_SECRET) };
     }
 
     const tokens = this.issueEmployeeTokens(employee);
@@ -174,6 +179,7 @@ export class AuthService {
     const secret = decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
     if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
     await this.audit.record({ actorType: "EMPLOYEE", actorId: employee.id, action: "employee.mfa_verified", entityType: "Employee", entityId: employee.id, locationId: employee.locationId });
+    await this.audit.record({ actorType: "EMPLOYEE", actorId: employee.id, action: "employee.login", entityType: "Employee", entityId: employee.id, locationId: employee.locationId });
     return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
   }
 
