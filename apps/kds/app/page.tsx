@@ -86,6 +86,8 @@ export default function KdsPage() {
     fingerprint: string;
     requestId: string;
   } | null>(null);
+  const queueRefreshPendingRef = useRef(false);
+  const queueRefreshRequestRef = useRef(0);
   const [transitioningTicketIds, setTransitioningTicketIds] = useState<string[]>([]);
 
   function storeSession(next: ActiveStaffSession) {
@@ -101,10 +103,13 @@ export default function KdsPage() {
   function signOut() {
     if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY);
+    queueRefreshRequestRef.current += 1; queueRefreshPendingRef.current = false;
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setStations([]); setStationId(""); setQueue(null);
   }
 
   function selectStation(nextStationId: string) {
+    queueRefreshRequestRef.current += 1;
+    queueRefreshPendingRef.current = false;
     setStationId(nextStationId);
     setQueue(null);
     setQueueStale(true);
@@ -134,7 +139,9 @@ export default function KdsPage() {
   }, [accessToken, expiresInSeconds, refreshToken]);
 
   const refresh = useCallback(async () => {
-    if (!accessToken || !stationId) return;
+    if (!accessToken || !stationId || queueRefreshPendingRef.current) return;
+    queueRefreshPendingRef.current = true;
+    const requestId = ++queueRefreshRequestRef.current;
     try {
       const response = await apiFetch<QueueResponse>(
         `/fulfillment/stations/${stationId}/queue`,
@@ -142,17 +149,21 @@ export default function KdsPage() {
           accessToken,
         },
       );
+      if (requestId !== queueRefreshRequestRef.current) return;
       setQueue(response);
       setQueueStale(false);
       setLastQueueUpdateAt(Date.now());
       setError(null);
     } catch (reason) {
+      if (requestId !== queueRefreshRequestRef.current) return;
       setQueueStale(true);
       setError(
         reason instanceof ApiRequestError
           ? reason.body.message
           : "The station queue could not refresh.",
       );
+    } finally {
+      if (requestId === queueRefreshRequestRef.current) queueRefreshPendingRef.current = false;
     }
   }, [accessToken, stationId]);
 
@@ -203,6 +214,8 @@ export default function KdsPage() {
     const refreshTimer = window.setInterval(() => void refresh(), 2_000);
     const clockTimer = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => {
+      queueRefreshRequestRef.current += 1;
+      queueRefreshPendingRef.current = false;
       window.clearInterval(refreshTimer);
       window.clearInterval(clockTimer);
     };
