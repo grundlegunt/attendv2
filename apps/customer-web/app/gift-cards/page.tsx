@@ -5,11 +5,12 @@ import { apiFetch, ApiRequestError } from "../lib/api-client";
 
 type Balance = { codeLast4: string; balanceCents: number; currency: string };
 type Config = { locationId: string; currency: string; payment: { ready: boolean; publishableKey: string | null; connectedAccountId: string | null } };
-type Purchase = { purchaseId: string; amountCents: number; currency: string; payment: { clientSecret?: string } };
+type Purchase = { purchaseId: string; amountCents: number; currency: string; buyerEmail: string; recipientEmail: string; payment: { clientSecret?: string } };
 type Confirmation = { status: string; amountCents: number; currency: string; code: string | null; codeLast4: string };
 type StripeElement = { mount(target: HTMLElement): void; unmount(): void; on(event: "ready", handler: () => void): void };
 type StripeElements = { create(type: "payment"): StripeElement };
 type StripeClient = { elements(options: { clientSecret: string; appearance?: Record<string, unknown> }): StripeElements; confirmPayment(options: { elements: StripeElements; redirect: "if_required"; confirmParams: { receipt_email: string } }): Promise<{ error?: { message?: string } }> };
+const PURCHASE_STORAGE_KEY = "attend-gift-card-purchase";
 
 function money(cents: number, currency: string) { return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100); }
 function stripeFactory() { return (window as unknown as { Stripe?: (key: string, options?: { stripeAccount?: string }) => StripeClient }).Stripe; }
@@ -34,19 +35,39 @@ export default function GiftCardsPage() {
   const [configAttempt, setConfigAttempt] = useState(0);
   const paymentRef = useRef<HTMLDivElement>(null);
   const purchaseKey = useRef<string | null>(null);
+  const resumeAttempted = useRef(false);
 
   useEffect(() => { setConfigError(""); apiFetch<Config>("/gift-card-purchases/config").then(setConfig).catch(() => setConfigError("Gift card purchasing is temporarily unavailable.")); }, [configAttempt]);
   useEffect(() => { if (!elements || !paymentRef.current) return; const element = elements.create("payment"); element.on("ready", () => setPaymentReady(true)); element.mount(paymentRef.current); return () => element.unmount(); }, [elements]);
+  useEffect(() => {
+    if (!config || resumeAttempted.current) return;
+    resumeAttempted.current = true;
+    const storedKey = window.sessionStorage.getItem(PURCHASE_STORAGE_KEY);
+    if (!storedKey) return;
+    purchaseKey.current = storedKey;
+    setPending(true); setError("");
+    apiFetch<Purchase>("/gift-card-purchases/resume", { method: "POST", headers: { "Idempotency-Key": storedKey }, body: "{}" })
+      .then(async (resumed) => {
+        if (!resumed.payment.clientSecret) throw new Error("A secure payment session could not be resumed.");
+        await loadStripe(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
+        setBuyerEmail(resumed.buyerEmail); setRecipientEmail(resumed.recipientEmail); setPurchase(resumed);
+        setElements(factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined }).elements({ clientSecret: resumed.payment.clientSecret, appearance: { theme: "night" } }));
+      })
+      .catch((reason) => { if (reason instanceof ApiRequestError && reason.status === 404) { window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY); purchaseKey.current = null; } setError(failure(reason)); })
+      .finally(() => setPending(false));
+  }, [config]);
 
   function failure(reason: unknown) { return reason instanceof ApiRequestError ? reason.body.message : reason instanceof Error ? reason.message : "The request could not be completed."; }
   function changePurchaseDetail(setter: (value: string) => void, value: string) {
     purchaseKey.current = null;
+    window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY);
     setter(value);
   }
   async function startPurchase(event: FormEvent) {
     event.preventDefault(); if (!config) return; setPending(true); setError("");
     try {
       if (!purchaseKey.current) purchaseKey.current = crypto.randomUUID();
+      window.sessionStorage.setItem(PURCHASE_STORAGE_KEY, purchaseKey.current);
       const created = await apiFetch<Purchase>("/gift-card-purchases", { method: "POST", headers: { "Idempotency-Key": purchaseKey.current }, body: JSON.stringify({ locationId: config.locationId, amountCents: Math.round(Number(amount) * 100), buyerEmail, recipientName: recipientName || undefined, recipientEmail, message: message || undefined }) });
       if (!created.payment.clientSecret) throw new Error("A secure payment session could not be created.");
       await loadStripe(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
@@ -61,6 +82,7 @@ export default function GiftCardsPage() {
       const result = await stripe.confirmPayment({ elements, redirect: "if_required", confirmParams: { receipt_email: buyerEmail } });
       if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
       setConfirmation(await apiFetch<Confirmation>(`/gift-card-purchases/${purchase.purchaseId}/finalize`, { method: "POST", headers: { "Idempotency-Key": purchaseKey.current! }, body: "{}" }));
+      window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY);
     } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
   }
   async function checkBalance(event: FormEvent) { event.preventDefault(); setError(""); setBalance(null); try { setBalance(await apiFetch<Balance>("/cinema/gift-cards/balance", { method: "POST", body: JSON.stringify({ code }) })); } catch (reason) { setError(failure(reason)); } }

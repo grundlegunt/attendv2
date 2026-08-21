@@ -18,6 +18,11 @@ export class GiftCardPurchaseController {
     return this.purchases.create({ ...createGiftCardPurchaseSchema.parse(body), idempotencyKey: idempotencyKey ?? "" });
   }
 
+  @Post("resume")
+  resume(@Headers("idempotency-key") purchaseKey: string | undefined) {
+    return this.purchases.resume(purchaseKey ?? "");
+  }
+
   @Post(":purchaseId/finalize")
   finalize(@Param("purchaseId") purchaseId: string, @Headers("idempotency-key") purchaseKey: string | undefined) {
     return this.purchases.finalize(purchaseId, purchaseKey ?? "");

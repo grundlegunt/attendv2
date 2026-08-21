@@ -60,6 +60,16 @@ export class GiftCardPurchaseService {
     return this.complete(purchase);
   }
 
+  async resume(purchaseKey: string) {
+    if (purchaseKey.length < 16) throw AppError.notFound("Gift card purchase was not found.");
+    const purchase = await prisma.giftCardPurchase.findUnique({
+      where: { idempotencyKey: purchaseKey },
+      include: { payment: true, location: { include: { organization: true } } },
+    });
+    if (!purchase) throw AppError.notFound("Gift card purchase was not found.");
+    return this.complete(purchase);
+  }
+
   private assertReplayMatches(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, input: { locationId: string; amountCents: number; buyerEmail: string; recipientName?: string; recipientEmail: string; message?: string }) {
     const matches = purchase.locationId === input.locationId
       && purchase.amountCents === input.amountCents
@@ -173,6 +183,6 @@ export class GiftCardPurchaseService {
   }
 
   private present(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, clientSecret?: string) {
-    return { purchaseId: purchase.id, status: purchase.status, amountCents: purchase.amountCents, currency: purchase.currency, recipientEmail: purchase.recipientEmail, payment: { providerPaymentId: purchase.payment.providerPaymentId, status: purchase.payment.status, clientSecret } };
+    return { purchaseId: purchase.id, status: purchase.status, amountCents: purchase.amountCents, currency: purchase.currency, buyerEmail: purchase.buyerEmail, recipientEmail: purchase.recipientEmail, payment: { providerPaymentId: purchase.payment.providerPaymentId, status: purchase.payment.status, clientSecret } };
   }
 }
