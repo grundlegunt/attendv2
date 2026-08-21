@@ -4944,20 +4944,32 @@ describe("Customer authentication", () => {
     const { TestEmailProvider } = await import("@cinema/notifications");
     const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
     const newEmail = "updated-customer@m0test.local";
+    const requestId = crypto.randomUUID();
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/email-change/request")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", crypto.randomUUID())
       .send({ newEmail, password: "wrong-password" })
       .expect(401);
 
+    const deliveriesBefore = emailProvider.sentCustomerEmailChanges.length;
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/email-change/request")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", requestId)
       .send({ newEmail: newEmail.toUpperCase(), password: "customer-password-3" })
       .expect(202, { accepted: true });
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/email-change/request")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", accessCookie)
+      .set("Idempotency-Key", requestId)
+      .send({ newEmail, password: "customer-password-3" })
+      .expect(202, { accepted: true });
+    expect(emailProvider.sentCustomerEmailChanges).toHaveLength(deliveriesBefore + 1);
     const delivery = emailProvider.sentCustomerEmailChanges.at(-1)!;
     expect(delivery.to).toBe(newEmail);
     const token = new URL(delivery.verificationUrl).hash.replace("#emailChange=", "");
