@@ -655,7 +655,7 @@ describe("Staff authentication", () => {
     await request(app.getHttpServer()).post("/api/v1/auth/staff/refresh").send({ refreshToken: previous.body.refreshToken }).expect(401);
     await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: resetEmail, password: SEED_PASSWORD }).expect(401);
 
-    const temporary = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: updatedEmail, password: "TemporaryPassword123!" }).expect(200);
+    const temporary = await request(app.getHttpServer()).post("/api/v1/auth/staff/login").send({ email: updatedEmail.toUpperCase(), password: "TemporaryPassword123!" }).expect(200);
     expect(temporary.body.employee.mustChangePassword).toBe(true);
     expect(temporary.body.employee.permissions).toEqual([]);
     await request(app.getHttpServer()).get("/api/v1/audit-events").set("Authorization", `Bearer ${temporary.body.accessToken}`).expect(403);
