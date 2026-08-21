@@ -2523,6 +2523,10 @@ describe("Milestone 1 cinema configuration", () => {
     const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
     provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
 
+    const paidResume = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases/resume")
+      .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
+    expect(paidResume.body.payment.status).toBe("SUCCEEDED");
+
     await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`)
       .set("Idempotency-Key", `wrong-${crypto.randomUUID()}`).send({}).expect(404);
     const finalized = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`)

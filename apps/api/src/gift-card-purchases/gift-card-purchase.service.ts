@@ -83,7 +83,7 @@ export class GiftCardPurchaseService {
   private async complete(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>) {
     if (purchase.payment.providerPaymentId) {
       const intent = await this.provider.retrievePaymentIntent({ connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, paymentIntentId: purchase.payment.providerPaymentId });
-      return this.present(purchase, intent.clientSecret);
+      return this.present(purchase, intent.clientSecret, intent.status);
     }
     const intent = await this.provider.createPaymentIntent({
       connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, amountCents: purchase.amountCents, currency: purchase.currency,
@@ -96,7 +96,7 @@ export class GiftCardPurchaseService {
       if (!isUniqueConstraintError(error)) throw error;
       updated = await this.waitForCompletedPurchase(purchase.id);
     }
-    return this.present(updated, intent.clientSecret);
+    return this.present(updated, intent.clientSecret, intent.status);
   }
 
   private async waitForPurchase(idempotencyKey: string) {
@@ -182,7 +182,7 @@ export class GiftCardPurchaseService {
     }
   }
 
-  private present(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, clientSecret?: string) {
-    return { purchaseId: purchase.id, status: purchase.status, amountCents: purchase.amountCents, currency: purchase.currency, buyerEmail: purchase.buyerEmail, recipientEmail: purchase.recipientEmail, payment: { providerPaymentId: purchase.payment.providerPaymentId, status: purchase.payment.status, clientSecret } };
+  private present(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>, clientSecret?: string, providerStatus?: string) {
+    return { purchaseId: purchase.id, status: purchase.status, amountCents: purchase.amountCents, currency: purchase.currency, buyerEmail: purchase.buyerEmail, recipientEmail: purchase.recipientEmail, payment: { providerPaymentId: purchase.payment.providerPaymentId, status: providerStatus ?? purchase.payment.status, clientSecret } };
   }
 }
