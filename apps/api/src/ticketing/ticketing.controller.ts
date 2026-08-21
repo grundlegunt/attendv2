@@ -79,7 +79,7 @@ export class TicketingController {
     @Body(new ZodValidationPipe(resendGuestTicketReceiptRequestSchema)) body: unknown,
   ) {
     const parsed = resendGuestTicketReceiptRequestSchema.parse(body);
-    return this.ticketingService.resendGuestReceipt(orderId, parsed.holderKey);
+    return this.ticketingService.resendGuestReceipt(orderId, parsed.holderKey, parsed.requestId);
   }
 
   @Post("scans")

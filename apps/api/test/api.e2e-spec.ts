@@ -3838,11 +3838,12 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
-      .send({ holderKey: "wrong-holder-key-000000" })
+      .send({ holderKey: "wrong-holder-key-000000", requestId: crypto.randomUUID() })
       .expect(404);
+    const receiptRequestId = crypto.randomUUID();
     const recoveredDelivery = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
-      .send({ holderKey })
+      .send({ holderKey, requestId: receiptRequestId })
       .expect(201);
 
     expect(failedDelivery.body.receiptDelivery).toBe("FAILED");
@@ -3850,6 +3851,18 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       receiptDelivery: "SENT",
       email: expect.stringMatching(/^ticket-receipt-retry-.*@example\.test$/),
     });
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
+      .send({ holderKey, requestId: receiptRequestId })
+      .expect(201, recoveredDelivery.body);
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.orderId}/receipt`)
+      .send({ holderKey, requestId: crypto.randomUUID() })
+      .expect(201, recoveredDelivery.body);
+    expect(sendReceipt).toHaveBeenCalledTimes(3);
+    expect(await prisma.auditEvent.count({
+      where: { actorType: "SYSTEM", action: "ticket_order.receipt_resent", entityId: checkout.orderId },
+    })).toBe(2);
     expect(
       await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
     ).toBe(1);

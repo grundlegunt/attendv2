@@ -957,34 +957,44 @@ export class TicketingService {
     return this.finalizeOrder(orderId);
   }
 
-  async resendGuestReceipt(orderId: string, holderKey: string) {
-    const order = await this.prisma.ticketOrder.findFirst({
-      where: {
-        id: orderId,
-        holderKey,
-        status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
-        guestEmail: { not: null },
-      },
-      include: {
-        tickets: {
-          where: { status: { in: ["ISSUED", "ADMITTED"] } },
-          include: {
-            ticketType: true,
-            showtimeSeat: {
-              include: {
-                seat: true,
-                showtime: { include: { movie: true, auditorium: true } },
-              },
-            },
-          },
+  async resendGuestReceipt(orderId: string, holderKey: string, requestId: string) {
+    if (!requestId || requestId.length < 16) throw TicketingError.validation("A valid receipt resend idempotency key is required.");
+    const staged = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`);
+      const order = await tx.ticketOrder.findFirst({
+        where: { id: orderId, holderKey, status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] }, guestEmail: { not: null } },
+        include: { tickets: { where: { status: { in: ["ISSUED", "ADMITTED"] } } } },
+      });
+      if (!order || order.tickets.length === 0) throw TicketingError.notFound("Ticket order was not found.");
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "SYSTEM", action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) return { deliver: false, email: order.guestEmail! };
+      if (order.receiptResendRequestId === requestId) return { deliver: true, email: order.guestEmail! };
+      await tx.ticketOrder.update({
+        where: { id: order.id },
+        data: {
+          receiptEmailClaimedAt: null,
+          receiptEmailSentAt: null,
+          receiptEmailMessageId: null,
+          receiptEmailError: null,
+          receiptResendRequestId: requestId,
+          receiptResendActorType: "SYSTEM",
+          receiptResendActorId: null,
+          receiptResendPreviousEmail: order.guestEmail,
         },
-      },
+      });
+      return { deliver: true, email: order.guestEmail! };
     });
-    if (!order || order.tickets.length === 0) {
-      throw TicketingError.notFound("Ticket order was not found.");
-    }
+    if (!staged.deliver) return { receiptDelivery: "SENT" as const, email: staged.email };
+    const order = await this.prisma.ticketOrder.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { tickets: { where: { status: { in: ["ISSUED", "ADMITTED"] } }, include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } },
+    });
     const receiptDelivery = await this.deliverReceipt(order);
-    return { receiptDelivery, email: order.guestEmail! };
+    return { receiptDelivery, email: staged.email };
   }
 
   async reconcileFailedReceipts(limit = 25) {
