@@ -30,6 +30,7 @@ import type {
 } from "@cinema/shared";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
+import { StructuredLogger } from "../common/logger.service";
 
 type AuditoriumInput = ReturnType<typeof createAuditoriumRequestSchema.parse>;
 type AuditoriumLayoutUpdateInput = ReturnType<
@@ -299,6 +300,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
   }
   private expiryTimer?: ReturnType<typeof setInterval>;
   private expirySweepRunning = false;
+  private readonly logger = new StructuredLogger(CinemaService.name);
   private readonly minimumCinemaCleaningMinutes = 15;
 
   onModuleInit() {
@@ -315,6 +317,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     this.expirySweepRunning = true;
     try {
       await this.expireSeatHolds();
+    } catch (error) {
+      this.logger.error("Seat-hold expiry sweep failed.", String(error));
     } finally {
       this.expirySweepRunning = false;
     }
