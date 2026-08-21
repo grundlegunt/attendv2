@@ -3783,6 +3783,21 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(
       await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
     ).toBe(1);
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    await expect(
+      app.get(TicketingService).reconcileFailedReceipts(),
+    ).resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
+    expect(sendReceipt).toHaveBeenCalledTimes(2);
+    await expect(
+      prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.orderId } }),
+    ).resolves.toMatchObject({
+      receiptEmailSentAt: expect.any(Date),
+      receiptEmailClaimedAt: null,
+      receiptEmailError: null,
+    });
+    expect(
+      await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
+    ).toBe(1);
     sendReceipt.mockRestore();
   });
 

@@ -157,6 +157,10 @@ export class TicketingService {
     return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey));
   }
 
+  reconcileFailedReceipts(limit?: number) {
+    return this.domain.reconcileFailedReceipts(limit);
+  }
+
   async scanTicket(input: {
     credential: string;
     expectedShowtimeId: string;

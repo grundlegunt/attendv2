@@ -987,6 +987,43 @@ export class TicketingService {
     return { receiptDelivery, email: order.guestEmail! };
   }
 
+  async reconcileFailedReceipts(limit = 25) {
+    const orders = await this.prisma.ticketOrder.findMany({
+      where: {
+        status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
+        guestEmail: { not: null },
+        receiptEmailSentAt: null,
+        receiptEmailError: { not: null },
+      },
+      include: {
+        tickets: {
+          where: { status: { in: ["ISSUED", "ADMITTED"] } },
+          include: {
+            ticketType: true,
+            showtimeSeat: {
+              include: {
+                seat: true,
+                showtime: { include: { movie: true, auditorium: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
+    });
+
+    let delivered = 0;
+    let failed = 0;
+    for (const order of orders) {
+      if (order.tickets.length === 0) continue;
+      const result = await this.deliverReceipt(order);
+      if (result === "SENT") delivered += 1;
+      else if (result === "FAILED") failed += 1;
+    }
+    return { scanned: orders.length, delivered, failed };
+  }
+
   private async finalizeGiftCardOnlyOrder(orderId: string) {
     const finalized = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`);
