@@ -41,9 +41,12 @@ export class RestaurantSettlementSchedulerService
       const processingPayments =
         await this.settlement.reconcileProcessingPayments();
       const fallbackTabs = await this.settlement.runFallback();
+      const receiptDeliveries =
+        await this.settlement.reconcileFailedReceiptDeliveries();
       this.logger.log("Restaurant settlement sweep complete.", {
         processingPayments,
         fallbackTabs,
+        receiptDeliveries,
       });
     } catch (error) {
       this.logger.error(
