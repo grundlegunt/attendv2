@@ -298,16 +298,28 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
   private expiryTimer?: ReturnType<typeof setInterval>;
+  private expirySweepRunning = false;
   private readonly minimumCinemaCleaningMinutes = 15;
 
   onModuleInit() {
-    this.expiryTimer = setInterval(() => void this.expireSeatHolds(), 15_000);
+    this.expiryTimer = setInterval(() => void this.runExpirySweep(), 15_000);
     this.expiryTimer.unref();
   }
 
   onModuleDestroy() {
     if (this.expiryTimer) clearInterval(this.expiryTimer);
   }
+
+  private async runExpirySweep() {
+    if (this.expirySweepRunning) return;
+    this.expirySweepRunning = true;
+    try {
+      await this.expireSeatHolds();
+    } finally {
+      this.expirySweepRunning = false;
+    }
+  }
+
   private requireLocation(actor: RequestActor): string {
     if (!actor.locationId)
       throw AppError.forbidden("A location-scoped staff session is required.");
