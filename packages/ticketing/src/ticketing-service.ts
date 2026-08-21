@@ -988,12 +988,16 @@ export class TicketingService {
   }
 
   async reconcileFailedReceipts(limit = 25) {
+    const staleClaimedAt = new Date(Date.now() - 5 * 60_000);
     const orders = await this.prisma.ticketOrder.findMany({
       where: {
         status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
         guestEmail: { not: null },
         receiptEmailSentAt: null,
-        receiptEmailError: { not: null },
+        OR: [
+          { receiptEmailError: { not: null } },
+          { receiptEmailClaimedAt: { lt: staleClaimedAt } },
+        ],
       },
       include: {
         tickets: {

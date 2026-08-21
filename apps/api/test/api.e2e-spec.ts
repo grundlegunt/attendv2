@@ -2612,6 +2612,14 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
     expect(finalized.body.delivery.status).toBe("DELIVERY_FAILED");
     firstDelivery.mockRestore();
+    await prisma.giftCardPurchase.update({
+      where: { id: purchase.body.purchaseId },
+      data: {
+        status: "PAID",
+        deliveryClaimedAt: new Date(Date.now() - 2 * 60_000),
+        deliveryError: null,
+      },
+    });
     const { GiftCardPurchaseService } = await import("../src/gift-card-purchases/gift-card-purchase.service");
     const result = await app.get(GiftCardPurchaseService).reconcileFailedDeliveries();
     expect(result).toEqual({ scanned: 1, delivered: 1, failed: 0 });
@@ -3943,12 +3951,10 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       where: { id: checkout.orderId },
       data: { receiptEmailClaimedAt: new Date(Date.now() - 6 * 60_000) },
     });
-    const recovered = await request(app.getHttpServer())
-      .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
-      .send({ holderKey })
-      .expect(201);
-
-    expect(recovered.body.receiptDelivery).toBe("SENT");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    await expect(
+      app.get(TicketingService).reconcileFailedReceipts(),
+    ).resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
     expect(sendReceipt).toHaveBeenCalledTimes(1);
     expect(
       await prisma.ticket.count({ where: { ticketOrderId: checkout.orderId } }),
