@@ -303,6 +303,8 @@ model GiftCardPurchase {
   @@index([organizationId, createdAt])
   @@index([recipientEmail, createdAt])
   @@index([deliveryClaimedAt])
+  @@index([deliveredAt, deliveryClaimedAt, updatedAt])
+  @@index([status, deliveredAt, updatedAt])
   @@map("gift_card_purchases")
 }
 
@@ -829,6 +831,8 @@ model TicketOrder {
   @@index([locationId, createdAt])
   @@index([customerId, createdAt])
   @@index([giftCardId, createdAt])
+  @@index([receiptEmailSentAt, receiptEmailClaimedAt, updatedAt])
+  @@index([receiptEmailSentAt, receiptEmailError, updatedAt])
   @@map("ticket_orders")
 }
 
@@ -1615,7 +1619,8 @@ model RestaurantReceipt {
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
-  @@index([emailSentAt, emailClaimedAt])
+  @@index([emailSentAt, emailClaimedAt, updatedAt])
+  @@index([emailSentAt, emailError, updatedAt])
   @@map("restaurant_receipts")
 }
 
