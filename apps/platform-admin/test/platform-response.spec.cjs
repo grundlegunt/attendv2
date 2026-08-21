@@ -17,3 +17,12 @@ test("platform requests normalize malformed responses", () => {
   assert.match(source, /The server returned an invalid response\. Please try again\./);
   assert.doesNotMatch(source, /response\.json\(\)\.catch/);
 });
+
+test("platform requests and refreshes are bounded while downloads get longer", () => {
+  assert.match(source, /REQUEST_TIMEOUT_MS = 20_000/);
+  assert.match(source, /DOWNLOAD_TIMEOUT_MS = 60_000/);
+  assert.match(source, /fetchPlatform\(`\$\{apiBaseUrl\}\/platform\/auth\/refresh`/);
+  assert.match(source, /\.catch\(\(\) => null\)/);
+  assert.match(source, /accessToken, DOWNLOAD_TIMEOUT_MS/);
+  assert.match(source, /The request timed out\. Please try again\./);
+});
