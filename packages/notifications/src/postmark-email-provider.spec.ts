@@ -82,6 +82,44 @@ describe("PostmarkEmailProvider", () => {
     ).rejects.toThrow("Sender not allowed");
   });
 
+  it("turns a non-JSON provider outage into a controlled delivery failure", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response("upstream unavailable", {
+        status: 503,
+        statusText: "Service Unavailable",
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider("POSTMARK_API_TEST", "receipts@example.com");
+
+    await expect(
+      provider.sendTicketReceipt({
+        to: "guest@example.com",
+        orderNumber: "AT-TEST",
+        totalCents: 1250,
+        currency: "USD",
+        tickets: [],
+      }),
+    ).rejects.toThrow("HTTP 503 Service Unavailable");
+  });
+
+  it("rejects an invalid JSON response shape without throwing a parser type error", async () => {
+    jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response("null", {
+        status: 502,
+        statusText: "Bad Gateway",
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    const provider = new PostmarkEmailProvider("POSTMARK_API_TEST", "receipts@example.com");
+
+    await expect(provider.sendCustomerPasswordReset({
+      to: "customer@example.com",
+      resetUrl: "https://cinema.example/account#resetPassword=token",
+      expiresInMinutes: 30,
+    })).rejects.toThrow("HTTP 502 Bad Gateway");
+  });
+
   it("sends a time-limited customer password reset link", async () => {
     const fetchMock = jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ MessageID: "message-reset" }), {
