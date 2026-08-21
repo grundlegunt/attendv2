@@ -191,11 +191,38 @@ export class GiftCardPurchaseService {
     if (!event.paymentIntentId || !["payment_intent.succeeded", "payment_intent.payment_failed", "payment_intent.requires_action"].includes(event.type)) {
       return this.recordProcessedWebhook(event.id);
     }
-    const purchase = await prisma.giftCardPurchase.findFirst({
-      where: { id: event.metadata?.giftCardPurchaseId, payment: { provider: this.provider.name, providerPaymentId: event.paymentIntentId } },
-      select: { id: true, idempotencyKey: true },
+    const purchaseId = event.metadata?.giftCardPurchaseId;
+    if (!purchaseId) return this.recordProcessedWebhook(event.id);
+    const purchase = await prisma.giftCardPurchase.findUnique({
+      where: { id: purchaseId },
+      include: { payment: true, location: { include: { organization: true } } },
     });
-    if (!purchase) throw AppError.notFound("Gift card purchase was not found.");
+    if (!purchase || purchase.payment.provider !== this.provider.name || (purchase.payment.providerPaymentId && purchase.payment.providerPaymentId !== event.paymentIntentId)) {
+      throw AppError.notFound("Gift card purchase was not found.");
+    }
+    if (!purchase.payment.providerPaymentId) {
+      const intent = await this.provider.retrievePaymentIntent({
+        connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined,
+        paymentIntentId: event.paymentIntentId,
+      });
+      if (intent.amountCents !== purchase.amountCents || intent.currency.toLowerCase() !== purchase.currency.toLowerCase() || intent.metadata.giftCardPurchaseId !== purchase.id) {
+        throw AppError.conflict("Payment verification failed and requires manual review.");
+      }
+      try {
+        await prisma.payment.update({
+          where: { id: purchase.payment.id },
+          data: {
+            providerPaymentId: intent.id,
+            status: localPaymentStatus(intent.status),
+            attempts: { create: { provider: this.provider.name, providerIntentId: intent.id, attemptNumber: 1, status: localAttemptStatus(intent.status) } },
+          },
+        });
+      } catch (error) {
+        if (!isUniqueConstraintError(error)) throw error;
+        const linked = await prisma.payment.findUniqueOrThrow({ where: { id: purchase.payment.id } });
+        if (linked.providerPaymentId !== intent.id) throw AppError.conflict("Payment verification failed and requires manual review.");
+      }
+    }
     if (event.type === "payment_intent.succeeded") {
       await this.finalize(purchase.id, purchase.idempotencyKey);
     } else {
