@@ -16,6 +16,7 @@
  * Those imports are deliberately dynamic below.
  */
 import type { INestApplication } from "@nestjs/common";
+import { authenticator } from "otplib";
 import request from "supertest";
 import { startTestDatabase, TestDatabase } from "./test-db";
 
@@ -580,12 +581,12 @@ describe("Staff authentication", () => {
     expect(res.body.email).toBe(`owner@${SEED_SUFFIX}`);
   });
 
-  it("reuses an unfinished MFA setup secret when the response must be retried", async () => {
+  it("reuses unfinished MFA setup and confirms concurrent submissions once", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findUniqueOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const previousMfa = await prisma.staffAuthAccount.findUniqueOrThrow({
       where: { employeeId: owner.id },
-      select: { mfaEnabled: true, mfaSecretEncrypted: true },
+      select: { mfaEnabled: true, mfaSecretEncrypted: true, refreshTokenVersion: true },
     });
     await prisma.staffAuthAccount.update({
       where: { employeeId: owner.id },
@@ -601,6 +602,20 @@ describe("Staff authentication", () => {
       expect(replay.body).toEqual(first.body);
       expect(first.body.secret).toEqual(expect.any(String));
       expect(first.body.uri).toContain(encodeURIComponent(`owner@${SEED_SUFFIX}`));
+      const auditCount = await prisma.auditEvent.count({ where: { action: "employee.mfa_enabled", entityId: owner.id } });
+      const confirmRequestId = crypto.randomUUID();
+      const confirm = () => request(app.getHttpServer())
+        .post("/api/v1/auth/staff/mfa/confirm")
+        .set("Authorization", `Bearer ${ownerAccessToken}`)
+        .set("Idempotency-Key", confirmRequestId)
+        .send({ code: authenticator.generate(first.body.secret) });
+      const [confirmed, replayedConfirmation] = await Promise.all([confirm(), confirm()]);
+      expect(confirmed.status).toBe(200);
+      expect(replayedConfirmation.status).toBe(200);
+      expect(replayedConfirmation.body.employee).toEqual(confirmed.body.employee);
+      const confirmedAccount = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: owner.id } });
+      expect(confirmedAccount.refreshTokenVersion).toBe(previousMfa.refreshTokenVersion + 1);
+      expect(await prisma.auditEvent.count({ where: { action: "employee.mfa_enabled", entityId: owner.id } })).toBe(auditCount + 1);
     } finally {
       await prisma.staffAuthAccount.update({ where: { employeeId: owner.id }, data: previousMfa });
     }

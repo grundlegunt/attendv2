@@ -83,9 +83,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
   @RateLimit({ scope: "auth", identity: "actor" })
-  async confirmStaffMfa(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(staffMfaConfirmRequestSchema)) body: unknown) {
+  async confirmStaffMfa(
+    @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(staffMfaConfirmRequestSchema)) body: unknown,
+  ) {
     if (actor.actorType !== "EMPLOYEE") throw AppError.forbidden();
-    const { tokens, employee } = await this.authService.confirmStaffMfa(actor.sub, staffMfaConfirmRequestSchema.parse(body));
+    const { tokens, employee } = await this.authService.confirmStaffMfa(actor.sub, staffMfaConfirmRequestSchema.parse(body), requestId ?? "");
     return { ...toTokenResponse(tokens), employee };
   }
 
