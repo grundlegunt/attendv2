@@ -4922,6 +4922,7 @@ describe("Customer authentication", () => {
   });
 
   it("recovers a customer password without revealing whether an email is registered", async () => {
+    const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
     const { TestEmailProvider } = await import("@cinema/notifications");
     const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
@@ -4941,17 +4942,23 @@ describe("Customer authentication", () => {
       .expect(202, { accepted: true });
     const delivery = emailProvider.sentCustomerPasswordResets.at(-1)!;
     const token = new URL(delivery.resetUrl).hash.replace("#resetPassword=", "");
+    const requestId = crypto.randomUUID();
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/password-reset/confirm")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", requestId)
       .send({ token, newPassword: "customer-password-3" })
       .expect(200, { reset: true });
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/password-reset/confirm")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .send({ token, newPassword: "customer-password-4" })
-      .expect(400);
+      .set("Idempotency-Key", requestId)
+      .send({ token, newPassword: "customer-password-3" })
+      .expect(200, { reset: true });
+    expect(await prisma.auditEvent.count({
+      where: { action: "customer.password_reset", afterState: { path: ["requestId"], equals: requestId } },
+    })).toBe(1);
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/login")
