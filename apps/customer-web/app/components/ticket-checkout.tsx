@@ -159,6 +159,7 @@ export function TicketCheckout({
     useState<TicketConfirmationResponse | null>(null);
   const [receiptRetryPending, setReceiptRetryPending] = useState(false);
   const [receiptRetryMessage, setReceiptRetryMessage] = useState<string | null>(null);
+  const receiptRetryRequestIdRef = useRef<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [accountRecognized, setAccountRecognized] = useState(false);
@@ -654,14 +655,17 @@ export function TicketCheckout({
     if (!confirmation || receiptRetryPending) return;
     setReceiptRetryPending(true);
     setReceiptRetryMessage(null);
+    const requestId = receiptRetryRequestIdRef.current ?? crypto.randomUUID();
+    receiptRetryRequestIdRef.current = requestId;
     try {
       const result = await apiFetch<{
         receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED";
         email: string;
       }>(`/ticketing/orders/${confirmation.orderId}/receipt`, {
         method: "POST",
-        body: JSON.stringify({ holderKey }),
+        body: JSON.stringify({ holderKey, requestId }),
       });
+      if (result.receiptDelivery === "SENT") receiptRetryRequestIdRef.current = null;
       setConfirmation((current) => current ? { ...current, receiptDelivery: result.receiptDelivery } : current);
       setReceiptRetryMessage(
         result.receiptDelivery === "SENT"

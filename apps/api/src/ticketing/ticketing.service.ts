@@ -153,8 +153,8 @@ export class TicketingService {
     return this.wrap(() => this.domain.finalizeGuestOrder(orderId, holderKey));
   }
 
-  resendGuestReceipt(orderId: string, holderKey: string) {
-    return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey));
+  resendGuestReceipt(orderId: string, holderKey: string, requestId: string) {
+    return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey, requestId));
   }
 
   reconcileFailedReceipts(limit?: number) {
