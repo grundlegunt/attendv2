@@ -392,7 +392,12 @@ export class AuthService {
       where: { customerId: payload.sub, refreshTokenVersion: payload.tokenVersion },
       data: { refreshTokenVersion: { increment: 1 } },
     });
-    if (result.count !== 1) throw AppError.unauthenticated("Session has already been invalidated.");
+    if (result.count === 1) return;
+    const account = await prisma.customerAuthAccount.findUnique({
+      where: { customerId: payload.sub },
+      select: { refreshTokenVersion: true },
+    });
+    if (!account || account.refreshTokenVersion <= payload.tokenVersion) throw AppError.unauthenticated();
   }
 
   async requestCustomerPasswordReset(input: CustomerPasswordResetRequest, requestId: string): Promise<void> {
