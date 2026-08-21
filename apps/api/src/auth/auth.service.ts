@@ -470,37 +470,33 @@ export class AuthService {
   async changeCustomerPassword(
     customerId: string,
     input: CustomerPasswordChangeRequest,
+    requestId: string,
   ): Promise<{ tokens: TokenPair; customer: AuthenticatedCustomer }> {
-    const current = await prisma.customer.findUnique({
-      where: { id: customerId },
-      include: { authAccount: true },
-    });
-    if (!current?.authAccount?.passwordHash) throw AppError.unauthenticated();
-    if (!(await verifyPassword(current.authAccount.passwordHash, input.currentPassword))) {
-      throw AppError.invalidCredentials("Current password is incorrect.");
-    }
-    if (await verifyPassword(current.authAccount.passwordHash, input.newPassword)) {
-      throw AppError.validationFailed("Choose a password that differs from your current password.");
-    }
-
-    const passwordHash = await hashPassword(input.newPassword);
-    await prisma.$transaction(async (tx) => {
-      await tx.customerAuthAccount.update({
-        where: { customerId },
-        data: { passwordHash, refreshTokenVersion: { increment: 1 } },
+    if (requestId.length < 16) throw AppError.validationFailed("A valid password-change idempotency key is required.");
+    const customer = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "customerId" FROM "customer_auth_accounts" WHERE "customerId" = ${customerId} FOR UPDATE`;
+      const current = await tx.customer.findUnique({ where: { id: customerId }, include: { authAccount: true } });
+      if (!current?.authAccount?.passwordHash) throw AppError.unauthenticated();
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "CUSTOMER", actorId: customerId, action: "customer.password_changed", entityType: "Customer", entityId: customerId },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) {
+        if (!(await verifyPassword(current.authAccount.passwordHash, input.newPassword))) throw AppError.conflict("The password-change request id was already used with different details.");
+        return current;
+      }
+      if (!(await verifyPassword(current.authAccount.passwordHash, input.currentPassword))) throw AppError.invalidCredentials("Current password is incorrect.");
+      if (await verifyPassword(current.authAccount.passwordHash, input.newPassword)) throw AppError.validationFailed("Choose a password that differs from your current password.");
+      const passwordHash = await hashPassword(input.newPassword);
+      const authAccount = await tx.customerAuthAccount.update({
+        where: { customerId }, data: { passwordHash, refreshTokenVersion: { increment: 1 } },
       });
       await this.audit.record({
-        actorType: "CUSTOMER",
-        actorId: customerId,
-        action: "customer.password_changed",
-        entityType: "Customer",
-        entityId: customerId,
+        actorType: "CUSTOMER", actorId: customerId, action: "customer.password_changed",
+        entityType: "Customer", entityId: customerId, afterState: { requestId },
       }, tx);
-    });
-
-    const customer = await prisma.customer.findUniqueOrThrow({
-      where: { id: customerId },
-      include: { authAccount: true },
+      return { ...current, authAccount };
     });
     return {
       tokens: this.issueCustomerTokens(customer.id, customer.authAccount!.refreshTokenVersion),

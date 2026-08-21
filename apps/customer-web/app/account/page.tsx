@@ -67,6 +67,7 @@ export default function AccountPage() {
   const [printOrderId, setPrintOrderId] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const passwordChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [passwordPending, setPasswordPending] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
@@ -327,18 +328,23 @@ export default function AccountPage() {
 
   async function changePassword(event: FormEvent) {
     event.preventDefault();
+    const fingerprint = JSON.stringify({ currentPassword, newPassword });
+    if (passwordChangeAttemptRef.current?.fingerprint !== fingerprint) passwordChangeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setPasswordPending(true);
     setPasswordMessage(null);
     try {
       const response = await apiFetch<CustomerSessionResponse>("/auth/customers/change-password", {
         method: "POST",
-        body: JSON.stringify({ currentPassword, newPassword }),
+        headers: { "Idempotency-Key": passwordChangeAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      passwordChangeAttemptRef.current = null;
       setSession(response.customer);
       setCurrentPassword("");
       setNewPassword("");
       setPasswordMessage("Password updated. Your other sessions have been signed out.");
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status < 500) passwordChangeAttemptRef.current = null;
       setPasswordMessage(
         err instanceof ApiRequestError ? err.body.message : "Your password could not be updated.",
       );

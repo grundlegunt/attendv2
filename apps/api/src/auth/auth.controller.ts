@@ -300,6 +300,7 @@ export class AuthController {
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerPasswordChangeRequestSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
@@ -307,6 +308,7 @@ export class AuthController {
     const { tokens, customer } = await this.authService.changeCustomerPassword(
       actor.sub,
       customerPasswordChangeRequestSchema.parse(body),
+      requestId ?? "",
     );
     setCustomerSessionCookies(response, tokens);
     return { expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, customer };

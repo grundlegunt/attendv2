@@ -4868,22 +4868,37 @@ describe("Customer authentication", () => {
   });
 
   it("changes a customer password, rotates cookies, and invalidates the prior refresh session", async () => {
+    const { prisma } = await import("@cinema/database");
     const incorrect = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/change-password")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", crypto.randomUUID())
       .send({ currentPassword: "wrong-password", newPassword: "customer-password-2" });
     expect(incorrect.status).toBe(401);
 
     const priorRefreshCookie = refreshCookie;
+    const priorAccessCookie = accessCookie;
+    const requestId = crypto.randomUUID();
     const changed = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/change-password")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
       .set("Cookie", accessCookie)
+      .set("Idempotency-Key", requestId)
       .send({ currentPassword: "customer-password-1", newPassword: "customer-password-2" });
     expect(changed.status).toBe(200);
     expect(changed.body.customer.email).toBe(email);
-    const cookies = setCookieHeaders(changed);
+    const replay = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/change-password")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Cookie", priorAccessCookie)
+      .set("Idempotency-Key", requestId)
+      .send({ currentPassword: "customer-password-1", newPassword: "customer-password-2" })
+      .expect(200);
+    expect(await prisma.auditEvent.count({
+      where: { action: "customer.password_changed", afterState: { path: ["requestId"], equals: requestId } },
+    })).toBe(1);
+    const cookies = setCookieHeaders(replay);
     accessCookie = cookiePair(cookies, "attend_customer_access");
     refreshCookie = cookiePair(cookies, "attend_customer_refresh");
 
