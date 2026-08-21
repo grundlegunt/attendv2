@@ -4672,10 +4672,13 @@ describe("Customer authentication", () => {
   let refreshCookie: string;
 
   it("registers a new customer account and stores tokens only in HttpOnly cookies", async () => {
+    const requestId = crypto.randomUUID();
+    const body = { email, password: "customer-password-1", name: "New Customer" };
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/register")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .send({ email, password: "customer-password-1", name: "New Customer" });
+      .set("Idempotency-Key", requestId)
+      .send(body);
 
     expect(res.status).toBe(201);
     customerId = res.body.customer.id;
@@ -4687,11 +4690,32 @@ describe("Customer authentication", () => {
       expect.stringMatching(/^attend_customer_access=.*HttpOnly.*SameSite=Lax/),
       expect.stringMatching(/^attend_customer_refresh=.*HttpOnly.*SameSite=Lax/),
     ]));
+
+    const replay = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/register")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", requestId)
+      .send(body);
+
+    expect(replay.status).toBe(201);
+    expect(replay.body.customer.id).toBe(customerId);
+    expect(setCookieHeaders(replay)).toEqual(expect.arrayContaining([
+      expect.stringMatching(/^attend_customer_access=.*HttpOnly.*SameSite=Lax/),
+      expect.stringMatching(/^attend_customer_refresh=.*HttpOnly.*SameSite=Lax/),
+    ]));
+    const { prisma } = await import("@cinema/database");
+    const registrationAudits = await prisma.auditEvent.findMany({
+      where: { action: "customer.registered", entityId: customerId },
+    });
+    expect(registrationAudits).toHaveLength(1);
+    expect(registrationAudits[0]?.afterState).toMatchObject({ requestId });
   });
 
   it("rejects registering the same email twice (409 conflict)", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/register")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", crypto.randomUUID())
       .send({ email, password: "customer-password-1", name: "New Customer" });
 
     expect(res.status).toBe(409);
@@ -4708,6 +4732,7 @@ describe("Customer authentication", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/register")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", crypto.randomUUID())
       .send({
         email: guestEmail.toUpperCase(),
         password: "customer-password-2",

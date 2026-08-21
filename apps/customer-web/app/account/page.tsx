@@ -56,6 +56,7 @@ export default function AccountPage() {
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const registrationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
@@ -192,16 +193,21 @@ export default function AccountPage() {
         mode === "login"
           ? { email, password }
           : { email, password, name: name || undefined };
+      const fingerprint = JSON.stringify(body);
+      if (mode === "register" && registrationAttemptRef.current?.fingerprint !== fingerprint) registrationAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
       const response = await apiFetch<CustomerSessionResponse>(path, {
         method: "POST",
-        body: JSON.stringify(body),
+        headers: mode === "register" ? { "Idempotency-Key": registrationAttemptRef.current!.requestId } : undefined,
+        body: fingerprint,
       });
+      if (mode === "register") registrationAttemptRef.current = null;
       setSession(response.customer);
       setAccountLoading(true);
       const nextAccount = await requestAccount(false);
       setAccount(nextAccount);
       setPassword("");
     } catch (err) {
+      if (mode === "register" && err instanceof ApiRequestError && err.status < 500) registrationAttemptRef.current = null;
       setError(
         err instanceof ApiRequestError ? err.body.message : "Please try again.",
       );

@@ -294,36 +294,52 @@ export class AuthService {
 
   async customerRegister(
     input: CustomerRegisterRequest,
+    requestId: string,
   ): Promise<{ tokens: TokenPair; customer: AuthenticatedCustomer }> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid registration idempotency key is required.");
     const normalizedEmail = input.email.toLowerCase();
-    const existing = await prisma.customer.findUnique({
-      where: { email: normalizedEmail },
-      include: { authAccount: true },
-    });
-    if (existing?.authAccount) {
-      throw AppError.conflict("An account with this email already exists.");
-    }
-
-    const passwordHash = await hashPassword(input.password);
-    const customer = existing
-      ? await prisma.customer.update({
+    const normalizedName = input.name ?? null;
+    const customer = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${normalizedEmail})::bigint)`;
+      const existing = await tx.customer.findUnique({ where: { email: normalizedEmail }, include: { authAccount: true } });
+      if (existing?.authAccount?.passwordHash) {
+        const completed = await tx.auditEvent.findMany({
+          where: { actorType: "CUSTOMER", actorId: existing.id, action: "customer.registered", entityType: "Customer", entityId: existing.id },
+          select: { afterState: true },
+        });
+        const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+        if (!replay) throw AppError.conflict("An account with this email already exists.");
+        const matches = replay.email === normalizedEmail && replay.name === normalizedName && await verifyPassword(existing.authAccount.passwordHash, input.password);
+        if (!matches) throw AppError.conflict("The registration request id was already used with different details.");
+        return existing;
+      }
+      const passwordHash = await hashPassword(input.password);
+      const registered = existing
+        ? await tx.customer.update({
           where: { id: existing.id },
           data: {
-            name: input.name,
+            name: normalizedName,
             isGuest: false,
             authAccount: { create: { passwordHash } },
           },
           include: { authAccount: true },
         })
-      : await prisma.customer.create({
+        : await tx.customer.create({
           data: {
             email: normalizedEmail,
-            name: input.name,
+            name: normalizedName,
             isGuest: false,
             authAccount: { create: { passwordHash } },
           },
           include: { authAccount: true },
         });
+      await this.audit.record({
+        actorType: "CUSTOMER", actorId: registered.id, action: "customer.registered",
+        entityType: "Customer", entityId: registered.id,
+        afterState: { requestId, email: normalizedEmail, name: normalizedName },
+      }, tx);
+      return registered;
+    });
 
     const tokens = this.issueCustomerTokens(customer.id, customer.authAccount!.refreshTokenVersion);
     return { tokens, customer: this.customerToProfile(customer) };
