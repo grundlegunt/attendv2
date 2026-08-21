@@ -8,6 +8,7 @@ import type {
   TicketConfirmationResponse,
 } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { loadStripeScript } from "../lib/stripe-loader";
 import { QRCodeSVG } from "qrcode.react";
 import { downloadTicketCalendar } from "../lib/ticket-calendar";
 import { isCheckoutHoldExpired } from "../lib/checkout-hold";
@@ -104,27 +105,6 @@ function money(cents: number, currency: string) {
     style: "currency",
     currency: currency.toUpperCase(),
   }).format(cents / 100);
-}
-
-async function loadStripe() {
-  if (window.Stripe) return;
-  await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://js.stripe.com/v3/"]',
-    );
-    if (existing) {
-      existing.remove();
-    }
-    const script = document.createElement("script");
-    script.src = "https://js.stripe.com/v3/";
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => {
-      script.remove();
-      reject(new Error("Stripe could not load."));
-    };
-    document.head.appendChild(script);
-  });
 }
 
 export function TicketCheckout({
@@ -500,7 +480,7 @@ export function TicketCheckout({
     if (!created.payment?.clientSecret || !config?.payment.publishableKey) {
       throw new Error("Stripe test payments are not configured.");
     }
-    await loadStripe();
+    await loadStripeScript();
     if (!window.Stripe) throw new Error("Stripe could not load.");
     const stripe = window.Stripe(config.payment.publishableKey, {
       stripeAccount: config.payment.connectedAccountId ?? undefined,
