@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { useAdminSession } from "./admin-session";
 import { visibleAdminNavigation } from "./admin-navigation";
@@ -84,6 +84,7 @@ function DashboardShowtimeRow({
   const [inventory, setInventory] = useState<ShowtimeSeatInventory | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
   const [inventoryError, setInventoryError] = useState(false);
+  const inventoryRequestRef = useRef<AbortController | null>(null);
   const occupancy = showtime.auditorium.capacity
     ? Math.min(100, Math.round((ticketsSold / showtime.auditorium.capacity) * 100))
     : 0;
@@ -96,15 +97,30 @@ function DashboardShowtimeRow({
         : "sales-normal";
 
   function loadInventory() {
-    if (inventory || inventoryLoading || inventoryError) return;
+    if (inventory || inventoryRequestRef.current) return;
+    const controller = new AbortController();
+    inventoryRequestRef.current = controller;
     setInventoryLoading(true);
+    setInventoryError(false);
     apiFetch<ShowtimeSeatInventory>(`/cinema/showtimes/${showtime.id}/seats`, {
       accessToken: accessToken ?? undefined,
+      signal: controller.signal,
     })
       .then(setInventory)
-      .catch(() => setInventoryError(true))
-      .finally(() => setInventoryLoading(false));
+      .catch(() => {
+        if (!controller.signal.aborted) setInventoryError(true);
+      })
+      .finally(() => {
+        if (inventoryRequestRef.current !== controller) return;
+        inventoryRequestRef.current = null;
+        setInventoryLoading(false);
+      });
   }
+
+  useEffect(() => () => {
+    inventoryRequestRef.current?.abort();
+    inventoryRequestRef.current = null;
+  }, []);
 
   return (
     <Link
