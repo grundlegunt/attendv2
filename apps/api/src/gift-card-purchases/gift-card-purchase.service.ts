@@ -184,8 +184,16 @@ export class GiftCardPurchaseService {
   }
 
   async reconcileFailedDeliveries(limit = 25) {
+    const staleClaimedAt = new Date(Date.now() - 60_000);
     const purchases = await prisma.giftCardPurchase.findMany({
-      where: { status: "DELIVERY_FAILED", deliveredAt: null, deliveryCodeEncrypted: { not: null } },
+      where: {
+        deliveredAt: null,
+        deliveryCodeEncrypted: { not: null },
+        OR: [
+          { status: "DELIVERY_FAILED" },
+          { deliveryClaimedAt: { lt: staleClaimedAt } },
+        ],
+      },
       select: { id: true },
       orderBy: { updatedAt: "asc" },
       take: limit,
