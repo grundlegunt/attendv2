@@ -972,71 +972,85 @@ export class AuthService {
 
   async resendCustomerReceipt(customerId: string, orderId: string, requestId: string) {
     if (requestId.length < 16) throw AppError.validationFailed("A valid receipt resend idempotency key is required.");
+    const staged = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`;
+      const order = await tx.ticketOrder.findFirst({
+        where: { id: orderId, customerId, status: { in: ["PAID", "EXCHANGED"] }, customer: { authAccount: { isNot: null } } },
+        include: { customer: true, tickets: { where: { status: { in: ["ISSUED", "ADMITTED"] } } } },
+      });
+      if (!order?.customer?.email || order.tickets.length === 0) throw AppError.notFound("Receiptable ticket order was not found.");
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "CUSTOMER", actorId: customerId, action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) {
+        if (replay.email !== order.customer.email) throw AppError.conflict("The receipt resend request id was already used for a different account email.");
+        return { staged: false, email: order.customer.email };
+      }
+      if (order.receiptResendRequestId === requestId) {
+        if (order.guestEmail !== order.customer.email) throw AppError.conflict("The receipt resend request id was already used for a different account email.");
+        return { staged: true, email: order.customer.email };
+      }
+      await tx.ticketOrder.update({
+        where: { id: order.id },
+        data: {
+          guestEmail: order.customer.email,
+          guestName: order.customer.name,
+          receiptEmailClaimedAt: null,
+          receiptEmailSentAt: null,
+          receiptEmailMessageId: null,
+          receiptEmailError: null,
+          receiptResendRequestId: requestId,
+          receiptResendActorType: "CUSTOMER",
+          receiptResendActorId: customerId,
+          receiptResendPreviousEmail: order.guestEmail,
+        },
+      });
+      return { staged: true, email: order.customer.email };
+    });
+    if (!staged.staged) return { receiptDelivery: "SENT" as const, email: staged.email };
+    const receiptDelivery = await this.deliverCustomerReceipt(orderId, requestId);
+    return { receiptDelivery, email: staged.email };
+  }
+
+  private async deliverCustomerReceipt(orderId: string, requestId: string) {
+    const now = new Date();
+    const claimed = await prisma.ticketOrder.updateMany({
+      where: { id: orderId, receiptResendRequestId: requestId, receiptEmailSentAt: null, OR: [{ receiptEmailClaimedAt: null }, { receiptEmailClaimedAt: { lt: new Date(now.getTime() - 5 * 60_000) } }] },
+      data: { receiptEmailClaimedAt: now, receiptEmailError: null },
+    });
+    if (claimed.count === 0) {
+      const current = await prisma.ticketOrder.findUniqueOrThrow({ where: { id: orderId }, select: { receiptEmailSentAt: true } });
+      return current.receiptEmailSentAt ? "SENT" as const : "NOT_REQUESTED" as const;
+    }
+    const order = await prisma.ticketOrder.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { tickets: { where: { status: { in: ["ISSUED", "ADMITTED"] } }, include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } },
+    });
+    if (!order.guestEmail || order.receiptResendRequestId !== requestId) return "NOT_REQUESTED" as const;
+    const receipt: TicketReceipt = {
+      to: order.guestEmail, guestName: order.guestName, orderNumber: order.orderNumber, totalCents: order.totalCents, currency: order.currency,
+      tickets: order.tickets.map((ticket) => ({ id: ticket.id, credential: ticket.qrToken, movie: ticket.showtimeSeat.showtime.movie.title, auditorium: ticket.showtimeSeat.showtime.auditorium.name, seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label, ticketType: ticket.ticketType.name, startsAt: ticket.showtimeSeat.showtime.startsAt })),
+    };
     try {
-      return await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`;
-        const order = await tx.ticketOrder.findFirst({
-          where: { id: orderId, customerId, status: { in: ["PAID", "EXCHANGED"] }, customer: { authAccount: { isNot: null } } },
-          include: { customer: true, tickets: { where: { status: { in: ["ISSUED", "ADMITTED"] } }, include: { ticketType: true, showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } } } } },
-        });
-        if (!order?.customer?.email || order.tickets.length === 0) throw AppError.notFound("Receiptable ticket order was not found.");
-        const completed = await tx.auditEvent.findMany({
-          where: { actorType: "CUSTOMER", actorId: customerId, action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id },
-          select: { afterState: true },
-        });
-        const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
-        if (replay) {
-          if (replay.email !== order.customer.email) throw AppError.conflict("The receipt resend request id was already used for a different account email.");
-          return { receiptDelivery: "SENT" as const, email: order.customer.email };
-        }
-        const receipt: TicketReceipt = {
-          to: order.customer.email, guestName: order.customer.name, orderNumber: order.orderNumber, totalCents: order.totalCents, currency: order.currency,
-          tickets: order.tickets.map((ticket) => ({ id: ticket.id, credential: ticket.qrToken, movie: ticket.showtimeSeat.showtime.movie.title, auditorium: ticket.showtimeSeat.showtime.auditorium.name, seat: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label, ticketType: ticket.ticketType.name, startsAt: ticket.showtimeSeat.showtime.startsAt })),
-        };
-        const delivery = await this.emailProvider.sendTicketReceipt(receipt);
-        await tx.ticketOrder.update({
-          where: { id: order.id },
-          data: {
-            guestEmail: order.customer!.email,
-            receiptEmailSentAt: new Date(),
-            receiptEmailMessageId: delivery.messageId,
-            receiptEmailClaimedAt: null,
-            receiptEmailError: null,
-          },
-        });
-        await this.audit.record({
-          actorType: "CUSTOMER",
-          actorId: customerId,
-          locationId: order.locationId,
-          action: "ticket_order.receipt_resent",
-          entityType: "TicketOrder",
-          entityId: order.id,
-          afterState: { requestId, email: order.customer.email, messageId: delivery.messageId },
-        }, tx);
-        return { receiptDelivery: "SENT" as const, email: order.customer.email };
-      });
-    } catch (error) {
-      if (error instanceof AppError) throw error;
-      const message = error instanceof Error ? error.message : "Unknown email delivery error";
-      const order = await prisma.ticketOrder.findFirst({ where: { id: orderId, customerId }, include: { customer: true } });
-      if (!order?.customer?.email) throw AppError.notFound("Receiptable ticket order was not found.");
-      const customerEmail = order.customer.email;
+      const delivery = await this.emailProvider.sendTicketReceipt(receipt);
       await prisma.$transaction(async (tx) => {
-        await tx.ticketOrder.update({
-          where: { id: order.id },
-          data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) },
+        const updated = await tx.ticketOrder.updateMany({
+          where: { id: order.id, receiptResendRequestId: requestId },
+          data: { receiptEmailSentAt: new Date(), receiptEmailMessageId: delivery.messageId, receiptEmailClaimedAt: null, receiptEmailError: null },
         });
-        await this.audit.record({
-          actorType: "CUSTOMER",
-          actorId: customerId,
-          locationId: order.locationId,
-          action: "ticket_order.receipt_resend_failed",
-          entityType: "TicketOrder",
-          entityId: order.id,
-          afterState: { requestId, email: customerEmail, error: message.slice(0, 1000) },
-        }, tx);
+        if (updated.count === 0) return;
+        await this.audit.record({ actorType: "CUSTOMER", actorId: order.receiptResendActorId ?? undefined, locationId: order.locationId, action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id, beforeState: { email: order.receiptResendPreviousEmail }, afterState: { requestId, email: order.guestEmail, messageId: delivery.messageId } }, tx);
       });
-      return { receiptDelivery: "FAILED" as const, email: customerEmail };
+      return "SENT" as const;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown email delivery error";
+      await prisma.$transaction([
+        prisma.ticketOrder.updateMany({ where: { id: order.id, receiptResendRequestId: requestId }, data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) } }),
+        prisma.auditEvent.create({ data: { actorType: "CUSTOMER", actorId: order.receiptResendActorId, locationId: order.locationId, action: "ticket_order.receipt_resend_failed", entityType: "TicketOrder", entityId: order.id, afterState: { requestId, email: order.guestEmail, error: message.slice(0, 1000) } } }),
+      ]);
+      return "FAILED" as const;
     }
   }
 

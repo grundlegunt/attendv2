@@ -2054,6 +2054,7 @@ export class TicketingService {
 
   private async deliverReceipt(order: {
     id: string;
+    locationId: string;
     orderNumber: string;
     guestEmail: string | null;
     guestName: string | null;
@@ -2064,6 +2065,10 @@ export class TicketingService {
     orderAheadTaxCents: number;
     orderAheadServiceChargeCents: number;
     receiptEmailSentAt: Date | null;
+    receiptResendRequestId: string | null;
+    receiptResendActorType: "EMPLOYEE" | "CUSTOMER" | "PLATFORM" | "SYSTEM" | null;
+    receiptResendActorId: string | null;
+    receiptResendPreviousEmail: string | null;
     tickets: Array<{
       id: string;
       qrToken: string;
@@ -2141,24 +2146,50 @@ export class TicketingService {
 
     try {
       const delivery = await this.emailProvider.sendTicketReceipt(receipt);
-      await this.prisma.ticketOrder.update({
-        where: { id: order.id },
-        data: {
-          receiptEmailSentAt: new Date(),
-          receiptEmailMessageId: delivery.messageId,
-          receiptEmailClaimedAt: null,
-          receiptEmailError: null,
-        },
+      await this.prisma.$transaction(async (tx) => {
+        const updated = await tx.ticketOrder.updateMany({
+          where: { id: order.id, receiptResendRequestId: order.receiptResendRequestId },
+          data: {
+            receiptEmailSentAt: new Date(),
+            receiptEmailMessageId: delivery.messageId,
+            receiptEmailClaimedAt: null,
+            receiptEmailError: null,
+          },
+        });
+        if (updated.count === 0 || !order.receiptResendRequestId || !order.receiptResendActorType) return;
+        await tx.auditEvent.create({
+          data: {
+            actorType: order.receiptResendActorType,
+            actorId: order.receiptResendActorId,
+            locationId: order.locationId,
+            action: "ticket_order.receipt_resent",
+            entityType: "TicketOrder",
+            entityId: order.id,
+            beforeState: { email: order.receiptResendPreviousEmail },
+            afterState: { requestId: order.receiptResendRequestId, email: order.guestEmail, messageId: delivery.messageId },
+          },
+        });
       });
       return "SENT";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email delivery error";
-      await this.prisma.ticketOrder.update({
-        where: { id: order.id },
-        data: {
-          receiptEmailClaimedAt: null,
-          receiptEmailError: message.slice(0, 1000),
-        },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.ticketOrder.updateMany({
+          where: { id: order.id, receiptResendRequestId: order.receiptResendRequestId },
+          data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) },
+        });
+        if (!order.receiptResendRequestId || !order.receiptResendActorType) return;
+        await tx.auditEvent.create({
+          data: {
+            actorType: order.receiptResendActorType,
+            actorId: order.receiptResendActorId,
+            locationId: order.locationId,
+            action: "ticket_order.receipt_resend_failed",
+            entityType: "TicketOrder",
+            entityId: order.id,
+            afterState: { requestId: order.receiptResendRequestId, email: order.guestEmail, error: message.slice(0, 1000) },
+          },
+        });
       });
       return "FAILED";
     }

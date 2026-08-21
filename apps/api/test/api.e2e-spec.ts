@@ -5102,6 +5102,8 @@ describe("Customer authentication", () => {
 
     const receiptRequestId = crypto.randomUUID();
     const receiptsBefore = emailProvider.sent.length;
+    const sendReceipt = jest.spyOn(emailProvider, "sendTicketReceipt")
+      .mockRejectedValueOnce(new Error("Temporary customer receipt outage"));
     const sent = await request(app.getHttpServer())
       .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
       .set("Origin", CUSTOMER_WEB_ORIGIN)
@@ -5109,15 +5111,36 @@ describe("Customer authentication", () => {
       .set("Idempotency-Key", receiptRequestId)
       .send();
     expect(sent.status).toBe(200);
-    expect(sent.body).toEqual({ receiptDelivery: "SENT", email });
-    await request(app.getHttpServer())
-      .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
-      .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .set("Cookie", accessCookie)
-      .set("Idempotency-Key", receiptRequestId)
-      .send()
-      .expect(200);
+    expect(sent.body).toEqual({ receiptDelivery: "FAILED", email });
+    await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+      receiptResendRequestId: receiptRequestId,
+      receiptResendActorType: "CUSTOMER",
+      receiptResendActorId: customerId,
+      receiptEmailSentAt: null,
+      receiptEmailClaimedAt: null,
+      receiptEmailError: "Temporary customer receipt outage",
+    });
+    sendReceipt.mockRestore();
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    await expect(app.get(TicketingService).reconcileFailedReceipts()).resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
+    await Promise.all([
+      request(app.getHttpServer())
+        .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
+        .set("Origin", CUSTOMER_WEB_ORIGIN)
+        .set("Cookie", accessCookie)
+        .set("Idempotency-Key", receiptRequestId)
+        .send()
+        .expect(200),
+      request(app.getHttpServer())
+        .post(`/api/v1/auth/customers/orders/${order.id}/receipt`)
+        .set("Origin", CUSTOMER_WEB_ORIGIN)
+        .set("Cookie", accessCookie)
+        .set("Idempotency-Key", receiptRequestId)
+        .send()
+        .expect(200),
+    ]);
     expect(emailProvider.sent).toHaveLength(receiptsBefore + 1);
+    expect(await prisma.auditEvent.count({ where: { action: "ticket_order.receipt_resent", entityId: order.id, actorId: customerId, afterState: { path: ["requestId"], equals: receiptRequestId } } })).toBe(1);
 
     const blocked = await request(app.getHttpServer())
       .post(`/api/v1/auth/customers/orders/${crypto.randomUUID()}/receipt`)
@@ -8722,9 +8745,23 @@ describe("Milestone 9 box office and workforce", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({}).expect(201);
     const correctedReceiptEmail = `corrected-${crypto.randomUUID()}@example.test`;
     const receiptRequestId = crypto.randomUUID();
+    const resendDelivery = jest.spyOn(emailProvider, "sendTicketReceipt")
+      .mockRejectedValueOnce(new Error("Temporary box-office receipt outage"));
     const resentReceipt = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/receipt`)
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: receiptRequestId, email: correctedReceiptEmail }).expect(201);
-    expect(resentReceipt.body).toEqual({ receiptDelivery: "SENT", email: correctedReceiptEmail });
+    expect(resentReceipt.body).toEqual({ receiptDelivery: "FAILED", email: correctedReceiptEmail });
+    await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: sale.body.id } })).resolves.toMatchObject({
+      receiptResendRequestId: receiptRequestId,
+      receiptResendActorType: "EMPLOYEE",
+      receiptResendActorId: owner.id,
+      guestEmail: correctedReceiptEmail,
+      receiptEmailSentAt: null,
+      receiptEmailClaimedAt: null,
+      receiptEmailError: "Temporary box-office receipt outage",
+    });
+    resendDelivery.mockRestore();
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    await expect(app.get(TicketingService).reconcileFailedReceipts()).resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
     expect(emailProvider.sent).toHaveLength(receiptsBefore + 2);
     expect(emailProvider.sent.at(-1)).toEqual(expect.objectContaining({ to: correctedReceiptEmail, orderNumber: sale.body.orderNumber }));
     await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: sale.body.id } })).resolves.toMatchObject({ guestEmail: correctedReceiptEmail, receiptEmailError: null });

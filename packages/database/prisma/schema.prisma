@@ -788,6 +788,10 @@ model TicketOrder {
   receiptEmailSentAt           DateTime?
   receiptEmailMessageId        String?
   receiptEmailError            String?
+  receiptResendRequestId       String?
+  receiptResendActorType       AuditActorType?
+  receiptResendActorId         String?
+  receiptResendPreviousEmail   String?
   // Captures the explicit checkout choice so Milestone 5 can create the
   // versioned CustomerConsent and saved payment reference after confirmation.
   diningAuthorizationRequested Boolean?
