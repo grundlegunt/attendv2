@@ -4969,6 +4969,7 @@ describe("Customer authentication", () => {
   });
 
   it("changes a customer email only after the new address is verified", async () => {
+    const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
     const { TestEmailProvider } = await import("@cinema/notifications");
     const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
@@ -5002,17 +5003,23 @@ describe("Customer authentication", () => {
     const delivery = emailProvider.sentCustomerEmailChanges.at(-1)!;
     expect(delivery.to).toBe(newEmail);
     const token = new URL(delivery.verificationUrl).hash.replace("#emailChange=", "");
+    const confirmationRequestId = crypto.randomUUID();
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/email-change/confirm")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", confirmationRequestId)
       .send({ token })
       .expect(200, { changed: true });
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/email-change/confirm")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", confirmationRequestId)
       .send({ token })
-      .expect(400);
+      .expect(200, { changed: true });
+    expect(await prisma.auditEvent.count({
+      where: { action: "customer.email_changed", afterState: { path: ["requestId"], equals: confirmationRequestId } },
+    })).toBe(1);
 
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/login")
