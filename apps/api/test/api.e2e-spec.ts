@@ -628,10 +628,13 @@ describe("Staff authentication", () => {
       expect(challengedLogin.status).toBe(200);
       expect(challengedLogin.body).toEqual(expect.objectContaining({ mfaRequired: true, challengeToken: expect.any(String) }));
       expect(challengedLogin.body.accessToken).toBeUndefined();
-      const verified = await request(app.getHttpServer())
+      const verificationCode = authenticator.generate(first.body.secret);
+      const verifyChallenge = () => request(app.getHttpServer())
         .post("/api/v1/auth/staff/mfa/verify")
-        .send({ challengeToken: challengedLogin.body.challengeToken, code: authenticator.generate(first.body.secret) })
-        .expect(200);
+        .send({ challengeToken: challengedLogin.body.challengeToken, code: verificationCode });
+      const verificationAttempts = await Promise.all([verifyChallenge(), verifyChallenge()]);
+      expect(verificationAttempts.map(({ status }) => status).sort()).toEqual([200, 401]);
+      const verified = verificationAttempts.find(({ status }) => status === 200)!;
       expect(verified.body.accessToken).toEqual(expect.any(String));
     } finally {
       await prisma.staffAuthAccount.update({

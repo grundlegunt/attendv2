@@ -168,18 +168,25 @@ export class AuthService {
   }
 
   async verifyStaffMfa(input: StaffMfaVerifyRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
-    let employeeId: string;
+    let challenge: { employeeId: string; challengeId: string };
     try {
-      employeeId = verifyMfaChallenge(input.challengeToken, loadEnv().JWT_ACCESS_SECRET);
+      challenge = verifyMfaChallenge(input.challengeToken, loadEnv().JWT_ACCESS_SECRET);
     } catch {
       throw AppError.unauthenticated("The MFA challenge expired. Sign in again.");
     }
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
-    if (!employee?.active || !employee.location.organization.active || !employee.authAccount?.mfaEnabled || !employee.authAccount.mfaSecretEncrypted) throw AppError.unauthenticated();
-    const secret = decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
-    if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
-    await this.audit.record({ actorType: "EMPLOYEE", actorId: employee.id, action: "employee.mfa_verified", entityType: "Employee", entityId: employee.id, locationId: employee.locationId });
-    await this.audit.record({ actorType: "EMPLOYEE", actorId: employee.id, action: "employee.login", entityType: "Employee", entityId: employee.id, locationId: employee.locationId });
+    const employee = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "employeeId" FROM "staff_auth_accounts" WHERE "employeeId" = ${challenge.employeeId} FOR UPDATE`;
+      const current = await tx.employee.findUnique({ where: { id: challenge.employeeId }, include: employeeInclude });
+      if (!current?.active || !current.location.organization.active || !current.authAccount?.mfaEnabled || !current.authAccount.mfaSecretEncrypted) throw AppError.unauthenticated();
+      const consumed = await tx.auditEvent.findFirst({ where: { action: "employee.mfa_challenge_consumed", entityType: "StaffMfaChallenge", entityId: challenge.challengeId } });
+      if (consumed) throw AppError.unauthenticated("The MFA challenge has already been used. Sign in again.");
+      const secret = decryptMfaSecret(current.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
+      if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
+      await this.audit.record({ actorType: "EMPLOYEE", actorId: current.id, action: "employee.mfa_challenge_consumed", entityType: "StaffMfaChallenge", entityId: challenge.challengeId, locationId: current.locationId }, tx);
+      await this.audit.record({ actorType: "EMPLOYEE", actorId: current.id, action: "employee.mfa_verified", entityType: "Employee", entityId: current.id, locationId: current.locationId }, tx);
+      await this.audit.record({ actorType: "EMPLOYEE", actorId: current.id, action: "employee.login", entityType: "Employee", entityId: current.id, locationId: current.locationId }, tx);
+      return current;
+    });
     return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
   }
 
