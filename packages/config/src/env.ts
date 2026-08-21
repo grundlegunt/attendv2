@@ -91,6 +91,10 @@ const envSchema = z.object({
   // explicitly).
   REFUND_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
 
+  // How often failed online gift-card email deliveries are retried. Delivery
+  // uses a database lease, so concurrent API instances can sweep safely.
+  GIFT_CARD_DELIVERY_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
+
   // How often the API checks for seat-linked restaurant tabs whose automatic
   // settlement time has arrived. Set to 0 in tests that invoke the sweep
   // explicitly.

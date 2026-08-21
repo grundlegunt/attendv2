@@ -183,6 +183,23 @@ export class GiftCardPurchaseService {
     return this.deliver(purchaseId);
   }
 
+  async reconcileFailedDeliveries(limit = 25) {
+    const purchases = await prisma.giftCardPurchase.findMany({
+      where: { status: "DELIVERY_FAILED", deliveredAt: null, deliveryCodeEncrypted: { not: null } },
+      select: { id: true },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
+    });
+    let delivered = 0;
+    let failed = 0;
+    for (const purchase of purchases) {
+      const result = await this.deliver(purchase.id);
+      if (result.status === "DELIVERED") delivered += 1;
+      else failed += 1;
+    }
+    return { scanned: purchases.length, delivered, failed };
+  }
+
   async processVerifiedWebhook(event: VerifiedProviderEvent) {
     const duplicate = await prisma.processedWebhookEvent.findUnique({
       where: { provider_providerEventId: { provider: this.provider.name, providerEventId: event.id } },
