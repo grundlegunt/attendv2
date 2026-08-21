@@ -1,6 +1,7 @@
 import type { ApiErrorBody } from "@cinema/shared";
 
 const API_BASE_URL = "/api/v1";
+const REQUEST_TIMEOUT_MS = 20_000;
 
 export class ApiRequestError extends Error {
   constructor(
@@ -68,7 +69,27 @@ export async function apiFetch<T>(
     }
   }
 
-  const res = await fetch(`${API_BASE_URL}${scopedPath}`, { ...init, headers, credentials: "include" });
+  const timeoutSignal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const signal = init?.signal
+    ? AbortSignal.any([init.signal, timeoutSignal])
+    : timeoutSignal;
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${scopedPath}`, {
+      ...init,
+      headers,
+      credentials: "include",
+      signal,
+    });
+  } catch (error) {
+    if (init?.signal?.aborted) throw error;
+    throw new ApiRequestError(timeoutSignal.aborted ? 504 : 503, {
+      code: "INTERNAL_ERROR",
+      message: timeoutSignal.aborted
+        ? "The request timed out. Please try again."
+        : "The server could not be reached. Please try again.",
+    });
+  }
 
   if (!res.ok) {
     const body = parseErrorBody(await res.text(), res.status, res.statusText);
