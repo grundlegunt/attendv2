@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { createStripeClient } from "./stripe-client";
 
 export type ConnectAccountState = {
   id: string;
@@ -28,7 +29,7 @@ export class StripeConnectOnboardingProvider implements ConnectOnboardingProvide
 
   constructor(secretKey: string, stripeClient?: Stripe) {
     if (!secretKey) throw new Error("StripeConnectOnboardingProvider requires a secretKey.");
-    this.client = stripeClient ?? new Stripe(secretKey, { apiVersion: "2024-11-20.acacia" as Stripe.LatestApiVersion });
+    this.client = stripeClient ?? createStripeClient(secretKey);
   }
 
   async createAccount(input: { organizationId: string; businessName: string; idempotencyKey: string }) {
