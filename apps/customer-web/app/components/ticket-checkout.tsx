@@ -376,7 +376,19 @@ export function TicketCheckout({
       method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
       body: JSON.stringify({ holderKey }),
-    }).then(async (resumed) => {
+    }).then(async (initialResume) => {
+      let resumed = initialResume;
+      while (active && resumed.payment?.status === "PROCESSING") {
+        paymentConfirmedRef.current = true;
+        setPaymentConfirmed(true);
+        await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+        if (!active) return;
+        resumed = await apiFetch<TicketCheckoutResponse>("/ticketing/checkouts/resume", {
+          method: "POST",
+          headers: { "Idempotency-Key": idempotencyKey },
+          body: JSON.stringify({ holderKey }),
+        });
+      }
       if (!active) return;
       setEmail(resumed.email ?? "");
       setName(resumed.name ?? "");

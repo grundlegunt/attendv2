@@ -41,13 +41,22 @@ export default function GiftCardsPage() {
   useEffect(() => { if (!elements || !paymentRef.current) return; const element = elements.create("payment"); element.on("ready", () => setPaymentReady(true)); element.mount(paymentRef.current); return () => element.unmount(); }, [elements]);
   useEffect(() => {
     if (!config || resumeAttempted.current) return;
+    let active = true;
     resumeAttempted.current = true;
     const storedKey = window.sessionStorage.getItem(PURCHASE_STORAGE_KEY);
     if (!storedKey) return;
     purchaseKey.current = storedKey;
     setPending(true); setError("");
     apiFetch<Purchase>("/gift-card-purchases/resume", { method: "POST", headers: { "Idempotency-Key": storedKey }, body: "{}" })
-      .then(async (resumed) => {
+      .then(async (initialResume) => {
+        let resumed = initialResume;
+        while (active && resumed.payment.status === "PROCESSING") {
+          setPurchase(resumed);
+          await new Promise((resolve) => window.setTimeout(resolve, 2_000));
+          if (!active) return;
+          resumed = await apiFetch<Purchase>("/gift-card-purchases/resume", { method: "POST", headers: { "Idempotency-Key": storedKey }, body: "{}" });
+        }
+        if (!active) return;
         setBuyerEmail(resumed.buyerEmail); setRecipientEmail(resumed.recipientEmail);
         if (resumed.payment.status === "SUCCEEDED") {
           setConfirmation(await finalizePurchase(resumed.purchaseId, storedKey));
@@ -59,8 +68,9 @@ export default function GiftCardsPage() {
         setPurchase(resumed);
         setElements(factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined }).elements({ clientSecret: resumed.payment.clientSecret, appearance: { theme: "night" } }));
       })
-      .catch((reason) => { if (reason instanceof ApiRequestError && reason.status === 404) { window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY); purchaseKey.current = null; } setError(failure(reason)); })
-      .finally(() => setPending(false));
+      .catch((reason) => { if (!active) return; if (reason instanceof ApiRequestError && reason.status === 404) { window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY); purchaseKey.current = null; } setError(failure(reason)); })
+      .finally(() => { if (active) setPending(false); });
+    return () => { active = false; };
   }, [config]);
 
   function failure(reason: unknown) { return reason instanceof ApiRequestError ? reason.body.message : reason instanceof Error ? reason.message : "The request could not be completed."; }

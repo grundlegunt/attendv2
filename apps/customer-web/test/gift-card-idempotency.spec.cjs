@@ -18,4 +18,10 @@ describe("gift card purchase idempotency", () => {
     assert.match(source, /if \(!purchaseKey\.current\) purchaseKey\.current = crypto\.randomUUID\(\)/);
     assert.match(source, /"Idempotency-Key": purchaseKey\.current/);
   });
+
+  it("waits for an in-flight payment instead of confirming it again", () => {
+    assert.match(source, /while \(active && resumed\.payment\.status === "PROCESSING"\)/);
+    assert.match(source, /window\.setTimeout\(resolve, 2_000\)/);
+    assert.match(source, /if \(!active\) return/);
+  });
 });

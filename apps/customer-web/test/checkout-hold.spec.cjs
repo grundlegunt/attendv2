@@ -40,6 +40,12 @@ describe("checkout hold expiration", () => {
     assert.match(checkoutSource, /it will be refunded if tickets cannot be issued\./);
   });
 
+  it("waits for an in-flight resumed payment instead of confirming it again", () => {
+    assert.match(checkoutSource, /while \(active && resumed\.payment\?\.status === "PROCESSING"\)/);
+    assert.match(checkoutSource, /window\.setTimeout\(resolve, 2_000\)/);
+    assert.match(checkoutSource, /paymentConfirmedRef\.current = true/);
+  });
+
   it("keeps ticket-type and ZIP-code controls out of customer checkout", () => {
     assert.doesNotMatch(checkoutSource, /<h3>Ticket types<\/h3>/);
     assert.doesNotMatch(checkoutSource, /ZIP code \(optional\)/);
