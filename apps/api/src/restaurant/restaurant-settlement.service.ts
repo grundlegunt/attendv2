@@ -869,7 +869,22 @@ export class RestaurantSettlementService {
         payments: true,
       },
     });
-    if (!tab?.primaryCustomer?.email || !tab.primaryCustomerId) return;
+    if (!tab?.primaryCustomer?.email || !tab.primaryCustomerId) return "NOT_REQUESTED" as const;
+    if (tab.paymentFailureEmailSentAt) return "SENT" as const;
+    const now = new Date();
+    const claim = await prisma.restaurantTab.updateMany({
+      where: {
+        id: tab.id,
+        status: "PAYMENT_FAILED",
+        paymentFailureEmailSentAt: null,
+        OR: [
+          { paymentFailureEmailClaimedAt: null },
+          { paymentFailureEmailClaimedAt: { lt: new Date(now.getTime() - 60_000) } },
+        ],
+      },
+      data: { paymentFailureEmailClaimedAt: now, paymentFailureEmailError: null },
+    });
+    if (claim.count === 0) return "NOT_REQUESTED" as const;
 
     const payload = Buffer.from(
       JSON.stringify({
@@ -886,7 +901,7 @@ export class RestaurantSettlementService {
     const baseUrl = loadEnv().CUSTOMER_WEB_URL.replace(/\/$/, "");
 
     try {
-      await this.emailProvider.sendRestaurantPaymentFailed({
+      const delivery = await this.emailProvider.sendRestaurantPaymentFailed({
         to: tab.primaryCustomer.email,
         customerName: tab.primaryCustomer.name ?? undefined,
         theaterName: tab.location.organization.name,
@@ -895,20 +910,65 @@ export class RestaurantSettlementService {
         currency,
         paymentUrl: `${baseUrl}/account?restaurantTab=${encodeURIComponent(token)}`,
       });
-    } catch (error) {
-      await prisma.auditEvent.create({
+      await prisma.restaurantTab.update({
+        where: { id: tab.id },
         data: {
+          paymentFailureEmailSentAt: new Date(),
+          paymentFailureEmailMessageId: delivery.messageId,
+          paymentFailureEmailClaimedAt: null,
+          paymentFailureEmailError: null,
+        },
+      });
+      return "SENT" as const;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Email delivery failed";
+      await prisma.$transaction([
+        prisma.restaurantTab.update({
+          where: { id: tab.id },
+          data: {
+            paymentFailureEmailClaimedAt: null,
+            paymentFailureEmailError: message.slice(0, 1000),
+          },
+        }),
+        prisma.auditEvent.create({ data: {
           actorType: "SYSTEM",
           action: "restaurant_tab.payment_failure_notification_failed",
           entityType: "RestaurantTab",
           entityId: tab.id,
           locationId: tab.locationId,
           afterState: {
-            message: error instanceof Error ? error.message : "Email delivery failed",
+            message,
           },
-        },
-      });
+        } }),
+      ]);
+      return "FAILED" as const;
     }
+  }
+
+  async reconcileFailedPaymentNotifications(limit = 25) {
+    const staleClaimedAt = new Date(Date.now() - 60_000);
+    const tabs = await prisma.restaurantTab.findMany({
+      where: {
+        status: "PAYMENT_FAILED",
+        primaryCustomer: { email: { not: null } },
+        paymentFailureEmailSentAt: null,
+        OR: [
+          { paymentFailureEmailError: { not: null } },
+          { paymentFailureEmailClaimedAt: { lt: staleClaimedAt } },
+        ],
+      },
+      select: { id: true },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
+    });
+    let delivered = 0;
+    let failed = 0;
+    for (const tab of tabs) {
+      const result = await this.notifyPaymentFailure(tab.id);
+      if (result === "SENT") delivered += 1;
+      else if (result === "FAILED") failed += 1;
+    }
+    return { scanned: tabs.length, delivered, failed };
   }
 
   private async tabView(input: {

@@ -7871,7 +7871,15 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       .get(`/api/v1/public/restaurant-tabs/${encodeURIComponent(guestToken!)}`)
       .expect(200);
 
-    jest
+    await prisma.restaurantTab.update({
+      where: { id: tab.id },
+      data: {
+        paymentFailureEmailSentAt: null,
+        paymentFailureEmailMessageId: null,
+      },
+    });
+    const noticesBeforeRetry = emailProvider.sentRestaurantPaymentFailures.length;
+    const failedNotice = jest
       .spyOn(emailProvider, "sendRestaurantPaymentFailed")
       .mockRejectedValueOnce(new Error("Email provider unavailable"));
     await (
@@ -7890,6 +7898,24 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
         },
       }),
     ).toBe(1);
+    failedNotice.mockRestore();
+    await expect(settlement.reconcileFailedPaymentNotifications()).resolves.toEqual({
+      scanned: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(
+      prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+    ).resolves.toMatchObject({
+      status: "PAYMENT_FAILED",
+      paymentFailureEmailSentAt: expect.any(Date),
+      paymentFailureEmailClaimedAt: null,
+      paymentFailureEmailError: null,
+      paymentFailureEmailMessageId: expect.any(String),
+    });
+    expect(
+      emailProvider.sentRestaurantPaymentFailures.slice(noticesBeforeRetry),
+    ).toHaveLength(1);
   });
 
   it("allows only one concurrent fallback worker to collect an overdue tab", async () => {
