@@ -7,6 +7,27 @@ export interface StoredPlatformSession {
 }
 
 let refreshInFlight: Promise<StoredPlatformSession | null> | null = null;
+const REQUEST_TIMEOUT_MS = 20_000;
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+
+async function fetchPlatform(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeoutSignal])
+    : timeoutSignal;
+  try {
+    return await fetch(url, { ...init, signal });
+  } catch (error) {
+    if (init.signal?.aborted) throw error;
+    throw new Error(timeoutSignal.aborted
+      ? "The request timed out. Please try again."
+      : "The server could not be reached. Please try again.");
+  }
+}
 
 function isPlatformSession(value: unknown): value is StoredPlatformSession {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -45,28 +66,29 @@ export function readPlatformSession(storageKey: string): StoredPlatformSession |
   }
 }
 
-async function platformResponse(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string) {
+async function platformResponse(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string, timeoutMs = REQUEST_TIMEOUT_MS) {
   const send = (token?: string) => {
     const headers = new Headers(init?.headers);
     headers.set("Content-Type", "application/json");
     if (token) headers.set("Authorization", `Bearer ${token}`);
-    return fetch(`${apiBaseUrl}${path}`, { ...init, headers });
+    return fetchPlatform(`${apiBaseUrl}${path}`, { ...init, headers }, timeoutMs);
   };
   const stored = accessToken ? readPlatformSession(storageKey) : null;
   let response = await send(stored?.accessToken ?? accessToken);
   if (response.status === 401 && accessToken) {
     const session = readPlatformSession(storageKey);
     if (session) {
-      refreshInFlight ??= fetch(`${apiBaseUrl}/platform/auth/refresh`, {
+      refreshInFlight ??= fetchPlatform(`${apiBaseUrl}/platform/auth/refresh`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ refreshToken: session.refreshToken }),
-        })
+        }, REQUEST_TIMEOUT_MS)
         .then(async (refreshed) => {
           if (!refreshed.ok) return null;
           const value = await readJson(refreshed);
           return isPlatformSession(value) ? value : null;
         })
+        .catch(() => null)
         .finally(() => { refreshInFlight = null; });
       const next = await refreshInFlight;
       if (next) {
@@ -98,5 +120,5 @@ export async function platformRequest<T>(apiBaseUrl: string, storageKey: string,
 }
 
 export async function platformDownload(apiBaseUrl: string, storageKey: string, path: string, accessToken: string) {
-  return (await platformResponse(apiBaseUrl, storageKey, path, undefined, accessToken)).blob();
+  return (await platformResponse(apiBaseUrl, storageKey, path, undefined, accessToken, DOWNLOAD_TIMEOUT_MS)).blob();
 }
