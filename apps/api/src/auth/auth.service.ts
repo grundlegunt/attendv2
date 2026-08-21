@@ -456,6 +456,7 @@ export class AuthService {
         where: { customerId: customer.id },
         data: {
           passwordResetRequestId: requestId,
+          passwordResetTokenVersion: customer.authAccount.refreshTokenVersion,
           passwordResetEmailClaimedAt: null,
           passwordResetEmailSentAt: null,
           passwordResetEmailMessageId: null,
@@ -489,8 +490,15 @@ export class AuthService {
     if (!customer?.email || !customer.authAccount?.passwordHash || customer.authAccount.passwordResetRequestId !== requestId) {
       return "NOT_REQUESTED" as const;
     }
+    if (customer.authAccount.passwordResetTokenVersion !== customer.authAccount.refreshTokenVersion) {
+      await prisma.customerAuthAccount.updateMany({
+        where: { customerId, passwordResetRequestId: requestId },
+        data: { passwordResetRequestId: null, passwordResetEmailClaimedAt: null },
+      });
+      return "NOT_REQUESTED" as const;
+    }
     const env = loadEnv();
-    const token = signCustomerPasswordResetToken({ sub: customer.id, tokenVersion: customer.authAccount.refreshTokenVersion, purpose: "customer-password-reset" }, env.JWT_REFRESH_SECRET);
+    const token = signCustomerPasswordResetToken({ sub: customer.id, tokenVersion: customer.authAccount.passwordResetTokenVersion, purpose: "customer-password-reset" }, env.JWT_REFRESH_SECRET);
     const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
     try {
       const delivery = await this.emailProvider.sendCustomerPasswordReset({
@@ -765,52 +773,144 @@ export class AuthService {
       throw AppError.conflict("That email address cannot be used.");
     }
 
+    const staged = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "customers" WHERE "id" = ${customer.id} FOR UPDATE`;
+      const current = await tx.customer.findUnique({ where: { id: customer.id }, include: { authAccount: true } });
+      if (!current?.authAccount?.passwordHash) throw AppError.unauthenticated();
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.email_change_requested", entityType: "Customer", entityId: customer.id },
+        select: { afterState: true },
+      });
+      const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+      if (replay) {
+        if (replay.newEmail !== newEmail) throw AppError.conflict("The email change request id was already used for a different address.");
+        return false;
+      }
+      if (current.authAccount.emailChangeRequestId === requestId) {
+        if (current.authAccount.emailChangeNewEmail !== newEmail) throw AppError.conflict("The email change request id was already used for a different address.");
+        return true;
+      }
+      await tx.customerAuthAccount.update({
+        where: { customerId: customer.id },
+        data: {
+          emailChangeRequestId: requestId,
+          emailChangeNewEmail: newEmail,
+          emailChangeTokenVersion: current.authAccount.refreshTokenVersion,
+          emailChangeEmailClaimedAt: null,
+          emailChangeEmailSentAt: null,
+          emailChangeEmailMessageId: null,
+          emailChangeEmailError: null,
+        },
+      });
+      return true;
+    });
+    if (staged) await this.deliverCustomerEmailChange(customer.id, requestId);
+  }
+
+  private async deliverCustomerEmailChange(customerId: string, requestId: string) {
+    const now = new Date();
+    const claim = await prisma.customerAuthAccount.updateMany({
+      where: {
+        customerId,
+        emailChangeRequestId: requestId,
+        emailChangeEmailSentAt: null,
+        OR: [
+          { emailChangeEmailClaimedAt: null },
+          { emailChangeEmailClaimedAt: { lt: new Date(now.getTime() - 60_000) } },
+        ],
+      },
+      data: { emailChangeEmailClaimedAt: now, emailChangeEmailError: null },
+    });
+    if (claim.count === 0) return "NOT_REQUESTED" as const;
+    const customer = await prisma.customer.findUnique({ where: { id: customerId }, include: { authAccount: true } });
+    const account = customer?.authAccount;
+    if (!customer || !account?.passwordHash || !account.emailChangeNewEmail || account.emailChangeRequestId !== requestId) {
+      return "NOT_REQUESTED" as const;
+    }
+    if (account.emailChangeTokenVersion !== account.refreshTokenVersion) {
+      await prisma.customerAuthAccount.updateMany({
+        where: { customerId, emailChangeRequestId: requestId },
+        data: { emailChangeRequestId: null, emailChangeEmailClaimedAt: null },
+      });
+      return "NOT_REQUESTED" as const;
+    }
     const env = loadEnv();
     const token = signCustomerEmailChangeToken({
       sub: customer.id,
-      tokenVersion: customer.authAccount.refreshTokenVersion,
-      newEmail,
+      tokenVersion: account.emailChangeTokenVersion,
+      newEmail: account.emailChangeNewEmail,
       purpose: "customer-email-change",
     }, env.JWT_REFRESH_SECRET);
     const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
     try {
-      await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT "id" FROM "customers" WHERE "id" = ${customer.id} FOR UPDATE`;
-        const completed = await tx.auditEvent.findMany({
-          where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.email_change_requested", entityType: "Customer", entityId: customer.id },
-          select: { afterState: true },
+      const delivery = await this.emailProvider.sendCustomerEmailChange({
+        to: account.emailChangeNewEmail, customerName: customer.name,
+        verificationUrl: `${customerWebUrl}/account#emailChange=${encodeURIComponent(token)}`,
+        expiresInMinutes: 30,
+      });
+      const recorded = await prisma.$transaction(async (tx) => {
+        const updated = await tx.customerAuthAccount.updateMany({
+          where: { customerId, emailChangeRequestId: requestId },
+          data: {
+            emailChangeEmailSentAt: new Date(),
+            emailChangeEmailMessageId: delivery.messageId,
+            emailChangeEmailClaimedAt: null,
+            emailChangeEmailError: null,
+          },
         });
-        const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
-        if (replay) {
-          if (replay.newEmail !== newEmail) throw AppError.conflict("The email change request id was already used for a different address.");
-          return;
-        }
-        const delivery = await this.emailProvider.sendCustomerEmailChange({
-          to: newEmail, customerName: customer.name,
-          verificationUrl: `${customerWebUrl}/account#emailChange=${encodeURIComponent(token)}`,
-          expiresInMinutes: 30,
-        });
+        if (updated.count === 0) return false;
         await this.audit.record({
           actorType: "CUSTOMER", actorId: customer.id, action: "customer.email_change_requested",
           entityType: "Customer", entityId: customer.id,
-          afterState: { requestId, newEmail, messageId: delivery.messageId },
+          afterState: { requestId, newEmail: account.emailChangeNewEmail, messageId: delivery.messageId },
         }, tx);
+        return true;
       });
+      return recorded ? "SENT" as const : "NOT_REQUESTED" as const;
     } catch (error) {
-      if (error instanceof AppError) throw error;
-      await this.audit.record({
-        actorType: "SYSTEM",
-        action: "customer.email_change_delivery_failed",
-        entityType: "Customer",
-        entityId: customer.id,
-        afterState: {
-          requestId,
-          newEmail,
-          error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000),
-        },
-      });
-      throw AppError.validationFailed("The verification email could not be sent. Please try again.");
+      const message = (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000);
+      await prisma.$transaction([
+        prisma.customerAuthAccount.updateMany({
+          where: { customerId, emailChangeRequestId: requestId },
+          data: { emailChangeEmailClaimedAt: null, emailChangeEmailError: message },
+        }),
+        prisma.auditEvent.create({
+          data: {
+            actorType: "SYSTEM", action: "customer.email_change_delivery_failed",
+            entityType: "Customer", entityId: customer.id,
+            afterState: { requestId, newEmail: account.emailChangeNewEmail, error: message },
+          },
+        }),
+      ]);
+      return "FAILED" as const;
     }
+  }
+
+  async reconcileCustomerEmailChangeEmails(limit = 25) {
+    const staleClaimedAt = new Date(Date.now() - 60_000);
+    const accounts = await prisma.customerAuthAccount.findMany({
+      where: {
+        passwordHash: { not: null },
+        emailChangeRequestId: { not: null },
+        emailChangeNewEmail: { not: null },
+        emailChangeEmailSentAt: null,
+        OR: [
+          { emailChangeEmailClaimedAt: null },
+          { emailChangeEmailClaimedAt: { lt: staleClaimedAt } },
+        ],
+      },
+      select: { customerId: true, emailChangeRequestId: true },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
+    });
+    let delivered = 0;
+    let failed = 0;
+    for (const account of accounts) {
+      const result = await this.deliverCustomerEmailChange(account.customerId, account.emailChangeRequestId!);
+      if (result === "SENT") delivered += 1;
+      else if (result === "FAILED") failed += 1;
+    }
+    return { scanned: accounts.length, delivered, failed };
   }
 
   async confirmCustomerEmailChange(input: CustomerEmailChangeConfirm, requestId: string): Promise<void> {

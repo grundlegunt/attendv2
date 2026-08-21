@@ -26,8 +26,12 @@ export class CustomerAuthEmailReconciliationService implements OnModuleInit, OnM
     if (this.running) return;
     this.running = true;
     try {
-      const result = await this.auth.reconcileCustomerPasswordResetEmails();
-      this.logger.log("Customer auth email reconciliation sweep complete.", result);
+      const passwordResetEmails = await this.auth.reconcileCustomerPasswordResetEmails();
+      const emailChangeEmails = await this.auth.reconcileCustomerEmailChangeEmails();
+      this.logger.log("Customer auth email reconciliation sweep complete.", {
+        passwordResetEmails,
+        emailChangeEmails,
+      });
     } catch (error) {
       this.logger.error("Customer auth email reconciliation sweep failed.", String(error));
     } finally {

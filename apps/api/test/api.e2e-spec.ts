@@ -5308,8 +5308,10 @@ describe("Customer authentication", () => {
   it("changes a customer email only after the new address is verified", async () => {
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { AuthService } = await import("../src/auth/auth.service");
     const { TestEmailProvider } = await import("@cinema/notifications");
     const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const auth = app.get(AuthService);
     const newEmail = "updated-customer@m0test.local";
     const requestId = crypto.randomUUID();
 
@@ -5322,6 +5324,8 @@ describe("Customer authentication", () => {
       .expect(401);
 
     const deliveriesBefore = emailProvider.sentCustomerEmailChanges.length;
+    const sendCustomerEmailChange = jest.spyOn(emailProvider, "sendCustomerEmailChange")
+      .mockRejectedValueOnce(new Error("Temporary email provider outage"));
     await request(app.getHttpServer())
       .post("/api/v1/auth/customers/email-change/request")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
@@ -5329,13 +5333,43 @@ describe("Customer authentication", () => {
       .set("Idempotency-Key", requestId)
       .send({ newEmail: newEmail.toUpperCase(), password: "customer-password-3" })
       .expect(202, { accepted: true });
-    await request(app.getHttpServer())
-      .post("/api/v1/auth/customers/email-change/request")
-      .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .set("Cookie", accessCookie)
-      .set("Idempotency-Key", requestId)
-      .send({ newEmail, password: "customer-password-3" })
-      .expect(202, { accepted: true });
+    const customer = await prisma.customer.findUniqueOrThrow({ where: { email }, include: { authAccount: true } });
+    expect(customer.authAccount).toMatchObject({
+      emailChangeRequestId: requestId,
+      emailChangeNewEmail: newEmail,
+      emailChangeTokenVersion: expect.any(Number),
+      emailChangeEmailClaimedAt: null,
+      emailChangeEmailSentAt: null,
+      emailChangeEmailMessageId: null,
+      emailChangeEmailError: "Temporary email provider outage",
+    });
+    sendCustomerEmailChange.mockRestore();
+
+    await expect(auth.reconcileCustomerEmailChangeEmails()).resolves.toEqual({ scanned: 1, delivered: 1, failed: 0 });
+    expect(await prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId: customer.id } })).toMatchObject({
+      emailChangeRequestId: requestId,
+      emailChangeEmailClaimedAt: null,
+      emailChangeEmailSentAt: expect.any(Date),
+      emailChangeEmailMessageId: expect.any(String),
+      emailChangeEmailError: null,
+    });
+
+    await Promise.all([
+      request(app.getHttpServer())
+        .post("/api/v1/auth/customers/email-change/request")
+        .set("Origin", CUSTOMER_WEB_ORIGIN)
+        .set("Cookie", accessCookie)
+        .set("Idempotency-Key", requestId)
+        .send({ newEmail, password: "customer-password-3" })
+        .expect(202, { accepted: true }),
+      request(app.getHttpServer())
+        .post("/api/v1/auth/customers/email-change/request")
+        .set("Origin", CUSTOMER_WEB_ORIGIN)
+        .set("Cookie", accessCookie)
+        .set("Idempotency-Key", requestId)
+        .send({ newEmail, password: "customer-password-3" })
+        .expect(202, { accepted: true }),
+    ]);
     expect(emailProvider.sentCustomerEmailChanges).toHaveLength(deliveriesBefore + 1);
     const delivery = emailProvider.sentCustomerEmailChanges.at(-1)!;
     expect(delivery.to).toBe(newEmail);

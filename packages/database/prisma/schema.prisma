@@ -1647,15 +1647,25 @@ model CustomerAuthAccount {
   refreshTokenVersion Int @default(0)
 
   passwordResetRequestId       String?
+  passwordResetTokenVersion    Int?
   passwordResetEmailClaimedAt  DateTime?
   passwordResetEmailSentAt     DateTime?
   passwordResetEmailMessageId  String?
   passwordResetEmailError      String?
 
+  emailChangeRequestId        String?
+  emailChangeNewEmail         String?
+  emailChangeTokenVersion     Int?
+  emailChangeEmailClaimedAt   DateTime?
+  emailChangeEmailSentAt      DateTime?
+  emailChangeEmailMessageId   String?
+  emailChangeEmailError       String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([passwordResetEmailSentAt, passwordResetEmailClaimedAt, updatedAt], map: "customer_auth_password_reset_claim_idx")
+  @@index([emailChangeEmailSentAt, emailChangeEmailClaimedAt, updatedAt], map: "customer_auth_email_change_claim_idx")
   @@map("customer_auth_accounts")
 }
 
