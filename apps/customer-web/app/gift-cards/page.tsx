@@ -60,7 +60,7 @@ export default function GiftCardsPage() {
       const stripe = factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined });
       const result = await stripe.confirmPayment({ elements, redirect: "if_required", confirmParams: { receipt_email: buyerEmail } });
       if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
-      setConfirmation(await apiFetch<Confirmation>(`/gift-card-purchases/${purchase.purchaseId}/finalize`, { method: "POST", body: "{}" }));
+      setConfirmation(await apiFetch<Confirmation>(`/gift-card-purchases/${purchase.purchaseId}/finalize`, { method: "POST", headers: { "Idempotency-Key": purchaseKey.current! }, body: "{}" }));
     } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
   }
   async function checkBalance(event: FormEvent) { event.preventDefault(); setError(""); setBalance(null); try { setBalance(await apiFetch<Balance>("/cinema/gift-cards/balance", { method: "POST", body: JSON.stringify({ code }) })); } catch (reason) { setError(failure(reason)); } }
