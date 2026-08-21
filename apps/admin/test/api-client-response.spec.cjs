@@ -16,3 +16,11 @@ test("admin JSON requests reject malformed success payloads predictably", () => 
   assert.match(source, /The server returned an invalid response\. Please try again\./);
   assert.match(source, /return parseSuccessBody<T>\(await res\.text\(\), res\.status\)/);
 });
+
+test("admin requests are bounded while report downloads get a longer window", () => {
+  assert.match(source, /REQUEST_TIMEOUT_MS = 20_000/);
+  assert.match(source, /DOWNLOAD_TIMEOUT_MS = 60_000/);
+  assert.match(source, /fetchWithTimeout\(path, \{ \.\.\.init, headers \}, REQUEST_TIMEOUT_MS\)/);
+  assert.match(source, /fetchWithTimeout\(path, \{ \.\.\.init, headers \}, DOWNLOAD_TIMEOUT_MS\)/);
+  assert.match(source, /timeoutSignal\.aborted \? 504 : 503/);
+});
