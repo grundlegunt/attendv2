@@ -54,6 +54,7 @@ export default function AccountPage() {
   const [resetToken, setResetToken] = useState("");
   const passwordResetAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const passwordResetRequestAttemptRef = useRef<{ email: string; requestId: string } | null>(null);
   const [recoveryMessage, setRecoveryMessage] = useState<string | null>(null);
   const [name, setName] = useState("");
   const registrationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -221,16 +222,21 @@ export default function AccountPage() {
     event.preventDefault();
     setError(null);
     setRecoveryMessage(null);
+    const normalizedEmail = email.trim().toLowerCase();
+    if (passwordResetRequestAttemptRef.current?.email !== normalizedEmail) passwordResetRequestAttemptRef.current = { email: normalizedEmail, requestId: crypto.randomUUID() };
     setLoading(true);
     try {
       await apiFetch<{ accepted: true }>("/auth/customers/password-reset/request", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        headers: { "Idempotency-Key": passwordResetRequestAttemptRef.current.requestId },
+        body: JSON.stringify({ email: normalizedEmail }),
       });
+      passwordResetRequestAttemptRef.current = null;
       setRecoveryMessage(
         "If an account exists for that email, a password reset link is on its way.",
       );
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status < 500) passwordResetRequestAttemptRef.current = null;
       setError(
         err instanceof ApiRequestError ? err.body.message : "Please try again.",
       );

@@ -168,11 +168,13 @@ export class AuthController {
   @RateLimit({ scope: "auth", identity: "email" })
   async requestCustomerPasswordReset(
     @Req() request: Request,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerPasswordResetRequestSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
     await this.authService.requestCustomerPasswordReset(
       customerPasswordResetRequestSchema.parse(body),
+      requestId ?? "",
     );
     return { accepted: true };
   }
