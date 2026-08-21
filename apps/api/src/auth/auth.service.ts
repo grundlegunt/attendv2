@@ -105,7 +105,7 @@ export class AuthService {
 
   async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
     const employee = await prisma.employee.findUnique({
-      where: { email: input.email },
+      where: { email: input.email.toLowerCase() },
       include: employeeInclude,
     });
 
