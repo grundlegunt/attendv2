@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { authenticator } from "otplib";
 import { InvalidTokenError } from "./tokens";
@@ -62,17 +62,18 @@ export function signMfaChallenge(employeeId: string, secret: string): string {
     expiresIn: "5m",
     issuer: MFA_CHALLENGE_ISSUER,
     audience: MFA_CHALLENGE_AUDIENCE,
+    jwtid: randomUUID(),
   });
 }
 
-export function verifyMfaChallenge(token: string, secret: string): string {
+export function verifyMfaChallenge(token: string, secret: string): { employeeId: string; challengeId: string } {
   try {
     const payload = jwt.verify(token, secret, {
       issuer: MFA_CHALLENGE_ISSUER,
       audience: MFA_CHALLENGE_AUDIENCE,
     }) as jwt.JwtPayload;
-    if (payload.purpose !== "staff-mfa" || typeof payload.sub !== "string") throw new Error("wrong token purpose");
-    return payload.sub;
+    if (payload.purpose !== "staff-mfa" || typeof payload.sub !== "string" || typeof payload.jti !== "string") throw new Error("wrong token purpose");
+    return { employeeId: payload.sub, challengeId: payload.jti };
   } catch (error) {
     throw new InvalidTokenError(error instanceof Error ? error.message : "unknown");
   }

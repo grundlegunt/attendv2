@@ -30,7 +30,7 @@ describe("staff MFA", () => {
 
   it("signs a purpose-limited short-lived login challenge", () => {
     const challenge = signMfaChallenge("employee-1", signingSecret);
-    expect(verifyMfaChallenge(challenge, signingSecret)).toBe("employee-1");
+    expect(verifyMfaChallenge(challenge, signingSecret)).toEqual({ employeeId: "employee-1", challengeId: expect.any(String) });
     expect(() => verifyMfaChallenge(challenge, `${signingSecret}-wrong`)).toThrow();
   });
 });
