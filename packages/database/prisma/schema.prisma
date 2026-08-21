@@ -1319,6 +1319,10 @@ model RestaurantTab {
   taxCents                 Int?
   serviceChargeCents       Int?
   totalCents               Int?
+  paymentFailureEmailClaimedAt DateTime?
+  paymentFailureEmailSentAt    DateTime?
+  paymentFailureEmailMessageId String?
+  paymentFailureEmailError     String?
   // Amount already collected through a combined ticket + dining payment.
   // This remains separate from staff-entered tab payments so settlement can
   // subtract it without representing a second processor charge.
@@ -1338,6 +1342,8 @@ model RestaurantTab {
 
   @@index([locationId, status, openedAt])
   @@index([showtimeId, status])
+  @@index([status, paymentFailureEmailSentAt, paymentFailureEmailClaimedAt, updatedAt], map: "restaurant_tabs_payment_failure_email_claim_idx")
+  @@index([status, paymentFailureEmailSentAt, paymentFailureEmailError, updatedAt], map: "restaurant_tabs_payment_failure_email_retry_idx")
   @@unique([locationId, idempotencyKey])
   @@map("restaurant_tabs")
 }
