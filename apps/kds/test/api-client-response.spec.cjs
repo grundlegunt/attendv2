@@ -16,3 +16,10 @@ test("KDS rejects malformed successful JSON predictably", () => {
   assert.match(source, /The server returned an invalid response\. Please try again\./);
   assert.match(source, /return parseSuccessBody<T>\(await res\.text\(\), res\.status\)/);
 });
+
+test("KDS commands time out without bounding the event stream", () => {
+  assert.match(source, /REQUEST_TIMEOUT_MS = 20_000/);
+  assert.match(source, /timeoutSignal\.aborted \? 504 : 503/);
+  assert.match(source, /const res = await fetchWithTimeout\(path, \{ \.\.\.init, headers \}\)/);
+  assert.match(source, /void fetch\(`\$\{API_BASE_URL\}\/fulfillment\/stations\/\$\{kitchenStationId\}\/events`/);
+});
