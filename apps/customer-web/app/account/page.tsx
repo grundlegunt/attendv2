@@ -74,6 +74,7 @@ export default function AccountPage() {
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [emailChangePassword, setEmailChangePassword] = useState("");
+  const emailChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [emailChangeToken, setEmailChangeToken] = useState("");
   const [emailChangePending, setEmailChangePending] = useState(false);
   const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
@@ -369,17 +370,22 @@ export default function AccountPage() {
 
   async function requestEmailChange(event: FormEvent) {
     event.preventDefault();
+    const fingerprint = JSON.stringify({ newEmail: newEmail.trim().toLowerCase(), password: emailChangePassword });
+    if (emailChangeAttemptRef.current?.fingerprint !== fingerprint) emailChangeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setEmailChangePending(true);
     setEmailChangeMessage(null);
     try {
       await apiFetch<{ accepted: true }>("/auth/customers/email-change/request", {
         method: "POST",
-        body: JSON.stringify({ newEmail, password: emailChangePassword }),
+        headers: { "Idempotency-Key": emailChangeAttemptRef.current.requestId },
+        body: fingerprint,
       });
+      emailChangeAttemptRef.current = null;
       setNewEmail("");
       setEmailChangePassword("");
       setEmailChangeMessage("Check the new address for a confirmation link.");
     } catch (err) {
+      if (err instanceof ApiRequestError && err.status < 500) emailChangeAttemptRef.current = null;
       setEmailChangeMessage(
         err instanceof ApiRequestError ? err.body.message : "The email change could not be started.",
       );

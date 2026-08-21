@@ -595,7 +595,9 @@ export class AuthService {
   async requestCustomerEmailChange(
     customerId: string,
     input: CustomerEmailChangeRequest,
+    requestId: string,
   ): Promise<void> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid email change idempotency key is required.");
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
       include: { authAccount: true },
@@ -623,27 +625,37 @@ export class AuthService {
     }, env.JWT_REFRESH_SECRET);
     const customerWebUrl = env.CUSTOMER_WEB_URL.replace(/\/$/, "");
     try {
-      const delivery = await this.emailProvider.sendCustomerEmailChange({
-        to: newEmail,
-        customerName: customer.name,
-        verificationUrl: `${customerWebUrl}/account#emailChange=${encodeURIComponent(token)}`,
-        expiresInMinutes: 30,
-      });
-      await this.audit.record({
-        actorType: "CUSTOMER",
-        actorId: customer.id,
-        action: "customer.email_change_requested",
-        entityType: "Customer",
-        entityId: customer.id,
-        afterState: { newEmail, messageId: delivery.messageId },
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "customers" WHERE "id" = ${customer.id} FOR UPDATE`;
+        const completed = await tx.auditEvent.findMany({
+          where: { actorType: "CUSTOMER", actorId: customer.id, action: "customer.email_change_requested", entityType: "Customer", entityId: customer.id },
+          select: { afterState: true },
+        });
+        const replay = completed.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+        if (replay) {
+          if (replay.newEmail !== newEmail) throw AppError.conflict("The email change request id was already used for a different address.");
+          return;
+        }
+        const delivery = await this.emailProvider.sendCustomerEmailChange({
+          to: newEmail, customerName: customer.name,
+          verificationUrl: `${customerWebUrl}/account#emailChange=${encodeURIComponent(token)}`,
+          expiresInMinutes: 30,
+        });
+        await this.audit.record({
+          actorType: "CUSTOMER", actorId: customer.id, action: "customer.email_change_requested",
+          entityType: "Customer", entityId: customer.id,
+          afterState: { requestId, newEmail, messageId: delivery.messageId },
+        }, tx);
       });
     } catch (error) {
+      if (error instanceof AppError) throw error;
       await this.audit.record({
         actorType: "SYSTEM",
         action: "customer.email_change_delivery_failed",
         entityType: "Customer",
         entityId: customer.id,
         afterState: {
+          requestId,
           newEmail,
           error: (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000),
         },

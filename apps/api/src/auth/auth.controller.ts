@@ -245,6 +245,7 @@ export class AuthController {
   async requestCustomerEmailChange(
     @Req() request: Request,
     @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
     @Body(new ZodValidationPipe(customerEmailChangeRequestSchema)) body: unknown,
   ) {
     assertTrustedCustomerOrigin(request);
@@ -252,6 +253,7 @@ export class AuthController {
     await this.authService.requestCustomerEmailChange(
       actor.sub,
       customerEmailChangeRequestSchema.parse(body),
+      requestId ?? "",
     );
     return { accepted: true };
   }
