@@ -194,16 +194,24 @@ export class AuthService {
     });
   }
 
-  async confirmStaffMfa(employeeId: string, input: StaffMfaConfirmRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
-    const current = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
-    if (!current?.active || !current.authAccount?.mfaSecretEncrypted) throw AppError.validationFailed("Start MFA setup before confirming a code.");
-    const secret = decryptMfaSecret(current.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
-    if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
-    await prisma.$transaction(async (tx) => {
-      await tx.staffAuthAccount.update({ where: { employeeId }, data: { mfaEnabled: true, refreshTokenVersion: { increment: 1 } } });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId: current.locationId, action: "employee.mfa_enabled", entityType: "Employee", entityId: employeeId } });
+  async confirmStaffMfa(employeeId: string, input: StaffMfaConfirmRequest, requestId: string): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
+    if (requestId.length < 16) throw AppError.validationFailed("A valid MFA confirmation idempotency key is required.");
+    const employee = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "employeeId" FROM "staff_auth_accounts" WHERE "employeeId" = ${employeeId} FOR UPDATE`;
+      const current = await tx.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+      if (!current?.active || !current.authAccount?.mfaSecretEncrypted) throw AppError.validationFailed("Start MFA setup before confirming a code.");
+      const completed = await tx.auditEvent.findMany({
+        where: { actorType: "EMPLOYEE", actorId: employeeId, action: "employee.mfa_enabled", entityType: "Employee", entityId: employeeId },
+        select: { afterState: true },
+      });
+      if (completed.some(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) && (afterState as Record<string, unknown>).requestId === requestId)) return current;
+      if (current.authAccount.mfaEnabled) throw AppError.conflict("MFA is already enabled.");
+      const secret = decryptMfaSecret(current.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET);
+      if (!(await verifyMfaCode(secret, input.code))) throw AppError.invalidCredentials("The authenticator code is incorrect.");
+      const authAccount = await tx.staffAuthAccount.update({ where: { employeeId }, data: { mfaEnabled: true, refreshTokenVersion: { increment: 1 } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: employeeId, locationId: current.locationId, action: "employee.mfa_enabled", entityType: "Employee", entityId: employeeId, afterState: { requestId } } });
+      return { ...current, authAccount };
     });
-    const employee = await prisma.employee.findUniqueOrThrow({ where: { id: employeeId }, include: employeeInclude });
     return { tokens: this.issueEmployeeTokens(employee), employee: employeeToProfile(employee) };
   }
 
