@@ -178,17 +178,20 @@ export class AuthService {
   }
 
   async beginStaffMfaSetup(employeeId: string): Promise<{ secret: string; uri: string }> {
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
-    if (!employee?.active || !employee.authAccount) throw AppError.unauthenticated();
-    if (employee.authAccount.mustChangePassword) throw AppError.forbidden("Change your temporary password before setting up MFA.");
-    if (employee.authAccount.mfaEnabled) throw AppError.conflict("MFA is already enabled.");
-    const secret = employee.authAccount.mfaSecretEncrypted
-      ? decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET)
-      : createMfaSecret();
-    if (!employee.authAccount.mfaSecretEncrypted) {
-      await prisma.staffAuthAccount.update({ where: { employeeId }, data: { mfaSecretEncrypted: encryptMfaSecret(secret, loadEnv().JWT_REFRESH_SECRET) } });
-    }
-    return { secret, uri: createMfaUri(secret, employee.email, "Attend Admin") };
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "employeeId" FROM "staff_auth_accounts" WHERE "employeeId" = ${employeeId} FOR UPDATE`;
+      const employee = await tx.employee.findUnique({ where: { id: employeeId }, include: employeeInclude });
+      if (!employee?.active || !employee.authAccount) throw AppError.unauthenticated();
+      if (employee.authAccount.mustChangePassword) throw AppError.forbidden("Change your temporary password before setting up MFA.");
+      if (employee.authAccount.mfaEnabled) throw AppError.conflict("MFA is already enabled.");
+      const secret = employee.authAccount.mfaSecretEncrypted
+        ? decryptMfaSecret(employee.authAccount.mfaSecretEncrypted, loadEnv().JWT_REFRESH_SECRET)
+        : createMfaSecret();
+      if (!employee.authAccount.mfaSecretEncrypted) {
+        await tx.staffAuthAccount.update({ where: { employeeId }, data: { mfaSecretEncrypted: encryptMfaSecret(secret, loadEnv().JWT_REFRESH_SECRET) } });
+      }
+      return { secret, uri: createMfaUri(secret, employee.email, "Attend Admin") };
+    });
   }
 
   async confirmStaffMfa(employeeId: string, input: StaffMfaConfirmRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
