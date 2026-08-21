@@ -2526,6 +2526,9 @@ describe("Milestone 1 cinema configuration", () => {
     const paidResume = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases/resume")
       .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
     expect(paidResume.body.payment.status).toBe("SUCCEEDED");
+    const storedPayment = await prisma.payment.findFirstOrThrow({ where: { providerPaymentId: purchase.body.payment.providerPaymentId } });
+    expect(storedPayment).toMatchObject({ status: "SUCCEEDED" });
+    expect(await prisma.paymentAttempt.findFirstOrThrow({ where: { paymentId: storedPayment.id } })).toMatchObject({ status: "SUCCEEDED" });
 
     await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`)
       .set("Idempotency-Key", `wrong-${crypto.randomUUID()}`).send({}).expect(404);
@@ -3175,6 +3178,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   });
 
   it("resumes a checkout without requiring the original receipt or payment details", async () => {
+    const { prisma } = await import("@cinema/database");
     const holderKey = `resume-checkout-${crypto.randomUUID()}`;
     const { hold } = await holdAvailableSeat(holderKey);
     const config = await request(app.getHttpServer())
@@ -3221,6 +3225,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       .send({ holderKey })
       .expect(201);
     expect(paidResume.body.payment.status).toBe("SUCCEEDED");
+    expect(await prisma.payment.findUniqueOrThrow({ where: { id: checkout.body.payment.id } })).toMatchObject({ status: "SUCCEEDED" });
+    expect(await prisma.paymentAttempt.findFirstOrThrow({ where: { paymentId: checkout.body.payment.id } })).toMatchObject({ status: "SUCCEEDED" });
 
     await request(app.getHttpServer())
       .post("/api/v1/ticketing/checkouts/resume")

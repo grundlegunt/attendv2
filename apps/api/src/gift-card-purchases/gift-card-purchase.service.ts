@@ -83,6 +83,13 @@ export class GiftCardPurchaseService {
   private async complete(purchase: Awaited<ReturnType<typeof this.purchaseWithPayment>>) {
     if (purchase.payment.providerPaymentId) {
       const intent = await this.provider.retrievePaymentIntent({ connectedAccountId: purchase.location.organization.stripeConnectedAccountId ?? undefined, paymentIntentId: purchase.payment.providerPaymentId });
+      await prisma.$transaction([
+        prisma.payment.update({ where: { id: purchase.payment.id }, data: { status: localPaymentStatus(intent.status) } }),
+        prisma.paymentAttempt.updateMany({
+          where: { paymentId: purchase.payment.id, providerIntentId: intent.id },
+          data: { status: localAttemptStatus(intent.status), failureCode: intent.failureCode, failureMessage: intent.failureMessage },
+        }),
+      ]);
       return this.present(purchase, intent.clientSecret, intent.status);
     }
     const intent = await this.provider.createPaymentIntent({

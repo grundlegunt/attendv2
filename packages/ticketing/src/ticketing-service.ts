@@ -543,6 +543,20 @@ export class TicketingService {
         connectedAccountId,
         paymentIntentId: order.payment.providerPaymentId,
       });
+      await this.prisma.$transaction([
+        this.prisma.payment.update({
+          where: { id: order.payment.id },
+          data: { status: paymentStatus(intent.status) },
+        }),
+        this.prisma.paymentAttempt.updateMany({
+          where: { paymentId: order.payment.id, providerIntentId: intent.id },
+          data: {
+            status: paymentAttemptStatus(intent.status),
+            failureCode: intent.failureCode,
+            failureMessage: intent.failureMessage,
+          },
+        }),
+      ]);
       return this.presentCheckout(order, promotion, intent.clientSecret, intent.status);
     }
 
