@@ -174,6 +174,7 @@ export function TicketCheckout({
   >({});
   const [error, setError] = useState<string | null>(null);
   const [configLoading, setConfigLoading] = useState(true);
+  const [resumeLoading, setResumeLoading] = useState(false);
   const [pending, setPending] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [paymentElementReady, setPaymentElementReady] = useState(false);
@@ -363,6 +364,42 @@ export function TicketCheckout({
       configLoadingRef.current = false;
     };
   }, [loadConfig]);
+
+  useEffect(() => {
+    if (!config || configShowtimeId !== showtimeId || checkout || confirmation || holdExpired) return;
+    const idempotencyKey = window.sessionStorage.getItem(checkoutStorageKey);
+    if (!idempotencyKey) return;
+    let active = true;
+    setResumeLoading(true);
+    setError(null);
+    apiFetch<TicketCheckoutResponse>("/ticketing/checkouts/resume", {
+      method: "POST",
+      headers: { "Idempotency-Key": idempotencyKey },
+      body: JSON.stringify({ holderKey }),
+    }).then(async (resumed) => {
+      if (!active) return;
+      setCheckout(resumed);
+      if (resumed.payment?.status === "SUCCEEDED") {
+        paymentConfirmedRef.current = true;
+        setPaymentConfirmed(true);
+      }
+      if (resumed.payment?.clientSecret) await initializePayment(resumed);
+    }).catch((requestError) => {
+      if (!active) return;
+      if (requestError instanceof ApiRequestError && requestError.status === 404) {
+        window.sessionStorage.removeItem(checkoutStorageKey);
+        return;
+      }
+      setError(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : "Checkout could not be resumed.",
+      );
+    }).finally(() => {
+      if (active) setResumeLoading(false);
+    });
+    return () => { active = false; };
+  }, [checkout, checkoutStorageKey, config, configShowtimeId, confirmation, holdExpired, holderKey, showtimeId]);
 
   useEffect(() => {
     if (!mountableElements || confirmation || holdExpired) return;
@@ -742,7 +779,9 @@ export function TicketCheckout({
           {configLoading ? "Retrying checkout…" : "Retry checkout setup"}
         </button>
       )}
-      {!checkout && !holdExpired ? (
+      {resumeLoading && !checkout && !holdExpired ? (
+        <div className="checkout-panel"><h3>Resuming secure checkout…</h3></div>
+      ) : !checkout && !holdExpired ? (
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
             <h3>Receipt</h3>

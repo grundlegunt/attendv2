@@ -420,6 +420,23 @@ export class TicketingService {
     return this.completeCheckout(order);
   }
 
+  async resumeCheckout(input: { checkoutIdempotencyKey: string; holderKey: string }) {
+    if (!input.checkoutIdempotencyKey || input.checkoutIdempotencyKey.length < 16) {
+      throw TicketingError.validation("A valid checkout idempotency key is required.");
+    }
+    if (!input.holderKey || input.holderKey.length < 16) {
+      throw TicketingError.validation("A valid checkout session is required.");
+    }
+    const order = await this.prisma.ticketOrder.findUnique({
+      where: { checkoutIdempotencyKey: input.checkoutIdempotencyKey },
+      include: { payment: { include: { attempts: { orderBy: { attemptNumber: "desc" } } } } },
+    });
+    if (!order || order.holderKey !== input.holderKey) {
+      throw TicketingError.notFound("Checkout was not found.");
+    }
+    return this.completeCheckout(order);
+  }
+
   private assertCheckoutReplayMatches(
     order: {
       ticketTypeId: string;

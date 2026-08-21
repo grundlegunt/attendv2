@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { Request } from "express";
-import { createTicketCheckoutRequestSchema, resendGuestTicketReceiptRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
+import { createTicketCheckoutRequestSchema, resendGuestTicketReceiptRequestSchema, resumeTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { TicketingService } from "./ticketing.service";
@@ -41,6 +41,20 @@ export class TicketingController {
   ) {
     const parsed = createTicketCheckoutRequestSchema.parse(body);
     return this.ticketingService.createCheckout({
+      ...parsed,
+      checkoutIdempotencyKey: idempotencyKey ?? "",
+    });
+  }
+
+  @Post("checkouts/resume")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
+  resumeCheckout(
+    @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Body(new ZodValidationPipe(resumeTicketCheckoutRequestSchema)) body: unknown,
+  ) {
+    const parsed = resumeTicketCheckoutRequestSchema.parse(body);
+    return this.ticketingService.resumeCheckout({
       ...parsed,
       checkoutIdempotencyKey: idempotencyKey ?? "",
     });

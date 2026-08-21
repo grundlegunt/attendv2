@@ -3155,6 +3155,46 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.body.orderId } })).toMatchObject({ promotionId: promotion.id, discountCents: 100 });
   });
 
+  it("resumes a checkout without requiring the original receipt or payment details", async () => {
+    const holderKey = `resume-checkout-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .expect(200);
+    const idempotencyKey = `checkout-${crypto.randomUUID()}`;
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", idempotencyKey)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: "reload-recovery@example.test",
+        name: "Reload Recovery",
+        giftCardCode: undefined,
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+
+    const resumed = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts/resume")
+      .set("Idempotency-Key", idempotencyKey)
+      .send({ holderKey })
+      .expect(201);
+    expect(resumed.body).toEqual(expect.objectContaining({
+      orderId: checkout.body.orderId,
+      orderNumber: checkout.body.orderNumber,
+      totalCents: checkout.body.totalCents,
+    }));
+    expect(resumed.body.payment.clientSecret).toBeTruthy();
+
+    await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts/resume")
+      .set("Idempotency-Key", idempotencyKey)
+      .send({ holderKey: `wrong-holder-${crypto.randomUUID()}` })
+      .expect(404);
+  });
+
   it("applies and refunds a gift card during online checkout", async () => {
     const { prisma } = await import("@cinema/database");
     const holderKey = `online-gift-card-${crypto.randomUUID()}`;
