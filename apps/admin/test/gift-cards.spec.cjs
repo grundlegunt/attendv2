@@ -16,8 +16,16 @@ describe("gift card admin resilience", () => {
   it("validates amounts and prevents duplicate submissions", () => {
     assert.match(source, /Number\.isFinite\(amountCents\)/);
     assert.match(source, /amountCents < 500 \|\| amountCents > 100_000/);
-    assert.match(source, /disabled=\{saving\}/);
+    assert.match(source, /if \(actionPendingRef\.current\) return;\s*actionPendingRef\.current = true/);
+    assert.match(source, /disabled=\{actionPending\}/);
     assert.match(source, /await load\(\)/);
+  });
+
+  it("serializes issuance and status changes with one immediate lock", () => {
+    assert.match(source, /const actionPendingRef = useRef\(false\)/);
+    assert.match(source, /async function updateStatus[\s\S]*?if \(actionPendingRef\.current\) return;[\s\S]*?setPendingStatusCardId\(card\.id\)/);
+    assert.match(source, /setPendingStatusCardId\(null\)/);
+    assert.match(source, /pendingStatusCardId === card\.id \? "Updating…"/);
   });
 
   it("uses a fresh request identity when issuance details change", () => {
