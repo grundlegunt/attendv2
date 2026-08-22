@@ -2323,12 +2323,12 @@ export default function AdminPage() {
 
       {movieEditorOpen && (
         <div
-          className="editor-backdrop"
+          className="editor-backdrop movie-editor-backdrop"
           role="presentation"
           onMouseDown={() => setMovieEditorOpen(false)}
         >
           <form
-            className="showtime-drawer"
+            className="showtime-drawer movie-editor-modal"
             onSubmit={createMovie}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -2667,7 +2667,7 @@ export default function AdminPage() {
                 + Add deal period
               </button>
             </fieldset>
-            <label>
+            <label className="movie-editor-wide">
               Synopsis
               <textarea
                 rows={6}
