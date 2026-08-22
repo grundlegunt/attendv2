@@ -102,6 +102,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [editingModifierPrice, setEditingModifierPrice] = useState(0);
   const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
   const updateItemAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const menuMutationRef = useRef(false);
+  const [menuMutation, setMenuMutation] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
@@ -239,6 +241,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function createItem(event: FormEvent) {
     event.preventDefault();
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = {
       menuCategoryId: categoryId,
       kitchenStationId: stationId,
@@ -277,10 +282,13 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           ? error.body.message
           : "Item could not be created.",
       );
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function toggle86(item: Menu["categories"][number]["items"][number]) {
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({ is86d: !item.is86d });
     const fingerprint = `${item.id}:${body}`;
     if (toggle86AttemptRef.current?.fingerprint !== fingerprint) toggle86AttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -296,11 +304,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) toggle86AttemptRef.current = null;
       showError(error, "Menu item availability could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function createCategory(event: FormEvent) {
     event.preventDefault();
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({
       name: categoryName,
       sortOrder: menu?.categories.length ?? 0,
@@ -320,13 +331,16 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) categoryAttemptRef.current = null;
       showError(error, "Category could not be created.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function updateCategory(
     category: Menu["categories"][number],
     changes: { name?: string; sortOrder?: number; active?: boolean },
   ) {
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify(changes);
     const fingerprint = `${category.id}:${body}`;
     if (updateCategoryAttemptRef.current?.fingerprint !== fingerprint) updateCategoryAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -344,11 +358,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) updateCategoryAttemptRef.current = null;
       showError(error, "Category could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function createStation(event: FormEvent) {
     event.preventDefault();
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({
       name: stationName,
       displayType: stationDisplayType,
@@ -368,13 +385,16 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) stationAttemptRef.current = null;
       showError(error, "Station could not be created.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function updateStation(
     station: Menu["stations"][number],
     changes: { name?: string; displayType?: string; active?: boolean },
   ) {
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify(changes);
     const fingerprint = `${station.id}:${body}`;
     if (updateStationAttemptRef.current?.fingerprint !== fingerprint) updateStationAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -392,11 +412,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) updateStationAttemptRef.current = null;
       showError(error, "Station could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function createModifierGroup(event: FormEvent) {
     event.preventDefault();
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({
       name: modifierGroupName,
       selectionType: modifierSelectionType,
@@ -427,11 +450,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) modifierGroupAttemptRef.current = null;
       showError(error, "Modifier group could not be created.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function createModifier(event: FormEvent) {
     event.preventDefault();
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({
       name: modifierName,
       priceDeltaCents: Math.round(modifierPrice * 100),
@@ -457,10 +483,13 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) modifierAttemptRef.current = null;
       showError(error, "Modifier could not be created.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function saveModifierGroup(group: (typeof modifierGroups)[number]) {
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({
       name: editingModifierGroupName,
       selectionType: editingModifierGroupSelectionType,
@@ -485,10 +514,13 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) updateModifierGroupAttemptRef.current = null;
       showError(error, "Modifier group could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   async function toggleModifierGroup(group: (typeof modifierGroups)[number]) {
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({ active: !group.active });
     const fingerprint = `${group.id}:${body}`;
     if (updateModifierGroupAttemptRef.current?.fingerprint !== fingerprint) updateModifierGroupAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -505,7 +537,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) updateModifierGroupAttemptRef.current = null;
       showError(error, "Modifier group could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   function beginEditingModifierGroup(group: (typeof modifierGroups)[number]) {
@@ -522,6 +554,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     modifier: MenuItem["modifierGroups"][number]["modifiers"][number],
     changes: { name?: string; priceDeltaCents?: number; active?: boolean },
   ) {
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify(changes);
     const fingerprint = `${modifier.id}:${body}`;
     if (updateModifierAttemptRef.current?.fingerprint !== fingerprint) updateModifierAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -539,7 +574,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) updateModifierAttemptRef.current = null;
       showError(error, "Modifier could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   function showError(error: unknown, fallback: string) {
@@ -568,6 +603,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   async function saveItem(event: FormEvent) {
     event.preventDefault();
     if (!editingItem) return;
+    if (menuMutationRef.current) return;
+    menuMutationRef.current = true;
+    setMenuMutation(true);
     const body = JSON.stringify({
       name: editName,
       description: editDescription || null,
@@ -597,7 +635,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) updateItemAttemptRef.current = null;
       showError(error, "Menu item could not be updated.");
-    }
+    } finally { menuMutationRef.current = false; setMenuMutation(false); }
   }
 
   const items = menu?.categories.flatMap((category) => category.items) ?? [];
@@ -634,7 +672,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     (Boolean(menuAssetUrl.trim()) && menuAssetType !== savedMenuPresentation.assetType);
 
   return (
-    <section className="management-stack">
+    <section className="management-stack" aria-busy={menuMutation}>
       <form className="panel" onSubmit={saveMenuPresentation}>
         <p className="kicker">CUSTOMER DINING PAGE</p>
         <h2>Published menu design</h2>
