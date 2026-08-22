@@ -138,6 +138,13 @@ describe("saved schedule publishing", () => {
     assert.match(schedulingSource, /expectedUpdatedAt: validation\.expectedUpdatedAt/);
     assert.doesNotMatch(schedulingSource, />Publish saved plan</);
   });
+
+  it("serializes validation and publishing before React updates the buttons", () => {
+    assert.match(schedulingSource, /const planActionPendingRef = useRef\(false\)/);
+    assert.match(schedulingSource, /async function validateSchedulePlan[\s\S]*?if \(planActionPendingRef\.current\) return;\s*planActionPendingRef\.current = true/);
+    assert.match(schedulingSource, /async function makeSchedulePlanLive[\s\S]*?if \(planActionPendingRef\.current\) return;\s*planActionPendingRef\.current = true/);
+    assert.match(schedulingSource, /finally \{\s*planActionPendingRef\.current = false;\s*setPublishingPlan\(false\)/);
+  });
 });
 
 describe("showtime inspector layout", () => {
