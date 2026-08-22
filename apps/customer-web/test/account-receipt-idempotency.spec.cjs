@@ -15,4 +15,11 @@ describe("customer ticket receipt resend idempotency", () => {
   it("starts a fresh request after a successful delivery", () => {
     assert.match(source, /receiptDelivery === "SENT"\) delete receiptAttemptRef\.current\[order\.id\]/);
   });
+
+  it("allows only one account receipt resend at a time", () => {
+    assert.match(source, /if \(receiptPendingRef\.current\) return/);
+    assert.match(source, /receiptPendingRef\.current = order\.id/);
+    assert.match(source, /if \(receiptPendingRef\.current === order\.id\)/);
+    assert.match(source, /receiptPendingRef\.current = null/);
+  });
 });
