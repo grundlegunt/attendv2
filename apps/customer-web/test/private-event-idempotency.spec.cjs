@@ -13,6 +13,8 @@ test("private event retries reuse a stable idempotency key", () => {
 });
 
 test("private event form blocks duplicate submissions while pending", () => {
-  assert.match(source, /if \(pending\) return/);
+  assert.match(source, /const pendingRef = useRef\(false\)/);
+  assert.match(source, /if \(pendingRef\.current\) return; pendingRef\.current = true/);
+  assert.match(source, /finally \{ pendingRef\.current = false; setPending\(false\); \}/);
   assert.match(source, /disabled=\{pending\}/);
 });
