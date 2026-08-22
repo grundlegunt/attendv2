@@ -215,6 +215,8 @@ export default function AdminPage() {
   const showtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const saleStatusAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const showtimeEditorActionRef = useRef(false);
+  const [showtimeEditorAction, setShowtimeEditorAction] = useState<"save" | "sale" | "remove" | null>(null);
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -1001,6 +1003,9 @@ export default function AdminPage() {
 
   async function createShowtime(event: FormEvent) {
     event.preventDefault();
+    if (showtimeEditorActionRef.current) return;
+    showtimeEditorActionRef.current = true;
+    setShowtimeEditorAction("save");
     setError(null);
     const body = JSON.stringify({
       movieId,
@@ -1056,6 +1061,9 @@ export default function AdminPage() {
         else showtimeAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      showtimeEditorActionRef.current = false;
+      setShowtimeEditorAction(null);
     }
   }
 
@@ -1191,6 +1199,9 @@ export default function AdminPage() {
 
   async function changeSaleStatus() {
     if (!editingShowtimeId) return;
+    if (showtimeEditorActionRef.current) return;
+    showtimeEditorActionRef.current = true;
+    setShowtimeEditorAction("sale");
     setError(null);
     const nextOnSale = !onSale;
     const fingerprint = `${editingShowtimeId}:${editingShowtimeUpdatedAt}:${nextOnSale}`;
@@ -1224,6 +1235,9 @@ export default function AdminPage() {
         saleStatusAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      showtimeEditorActionRef.current = false;
+      setShowtimeEditorAction(null);
     }
   }
 
@@ -1236,6 +1250,9 @@ export default function AdminPage() {
       )
     )
       return;
+    if (showtimeEditorActionRef.current) return;
+    showtimeEditorActionRef.current = true;
+    setShowtimeEditorAction("remove");
     setError(null);
     if (removeShowtimeAttemptRef.current?.fingerprint !== editingShowtimeId) {
       removeShowtimeAttemptRef.current = {
@@ -1260,6 +1277,9 @@ export default function AdminPage() {
         removeShowtimeAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      showtimeEditorActionRef.current = false;
+      setShowtimeEditorAction(null);
     }
   }
 
@@ -1960,6 +1980,7 @@ export default function AdminPage() {
                   <button
                     type="button"
                     className="drawer-close"
+                    disabled={showtimeEditorAction !== null}
                     onClick={() => setShowtimeEditorOpen(false)}
                     aria-label="Close showtime editor"
                   >
@@ -2208,8 +2229,8 @@ export default function AdminPage() {
                   cleaning. Conflicting placements are rejected.
                 </div>
                 <div className="showtime-inspector-actions">
-                  <button className="primary">
-                    {editingShowtimeId ? "Save changes" : "Add to schedule"}
+                  <button className="primary" disabled={showtimeEditorAction !== null}>
+                    {showtimeEditorAction === "save" ? "Saving…" : editingShowtimeId ? "Save changes" : "Add to schedule"}
                   </button>
                   {editingShowtimeId && (
                     <button
@@ -2219,23 +2240,26 @@ export default function AdminPage() {
                           ? "sale-action close-sale"
                           : "sale-action open-sale"
                       }
+                      disabled={showtimeEditorAction !== null}
                       onClick={() => void changeSaleStatus()}
                     >
-                      {onSale ? "Close sales" : "Open sales"}
+                      {showtimeEditorAction === "sale" ? "Updating…" : onSale ? "Close sales" : "Open sales"}
                     </button>
                   )}
                   {editingShowtimeId && (
                     <button
                       type="button"
                       className="secondary destructive-outline"
+                      disabled={showtimeEditorAction !== null}
                       onClick={() => void removeShowtime()}
                     >
-                      Remove from schedule
+                      {showtimeEditorAction === "remove" ? "Removing…" : "Remove from schedule"}
                     </button>
                   )}
                   <button
                     type="button"
                     className="secondary"
+                    disabled={showtimeEditorAction !== null}
                     onClick={() => setShowtimeEditorOpen(false)}
                   >
                     Close
