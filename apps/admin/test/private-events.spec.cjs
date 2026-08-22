@@ -30,4 +30,11 @@ describe("private-event inquiry management", () => {
     assert.match(source, /statusAttemptRef = useRef/);
     assert.match(source, /"Idempotency-Key": statusAttemptRef\.current\.requestId/);
   });
+
+  it("serializes inquiry status changes before React rerenders", () => {
+    assert.match(source, /const statusActionRef = useRef\(false\)/);
+    assert.match(source, /if \(statusActionRef\.current\) return;\s*statusActionRef\.current = true/);
+    assert.match(source, /finally \{\s*statusActionRef\.current = false;\s*setStatusActionId\(null\)/);
+    assert.match(source, /disabled=\{statusActionId !== null\}/);
+  });
 });
