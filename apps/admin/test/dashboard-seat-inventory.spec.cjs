@@ -24,3 +24,11 @@ test("top films preview the closest showing and link to their revenue row", () =
   assert.match(source, /href=\{`\/reports#movie-\$\{encodeURIComponent\(film\.movieId\)\}`\}/);
   assert.match(source, /onMouseEnter=\{loadInventory\}/);
 });
+
+test("dashboard calendar ranges use the cinema timezone instead of the browser timezone", () => {
+  assert.match(source, /timezone: string/);
+  assert.match(source, /startOfLocalDay\(date, timeZone\)/);
+  assert.match(source, /dayRange\(locationTimeZone\)/);
+  assert.match(source, /scheduleRange\(scheduleDay, locationTimeZone\)/);
+  assert.doesNotMatch(source, /from\.setHours\(0, 0, 0, 0\)/);
+});
