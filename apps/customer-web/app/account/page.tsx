@@ -74,10 +74,12 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState("");
   const passwordChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [passwordPending, setPasswordPending] = useState(false);
+  const passwordPendingRef = useRef(false);
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [profileName, setProfileName] = useState("");
   const profileAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [profilePending, setProfilePending] = useState(false);
+  const profilePendingRef = useRef(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [emailChangePassword, setEmailChangePassword] = useState("");
@@ -85,6 +87,7 @@ export default function AccountPage() {
   const [emailChangeToken, setEmailChangeToken] = useState("");
   const emailConfirmationAttemptRef = useRef<{ token: string; requestId: string } | null>(null);
   const [emailChangePending, setEmailChangePending] = useState(false);
+  const emailChangePendingRef = useRef(false);
   const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
@@ -363,6 +366,8 @@ export default function AccountPage() {
 
   async function changePassword(event: FormEvent) {
     event.preventDefault();
+    if (passwordPendingRef.current) return;
+    passwordPendingRef.current = true;
     const fingerprint = JSON.stringify({ currentPassword, newPassword });
     if (passwordChangeAttemptRef.current?.fingerprint !== fingerprint) passwordChangeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setPasswordPending(true);
@@ -384,12 +389,15 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "Your password could not be updated.",
       );
     } finally {
+      passwordPendingRef.current = false;
       setPasswordPending(false);
     }
   }
 
   async function updateProfile(event: FormEvent) {
     event.preventDefault();
+    if (profilePendingRef.current) return;
+    profilePendingRef.current = true;
     const fingerprint = JSON.stringify({ name: profileName.trim() });
     if (profileAttemptRef.current?.fingerprint !== fingerprint) profileAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setProfilePending(true);
@@ -411,12 +419,15 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "Your profile could not be updated.",
       );
     } finally {
+      profilePendingRef.current = false;
       setProfilePending(false);
     }
   }
 
   async function requestEmailChange(event: FormEvent) {
     event.preventDefault();
+    if (emailChangePendingRef.current) return;
+    emailChangePendingRef.current = true;
     const fingerprint = JSON.stringify({ newEmail: newEmail.trim().toLowerCase(), password: emailChangePassword });
     if (emailChangeAttemptRef.current?.fingerprint !== fingerprint) emailChangeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setEmailChangePending(true);
@@ -437,12 +448,15 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "The email change could not be started.",
       );
     } finally {
+      emailChangePendingRef.current = false;
       setEmailChangePending(false);
     }
   }
 
   async function confirmEmailChange(event: FormEvent) {
     event.preventDefault();
+    if (emailChangePendingRef.current) return;
+    emailChangePendingRef.current = true;
     if (emailConfirmationAttemptRef.current?.token !== emailChangeToken) emailConfirmationAttemptRef.current = { token: emailChangeToken, requestId: crypto.randomUUID() };
     setEmailChangePending(true);
     setEmailChangeMessage(null);
@@ -465,6 +479,7 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "The email change could not be confirmed.",
       );
     } finally {
+      emailChangePendingRef.current = false;
       setEmailChangePending(false);
     }
   }
