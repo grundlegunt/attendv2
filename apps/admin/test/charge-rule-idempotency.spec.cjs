@@ -8,8 +8,16 @@ const source = readFileSync(join(__dirname, "../app/management-controls.tsx"), "
 test("tax and service-charge creation retain stable retry identities", () => {
   assert.match(source, /taxAttemptRef = useRef/);
   assert.match(source, /chargeAttemptRef = useRef/);
-  assert.match(source, /"Idempotency-Key": taxAttemptRef\.current\.requestId/);
+  assert.match(source, /"Idempotency-Key": taxAttemptRef\.current!\.requestIds\[body\.appliesTo\]/);
   assert.match(source, /"Idempotency-Key": chargeAttemptRef\.current\.requestId/);
+});
+
+test("one tax form can create idempotent rules for multiple categories", () => {
+  assert.match(source, /function setTaxCategory/);
+  assert.match(source, /tax\.appliesTo\.map\(\(appliesTo\)/);
+  assert.match(source, /await Promise\.all/);
+  assert.match(source, /Choose at least one tax category\./);
+  assert.match(source, /category === "ALL"/);
 });
 
 test("tax-rule updates retain a stable retry identity", () => {

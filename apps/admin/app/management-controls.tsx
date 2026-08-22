@@ -140,6 +140,13 @@ const tabNeedsAttention = (tab: Refunds["restaurantTabs"][number]) =>
   );
 
 type ControlSection = "taxes" | "users" | "refunds";
+const taxCategories = [
+  { value: "ALL", label: "All" },
+  { value: "FOOD", label: "Food" },
+  { value: "ALCOHOL", label: "Alcohol" },
+  { value: "NA_BEVERAGE", label: "Non-alcoholic beverage" },
+] as const;
+type TaxCategory = (typeof taxCategories)[number]["value"];
 
 export function ManagementControls({
   accessToken,
@@ -157,7 +164,7 @@ export function ManagementControls({
   const [error, setError] = useState<string | null>(null);
   const [tax, setTax] = useState({
     name: "",
-    appliesTo: "ALL",
+    appliesTo: ["ALL"] as TaxCategory[],
     ratePercent: "",
   });
   const [taxNameDrafts, setTaxNameDrafts] = useState<Record<string, string>>({});
@@ -168,7 +175,10 @@ export function ManagementControls({
     appliesTo: "ALL",
     ratePermille: 0,
   });
-  const taxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const taxAttemptRef = useRef<{
+    fingerprint: string;
+    requestIds: Record<TaxCategory, string>;
+  } | null>(null);
   const updateTaxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const chargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateChargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -388,6 +398,20 @@ export function ManagementControls({
     );
   }
 
+  function setTaxCategory(category: TaxCategory, checked: boolean) {
+    setTax((current) => ({
+      ...current,
+      appliesTo:
+        category === "ALL"
+          ? checked
+            ? ["ALL"]
+            : []
+          : checked
+            ? [...current.appliesTo.filter((value) => value !== "ALL"), category]
+            : current.appliesTo.filter((value) => value !== category),
+    }));
+  }
+
   async function createTax(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -399,25 +423,42 @@ export function ManagementControls({
       showError(reason);
       return;
     }
+    if (tax.appliesTo.length === 0) {
+      setError("Choose at least one tax category.");
+      return;
+    }
     checkoutRuleActionRef.current = true;
     setCheckoutRuleAction({ kind: "create-tax" });
-    const body = {
+    const bodies = tax.appliesTo.map((appliesTo) => ({
       name: tax.name,
-      appliesTo: tax.appliesTo,
+      appliesTo,
       ratePermille,
       active: true,
-    };
-    const fingerprint = JSON.stringify(body);
-    if (taxAttemptRef.current?.fingerprint !== fingerprint) taxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    }));
+    const fingerprint = JSON.stringify(bodies);
+    if (taxAttemptRef.current?.fingerprint !== fingerprint) {
+      taxAttemptRef.current = {
+        fingerprint,
+        requestIds: Object.fromEntries(
+          taxCategories.map(({ value }) => [value, crypto.randomUUID()]),
+        ) as Record<TaxCategory, string>,
+      };
+    }
     try {
-      await apiFetch("/management/settings/tax-rules", {
-        accessToken,
-        method: "POST",
-        headers: { "Idempotency-Key": taxAttemptRef.current.requestId },
-        body: fingerprint,
-      });
+      await Promise.all(
+        bodies.map((body) =>
+          apiFetch("/management/settings/tax-rules", {
+            accessToken,
+            method: "POST",
+            headers: {
+              "Idempotency-Key": taxAttemptRef.current!.requestIds[body.appliesTo],
+            },
+            body: JSON.stringify(body),
+          }),
+        ),
+      );
       taxAttemptRef.current = null;
-      setTax({ name: "", appliesTo: "ALL", ratePercent: "" });
+      setTax({ name: "", appliesTo: ["ALL"], ratePercent: "" });
       await refresh();
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) taxAttemptRef.current = null;
@@ -1197,20 +1238,21 @@ export function ManagementControls({
                   }
                 />
               </label>
-              <label>
-                Category
-                <select
-                  value={tax.appliesTo}
-                  onChange={(event) =>
-                    setTax({ ...tax, appliesTo: event.target.value })
-                  }
-                >
-                  <option value="ALL">All</option>
-                  <option value="FOOD">Food</option>
-                  <option value="ALCOHOL">Alcohol</option>
-                  <option value="NA_BEVERAGE">Non-alcoholic beverage</option>
-                </select>
-              </label>
+              <fieldset>
+                <legend>Categories</legend>
+                {taxCategories.map((category) => (
+                  <label className="check" key={category.value}>
+                    <input
+                      type="checkbox"
+                      checked={tax.appliesTo.includes(category.value)}
+                      onChange={(event) =>
+                        setTaxCategory(category.value, event.target.checked)
+                      }
+                    />
+                    {category.label}
+                  </label>
+                ))}
+              </fieldset>
               <label>
                 Rate (%)
                 <input
