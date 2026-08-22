@@ -20,6 +20,18 @@ navigationModule.paths = module.paths;
 navigationModule._compile(compiled.outputText, navigationPath);
 const { adminNavigation, isAdminItemActive, visibleAdminNavigation } = navigationModule.exports;
 
+const operationalSitesPath = resolve(__dirname, "../app/lib/operational-sites.ts");
+const operationalSitesSource = readFileSync(operationalSitesPath, "utf8");
+const operationalSitesCompiled = ts.transpileModule(operationalSitesSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  fileName: operationalSitesPath,
+});
+const operationalSitesModule = new Module(operationalSitesPath, module);
+operationalSitesModule.filename = operationalSitesPath;
+operationalSitesModule.paths = module.paths;
+operationalSitesModule._compile(operationalSitesCompiled.outputText, operationalSitesPath);
+const { operationalSites, visibleOperationalSites } = operationalSitesModule.exports;
+
 const auditoriumLayoutPath = resolve(__dirname, "../app/auditorium-layout.ts");
 const auditoriumLayoutSource = readFileSync(auditoriumLayoutPath, "utf8");
 const auditoriumLayoutCompiled = ts.transpileModule(auditoriumLayoutSource, {
@@ -83,6 +95,21 @@ describe("admin navigation", () => {
     assert.equal(links.some((item) => item.href === "/gift-cards"), false);
     const managerLinks = visibleAdminNavigation(["payment.refund"]).flatMap((group) => group.items);
     assert.deepEqual(managerLinks.map((item) => item.href), ["/", "/refunds", "/gift-cards"]);
+  });
+});
+
+describe("operational app links", () => {
+  it("uses the deployed apps as safe defaults", () => {
+    assert.deepEqual(operationalSites.map((site) => site.href), [
+      "https://attend-staff-pos.vercel.app",
+      "https://attendv2-kds.vercel.app",
+    ]);
+  });
+
+  it("only exposes apps the employee can operate", () => {
+    assert.deepEqual(visibleOperationalSites([]), []);
+    assert.deepEqual(visibleOperationalSites(["seat.sell"]).map((site) => site.label), ["Open Staff POS"]);
+    assert.deepEqual(visibleOperationalSites(["kitchen.status.update"]).map((site) => site.label), ["Open kitchen display"]);
   });
 });
 
