@@ -113,6 +113,16 @@ describe("operational app links", () => {
   });
 });
 
+describe("film editor layout", () => {
+  it("uses a large centered workspace without widening every scheduling drawer", () => {
+    assert.match(schedulingSource, /className="editor-backdrop movie-editor-backdrop"/);
+    assert.match(schedulingSource, /className="showtime-drawer movie-editor-modal"/);
+    assert.match(globalStylesSource, /\.movie-editor-modal \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    assert.match(globalStylesSource, /\.movie-editor-modal \{[^}]*width: min\(1100px, 100%\)/);
+    assert.match(globalStylesSource, /\.showtime-drawer \{[^}]*460px/);
+  });
+});
+
 describe("auditorium layout editing", () => {
   it("preserves table metadata when an existing seat becomes ADA", () => {
     const seats = [
