@@ -321,7 +321,7 @@ export function AdminDashboard() {
     </section>}
     <section className="dashboard-grid">
       {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">PROGRAMMING</p><h2 id="today-schedule-heading">Schedule</h2></div><div className="schedule-heading-actions"><div className="dashboard-day-switch" role="group" aria-label="Schedule day"><button type="button" className={scheduleDay === "today" ? "active" : ""} onClick={() => setScheduleDay("today")}>Today</button><button type="button" className={scheduleDay === "tomorrow" ? "active" : ""} onClick={() => setScheduleDay("tomorrow")}>Tomorrow</button></div><Link href="/scheduling">View calendar</Link></div></div>
-        <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.slice(0, 8).map((showtime) => {
+        <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.map((showtime) => {
           const ticketsSold = scheduleSales.get(showtime.id) ?? 0;
           const salesVisible = canFinancial && scheduleRevenue !== null;
           return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} />;
