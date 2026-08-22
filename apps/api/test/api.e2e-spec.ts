@@ -560,6 +560,7 @@ describe("Staff authentication", () => {
     expect(res.body.refreshToken).toEqual(expect.any(String));
     expect(res.body.employee.roles).toContain("OWNER");
     expect(res.body.employee.permissions).toContain("audit.log.view");
+    expect(res.body.employee.timezone).toBe("America/Chicago");
     expect(res.body.employee).toMatchObject({ mfaEnabled: true, mfaSetupRequired: false });
     expect(res.body.mfaRequired).toBeUndefined();
 
