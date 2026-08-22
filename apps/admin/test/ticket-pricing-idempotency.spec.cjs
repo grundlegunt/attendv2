@@ -21,3 +21,15 @@ test("admission-type updates use a stable retry identity", () => {
   assert.match(source, /updateTicketTypeAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": updateTicketTypeAttemptRef\.current\.requestId/);
 });
+
+test("ticket pricing mutations share an immediate action lock", () => {
+  assert.match(source, /ticketPricingActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(ticketPricingActionRef\.current\) return;/g)?.length, 5);
+  assert.equal(source.match(/ticketPricingActionRef\.current = true;/g)?.length, 5);
+  assert.equal(source.match(/ticketPricingActionRef\.current = false;/g)?.length, 5);
+  assert.match(source, /setTicketPricingAction\(\{ kind: "create-price" \}\)/);
+  assert.match(source, /setTicketPricingAction\(\{ kind: "create-type" \}\)/);
+  assert.match(source, /setTicketPricingAction\(\{ kind: "save-price", id: tier\.id \}\)/);
+  assert.match(source, /setTicketPricingAction\(\{ kind: "toggle-price", id: tier\.id \}\)/);
+  assert.match(source, /setTicketPricingAction\(\{ kind: "update-type", id: ticketType\.id \}\)/);
+});
