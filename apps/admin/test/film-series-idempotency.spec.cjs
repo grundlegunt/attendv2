@@ -34,3 +34,10 @@ test("film series reordering is atomic and retains a stable retry identity", () 
   assert.match(source, /"Idempotency-Key": reorderSeriesAttemptRef\.current\.requestId/);
   assert.doesNotMatch(source, /Promise\.all\(reordered\.map/);
 });
+
+test("film series mutations share an immediate action lock", () => {
+  assert.match(source, /const seriesActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(seriesActionRef\.current\) return;\s*seriesActionRef\.current = true/g)?.length, 4);
+  assert.equal(source.match(/seriesActionRef\.current = false;\s*setSeriesSaving\(false\)/g)?.length, 4);
+  assert.match(source, /draggable=\{!seriesSaving\}/);
+});

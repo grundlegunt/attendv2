@@ -33,6 +33,7 @@ export default function FilmSeriesPage() {
   const [editingSeriesId, setEditingSeriesId] = useState<string | null>(null);
   const [editingSeriesUpdatedAt, setEditingSeriesUpdatedAt] = useState<string | null>(null);
   const [seriesSaving, setSeriesSaving] = useState(false);
+  const seriesActionRef = useRef(false);
   const [draggedSeriesId, setDraggedSeriesId] = useState<string | null>(null);
   const [dragOverSeriesId, setDragOverSeriesId] = useState<string | null>(null);
   const createSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -87,6 +88,8 @@ export default function FilmSeriesPage() {
       setError("Sign in again before adding a film series.");
       return;
     }
+    if (seriesActionRef.current) return;
+    seriesActionRef.current = true;
     const body = JSON.stringify({ name, description: seriesDescription.trim() || null, artworkUrl: seriesArtworkUrl.trim() || null });
     if (!editingSeriesId && createSeriesAttemptRef.current?.fingerprint !== body) {
       createSeriesAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
@@ -127,12 +130,16 @@ export default function FilmSeriesPage() {
       }
       showError(reason);
     } finally {
+      seriesActionRef.current = false;
       setSeriesSaving(false);
     }
   }
 
   async function archiveSeries(series: FilmSeries) {
     if (!window.confirm(`Archive ${series.name}? Existing showtimes will keep their series history.`)) return;
+    if (seriesActionRef.current) return;
+    seriesActionRef.current = true;
+    setSeriesSaving(true);
     setError(null);
     if (archiveSeriesAttemptRef.current?.seriesId !== series.id) {
       archiveSeriesAttemptRef.current = { seriesId: series.id, requestId: crypto.randomUUID() };
@@ -152,10 +159,13 @@ export default function FilmSeriesPage() {
         archiveSeriesAttemptRef.current = null;
       }
       showError(reason);
-    }
+    } finally { seriesActionRef.current = false; setSeriesSaving(false); }
   }
 
   async function restoreSeries(series: FilmSeries) {
+    if (seriesActionRef.current) return;
+    seriesActionRef.current = true;
+    setSeriesSaving(true);
     setError(null);
     setNotice(null);
     if (restoreSeriesAttemptRef.current?.seriesId !== series.id) {
@@ -175,7 +185,7 @@ export default function FilmSeriesPage() {
         restoreSeriesAttemptRef.current = null;
       }
       showError(reason);
-    }
+    } finally { seriesActionRef.current = false; setSeriesSaving(false); }
   }
 
   async function reorderSeries(targetSeriesId: string) {
@@ -187,6 +197,9 @@ export default function FilmSeriesPage() {
     const [moved] = reordered.splice(sourceIndex, 1);
     if (!moved) return;
     reordered.splice(targetIndex, 0, moved);
+    if (seriesActionRef.current) return;
+    seriesActionRef.current = true;
+    setSeriesSaving(true);
     const body = JSON.stringify({ seriesIds: reordered.map((series) => series.id) });
     if (reorderSeriesAttemptRef.current?.fingerprint !== body) {
       reorderSeriesAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
@@ -209,6 +222,8 @@ export default function FilmSeriesPage() {
       }
       showError(reason);
     } finally {
+      seriesActionRef.current = false;
+      setSeriesSaving(false);
       setDraggedSeriesId(null);
       setDragOverSeriesId(null);
     }
@@ -243,7 +258,7 @@ export default function FilmSeriesPage() {
       <div className="film-series-list">
         {activeSeries.map((series) => <article
           key={series.id}
-          draggable
+          draggable={!seriesSaving}
           className={`${draggedSeriesId === series.id ? "dragging" : ""} ${dragOverSeriesId === series.id ? "drag-over" : ""}`.trim()}
           onDragStart={(event) => { setDraggedSeriesId(series.id); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", series.id); }}
           onDragEnter={() => setDragOverSeriesId(series.id)}
@@ -253,7 +268,7 @@ export default function FilmSeriesPage() {
         >
           {series.artworkUrl ? <img src={series.artworkUrl} alt="" /> : <div className="series-artwork-placeholder">Series</div>}
           <div><h3>{series.name}</h3><p>{series.description || "No description added."}</p></div>
-          <div className="film-series-row-actions"><span className="film-series-drag-handle" aria-label={`Drag ${series.name} to reorder`} title="Drag to reorder">⠿</span><button type="button" onClick={() => editSeries(series)}>Edit</button><button type="button" className="destructive-outline" onClick={() => void archiveSeries(series)}>Archive</button></div>
+          <div className="film-series-row-actions"><span className="film-series-drag-handle" aria-label={`Drag ${series.name} to reorder`} title="Drag to reorder">⠿</span><button type="button" disabled={seriesSaving} onClick={() => editSeries(series)}>Edit</button><button type="button" className="destructive-outline" disabled={seriesSaving} onClick={() => void archiveSeries(series)}>Archive</button></div>
         </article>)}
         {data && activeSeries.length === 0 && <p className="builder-help">No film series yet. Add one here, then assign it to showtimes from Scheduling.</p>}
       </div>
@@ -262,7 +277,7 @@ export default function FilmSeriesPage() {
         <p>Archived series stay attached to historical showtimes and reports.</p>
         {archivedSeries.length ? <div className="archived-film-list">{archivedSeries.map((series) => <div key={series.id}>
           <span><strong>{series.name}</strong><small>{series.description || "No description added."}</small></span>
-          <div><button type="button" onClick={() => void restoreSeries(series)}>Restore</button></div>
+          <div><button type="button" disabled={seriesSaving} onClick={() => void restoreSeries(series)}>Restore</button></div>
         </div>)}</div> : <p>No archived series.</p>}
       </details>
     </section>
