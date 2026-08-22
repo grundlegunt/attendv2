@@ -24,7 +24,7 @@ test("credential resets retain a stable retry identity", () => {
 
 test("employee mutations share an immediate action lock", () => {
   assert.match(source, /employeeActionRef = useRef\(false\)/);
-  assert.equal(source.match(/if \(employeeActionRef\.current\) return/g)?.length, 3);
+  assert.equal(source.match(/if \(employeeActionRef\.current(?: \|\| roleActionRef\.current)?\) return/g)?.length, 3);
   assert.equal(source.match(/employeeActionRef\.current = true;/g)?.length, 3);
   assert.equal(source.match(/employeeActionRef\.current = false;/g)?.length, 3);
   assert.match(source, /setEmployeeAction\(\{ kind: "create" \}\)/);

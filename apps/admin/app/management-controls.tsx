@@ -213,6 +213,8 @@ export function ManagementControls({
   const renameRoleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const rolePermissionsAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const deleteRoleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const roleActionRef = useRef(false);
+  const [roleAction, setRoleAction] = useState<"create" | "rename" | "permissions" | "delete" | null>(null);
   const [selectedRoleName, setSelectedRoleName] = useState("");
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [employeeRoleDrafts, setEmployeeRoleDrafts] = useState<
@@ -658,6 +660,9 @@ export function ManagementControls({
   }
   async function saveRole() {
     if (!selectedRoleId) return;
+    if (roleActionRef.current || employeeActionRef.current) return;
+    roleActionRef.current = true;
+    setRoleAction("permissions");
     const body = JSON.stringify({ permissionKeys: selectedPermissions });
     const fingerprint = `${selectedRoleId}:${body}`;
     if (rolePermissionsAttemptRef.current?.fingerprint !== fingerprint) rolePermissionsAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -673,11 +678,17 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) rolePermissionsAttemptRef.current = null;
       showError(reason);
+    } finally {
+      roleActionRef.current = false;
+      setRoleAction(null);
     }
   }
   async function createRole(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (roleActionRef.current || employeeActionRef.current) return;
+    roleActionRef.current = true;
+    setRoleAction("create");
     const body = JSON.stringify({ name: newRoleName });
     if (roleAttemptRef.current?.fingerprint !== body) roleAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
@@ -694,10 +705,16 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) roleAttemptRef.current = null;
       showError(reason);
+    } finally {
+      roleActionRef.current = false;
+      setRoleAction(null);
     }
   }
   async function renameRole() {
     if (!selectedRole?.key.startsWith("CUSTOM_")) return;
+    if (roleActionRef.current || employeeActionRef.current) return;
+    roleActionRef.current = true;
+    setRoleAction("rename");
     const body = JSON.stringify({ name: selectedRoleName });
     const fingerprint = `${selectedRole.id}:${body}`;
     if (renameRoleAttemptRef.current?.fingerprint !== fingerprint) renameRoleAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -713,6 +730,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) renameRoleAttemptRef.current = null;
       showError(reason);
+    } finally {
+      roleActionRef.current = false;
+      setRoleAction(null);
     }
   }
   async function deleteRole() {
@@ -723,6 +743,9 @@ export function ManagementControls({
       )
     )
       return;
+    if (roleActionRef.current || employeeActionRef.current) return;
+    roleActionRef.current = true;
+    setRoleAction("delete");
     const fingerprint = selectedRole.id;
     if (deleteRoleAttemptRef.current?.fingerprint !== fingerprint) deleteRoleAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
@@ -739,10 +762,13 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) deleteRoleAttemptRef.current = null;
       showError(reason);
+    } finally {
+      roleActionRef.current = false;
+      setRoleAction(null);
     }
   }
   async function submitEmployeeUpdate(targetId: string, changes: object) {
-    if (employeeActionRef.current) return false;
+    if (employeeActionRef.current || roleActionRef.current) return false;
     employeeActionRef.current = true;
     setEmployeeAction({ kind: "update", id: targetId });
     const body = JSON.stringify(changes);
@@ -1508,7 +1534,7 @@ export function ManagementControls({
                     placeholder="Floor manager"
                   />
                 </label>
-                <button className="secondary">Create role</button>
+                <button className="secondary" disabled={roleAction !== null || employeeAction !== null}>{roleAction === "create" ? "Creating…" : "Create role"}</button>
               </form>
               <div className="role-assignment-list">
                 {people.employees.map((person) => (
@@ -1540,7 +1566,7 @@ export function ManagementControls({
                     <button
                       className="secondary"
                       type="button"
-                      disabled={employeeAction !== null}
+                      disabled={employeeAction !== null || roleAction !== null}
                       onClick={() => void saveEmployeeRoles(person)}
                     >
                       {employeeAction?.kind === "update" && employeeAction.id === person.id ? "Saving…" : "Save roles"}
@@ -1581,19 +1607,21 @@ export function ManagementControls({
                     type="button"
                     className="secondary"
                     disabled={
+                      roleAction !== null || employeeAction !== null ||
                       !selectedRoleName.trim() ||
                       selectedRoleName.trim() === selectedRole.name
                     }
                     onClick={() => void renameRole()}
                   >
-                    Rename
+                    {roleAction === "rename" ? "Renaming…" : "Rename"}
                   </button>
                   <button
                     type="button"
                     className="danger"
+                    disabled={roleAction !== null || employeeAction !== null}
                     onClick={() => void deleteRole()}
                   >
-                    Delete
+                    {roleAction === "delete" ? "Deleting…" : "Delete"}
                   </button>
                 </div>
               )}
@@ -1622,6 +1650,7 @@ export function ManagementControls({
                         <button
                           type="button"
                           className="secondary"
+                          disabled={roleAction !== null || employeeAction !== null}
                           onClick={() => setPermissionGroup(keys, !allSelected)}
                         >
                           {allSelected ? "Clear group" : "Select group"}
@@ -1656,8 +1685,8 @@ export function ManagementControls({
                   );
                 })}
               </div>
-              <button className="primary" onClick={() => void saveRole()}>
-                Save role permissions
+              <button className="primary" disabled={roleAction !== null || employeeAction !== null} onClick={() => void saveRole()}>
+                {roleAction === "permissions" ? "Saving…" : "Save role permissions"}
               </button>
             </div>
           )}
