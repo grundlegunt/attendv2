@@ -102,6 +102,7 @@ export interface AuthenticatedEmployee {
   roles: string[];
   permissions: string[];
   timeClockEnabled: boolean;
+  timezone: string;
   mustChangePassword: boolean;
   mfaEnabled: boolean;
   mfaSetupRequired: boolean;
