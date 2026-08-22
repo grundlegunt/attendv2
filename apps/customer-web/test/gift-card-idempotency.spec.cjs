@@ -24,4 +24,11 @@ describe("gift card purchase idempotency", () => {
     assert.match(source, /window\.setTimeout\(resolve, 2_000\)/);
     assert.match(source, /if \(!active\) return/);
   });
+
+  it("blocks duplicate create and payment actions before React rerenders", () => {
+    assert.match(source, /if \(!config \|\| purchaseActionPendingRef\.current\) return/);
+    assert.match(source, /payment\.publishableKey \|\| purchaseActionPendingRef\.current\) return/);
+    assert.equal((source.match(/purchaseActionPendingRef\.current = true/g) ?? []).length, 2);
+    assert.equal((source.match(/purchaseActionPendingRef\.current = false/g) ?? []).length, 2);
+  });
 });

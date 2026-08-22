@@ -39,6 +39,7 @@ export default function GiftCardsPage() {
   const purchaseKey = useRef<string | null>(null);
   const resumeAttempted = useRef(false);
   const balanceRequestRef = useRef<AbortController | null>(null);
+  const purchaseActionPendingRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,7 +103,10 @@ export default function GiftCardsPage() {
     setter(value);
   }
   async function startPurchase(event: FormEvent) {
-    event.preventDefault(); if (!config) return; setPending(true); setError("");
+    event.preventDefault();
+    if (!config || purchaseActionPendingRef.current) return;
+    purchaseActionPendingRef.current = true;
+    setPending(true); setError("");
     try {
       if (!purchaseKey.current) purchaseKey.current = crypto.randomUUID();
       window.sessionStorage.setItem(PURCHASE_STORAGE_KEY, purchaseKey.current);
@@ -111,17 +115,21 @@ export default function GiftCardsPage() {
       await loadStripeScript(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
       const stripe = factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined });
       setPurchase(created); setElements(stripe.elements({ clientSecret: created.payment.clientSecret, appearance: { theme: "night" } }));
-    } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
+    } catch (reason) { setError(failure(reason)); } finally { purchaseActionPendingRef.current = false; setPending(false); }
   }
   async function pay(event: FormEvent) {
-    event.preventDefault(); const factory = stripeFactory(); if (!purchase || !elements || !factory || !config?.payment.publishableKey) return; setPending(true); setError("");
+    event.preventDefault();
+    const factory = stripeFactory();
+    if (!purchase || !elements || !factory || !config?.payment.publishableKey || purchaseActionPendingRef.current) return;
+    purchaseActionPendingRef.current = true;
+    setPending(true); setError("");
     try {
       const stripe = factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined });
       const result = await stripe.confirmPayment({ elements, redirect: "if_required", confirmParams: { receipt_email: buyerEmail } });
       if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
       setConfirmation(await finalizePurchase(purchase.purchaseId, purchaseKey.current!));
       window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY);
-    } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
+    } catch (reason) { setError(failure(reason)); } finally { purchaseActionPendingRef.current = false; setPending(false); }
   }
   async function checkBalance(event: FormEvent) {
     event.preventDefault();
