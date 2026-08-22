@@ -73,6 +73,7 @@ export function TicketService({
   const [message, setMessage] = useState<string | null>(null);
   const [receiptEmails, setReceiptEmails] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [exchangeTicket, setExchangeTicket] = useState<TicketOrder["tickets"][number] | null>(null);
   const [exchangeShowtimeId, setExchangeShowtimeId] = useState("");
   const [exchangeSeats, setExchangeSeats] = useState<ExchangeSeat[]>([]);
@@ -113,6 +114,8 @@ export function TicketService({
       setMessage("Enter at least two characters.");
       return;
     }
+    if (busyRef.current) return;
+    busyRef.current = true;
     const requestId = ++requestRef.current;
     setBusy(true);
     setMessage(null);
@@ -134,13 +137,18 @@ export function TicketService({
         setMessage(errorMessage(error));
       }
     } finally {
-      if (requestId === requestRef.current) setBusy(false);
+      if (requestId === requestRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
   async function resendReceipt(order: TicketOrder) {
     const email = receiptEmails[order.id]?.trim().toLowerCase();
     if (!email) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     if (receiptAttemptRef.current[order.id]?.email !== email) {
       receiptAttemptRef.current[order.id] = { email, requestId: crypto.randomUUID() };
     }
@@ -158,11 +166,14 @@ export function TicketService({
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
   async function prepareReprint(ticketId: string) {
+    if (busyRef.current) return;
+    busyRef.current = true;
     const requestId = ++requestRef.current;
     setBusy(true);
     setMessage(null);
@@ -177,22 +188,27 @@ export function TicketService({
     } catch (error) {
       if (requestId === requestRef.current) setMessage(errorMessage(error));
     } finally {
-      if (requestId === requestRef.current) setBusy(false);
+      if (requestId === requestRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
   async function chooseExchangeShowtime(showtimeId: string) {
-    await releaseHold();
-    exchangeRequestIdRef.current = crypto.randomUUID();
-    exchangeHolderKeyRef.current = `staff-exchange-${crypto.randomUUID()}`;
-    setExchangeShowtimeId(showtimeId);
-    setExchangeSeatId("");
-    setExchangeSeats([]);
-    setExchangePriceMatches(true);
-    if (!showtimeId || !exchangeTicket) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setMessage(null);
     try {
+      await releaseHold();
+      exchangeRequestIdRef.current = crypto.randomUUID();
+      exchangeHolderKeyRef.current = `staff-exchange-${crypto.randomUUID()}`;
+      setExchangeShowtimeId(showtimeId);
+      setExchangeSeatId("");
+      setExchangeSeats([]);
+      setExchangePriceMatches(true);
+      if (!showtimeId || !exchangeTicket) return;
       const availability = await apiFetch<ExchangeAvailability>(`/cinema/showtimes/${showtimeId}/seats`);
       const priceMatches = availability.showtime.priceTier.ticketPriceMinor === exchangeTicket.priceCentsPaid;
       setExchangePriceMatches(priceMatches);
@@ -201,6 +217,7 @@ export function TicketService({
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -246,6 +263,8 @@ export function TicketService({
   async function completeExchange(event: FormEvent) {
     event.preventDefault();
     if (!exchangeTicket || !exchangeShowtimeId || !exchangeSeatId || !exchangeReason.trim()) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setMessage(null);
     const holderKey = exchangeHolderKeyRef.current || `staff-exchange-${crypto.randomUUID()}`;
@@ -291,6 +310,7 @@ export function TicketService({
     } catch (error) {
       setMessage(errorMessage(error));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
