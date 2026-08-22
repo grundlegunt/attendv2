@@ -53,23 +53,22 @@ function localDayStart(date: Date, timeZone: string, dayOffset = 0) {
   return startOfLocalDay(new Date(start.getTime() + dayOffset * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000), timeZone);
 }
 
-function dayRange(timeZone: string, dayOffset = 0) {
-  const now = new Date();
-  const from = localDayStart(now, timeZone, dayOffset);
-  const to = localDayStart(now, timeZone, dayOffset + 1);
+function dayRange(timeZone: string, dayOffset = 0, reference = new Date()) {
+  const from = localDayStart(reference, timeZone, dayOffset);
+  const to = localDayStart(reference, timeZone, dayOffset + 1);
   return { from, to };
 }
 
-function performanceRange(range: FilmPerformanceRange, timeZone: string) {
+function performanceRange(range: FilmPerformanceRange, timeZone: string, reference = new Date()) {
   const daysBack = range === "today" ? 0 : range === "7d" ? 6 : 29;
   return {
-    from: localDayStart(new Date(), timeZone, -daysBack),
-    to: localDayStart(new Date(), timeZone, 1),
+    from: localDayStart(reference, timeZone, -daysBack),
+    to: localDayStart(reference, timeZone, 1),
   };
 }
 
-function scheduleRange(day: ScheduleDay, timeZone: string) {
-  return dayRange(timeZone, day === "tomorrow" ? 1 : 0);
+function scheduleRange(day: ScheduleDay, timeZone: string, reference = new Date()) {
+  return dayRange(timeZone, day === "tomorrow" ? 1 : 0, reference);
 }
 
 function messageFor(reason: unknown) {
@@ -81,11 +80,13 @@ function DashboardShowtimeRow({
   ticketsSold,
   salesVisible,
   accessToken,
+  now,
 }: {
   showtime: Bootstrap["showtimes"][number];
   ticketsSold: number;
   salesVisible: boolean;
   accessToken: string | null;
+  now: number;
 }) {
   const [inventory, setInventory] = useState<ShowtimeSeatInventory | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -94,7 +95,7 @@ function DashboardShowtimeRow({
   const occupancy = showtime.auditorium.capacity
     ? Math.min(100, Math.round((ticketsSold / showtime.auditorium.capacity) * 100))
     : 0;
-  const hasStarted = new Date(showtime.startsAt).getTime() <= Date.now();
+  const hasStarted = new Date(showtime.startsAt).getTime() <= now;
   const salesClass = !salesVisible
     ? "sales-normal"
     : hasStarted
@@ -213,12 +214,19 @@ export function AdminDashboard() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
+  const [now, setNow] = useState(() => new Date());
   const permissions = useMemo(() => new Set(employee.permissions), [employee.permissions]);
   const canCinema = ["auditorium.manage", "movie.manage", "showtime.manage"].every((permission) => permissions.has(permission));
   const canFinancial = permissions.has("reports.view.financial");
   const canAudit = permissions.has("audit.log.view");
   const canSettings = permissions.has("ticket.price.edit");
   const locationTimeZone = bootstrap?.location.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const locationDayStart = localDayStart(now, locationTimeZone).toISOString();
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -250,43 +258,43 @@ export function AdminDashboard() {
   useEffect(() => {
     if (!canFinancial || (canCinema && !bootstrap)) return;
     let cancelled = false;
-    const { from, to } = dayRange(locationTimeZone);
+    const { from, to } = dayRange(locationTimeZone, 0, new Date(locationDayStart));
     apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
       .then((result) => { if (!cancelled) setRevenue(result); })
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); });
     return () => { cancelled = true; };
-  }, [accessToken, bootstrap, canCinema, canFinancial, locationTimeZone]);
+  }, [accessToken, bootstrap, canCinema, canFinancial, locationDayStart, locationTimeZone]);
 
   useEffect(() => {
     if (!canFinancial || (canCinema && !bootstrap)) return;
     let cancelled = false;
-    const { from, to } = performanceRange(filmRange, locationTimeZone);
+    const { from, to } = performanceRange(filmRange, locationTimeZone, new Date(locationDayStart));
     setFilmRevenueLoading(true);
     apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
       .then((result) => { if (!cancelled) setFilmRevenue(result); })
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
       .finally(() => { if (!cancelled) setFilmRevenueLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken, bootstrap, canCinema, canFinancial, filmRange, locationTimeZone]);
+  }, [accessToken, bootstrap, canCinema, canFinancial, filmRange, locationDayStart, locationTimeZone]);
 
   useEffect(() => {
     if (!canFinancial || !canCinema || !bootstrap) return;
     let cancelled = false;
-    const { from, to } = scheduleRange(scheduleDay, locationTimeZone);
+    const { from, to } = scheduleRange(scheduleDay, locationTimeZone, new Date(locationDayStart));
     setScheduleRevenueLoading(true);
     apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
       .then((result) => { if (!cancelled) setScheduleRevenue(result); })
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
       .finally(() => { if (!cancelled) setScheduleRevenueLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken, bootstrap, canCinema, canFinancial, locationTimeZone, scheduleDay]);
+  }, [accessToken, bootstrap, canCinema, canFinancial, locationDayStart, locationTimeZone, scheduleDay]);
 
-  const { from, to } = dayRange(locationTimeZone);
+  const { from, to } = dayRange(locationTimeZone, 0, now);
   const todaysShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
     const startsAt = new Date(showtime.startsAt);
     return startsAt >= from && startsAt < to;
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const selectedScheduleRange = scheduleRange(scheduleDay, locationTimeZone);
+  const selectedScheduleRange = scheduleRange(scheduleDay, locationTimeZone, now);
   const scheduleShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
     const startsAt = new Date(showtime.startsAt);
     return startsAt >= selectedScheduleRange.from && startsAt < selectedScheduleRange.to;
@@ -299,7 +307,7 @@ export function AdminDashboard() {
   const closestShowtimeByMovie = new Map<string, Bootstrap["showtimes"][number]>();
   for (const showtime of bootstrap?.showtimes ?? []) {
     const current = closestShowtimeByMovie.get(showtime.movie.id);
-    if (!current || Math.abs(new Date(showtime.startsAt).getTime() - Date.now()) < Math.abs(new Date(current.startsAt).getTime() - Date.now())) closestShowtimeByMovie.set(showtime.movie.id, showtime);
+    if (!current || Math.abs(new Date(showtime.startsAt).getTime() - now.getTime()) < Math.abs(new Date(current.startsAt).getTime() - now.getTime())) closestShowtimeByMovie.set(showtime.movie.id, showtime);
   }
   const filmRangeLabel = filmRange === "today" ? "Today" : filmRange === "7d" ? "Last 7 days" : "Last 30 days";
 
@@ -324,7 +332,7 @@ export function AdminDashboard() {
         <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.map((showtime) => {
           const ticketsSold = scheduleSales.get(showtime.id) ?? 0;
           const salesVisible = canFinancial && scheduleRevenue !== null;
-          return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} />;
+          return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} now={now.getTime()} />;
         })}{!loading && scheduleShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled {scheduleDay}.</p>}</div>
       </section>}
       {canCinema && <section className="panel" aria-labelledby="setup-status-heading"><div className="dashboard-section-heading"><div><p className="kicker">READINESS</p><h2 id="setup-status-heading">Cinema setup</h2></div><Link href="/cinema-setup">Manage</Link></div>

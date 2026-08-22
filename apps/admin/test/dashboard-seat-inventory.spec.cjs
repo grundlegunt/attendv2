@@ -34,8 +34,8 @@ test("top films preview the closest showing and link to their revenue row", () =
 test("dashboard calendar ranges use the cinema timezone instead of the browser timezone", () => {
   assert.match(source, /timezone: string/);
   assert.match(source, /startOfLocalDay\(date, timeZone\)/);
-  assert.match(source, /dayRange\(locationTimeZone\)/);
-  assert.match(source, /scheduleRange\(scheduleDay, locationTimeZone\)/);
+  assert.match(source, /dayRange\(locationTimeZone, 0, now\)/);
+  assert.match(source, /scheduleRange\(scheduleDay, locationTimeZone, now\)/);
   assert.doesNotMatch(source, /from\.setHours\(0, 0, 0, 0\)/);
 });
 
@@ -47,7 +47,7 @@ test("dashboard waits for cinema timezone before loading date-bound reports", ()
 });
 
 test("started showtimes are not presented as active low-sales screenings", () => {
-  assert.match(source, /const hasStarted = new Date\(showtime\.startsAt\)\.getTime\(\) <= Date\.now\(\)/);
+  assert.match(source, /const hasStarted = new Date\(showtime\.startsAt\)\.getTime\(\) <= now/);
   assert.match(source, /hasStarted\s*\? "sales-normal"/);
   assert.match(source, /<em>\{hasStarted \? "Started"/);
 });
@@ -55,4 +55,12 @@ test("started showtimes are not presented as active low-sales screenings", () =>
 test("daily schedule does not silently omit later showtimes", () => {
   assert.match(source, /scheduleShowtimes\.map\(\(showtime\) =>/);
   assert.doesNotMatch(source, /scheduleShowtimes\.slice\(/);
+});
+
+test("dashboard time-sensitive status and reports advance without a reload", () => {
+  assert.match(source, /window\.setInterval\(\(\) => setNow\(new Date\(\)\), 60_000\)/);
+  assert.match(source, /return \(\) => window\.clearInterval\(timer\)/);
+  assert.match(source, /const locationDayStart = localDayStart\(now, locationTimeZone\)\.toISOString\(\)/);
+  assert.match(source, /locationDayStart, locationTimeZone/);
+  assert.match(source, /new Date\(showtime\.startsAt\)\.getTime\(\) <= now/);
 });
