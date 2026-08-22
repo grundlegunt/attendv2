@@ -55,6 +55,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [merchUrl, setMerchUrl] = useState("");
   const [locationDraft, setLocationDraft] = useState<OperatingSettings | null>(null);
   const locationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const locationSavingRef = useRef(false);
+  const [locationSaving, setLocationSaving] = useState(false);
   const brandingAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const merchAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const siteCopyAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -103,6 +105,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   async function saveLocation(event: FormEvent) {
     event.preventDefault();
     if (!locationDraft) return;
+    if (locationSavingRef.current) return;
+    locationSavingRef.current = true;
+    setLocationSaving(true);
     setError(null);
     const body = JSON.stringify({ ...locationDraft, address: locationDraft.address?.trim() || null, currency: undefined });
     if (locationAttemptRef.current?.fingerprint !== body) locationAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
@@ -113,6 +118,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) locationAttemptRef.current = null;
       setError(reason instanceof ApiRequestError ? reason.body.message : "Location settings could not be saved.");
+    } finally {
+      locationSavingRef.current = false;
+      setLocationSaving(false);
     }
   }
 
@@ -323,7 +331,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Auto-settlement tip (%)<input type="number" min="0" max="100" step="0.01" required value={locationDraft.autoSettleTipBasisPoints / 100} onChange={(event) => setLocationDraft({ ...locationDraft, autoSettleTipBasisPoints: Math.round(Number(event.target.value) * 100) })} /></label>
       </div>
       <label className="checkbox"><input type="checkbox" checked={locationDraft.timeClockEnabled} onChange={(event) => setLocationDraft({ ...locationDraft, timeClockEnabled: event.target.checked })} /> Require staff clock-in at this location</label>
-      <div className="location-actions"><button className="primary">Save operating settings</button><a className="secondary button-link" href={`${CUSTOMER_WEB_URL}/signage?locationId=${encodeURIComponent(settings!.id)}`} target="_blank" rel="noreferrer">Open lobby display</a></div>
+      <div className="location-actions"><button className="primary" disabled={locationSaving}>{locationSaving ? "Saving…" : "Save operating settings"}</button><a className="secondary button-link" href={`${CUSTOMER_WEB_URL}/signage?locationId=${encodeURIComponent(settings!.id)}`} target="_blank" rel="noreferrer">Open lobby display</a></div>
     </form>}
     {settings && section === "promotions" && <section className="panel promotions-manager"><p className="kicker">PROMOTIONS</p><h2>Discount codes</h2><p>Create a fixed discount, percentage discount, or complimentary-ticket code. Date windows are optional.</p>
       <form className="promotion-form" onSubmit={(event) => void createPromotion(event)}>
