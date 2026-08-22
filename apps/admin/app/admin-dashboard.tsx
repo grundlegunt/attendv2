@@ -94,13 +94,16 @@ function DashboardShowtimeRow({
   const occupancy = showtime.auditorium.capacity
     ? Math.min(100, Math.round((ticketsSold / showtime.auditorium.capacity) * 100))
     : 0;
+  const hasStarted = new Date(showtime.startsAt).getTime() <= Date.now();
   const salesClass = !salesVisible
     ? "sales-normal"
-    : occupancy >= 80
-      ? "selling-fast"
-      : showtime.onSale && occupancy < 20
-        ? "sales-low"
-        : "sales-normal";
+    : hasStarted
+      ? "sales-normal"
+      : occupancy >= 80
+        ? "selling-fast"
+        : showtime.onSale && occupancy < 20
+          ? "sales-low"
+          : "sales-normal";
 
   function loadInventory() {
     if (inventory || inventoryRequestRef.current) return;
@@ -139,7 +142,7 @@ function DashboardShowtimeRow({
       <time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
       <span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}{salesVisible ? ` · ${ticketsSold}/${showtime.auditorium.capacity} seats` : ` · ${showtime.auditorium.capacity} seats`}</small></span>
       {salesVisible ? <span className="schedule-occupancy"><i><span style={{ width: `${occupancy}%` }} /></i><b>{occupancy}%</b></span> : <span aria-hidden="true" />}
-      <em>{salesVisible && occupancy >= 80 ? "Selling fast" : salesVisible && showtime.onSale && occupancy < 20 ? "Low sales" : showtime.onSale ? "On sale" : "Draft"}</em>
+      <em>{hasStarted ? "Started" : salesVisible && occupancy >= 80 ? "Selling fast" : salesVisible && showtime.onSale && occupancy < 20 ? "Low sales" : showtime.onSale ? "On sale" : "Draft"}</em>
       <aside className="dashboard-seat-preview">
         <header><span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name} · Click for full sales view</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
         {inventory ? <>
