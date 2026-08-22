@@ -168,6 +168,8 @@ export function ManagementControls({
   const updateTaxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const chargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateChargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const checkoutRuleActionRef = useRef(false);
+  const [checkoutRuleAction, setCheckoutRuleAction] = useState<{ kind: "create-tax" | "create-service" | "update"; id?: string; field?: string } | null>(null);
   const [newPriceTier, setNewPriceTier] = useState({
     name: "Standard",
     price: "",
@@ -370,6 +372,9 @@ export function ManagementControls({
   async function createTax(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (checkoutRuleActionRef.current) return;
+    checkoutRuleActionRef.current = true;
+    setCheckoutRuleAction({ kind: "create-tax" });
     const body = { ...tax, active: true };
     const fingerprint = JSON.stringify(body);
     if (taxAttemptRef.current?.fingerprint !== fingerprint) taxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -386,6 +391,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) taxAttemptRef.current = null;
       showError(reason);
+    } finally {
+      checkoutRuleActionRef.current = false;
+      setCheckoutRuleAction(null);
     }
   }
   async function createPrice(event: FormEvent) {
@@ -560,6 +568,9 @@ export function ManagementControls({
   async function createCharge(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (checkoutRuleActionRef.current) return;
+    checkoutRuleActionRef.current = true;
+    setCheckoutRuleAction({ kind: "create-service" });
     const body = { ...charge, active: true, autoApply: true };
     const fingerprint = JSON.stringify(body);
     if (chargeAttemptRef.current?.fingerprint !== fingerprint) chargeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -576,6 +587,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) chargeAttemptRef.current = null;
       showError(reason);
+    } finally {
+      checkoutRuleActionRef.current = false;
+      setCheckoutRuleAction(null);
     }
   }
   async function updateRule(
@@ -584,6 +598,9 @@ export function ManagementControls({
     changes: Record<string, boolean>,
   ) {
     setError(null);
+    if (checkoutRuleActionRef.current) return;
+    checkoutRuleActionRef.current = true;
+    setCheckoutRuleAction({ kind: "update", id, field: Object.keys(changes)[0] });
     const body = JSON.stringify(changes);
     const fingerprint = `${id}:${body}`;
     if (kind === "tax" && updateTaxAttemptRef.current?.fingerprint !== fingerprint) updateTaxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -606,6 +623,9 @@ export function ManagementControls({
       if (kind === "tax" && reason instanceof ApiRequestError && reason.status < 500) updateTaxAttemptRef.current = null;
       if (kind === "service" && reason instanceof ApiRequestError && reason.status < 500) updateChargeAttemptRef.current = null;
       showError(reason);
+    } finally {
+      checkoutRuleActionRef.current = false;
+      setCheckoutRuleAction(null);
     }
   }
   async function createEmployee(event: FormEvent) {
@@ -1112,7 +1132,7 @@ export function ManagementControls({
                   }
                 />
               </label>
-              <button className="primary">Add tax rule</button>
+              <button className="primary" disabled={checkoutRuleAction !== null}>{checkoutRuleAction?.kind === "create-tax" ? "Adding…" : "Add tax rule"}</button>
               <div className="rule-list">
                 {settings?.taxRules.map((rule) => (
                   <article key={rule.id}>
@@ -1126,13 +1146,14 @@ export function ManagementControls({
                     <button
                       type="button"
                       className="secondary"
+                      disabled={checkoutRuleAction !== null}
                       onClick={() =>
                         void updateRule("tax", rule.id, {
                           active: !rule.active,
                         })
                       }
                     >
-                      {rule.active ? "Deactivate" : "Activate"}
+                      {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id ? "Updating…" : rule.active ? "Deactivate" : "Activate"}
                     </button>
                   </article>
                 ))}
@@ -1185,7 +1206,7 @@ export function ManagementControls({
                   }
                 />
               </label>
-              <button className="primary">Add service charge</button>
+              <button className="primary" disabled={checkoutRuleAction !== null}>{checkoutRuleAction?.kind === "create-service" ? "Adding…" : "Add service charge"}</button>
               <div className="rule-list">
                 {settings?.serviceChargeRules.map((rule) => (
                   <article key={rule.id}>
@@ -1203,25 +1224,26 @@ export function ManagementControls({
                       <button
                         type="button"
                         className="secondary"
-                        disabled={!rule.active}
+                        disabled={checkoutRuleAction !== null || !rule.active}
                         onClick={() =>
                           void updateRule("service", rule.id, {
                             autoApply: !rule.autoApply,
                           })
                         }
                       >
-                        {rule.autoApply ? "Automatic" : "Not applied"}
+                        {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id && checkoutRuleAction.field === "autoApply" ? "Updating…" : rule.autoApply ? "Automatic" : "Not applied"}
                       </button>
                       <button
                         type="button"
                         className="secondary"
+                        disabled={checkoutRuleAction !== null}
                         onClick={() =>
                           void updateRule("service", rule.id, {
                             active: !rule.active,
                           })
                         }
                       >
-                        {rule.active ? "Deactivate" : "Activate"}
+                        {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id && checkoutRuleAction.field === "active" ? "Updating…" : rule.active ? "Deactivate" : "Activate"}
                       </button>
                     </div>
                   </article>

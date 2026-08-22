@@ -21,3 +21,13 @@ test("service-charge updates retain a stable retry identity", () => {
   assert.match(source, /updateChargeAttemptRef = useRef/);
   assert.match(source, /updateChargeAttemptRef\.current!\.requestId/);
 });
+
+test("tax and service-charge mutations share an immediate action lock", () => {
+  assert.match(source, /checkoutRuleActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(checkoutRuleActionRef\.current\) return;/g)?.length, 3);
+  assert.equal(source.match(/checkoutRuleActionRef\.current = true;/g)?.length, 3);
+  assert.equal(source.match(/checkoutRuleActionRef\.current = false;/g)?.length, 3);
+  assert.match(source, /setCheckoutRuleAction\(\{ kind: "create-tax" \}\)/);
+  assert.match(source, /setCheckoutRuleAction\(\{ kind: "create-service" \}\)/);
+  assert.match(source, /setCheckoutRuleAction\(\{ kind: "update", id, field: Object\.keys\(changes\)\[0\] \}\)/);
+});
