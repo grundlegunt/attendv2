@@ -108,7 +108,7 @@ function DashboardShowtimeRow({
     inventoryRequestRef.current = controller;
     setInventoryLoading(true);
     setInventoryError(false);
-    apiFetch<ShowtimeSeatInventory>(`/cinema/showtimes/${showtime.id}/seats`, {
+    apiFetch<ShowtimeSeatInventory>(`/cinema/admin/showtimes/${showtime.id}/seats`, {
       accessToken: accessToken ?? undefined,
       signal: controller.signal,
     })
@@ -172,7 +172,7 @@ function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken }: {
     inventoryRequestRef.current = controller;
     setInventoryLoading(true);
     setInventoryError(false);
-    apiFetch<ShowtimeSeatInventory>(`/cinema/showtimes/${showtime.id}/seats`, { accessToken, signal: controller.signal })
+    apiFetch<ShowtimeSeatInventory>(`/cinema/admin/showtimes/${showtime.id}/seats`, { accessToken, signal: controller.signal })
       .then(setInventory)
       .catch(() => { if (!controller.signal.aborted) setInventoryError(true); })
       .finally(() => {
