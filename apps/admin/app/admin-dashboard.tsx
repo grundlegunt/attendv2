@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { startOfLocalDay } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { useAdminSession } from "./admin-session";
 import { visibleAdminNavigation } from "./admin-navigation";
@@ -10,6 +11,7 @@ import { apiFetch, ApiRequestError } from "./lib/api-client";
 type Bootstrap = {
   location: {
     name: string;
+    timezone: string;
     auditoriums: Array<{ id: string; name: string; capacity: number; seatMap: { id: string } | null }>;
     organization: {
       movies: Array<{ id: string; title: string }>;
@@ -43,27 +45,31 @@ function money(cents: number) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
-function dayRange() {
-  const from = new Date();
-  from.setHours(0, 0, 0, 0);
-  const to = new Date(from);
-  to.setDate(to.getDate() + 1);
+function localDayStart(date: Date, timeZone: string, dayOffset = 0) {
+  const start = startOfLocalDay(date, timeZone);
+  if (!dayOffset) return start;
+  // Noon stays within the intended neighboring calendar day across DST shifts;
+  // startOfLocalDay then resolves that day's exact UTC boundary.
+  return startOfLocalDay(new Date(start.getTime() + dayOffset * 24 * 60 * 60 * 1000 + 12 * 60 * 60 * 1000), timeZone);
+}
+
+function dayRange(timeZone: string, dayOffset = 0) {
+  const now = new Date();
+  const from = localDayStart(now, timeZone, dayOffset);
+  const to = localDayStart(now, timeZone, dayOffset + 1);
   return { from, to };
 }
 
-function performanceRange(range: FilmPerformanceRange) {
-  const { from, to } = dayRange();
-  if (range !== "today") from.setDate(from.getDate() - (range === "7d" ? 6 : 29));
-  return { from, to };
+function performanceRange(range: FilmPerformanceRange, timeZone: string) {
+  const daysBack = range === "today" ? 0 : range === "7d" ? 6 : 29;
+  return {
+    from: localDayStart(new Date(), timeZone, -daysBack),
+    to: localDayStart(new Date(), timeZone, 1),
+  };
 }
 
-function scheduleRange(day: ScheduleDay) {
-  const { from, to } = dayRange();
-  if (day === "tomorrow") {
-    from.setDate(from.getDate() + 1);
-    to.setDate(to.getDate() + 1);
-  }
-  return { from, to };
+function scheduleRange(day: ScheduleDay, timeZone: string) {
+  return dayRange(timeZone, day === "tomorrow" ? 1 : 0);
 }
 
 function messageFor(reason: unknown) {
@@ -209,13 +215,14 @@ export function AdminDashboard() {
   const canFinancial = permissions.has("reports.view.financial");
   const canAudit = permissions.has("audit.log.view");
   const canSettings = permissions.has("ticket.price.edit");
+  const locationTimeZone = bootstrap?.location.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       setErrors([]);
-      const { from, to } = dayRange();
+      const { from, to } = dayRange(locationTimeZone);
       const requests: Array<{ key: "bootstrap" | "revenue" | "activity" | "settings"; request: Promise<unknown> }> = [];
       if (canCinema) requests.push({ key: "bootstrap", request: apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken }) });
       if (canFinancial) requests.push({ key: "revenue", request: apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken }) });
@@ -238,38 +245,38 @@ export function AdminDashboard() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [accessToken, canAudit, canCinema, canFinancial, canSettings]);
+  }, [accessToken, canAudit, canCinema, canFinancial, canSettings, locationTimeZone]);
 
   useEffect(() => {
     if (!canFinancial) return;
     let cancelled = false;
-    const { from, to } = performanceRange(filmRange);
+    const { from, to } = performanceRange(filmRange, locationTimeZone);
     setFilmRevenueLoading(true);
     apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
       .then((result) => { if (!cancelled) setFilmRevenue(result); })
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
       .finally(() => { if (!cancelled) setFilmRevenueLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken, canFinancial, filmRange]);
+  }, [accessToken, canFinancial, filmRange, locationTimeZone]);
 
   useEffect(() => {
     if (!canFinancial || !canCinema) return;
     let cancelled = false;
-    const { from, to } = scheduleRange(scheduleDay);
+    const { from, to } = scheduleRange(scheduleDay, locationTimeZone);
     setScheduleRevenueLoading(true);
     apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
       .then((result) => { if (!cancelled) setScheduleRevenue(result); })
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
       .finally(() => { if (!cancelled) setScheduleRevenueLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken, canCinema, canFinancial, scheduleDay]);
+  }, [accessToken, canCinema, canFinancial, locationTimeZone, scheduleDay]);
 
-  const { from, to } = dayRange();
+  const { from, to } = dayRange(locationTimeZone);
   const todaysShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
     const startsAt = new Date(showtime.startsAt);
     return startsAt >= from && startsAt < to;
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const selectedScheduleRange = scheduleRange(scheduleDay);
+  const selectedScheduleRange = scheduleRange(scheduleDay, locationTimeZone);
   const scheduleShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
     const startsAt = new Date(showtime.startsAt);
     return startsAt >= selectedScheduleRange.from && startsAt < selectedScheduleRange.to;
