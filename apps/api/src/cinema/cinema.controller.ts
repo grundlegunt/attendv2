@@ -114,6 +114,13 @@ export class CinemaController {
     return this.cinemaService.adminBootstrap(actor);
   }
 
+  @Get("admin/showtimes/:id/seats")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  adminSeatAvailability(@CurrentActor() actor: RequestActor, @Param("id") id: string) {
+    return this.cinemaService.adminSeatAvailability(actor, id);
+  }
+
   @Get("schedule-plans")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)

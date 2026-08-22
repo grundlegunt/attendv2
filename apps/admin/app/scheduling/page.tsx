@@ -1124,7 +1124,8 @@ export default function AdminPage() {
     setSeatInventory(null);
     setSeatInventoryError(null);
     apiFetch<ShowtimeSeatInventory>(
-      `/cinema/showtimes/${editingShowtimeId}/seats`,
+      `/cinema/admin/showtimes/${editingShowtimeId}/seats`,
+      { accessToken: token },
     )
       .then((inventory) => {
         if (!canceled) setSeatInventory(inventory);
@@ -1136,7 +1137,7 @@ export default function AdminPage() {
     return () => {
       canceled = true;
     };
-  }, [editingShowtimeId, showtimeEditorOpen]);
+  }, [editingShowtimeId, showtimeEditorOpen, token]);
 
   useEffect(() => {
     if (!data || !linkedShowtimeId || linkedShowtimeHandled) return;
