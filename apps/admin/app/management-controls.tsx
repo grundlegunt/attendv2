@@ -179,6 +179,8 @@ export function ManagementControls({
   const updatePriceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const ticketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateTicketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const ticketPricingActionRef = useRef(false);
+  const [ticketPricingAction, setTicketPricingAction] = useState<{ kind: "create-price" | "create-type" | "save-price" | "toggle-price" | "update-type"; id?: string } | null>(null);
   const [ticketTypeDrafts, setTicketTypeDrafts] = useState<
     Record<string, string>
   >({});
@@ -389,6 +391,9 @@ export function ManagementControls({
   async function createPrice(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (ticketPricingActionRef.current) return;
+    ticketPricingActionRef.current = true;
+    setTicketPricingAction({ kind: "create-price" });
     const body = { name: newPriceTier.name, ticketPriceMinor: Math.round(Number(newPriceTier.price) * 100) };
     const fingerprint = JSON.stringify(body);
     if (priceAttemptRef.current?.fingerprint !== fingerprint) priceAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -405,11 +410,17 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) priceAttemptRef.current = null;
       showError(reason);
+    } finally {
+      ticketPricingActionRef.current = false;
+      setTicketPricingAction(null);
     }
   }
   async function createTicketType(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (ticketPricingActionRef.current) return;
+    ticketPricingActionRef.current = true;
+    setTicketPricingAction({ kind: "create-type" });
     const body = { name: newTicketTypeName, priceAdjustmentMinor: Math.round(Number(newTicketTypeAdjustment) * 100) };
     const fingerprint = JSON.stringify(body);
     if (ticketTypeAttemptRef.current?.fingerprint !== fingerprint) ticketTypeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -427,6 +438,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) ticketTypeAttemptRef.current = null;
       showError(reason);
+    } finally {
+      ticketPricingActionRef.current = false;
+      setTicketPricingAction(null);
     }
   }
   async function updateTicketType(
@@ -434,6 +448,9 @@ export function ManagementControls({
     changes: { name?: string; priceAdjustmentMinor?: number; active?: boolean },
   ) {
     setError(null);
+    if (ticketPricingActionRef.current) return;
+    ticketPricingActionRef.current = true;
+    setTicketPricingAction({ kind: "update-type", id: ticketType.id });
     const body = JSON.stringify(changes);
     const fingerprint = `${ticketType.id}:${body}`;
     if (updateTicketTypeAttemptRef.current?.fingerprint !== fingerprint) updateTicketTypeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -449,6 +466,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) updateTicketTypeAttemptRef.current = null;
       showError(reason);
+    } finally {
+      ticketPricingActionRef.current = false;
+      setTicketPricingAction(null);
     }
   }
   async function savePrice(tier: Settings["priceTiers"][number]) {
@@ -462,6 +482,9 @@ export function ManagementControls({
       setError("Enter a valid ticket price.");
       return;
     }
+    if (ticketPricingActionRef.current) return;
+    ticketPricingActionRef.current = true;
+    setTicketPricingAction({ kind: "save-price", id: tier.id });
     setError(null);
     setSavedPriceId(null);
     setSavingPriceId(tier.id);
@@ -503,10 +526,15 @@ export function ManagementControls({
       showError(reason);
     } finally {
       setSavingPriceId(null);
+      ticketPricingActionRef.current = false;
+      setTicketPricingAction(null);
     }
   }
   async function togglePriceTier(tier: Settings["priceTiers"][number]) {
     setError(null);
+    if (ticketPricingActionRef.current) return;
+    ticketPricingActionRef.current = true;
+    setTicketPricingAction({ kind: "toggle-price", id: tier.id });
     setSavingPriceId(tier.id);
     const body = JSON.stringify({ active: !tier.active });
     const fingerprint = `${tier.id}:${body}`;
@@ -525,6 +553,8 @@ export function ManagementControls({
       showError(reason);
     } finally {
       setSavingPriceId(null);
+      ticketPricingActionRef.current = false;
+      setTicketPricingAction(null);
     }
   }
   async function createCharge(event: FormEvent) {
@@ -879,6 +909,7 @@ export function ManagementControls({
                         type="button"
                         className="secondary"
                         disabled={
+                          ticketPricingAction !== null ||
                           !ticketTypeDrafts[ticketType.id]?.trim() ||
                           !Number.isFinite(Number(ticketTypeAdjustmentDrafts[ticketType.id]))
                         }
@@ -889,18 +920,19 @@ export function ManagementControls({
                           })
                         }
                       >
-                        Save
+                        {ticketPricingAction?.kind === "update-type" && ticketPricingAction.id === ticketType.id ? "Saving…" : "Save"}
                       </button>
                       <button
                         type="button"
                         className="secondary"
+                        disabled={ticketPricingAction !== null}
                         onClick={() =>
                           void updateTicketType(ticketType, {
                             active: !ticketType.active,
                           })
                         }
                       >
-                        {ticketType.active ? "Deactivate" : "Activate"}
+                        {ticketPricingAction?.kind === "update-type" && ticketPricingAction.id === ticketType.id ? "Updating…" : ticketType.active ? "Deactivate" : "Activate"}
                       </button>
                     </div>
                   </article>
@@ -922,7 +954,7 @@ export function ManagementControls({
                 Price adjustment
                 <input required type="number" step="0.01" value={newTicketTypeAdjustment} onChange={(event) => setNewTicketTypeAdjustment(event.target.value)} />
               </label>
-              <button className="primary">Add ticket type</button>
+              <button className="primary" disabled={ticketPricingAction !== null}>{ticketPricingAction?.kind === "create-type" ? "Adding…" : "Add ticket type"}</button>
             </form>
           )}
           {canConfig && (
@@ -986,7 +1018,7 @@ export function ManagementControls({
                         type="button"
                         className="secondary"
                         disabled={
-                          savingPriceId === tier.id ||
+                          ticketPricingAction !== null ||
                           !priceNameDrafts[tier.id]?.trim()
                         }
                         onClick={() => void savePrice(tier)}
@@ -996,10 +1028,10 @@ export function ManagementControls({
                       <button
                         type="button"
                         className="secondary"
-                        disabled={savingPriceId === tier.id}
+                        disabled={ticketPricingAction !== null}
                         onClick={() => void togglePriceTier(tier)}
                       >
-                        {tier.active ? "Deactivate" : "Activate"}
+                        {ticketPricingAction?.kind === "toggle-price" && ticketPricingAction.id === tier.id ? "Updating…" : tier.active ? "Deactivate" : "Activate"}
                       </button>
                     </div>
                   </article>
@@ -1037,7 +1069,7 @@ export function ManagementControls({
                   }
                 />
               </label>
-              <button className="primary">Add ticket group</button>
+              <button className="primary" disabled={ticketPricingAction !== null}>{ticketPricingAction?.kind === "create-price" ? "Adding…" : "Add ticket group"}</button>
             </form>
           )}
           {canMenuConfig && (
