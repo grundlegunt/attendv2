@@ -49,6 +49,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [labor, setLabor] = useState<LaborReport | null>(null);
   const [shiftDraft, setShiftDraft] = useState<{ shiftId: string; employeeName: string; clockInAt: string; clockOutAt: string; breakStartAt: string; breakEndAt: string; notes: string } | null>(null);
   const shiftAdjustmentAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const shiftSavingRef = useRef(false);
+  const [shiftSaving, setShiftSaving] = useState(false);
   const [audit, setAudit] = useState<AuditEvent[]>([]);
   const [auditHasMore, setAuditHasMore] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -274,6 +276,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     if (shiftDraft.breakEndAt && (!shiftDraft.breakStartAt || new Date(shiftDraft.breakEndAt) <= new Date(shiftDraft.breakStartAt))) { setError("Break end must be after break start."); return; }
     if (shiftDraft.clockOutAt && shiftDraft.breakStartAt && new Date(shiftDraft.breakStartAt) > new Date(shiftDraft.clockOutAt)) { setError("Break start cannot be after clock-out."); return; }
     if (shiftDraft.clockOutAt && shiftDraft.breakEndAt && new Date(shiftDraft.breakEndAt) > new Date(shiftDraft.clockOutAt)) { setError("Break end cannot be after clock-out."); return; }
+    if (shiftSavingRef.current) return;
+    shiftSavingRef.current = true;
+    setShiftSaving(true);
     const body = JSON.stringify({ clockInAt: new Date(shiftDraft.clockInAt).toISOString(), clockOutAt: shiftDraft.clockOutAt ? new Date(shiftDraft.clockOutAt).toISOString() : null, breakStartAt: shiftDraft.breakStartAt ? new Date(shiftDraft.breakStartAt).toISOString() : null, breakEndAt: shiftDraft.breakEndAt ? new Date(shiftDraft.breakEndAt).toISOString() : null, notes: shiftDraft.notes });
     const fingerprint = `${shiftDraft.shiftId}:${body}`;
     if (shiftAdjustmentAttemptRef.current?.fingerprint !== fingerprint) shiftAdjustmentAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -283,6 +288,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       setShiftDraft(null);
       await refresh();
     } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) shiftAdjustmentAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The shift could not be adjusted."); }
+    finally { shiftSavingRef.current = false; setShiftSaving(false); }
   }
 
   function exportRevenue() {
@@ -323,7 +329,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     </section>}
 
     {labor && <section className="panel labor-report"><p className="kicker">LABOR</p><h2>Hours</h2><p><strong>{(labor.totalMinutes / 60).toFixed(2)}</strong> total hours</p><button className="primary" onClick={() => void exportHours()}>Export CSV</button><div className="management-table"><div className="table-row table-head"><span>Employee</span><span>Roles</span><span>Clock in</span><span>Hours</span></div>{labor.rows.map((row) => <div className="table-row" key={row.shiftId}><strong>{row.employeeName}</strong><span>{row.roles.join(", ")}</span><span>{new Date(row.clockInAt).toLocaleString()}</span><span className="labor-hours">{(row.workedMinutes / 60).toFixed(2)}{canEditEmployees && <button type="button" className="secondary" onClick={() => editShift(row)}>Adjust</button>}</span></div>)}</div>
-      {shiftDraft && <form className="shift-adjustment" onSubmit={(event) => void saveShift(event)}><div className="management-heading"><div><p className="kicker">MANAGER CORRECTION</p><h3>{shiftDraft.employeeName}</h3></div><button type="button" className="secondary" onClick={() => setShiftDraft(null)}>Cancel</button></div><div className="shift-adjustment-grid"><label>Clock in<input type="datetime-local" required value={shiftDraft.clockInAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockInAt: event.target.value })} /></label><label>Clock out<input type="datetime-local" value={shiftDraft.clockOutAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockOutAt: event.target.value })} /></label><label>Break start<input type="datetime-local" value={shiftDraft.breakStartAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakStartAt: event.target.value })} /></label><label>Break end<input type="datetime-local" value={shiftDraft.breakEndAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakEndAt: event.target.value })} /></label></div><label>Correction note<textarea required maxLength={500} value={shiftDraft.notes} onChange={(event) => setShiftDraft({ ...shiftDraft, notes: event.target.value })} placeholder="Why this shift was changed" /></label><button className="primary">Save correction</button></form>}
+      {shiftDraft && <form className="shift-adjustment" aria-busy={shiftSaving} onSubmit={(event) => void saveShift(event)}><div className="management-heading"><div><p className="kicker">MANAGER CORRECTION</p><h3>{shiftDraft.employeeName}</h3></div><button type="button" className="secondary" disabled={shiftSaving} onClick={() => setShiftDraft(null)}>Cancel</button></div><div className="shift-adjustment-grid"><label>Clock in<input type="datetime-local" required value={shiftDraft.clockInAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockInAt: event.target.value })} /></label><label>Clock out<input type="datetime-local" value={shiftDraft.clockOutAt} onChange={(event) => setShiftDraft({ ...shiftDraft, clockOutAt: event.target.value })} /></label><label>Break start<input type="datetime-local" value={shiftDraft.breakStartAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakStartAt: event.target.value })} /></label><label>Break end<input type="datetime-local" value={shiftDraft.breakEndAt} onChange={(event) => setShiftDraft({ ...shiftDraft, breakEndAt: event.target.value })} /></label></div><label>Correction note<textarea required maxLength={500} value={shiftDraft.notes} onChange={(event) => setShiftDraft({ ...shiftDraft, notes: event.target.value })} placeholder="Why this shift was changed" /></label><button className="primary" disabled={shiftSaving}>{shiftSaving ? "Saving correction…" : "Save correction"}</button></form>}
     </section>}
 
     {settings && section === "branding" && <>
