@@ -64,6 +64,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const [promotion, setPromotion] = useState<PromotionDraft>(emptyPromotion);
   const promotionAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updatePromotionAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const promotionActionRef = useRef(false);
+  const [promotionAction, setPromotionAction] = useState<{ kind: "create" | "save" | "toggle"; id?: string } | null>(null);
   const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
   const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000)));
   const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
@@ -163,6 +165,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     event.preventDefault();
     setError(null);
     if (promotion.startsAt && promotion.endsAt && new Date(promotion.startsAt) >= new Date(promotion.endsAt)) { setError("Promotion end time must be after its start time."); return; }
+    if (promotionActionRef.current) return;
+    promotionActionRef.current = true;
+    setPromotionAction({ kind: "create" });
     const body = { ...promotionBody(promotion), active: true };
     const fingerprint = JSON.stringify(body);
     if (promotionAttemptRef.current?.fingerprint !== fingerprint) promotionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -172,23 +177,32 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       setPromotion(emptyPromotion());
       await refresh();
     } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) promotionAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be created."); }
+    finally { promotionActionRef.current = false; setPromotionAction(null); }
   }
   async function savePromotion(event: FormEvent) {
     event.preventDefault();
     if (!promotionEdit) return;
     setError(null);
     if (promotionEdit.draft.startsAt && promotionEdit.draft.endsAt && new Date(promotionEdit.draft.startsAt) >= new Date(promotionEdit.draft.endsAt)) { setError("Promotion end time must be after its start time."); return; }
-    const body = JSON.stringify(promotionBody(promotionEdit.draft, true)); const fingerprint = `${promotionEdit.id}:${body}`;
+    if (promotionActionRef.current) return;
+    promotionActionRef.current = true;
+    setPromotionAction({ kind: "save", id: promotionEdit.id });
+    const editingPromotion = promotionEdit;
+    const body = JSON.stringify(promotionBody(editingPromotion.draft, true)); const fingerprint = `${editingPromotion.id}:${body}`;
     if (updatePromotionAttemptRef.current?.fingerprint !== fingerprint) updatePromotionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      await apiFetch(`/management/settings/promotions/${promotionEdit.id}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updatePromotionAttemptRef.current.requestId }, body });
+      await apiFetch(`/management/settings/promotions/${editingPromotion.id}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updatePromotionAttemptRef.current.requestId }, body });
       updatePromotionAttemptRef.current = null;
       setPromotionEdit(null);
       await refresh();
     } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) updatePromotionAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
+    finally { promotionActionRef.current = false; setPromotionAction(null); }
   }
   async function togglePromotion(item: Settings["promotions"][number]) {
     setError(null);
+    if (promotionActionRef.current) return;
+    promotionActionRef.current = true;
+    setPromotionAction({ kind: "toggle", id: item.id });
     const body = JSON.stringify({ active: !item.active }); const fingerprint = `${item.id}:${body}`;
     if (updatePromotionAttemptRef.current?.fingerprint !== fingerprint) updatePromotionAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
@@ -196,6 +210,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       updatePromotionAttemptRef.current = null;
       await refresh();
     } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) updatePromotionAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The promotion could not be updated."); }
+    finally { promotionActionRef.current = false; setPromotionAction(null); }
   }
   async function previewCustomerSegment(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -320,12 +335,12 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Maximum redemptions<input type="number" min="1" step="1" value={promotion.maximumRedemptions || ""} onChange={(event) => setPromotion({ ...promotion, maximumRedemptions: Number(event.target.value) })} placeholder="Unlimited" /></label>
         <label>Starts (optional)<input type="datetime-local" value={promotion.startsAt} onChange={(event) => setPromotion({ ...promotion, startsAt: event.target.value })} /></label>
         <label>Ends (optional)<input type="datetime-local" value={promotion.endsAt} onChange={(event) => setPromotion({ ...promotion, endsAt: event.target.value })} /></label>
-        <button className="primary">Create promotion</button>
+        <button className="primary" disabled={promotionAction !== null}>{promotionAction?.kind === "create" ? "Creating…" : "Create promotion"}</button>
       </form>
       {canReports && <section className="segment-preview"><p className="kicker">CUSTOMER SEGMENT</p><h3>Win-back audience preview</h3><p>Find registered customers whose most recent completed ticket purchase was on or before a chosen date. This preview does not send or enroll anyone in marketing.</p><form className="report-range" onSubmit={(event) => void previewCustomerSegment(event)}><label>Last purchased on or before<input type="date" required value={inactiveSince} onChange={(event) => setInactiveSince(event.target.value)} /></label><button className="secondary">Preview customers</button></form>{customerSegment && <><p><strong>{customerSegment.total}</strong> matching customers</p><div className="management-table"><div className="table-row table-head"><span>Customer</span><span>Last purchase</span><span>Order</span><span>Total</span></div>{customerSegment.preview.map((customer) => <div className="table-row" key={customer.id}><strong>{customer.name}<small>{customer.email}</small></strong><span>{new Date(customer.lastPurchaseAt).toLocaleDateString()}</span><span>{customer.lastOrderNumber}</span><span>{money(customer.lastOrderTotalCents)}</span></div>)}</div>{customerSegment.total > customerSegment.preview.length && <small>Showing the first {customerSegment.preview.length} customers.</small>}</>}</section>}
-      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalTicketFaceValueCents)} face value · {money(item.totalCollectedCents)} collected · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><div className="promotion-actions"><button type="button" className="secondary" onClick={() => setPromotionEdit({ id: item.id, draft: promotionDraft(item) })}>Edit</button><button type="button" className="secondary" onClick={() => void togglePromotion(item)}>{item.active ? "Deactivate" : "Activate"}</button></div></article>)}</div>
+      <div className="promotion-list">{settings.promotions.map((item) => <article key={item.id}><div><strong>{item.code}</strong><span>{item.name}</span><small>{item.redemptionCount}{item.maximumRedemptions ? ` / ${item.maximumRedemptions}` : ""} redemptions · {item.discountedTicketCount} tickets · {money(item.totalTicketFaceValueCents)} face value · {money(item.totalCollectedCents)} collected · {money(item.totalDiscountCents)} discounted</small></div><b>{item.type === "FIXED_AMOUNT" ? money(item.amountCents ?? 0) : item.type === "PERCENTAGE" ? `${((item.percentageBasisPoints ?? 0) / 100).toFixed(2).replace(/\.00$/, "")}%` : "Comp"}<small>{item.minimumSubtotalCents ? `${money(item.minimumSubtotalCents)} minimum` : "No minimum"}</small></b><span>{item.startsAt ? new Date(item.startsAt).toLocaleString() : "Immediately"} → {item.endsAt ? new Date(item.endsAt).toLocaleString() : "No end date"}</span><div className="promotion-actions"><button type="button" className="secondary" disabled={promotionAction !== null} onClick={() => setPromotionEdit({ id: item.id, draft: promotionDraft(item) })}>Edit</button><button type="button" className="secondary" disabled={promotionAction !== null} onClick={() => void togglePromotion(item)}>{promotionAction?.kind === "toggle" && promotionAction.id === item.id ? "Updating…" : item.active ? "Deactivate" : "Activate"}</button></div></article>)}</div>
       {promotionEdit && <form className="promotion-form" onSubmit={(event) => void savePromotion(event)}>
-        <div className="management-heading"><div><p className="kicker">EDIT PROMOTION</p><h3>{promotionEdit.draft.code}</h3></div><button type="button" className="secondary" onClick={() => setPromotionEdit(null)}>Cancel</button></div>
+        <div className="management-heading"><div><p className="kicker">EDIT PROMOTION</p><h3>{promotionEdit.draft.code}</h3></div><button type="button" className="secondary" disabled={promotionAction !== null} onClick={() => setPromotionEdit(null)}>Cancel</button></div>
         <label>Code<input required maxLength={50} value={promotionEdit.draft.code} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, code: event.target.value.toUpperCase() } })} /></label>
         <label>Name<input required maxLength={100} value={promotionEdit.draft.name} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, name: event.target.value } })} /></label>
         <label>Discount type<select value={promotionEdit.draft.type} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, type: event.target.value as PromotionType, value: 0 } })}><option value="FIXED_AMOUNT">Fixed amount</option><option value="PERCENTAGE">Percentage</option><option value="COMP">Complimentary</option></select></label>
@@ -334,7 +349,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
         <label>Maximum redemptions<input type="number" min="1" step="1" value={promotionEdit.draft.maximumRedemptions || ""} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, maximumRedemptions: Number(event.target.value) } })} placeholder="Unlimited" /></label>
         <label>Starts (optional)<input type="datetime-local" value={promotionEdit.draft.startsAt} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, startsAt: event.target.value } })} /></label>
         <label>Ends (optional)<input type="datetime-local" value={promotionEdit.draft.endsAt} onChange={(event) => setPromotionEdit({ ...promotionEdit, draft: { ...promotionEdit.draft, endsAt: event.target.value } })} /></label>
-        <button className="primary">Save promotion</button>
+        <button className="primary" disabled={promotionAction !== null}>{promotionAction?.kind === "save" ? "Saving…" : "Save promotion"}</button>
       </form>}
     </section>}
 
