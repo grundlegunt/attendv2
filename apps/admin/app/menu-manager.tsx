@@ -120,6 +120,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [itemAvailabilityFilter, setItemAvailabilityFilter] = useState("");
   const [menuAssetUrl, setMenuAssetUrl] = useState("");
   const [menuAssetType, setMenuAssetType] = useState<"IMAGE" | "PDF">("IMAGE");
+  const [publishingMenuPresentation, setPublishingMenuPresentation] = useState(false);
+  const menuPresentationPendingRef = useRef(false);
   const menuPresentationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [savedMenuPresentation, setSavedMenuPresentation] = useState<{
     assetUrl: string;
@@ -205,6 +207,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
 
   async function saveMenuPresentation(event: FormEvent) {
     event.preventDefault();
+    if (menuPresentationPendingRef.current) return;
+    menuPresentationPendingRef.current = true;
+    setPublishingMenuPresentation(true);
     const body = JSON.stringify({
       assetUrl: menuAssetUrl.trim() || null,
       assetType: menuAssetUrl.trim() ? menuAssetType : null,
@@ -226,6 +231,9 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
     } catch (error) {
       if (error instanceof ApiRequestError && error.status < 500) menuPresentationAttemptRef.current = null;
       showError(error, "Menu presentation could not be published.");
+    } finally {
+      menuPresentationPendingRef.current = false;
+      setPublishingMenuPresentation(false);
     }
   }
 
@@ -634,14 +642,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         <div className="two-fields">
           <label>
             Asset type
-            <select value={menuAssetType} onChange={(event) => setMenuAssetType(event.target.value as "IMAGE" | "PDF")}>
+            <select value={menuAssetType} disabled={publishingMenuPresentation} onChange={(event) => setMenuAssetType(event.target.value as "IMAGE" | "PDF")}>
               <option value="IMAGE">Image</option>
               <option value="PDF">PDF document</option>
             </select>
           </label>
           <label>
             Menu image or PDF URL
-            <input type="url" value={menuAssetUrl} onChange={(event) => setMenuAssetUrl(event.target.value)} placeholder="https://…" />
+            <input type="url" value={menuAssetUrl} disabled={publishingMenuPresentation} onChange={(event) => setMenuAssetUrl(event.target.value)} placeholder="https://…" />
           </label>
         </div>
         {menuAssetUrl && <div className="menu-presentation-preview">
@@ -655,8 +663,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
           </div>
         </div>}
         <div className="rule-actions">
-          <button className="primary" disabled={!menuPresentationChanged}>{menuPresentationChanged ? "Publish menu design" : "Menu design is live"}</button>
-          {menuAssetUrl && <button className="secondary" type="button" onClick={() => setMenuAssetUrl("")}>Clear field</button>}
+          <button className="primary" disabled={!menuPresentationChanged || publishingMenuPresentation}>{publishingMenuPresentation ? "Publishing…" : menuPresentationChanged ? "Publish menu design" : "Menu design is live"}</button>
+          {menuAssetUrl && <button className="secondary" type="button" disabled={publishingMenuPresentation} onClick={() => setMenuAssetUrl("")}>Clear field</button>}
         </div>
         {menuPresentationChanged && <p className="secondary-copy">These changes are only a preview until you publish them.</p>}
       </form>
