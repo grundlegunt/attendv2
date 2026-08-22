@@ -261,6 +261,7 @@ export default function AdminPage() {
     useState<SchedulePlanValidation | null>(null);
   const [validatingPlan, setValidatingPlan] = useState(false);
   const [publishingPlan, setPublishingPlan] = useState(false);
+  const planActionPendingRef = useRef(false);
 
   async function refresh(accessToken = token) {
     if (!accessToken) return;
@@ -584,6 +585,8 @@ export default function AdminPage() {
   }
 
   async function validateSchedulePlan(plan: SchedulePlan) {
+    if (planActionPendingRef.current) return;
+    planActionPendingRef.current = true;
     setError(null);
     setPlanValidation(null);
     setValidatingPlan(true);
@@ -599,11 +602,14 @@ export default function AdminPage() {
     } catch (reason) {
       showError(reason);
     } finally {
+      planActionPendingRef.current = false;
       setValidatingPlan(false);
     }
   }
 
   async function makeSchedulePlanLive(plan: SchedulePlan) {
+    if (planActionPendingRef.current) return;
+    planActionPendingRef.current = true;
     setError(null);
     setPlanValidation(null);
     setValidatingPlan(true);
@@ -619,17 +625,23 @@ export default function AdminPage() {
       setPlanValidation(validation);
     } catch (reason) {
       showError(reason);
+      planActionPendingRef.current = false;
       return;
     } finally {
       setValidatingPlan(false);
     }
-    if (!validation.valid) return;
+    if (!validation.valid) {
+      planActionPendingRef.current = false;
+      return;
+    }
     if (
       !window.confirm(
         `Publish “${plan.name}” as the live schedule? This replaces the future live week only when no protected sales or restaurant records would be affected.`,
       )
-    )
+    ) {
+      planActionPendingRef.current = false;
       return;
+    }
     setPublishingPlan(true);
     const body = JSON.stringify({
       expectedUpdatedAt: validation.expectedUpdatedAt,
@@ -667,6 +679,7 @@ export default function AdminPage() {
       }
       showError(reason);
     } finally {
+      planActionPendingRef.current = false;
       setPublishingPlan(false);
     }
   }
