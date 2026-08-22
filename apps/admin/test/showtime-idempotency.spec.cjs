@@ -52,3 +52,13 @@ test("showtime creation retains stable retry identities", () => {
   assert.match(source, /"Idempotency-Key": deletePlanAttemptRef\.current!\.requestId/);
   assert.match(source, /"Idempotency-Key": publishPlanAttemptRef\.current!\.requestId/);
 });
+
+test("showtime editor mutations share an immediate action lock", () => {
+  assert.match(source, /showtimeEditorActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(showtimeEditorActionRef\.current\) return;/g)?.length, 3);
+  assert.equal(source.match(/showtimeEditorActionRef\.current = true;/g)?.length, 3);
+  assert.equal(source.match(/showtimeEditorActionRef\.current = false;/g)?.length, 3);
+  assert.match(source, /setShowtimeEditorAction\("save"\)/);
+  assert.match(source, /setShowtimeEditorAction\("sale"\)/);
+  assert.match(source, /setShowtimeEditorAction\("remove"\)/);
+});
