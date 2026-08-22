@@ -45,3 +45,9 @@ test("dashboard waits for cinema timezone before loading date-bound reports", ()
   assert.doesNotMatch(source, /key: "bootstrap" \| "revenue"/);
   assert.doesNotMatch(source, /canSettings, locationTimeZone\]\)/);
 });
+
+test("started showtimes are not presented as active low-sales screenings", () => {
+  assert.match(source, /const hasStarted = new Date\(showtime\.startsAt\)\.getTime\(\) <= Date\.now\(\)/);
+  assert.match(source, /hasStarted\s*\? "sales-normal"/);
+  assert.match(source, /<em>\{hasStarted \? "Started"/);
+});
