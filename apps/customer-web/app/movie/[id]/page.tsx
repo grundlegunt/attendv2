@@ -8,6 +8,7 @@ import {
 import { apiFetch, ApiRequestError } from "../../lib/api-client";
 import { SeatPicker } from "../../components/seat-picker";
 import { localDateKey } from "../../components/movie-tile";
+import { TrailerTrigger } from "../../components/trailer-modal";
 
 interface DetailResponse {
   location: { id: string; name: string; timezone: string };
@@ -133,14 +134,13 @@ export default function MovieDetailPage({
             )}
           </div>
           {movie.trailerUrl && (
-            <a
+            <TrailerTrigger
               className="primary-link movie-detail__trailer"
-              href={movie.trailerUrl}
-              target="_blank"
-              rel="noreferrer"
+              url={movie.trailerUrl}
+              title={movie.title}
             >
-              Watch Trailer ↗
-            </a>
+              Watch Trailer
+            </TrailerTrigger>
           )}
         </aside>
         <div className="movie-detail__copy">

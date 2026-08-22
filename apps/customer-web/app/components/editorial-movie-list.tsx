@@ -5,6 +5,7 @@ import {
   type PublicShowtime,
 } from "@cinema/shared";
 import { localDateKey } from "./movie-tile";
+import { TrailerTrigger } from "./trailer-modal";
 
 type EditorialMovieListProps = {
   movies: NowPlayingMovie[];
@@ -94,9 +95,9 @@ export function EditorialMovieList({
                   <div className="editorial-movie__placeholder">{movie.title}</div>
                 )}
                 {openCaptions && movie.trailerUrl ? (
-                  <a className="editorial-movie__trailer" href={movie.trailerUrl}>
+                  <TrailerTrigger className="editorial-movie__trailer" url={movie.trailerUrl} title={movie.title}>
                     Watch trailer
-                  </a>
+                  </TrailerTrigger>
                 ) : null}
               </div>
 
