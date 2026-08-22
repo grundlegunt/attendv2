@@ -51,6 +51,37 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+export function platformErrorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return fallback;
+  const error = body as {
+    message?: unknown;
+    details?: { issues?: unknown };
+  };
+  const message =
+    typeof error.message === "string" && error.message.trim()
+      ? error.message.trim()
+      : fallback;
+  if (!Array.isArray(error.details?.issues)) return message;
+
+  const issues = error.details.issues.flatMap((issue) => {
+    if (!issue || typeof issue !== "object" || Array.isArray(issue)) return [];
+    const candidate = issue as { path?: unknown; message?: unknown };
+    if (typeof candidate.message !== "string" || !candidate.message.trim()) {
+      return [];
+    }
+    const path = Array.isArray(candidate.path)
+      ? candidate.path
+          .filter((part): part is string | number =>
+            typeof part === "string" || typeof part === "number",
+          )
+          .join(".")
+      : "";
+    return [`${path ? `${path}: ` : ""}${candidate.message.trim()}`];
+  });
+
+  return issues.length > 0 ? issues.join(" ") : message;
+}
+
 export function readPlatformSession(storageKey: string): StoredPlatformSession | null {
   const stored = window.sessionStorage.getItem(storageKey);
   if (!stored) return null;
@@ -101,11 +132,10 @@ async function platformResponse(apiBaseUrl: string, storageKey: string, path: st
   }
   if (!response.ok) {
     const body = await readJson(response);
-    const message = body && typeof body === "object" && !Array.isArray(body)
-      && typeof (body as { message?: unknown }).message === "string"
-      && (body as { message: string }).message.trim()
-      ? (body as { message: string }).message
-      : response.statusText.trim() || `Request failed with status ${response.status}.`;
+    const message = platformErrorMessage(
+      body,
+      response.statusText.trim() || `Request failed with status ${response.status}.`,
+    );
     throw new Error(message);
   }
   return response;

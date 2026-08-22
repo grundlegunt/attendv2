@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   adminUiDefaults,
+  seatMapLayoutSchema,
   type AdminUiConfig,
   type CinemaContent,
   type SeatInput,
@@ -1044,6 +1045,19 @@ export default function AttendMaster() {
   async function saveAuditorium(event: FormEvent) {
     event.preventDefault();
     if (!session || !organization || !auditoriumDraft) return;
+    if (auditoriumDraft.seatingMode === "RESERVED") {
+      const layoutResult = seatMapLayoutSchema.safeParse(
+        auditoriumLayout(auditoriumDraft),
+      );
+      if (!layoutResult.success) {
+        const issue = layoutResult.error.issues[0];
+        const field = issue?.path.join(".") ?? "layout";
+        setError(
+          `${field}: ${issue?.message ?? "The layout is invalid."} Reserved auditoriums require at least 8 rows and a layout 12 spaces wide.`,
+        );
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -2117,14 +2131,14 @@ export default function AttendMaster() {
                                 Rows
                                 <input
                                   type="number"
-                                  min={1}
+                                  min={8}
                                   max={20}
                                   value={auditoriumDraft.rows}
                                   onChange={(event) =>
                                     setAuditoriumDraft({
                                       ...auditoriumDraft,
                                       rows: Math.max(
-                                        1,
+                                        8,
                                         Math.min(
                                           20,
                                           Number(event.target.value),
@@ -2140,12 +2154,12 @@ export default function AttendMaster() {
                                 Seats per row
                                 <input
                                   type="number"
-                                  min={2}
+                                  min={auditoriumDraft.centerAisle ? 11 : 12}
                                   max={25}
                                   value={auditoriumDraft.seatsPerRow}
                                   onChange={(event) => {
                                     const seatsPerRow = Math.max(
-                                      2,
+                                      auditoriumDraft.centerAisle ? 11 : 12,
                                       Math.min(25, Number(event.target.value)),
                                     );
                                     setAuditoriumDraft({
@@ -2196,6 +2210,10 @@ export default function AttendMaster() {
                                     setAuditoriumDraft({
                                       ...auditoriumDraft,
                                       centerAisle: event.target.checked,
+                                      seatsPerRow: Math.max(
+                                        event.target.checked ? 11 : 12,
+                                        auditoriumDraft.seatsPerRow,
+                                      ),
                                       sourceSeats: undefined,
                                       sourceLayout: undefined,
                                     })
