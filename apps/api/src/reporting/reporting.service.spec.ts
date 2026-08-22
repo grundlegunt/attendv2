@@ -34,7 +34,7 @@ describe("ReportingService distributor box-office export", () => {
       movies: [{ movieId: "movie-1", title: 'Film, "One"', ticketRevenueCents: 1700, ticketsSold: 1, fnbRevenueCents: 1400 }],
       showtimes: [{ showtimeId: "show-1", movieId: "movie-1", title: 'Film, "One"', startsAt: new Date("2026-08-05T18:00:00.000Z"), ticketRevenueCents: 1700, ticketsSold: 1, fnbRevenueCents: 1400 }],
       admissionTypes: [{ ticketTypeId: "adult", name: "Adult", ticketsSold: 1, ticketRevenueCents: 1700 }],
-      salesChannels: [{ channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, grossCollectedCents: 2066, refundedCents: 0, netCollectedCents: 2066 }],
+      salesChannels: [{ channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, ticketFeesCents: 200, grossCollectedCents: 2066, refundedCents: 0, netCollectedCents: 2066 }],
       salesOperators: [],
       concessionTopSellers: [],
       dailyPerformance: [],
