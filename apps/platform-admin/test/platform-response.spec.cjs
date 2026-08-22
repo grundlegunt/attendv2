@@ -18,6 +18,14 @@ test("platform requests normalize malformed responses", () => {
   assert.doesNotMatch(source, /response\.json\(\)\.catch/);
 });
 
+test("platform requests surface structured validation issues", () => {
+  assert.match(source, /export function platformErrorMessage/);
+  assert.match(source, /error\.details\.issues\.flatMap/);
+  assert.match(source, /candidate\.path/);
+  assert.match(source, /issues\.length > 0 \? issues\.join\(" "\) : message/);
+  assert.match(source, /platformErrorMessage\(/);
+});
+
 test("platform requests and refreshes are bounded while downloads get longer", () => {
   assert.match(source, /REQUEST_TIMEOUT_MS = 20_000/);
   assert.match(source, /DOWNLOAD_TIMEOUT_MS = 60_000/);
