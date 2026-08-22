@@ -205,6 +205,8 @@ export function ManagementControls({
   const employeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateEmployeeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const credentialResetAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const employeeActionRef = useRef(false);
+  const [employeeAction, setEmployeeAction] = useState<{ kind: "create" | "update" | "credentials"; id?: string } | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [newRoleName, setNewRoleName] = useState("");
   const roleAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -631,6 +633,9 @@ export function ManagementControls({
   async function createEmployee(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    if (employeeActionRef.current) return;
+    employeeActionRef.current = true;
+    setEmployeeAction({ kind: "create" });
     const body = JSON.stringify({ name: employee.name, email: employee.email, password: employee.password, pin: employee.pin || undefined, roleIds: [employee.roleId] });
     if (employeeAttemptRef.current?.fingerprint !== body) employeeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
@@ -646,6 +651,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) employeeAttemptRef.current = null;
       showError(reason);
+    } finally {
+      employeeActionRef.current = false;
+      setEmployeeAction(null);
     }
   }
   async function saveRole() {
@@ -734,22 +742,28 @@ export function ManagementControls({
     }
   }
   async function submitEmployeeUpdate(targetId: string, changes: object) {
+    if (employeeActionRef.current) return false;
+    employeeActionRef.current = true;
+    setEmployeeAction({ kind: "update", id: targetId });
     const body = JSON.stringify(changes);
     const fingerprint = `${targetId}:${body}`;
     if (updateEmployeeAttemptRef.current?.fingerprint !== fingerprint) updateEmployeeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
-      const updated = await apiFetch(`/management/employees/${targetId}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updateEmployeeAttemptRef.current.requestId }, body });
+      await apiFetch(`/management/employees/${targetId}`, { accessToken, method: "PATCH", headers: { "Idempotency-Key": updateEmployeeAttemptRef.current.requestId }, body });
       updateEmployeeAttemptRef.current = null;
-      return updated;
+      await refresh();
+      return true;
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) updateEmployeeAttemptRef.current = null;
       throw reason;
+    } finally {
+      employeeActionRef.current = false;
+      setEmployeeAction(null);
     }
   }
   async function toggleEmployee(target: People["employees"][number]) {
     try {
       await submitEmployeeUpdate(target.id, { active: !target.active });
-      await refresh();
     } catch (reason) {
       showError(reason);
     }
@@ -762,7 +776,6 @@ export function ManagementControls({
     }
     try {
       await submitEmployeeUpdate(target.id, { name: draft.name, email: draft.email });
-      await refresh();
     } catch (reason) {
       showError(reason);
     }
@@ -775,7 +788,6 @@ export function ManagementControls({
     }
     try {
       await submitEmployeeUpdate(target.id, { roleIds });
-      await refresh();
     } catch (reason) {
       showError(reason);
     }
@@ -800,6 +812,9 @@ export function ManagementControls({
       )
     )
       return;
+    if (employeeActionRef.current) return;
+    employeeActionRef.current = true;
+    setEmployeeAction({ kind: "credentials", id: target.id });
     const body = JSON.stringify(field === "password" ? { password: draft.password } : { pin: removePin ? null : draft.pin });
     const fingerprint = `${target.id}:${body}`;
     if (credentialResetAttemptRef.current?.fingerprint !== fingerprint) credentialResetAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -819,6 +834,9 @@ export function ManagementControls({
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) credentialResetAttemptRef.current = null;
       showError(reason);
+    } finally {
+      employeeActionRef.current = false;
+      setEmployeeAction(null);
     }
   }
   async function refund(
@@ -1323,7 +1341,7 @@ export function ManagementControls({
                 ))}
               </select>
             </label>
-            <button className="primary">Create employee</button>
+            <button className="primary" disabled={employeeAction !== null}>{employeeAction?.kind === "create" ? "Creating…" : "Create employee"}</button>
             <div className="people-list employee-credential-list">
               {people.employees.map((person) => {
                 const draft = credentialDrafts[person.id] ?? {
@@ -1383,12 +1401,13 @@ export function ManagementControls({
                           type="button"
                           className="secondary"
                           disabled={
+                            employeeAction !== null ||
                             identity.name === person.name &&
                             identity.email === person.email
                           }
                           onClick={() => void saveEmployeeIdentity(person)}
                         >
-                          Save profile
+                          {employeeAction?.kind === "update" && employeeAction.id === person.id ? "Saving…" : "Save profile"}
                         </button>
                       </div>
                       <div className="credential-reset-fields">
@@ -1412,11 +1431,12 @@ export function ManagementControls({
                         <button
                           type="button"
                           className="secondary"
+                          disabled={employeeAction !== null}
                           onClick={() =>
                             void resetEmployeeCredentials(person, "password")
                           }
                         >
-                          Reset password
+                          {employeeAction?.kind === "credentials" && employeeAction.id === person.id ? "Updating…" : "Reset password"}
                         </button>
                         <label>
                           New PIN
@@ -1438,6 +1458,7 @@ export function ManagementControls({
                         <button
                           type="button"
                           className="secondary"
+                          disabled={employeeAction !== null}
                           onClick={() =>
                             void resetEmployeeCredentials(person, "pin")
                           }
@@ -1447,6 +1468,7 @@ export function ManagementControls({
                         <button
                           type="button"
                           className="secondary"
+                          disabled={employeeAction !== null}
                           onClick={() =>
                             void resetEmployeeCredentials(person, "pin", true)
                           }
@@ -1458,9 +1480,10 @@ export function ManagementControls({
                     <button
                       type="button"
                       className="secondary"
+                      disabled={employeeAction !== null}
                       onClick={() => void toggleEmployee(person)}
                     >
-                      {person.active ? "Deactivate" : "Reactivate"}
+                      {employeeAction?.kind === "update" && employeeAction.id === person.id ? "Updating…" : person.active ? "Deactivate" : "Reactivate"}
                     </button>
                   </article>
                 );
@@ -1517,9 +1540,10 @@ export function ManagementControls({
                     <button
                       className="secondary"
                       type="button"
+                      disabled={employeeAction !== null}
                       onClick={() => void saveEmployeeRoles(person)}
                     >
-                      Save roles
+                      {employeeAction?.kind === "update" && employeeAction.id === person.id ? "Saving…" : "Save roles"}
                     </button>
                   </article>
                 ))}

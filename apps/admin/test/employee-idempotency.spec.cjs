@@ -21,3 +21,13 @@ test("credential resets retain a stable retry identity", () => {
   assert.match(source, /credentialResetAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": credentialResetAttemptRef\.current\.requestId/);
 });
+
+test("employee mutations share an immediate action lock", () => {
+  assert.match(source, /employeeActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(employeeActionRef\.current\) return/g)?.length, 3);
+  assert.equal(source.match(/employeeActionRef\.current = true;/g)?.length, 3);
+  assert.equal(source.match(/employeeActionRef\.current = false;/g)?.length, 3);
+  assert.match(source, /setEmployeeAction\(\{ kind: "create" \}\)/);
+  assert.match(source, /setEmployeeAction\(\{ kind: "update", id: targetId \}\)/);
+  assert.match(source, /setEmployeeAction\(\{ kind: "credentials", id: target\.id \}\)/);
+});
