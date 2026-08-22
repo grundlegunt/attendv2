@@ -12,6 +12,12 @@ test("dashboard seat previews serialize requests and cancel them on teardown", (
   assert.match(source, /inventoryRequestRef\.current\?\.abort\(\)/);
 });
 
+test("dashboard seat previews use authenticated historical inventory", () => {
+  const adminInventoryRequests = source.match(/`\/cinema\/admin\/showtimes\/\$\{showtime\.id\}\/seats`/g) ?? [];
+  assert.equal(adminInventoryRequests.length, 2);
+  assert.doesNotMatch(source, /`\/cinema\/showtimes\/\$\{showtime\.id\}\/seats`/);
+});
+
 test("dashboard seat previews allow retry after a transient failure", () => {
   assert.doesNotMatch(source, /if \(inventory \|\| inventoryLoading \|\| inventoryError\) return/);
   assert.match(source, /setInventoryError\(false\)/);
