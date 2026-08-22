@@ -69,6 +69,8 @@ export default function AccountPage() {
   const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
   const receiptAttemptRef = useRef<Record<string, string>>({});
   const receiptPendingRef = useRef<string | null>(null);
+  const [signOutPending, setSignOutPending] = useState(false);
+  const signOutPendingRef = useRef(false);
   const [printOrderId, setPrintOrderId] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -294,11 +296,17 @@ export default function AccountPage() {
   }
 
   async function signOut() {
-    if (!session) return;
+    if (!session || signOutPendingRef.current) return;
+    signOutPendingRef.current = true;
+    setSignOutPending(true);
     try {
       await apiFetch<void>("/auth/customers/logout", {
         method: "POST",
       });
+      setSession(null);
+      setAccount(null);
+      setLiveTabId("");
+      setError(null);
     } catch (err) {
       setError(
         err instanceof ApiRequestError
@@ -306,11 +314,10 @@ export default function AccountPage() {
           : "Sign out failed. Please try again.",
       );
       return;
+    } finally {
+      signOutPendingRef.current = false;
+      setSignOutPending(false);
     }
-    setSession(null);
-    setAccount(null);
-    setLiveTabId("");
-    setError(null);
   }
 
   async function resendReceipt(order: CustomerTicketOrderSummary) {
@@ -649,8 +656,8 @@ export default function AccountPage() {
                 {account?.customer.email ?? session.email}
               </p>
             </div>
-            <button className="account-secondary-button" onClick={signOut}>
-              Sign out
+            <button className="account-secondary-button" onClick={signOut} disabled={signOutPending}>
+              {signOutPending ? "Signing out…" : "Sign out"}
             </button>
           </section>
 
