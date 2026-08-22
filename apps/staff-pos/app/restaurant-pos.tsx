@@ -129,12 +129,6 @@ export function RestaurantPos({
     setTabId(nextTabId);
   }
 
-  function hasPendingSettlementAction(requestedTabId: string) {
-    return actionLocks.current.has(`drop:${requestedTabId}`) ||
-      actionLocks.current.has(`guest-link:${requestedTabId}`) ||
-      actionLocks.current.has(`finalize:${requestedTabId}`);
-  }
-
   function settlementBlocked() {
     if (orderId) {
       setMessage("Send or remove the current draft before changing the check.");
@@ -551,7 +545,7 @@ export function RestaurantPos({
   async function dropCheck() {
     if (settlementBlocked()) return;
     const actionKey = `drop:${tabId}`;
-    if (!tabId || hasPendingSettlementAction(tabId) || !beginAction(actionKey)) return;
+    if (!tabId || actionLocks.current.size > 0 || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedTabId = tabId;
     try {
@@ -622,7 +616,7 @@ export function RestaurantPos({
       return;
     }
     const actionKey = `finalize:${tabId}`;
-    if (!tabId || hasPendingSettlementAction(tabId) || !beginAction(actionKey)) return;
+    if (!tabId || actionLocks.current.size > 0 || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedTabId = tabId;
     const tenders = [
@@ -678,7 +672,7 @@ export function RestaurantPos({
   async function createGuestLink() {
     if (settlementBlocked()) return;
     const actionKey = `guest-link:${tabId}`;
-    if (!tabId || hasPendingSettlementAction(tabId) || !beginAction(actionKey)) return;
+    if (!tabId || actionLocks.current.size > 0 || !beginAction(actionKey)) return;
     const requestId = tabActionRequestRef.current;
     const requestedTabId = tabId;
     try {
