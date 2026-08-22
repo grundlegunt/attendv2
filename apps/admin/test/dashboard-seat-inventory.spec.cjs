@@ -64,3 +64,10 @@ test("dashboard time-sensitive status and reports advance without a reload", () 
   assert.match(source, /locationDayStart, locationTimeZone/);
   assert.match(source, /new Date\(showtime\.startsAt\)\.getTime\(\) <= now/);
 });
+
+test("dashboard date and time labels use the cinema timezone", () => {
+  assert.match(source, /toLocaleTimeString\(\[\], \{ hour: "numeric", minute: "2-digit", timeZone \}\)/);
+  assert.match(source, /toLocaleString\(\[\], \{ timeZone \}\)/);
+  assert.match(source, /timeZone: locationTimeZone/);
+  assert.doesNotMatch(source, /new Date\(\)\.toLocaleDateString/);
+});
