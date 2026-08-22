@@ -26,3 +26,13 @@ test("auditorium deactivation retains a stable retry identity", () => {
   assert.match(source, /deactivateAuditoriumAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": deactivateAuditoriumAttemptRef\.current\.requestId/);
 });
+
+test("auditorium mutations share an immediate action lock", () => {
+  assert.match(source, /auditoriumActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(auditoriumActionRef\.current\) return;/g)?.length, 3);
+  assert.equal(source.match(/auditoriumActionRef\.current = true;/g)?.length, 3);
+  assert.equal(source.match(/auditoriumActionRef\.current = false;/g)?.length, 3);
+  assert.match(source, /setAuditoriumAction\("save"\)/);
+  assert.match(source, /setAuditoriumAction\("duplicate"\)/);
+  assert.match(source, /setAuditoriumAction\("deactivate"\)/);
+});

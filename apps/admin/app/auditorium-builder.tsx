@@ -269,6 +269,8 @@ export function AuditoriumBuilder({
   const updateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateAuditoriumAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const deactivateAuditoriumAttemptRef = useRef<{ auditoriumId: string; requestId: string } | null>(null);
+  const auditoriumActionRef = useRef(false);
+  const [auditoriumAction, setAuditoriumAction] = useState<"save" | "duplicate" | "deactivate" | null>(null);
 
   const preview = useMemo(
     () => (mode === "BASIC" ? basicSeats(rows, seatsPerRow) : seats),
@@ -608,6 +610,9 @@ export function AuditoriumBuilder({
 
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (auditoriumActionRef.current) return;
+    auditoriumActionRef.current = true;
+    setAuditoriumAction("save");
     const finalLayout: SeatMapLayout =
       mode === "BASIC"
         ? {
@@ -682,6 +687,9 @@ export function AuditoriumBuilder({
         updateAuditoriumAttemptRef.current = null;
       }
       onError(reason);
+    } finally {
+      auditoriumActionRef.current = false;
+      setAuditoriumAction(null);
     }
   }
 
@@ -692,6 +700,9 @@ export function AuditoriumBuilder({
       `${name} copy`,
     );
     if (!copyName) return;
+    if (auditoriumActionRef.current) return;
+    auditoriumActionRef.current = true;
+    setAuditoriumAction("duplicate");
     const body = JSON.stringify({ name: copyName });
     const fingerprint = `${editingId}:${body}`;
     if (duplicateAuditoriumAttemptRef.current?.fingerprint !== fingerprint) {
@@ -714,6 +725,9 @@ export function AuditoriumBuilder({
         duplicateAuditoriumAttemptRef.current = null;
       }
       onError(reason);
+    } finally {
+      auditoriumActionRef.current = false;
+      setAuditoriumAction(null);
     }
   }
 
@@ -725,6 +739,9 @@ export function AuditoriumBuilder({
       )
     )
       return;
+    if (auditoriumActionRef.current) return;
+    auditoriumActionRef.current = true;
+    setAuditoriumAction("deactivate");
     if (deactivateAuditoriumAttemptRef.current?.auditoriumId !== editingId) {
       deactivateAuditoriumAttemptRef.current = {
         auditoriumId: editingId,
@@ -754,6 +771,9 @@ export function AuditoriumBuilder({
         deactivateAuditoriumAttemptRef.current = null;
       }
       onError(reason);
+    } finally {
+      auditoriumActionRef.current = false;
+      setAuditoriumAction(null);
     }
   }
 
@@ -1302,8 +1322,10 @@ export function AuditoriumBuilder({
         </>
       )}
       <div className="builder-actions">
-        <button className="primary">
-          {seatingMode === "GENERAL_ADMISSION"
+        <button className="primary" disabled={auditoriumAction !== null}>
+          {auditoriumAction === "save"
+            ? "Saving…"
+            : seatingMode === "GENERAL_ADMISSION"
             ? editingId
               ? "Save GA auditorium"
               : `Create ${gaCapacity}-capacity auditorium`
@@ -1315,18 +1337,20 @@ export function AuditoriumBuilder({
           <button
             type="button"
             className="secondary"
+            disabled={auditoriumAction !== null}
             onClick={() => void duplicate()}
           >
-            Duplicate theater
+            {auditoriumAction === "duplicate" ? "Duplicating…" : "Duplicate theater"}
           </button>
         )}
         {editingId && (
           <button
             type="button"
             className="secondary destructive-outline"
+            disabled={auditoriumAction !== null}
             onClick={() => void deactivate()}
           >
-            Deactivate theater
+            {auditoriumAction === "deactivate" ? "Deactivating…" : "Deactivate theater"}
           </button>
         )}
       </div>
