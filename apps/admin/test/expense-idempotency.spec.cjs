@@ -16,3 +16,10 @@ test("expense deletion retries retain one request identity", () => {
   assert.match(source, /deleteExpenseAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": deleteExpenseAttemptRef\.current\.requestId/);
 });
+
+test("expense mutations share an immediate action lock", () => {
+  assert.match(source, /const mutationPendingRef = useRef\(false\)/);
+  assert.match(source, /async function createExpense[\s\S]*?if \(mutationPendingRef\.current\) return;\s*mutationPendingRef\.current = true/);
+  assert.match(source, /async function removeExpense[\s\S]*?if \(mutationPendingRef\.current\) return;[\s\S]*?mutationPendingRef\.current = true/);
+  assert.match(source, /deletingExpenseId === expense\.id \? "Deleting…" : "Delete"/);
+});

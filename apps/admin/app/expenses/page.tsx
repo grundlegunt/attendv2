@@ -20,6 +20,7 @@ export default function ExpensesPage() {
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingExpenseId, setDeletingExpenseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [category, setCategory] = useState<ExpenseCategory>("FILM_RENTAL");
   const [vendor, setVendor] = useState("");
@@ -27,6 +28,7 @@ export default function ExpensesPage() {
   const [amount, setAmount] = useState("");
   const [incurredAt, setIncurredAt] = useState(localDateInputValue(today));
   const [notes, setNotes] = useState("");
+  const mutationPendingRef = useRef(false);
   const expenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const deleteExpenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
@@ -41,9 +43,12 @@ export default function ExpensesPage() {
   useEffect(() => { void load(); }, [load]);
 
   async function createExpense(event: FormEvent) {
-    event.preventDefault(); setSaving(true); setError(null);
+    event.preventDefault(); setError(null);
     const amountCents = Math.round(Number(amount) * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) { setError("Enter an expense amount greater than zero."); setSaving(false); return; }
+    if (!Number.isFinite(amountCents) || amountCents <= 0) { setError("Enter an expense amount greater than zero."); return; }
+    if (mutationPendingRef.current) return;
+    mutationPendingRef.current = true;
+    setSaving(true);
     const payload = { category, vendor: vendor || undefined, description, amountCents, incurredAt: new Date(`${incurredAt}T12:00:00`).toISOString(), notes: notes || undefined };
     const fingerprint = JSON.stringify(payload);
     if (expenseAttemptRef.current?.fingerprint !== fingerprint) expenseAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
@@ -53,15 +58,19 @@ export default function ExpensesPage() {
       setVendor(""); setDescription(""); setAmount(""); setNotes("");
       await load();
     } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) expenseAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The expense could not be saved."); }
-    finally { setSaving(false); }
+    finally { mutationPendingRef.current = false; setSaving(false); }
   }
 
   async function removeExpense(expense: Expense) {
+    if (mutationPendingRef.current) return;
     if (!window.confirm(`Delete ${expense.description}?`)) return;
+    mutationPendingRef.current = true;
+    setDeletingExpenseId(expense.id);
     setError(null);
     if (deleteExpenseAttemptRef.current?.fingerprint !== expense.id) deleteExpenseAttemptRef.current = { fingerprint: expense.id, requestId: crypto.randomUUID() };
     try { await apiFetch(`/reports/expenses/${expense.id}`, { accessToken, method: "DELETE", headers: { "Idempotency-Key": deleteExpenseAttemptRef.current.requestId } }); deleteExpenseAttemptRef.current = null; await load(); }
     catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) deleteExpenseAttemptRef.current = null; setError(reason instanceof ApiRequestError ? reason.body.message : "The expense could not be deleted."); }
+    finally { mutationPendingRef.current = false; setDeletingExpenseId(null); }
   }
 
   async function downloadCsv() {
@@ -77,8 +86,8 @@ export default function ExpensesPage() {
     {error && <div className="error-banner">{error}</div>}
     <section className="panel expense-filters"><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>Through<input type="date" value={through} min={from} onChange={(event) => setThrough(event.target.value)} /></label><button className="secondary" type="button" onClick={() => void load()}>Refresh</button></section>
     <section className="dashboard-metrics"><article className="dashboard-metric"><span>Total expenses</span><strong>{money.format((report?.totals.totalExpenseCents ?? 0) / 100)}</strong><small>{report?.totals.count ?? 0} entries in this period</small></article>{Object.entries(report?.totals.byCategory ?? {}).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([name, cents]) => <article className="dashboard-metric" key={name}><span>{categoryLabel(name)}</span><strong>{money.format(cents / 100)}</strong><small>Category total</small></article>)}</section>
-    <div className="expense-layout"><form className="panel expense-form" onSubmit={createExpense}><p className="kicker">NEW ENTRY</p><h2>Add expense</h2><label>Date<input required type="date" value={incurredAt} onChange={(event) => setIncurredAt(event.target.value)} /></label><label>Category<select value={category} onChange={(event) => setCategory(event.target.value as ExpenseCategory)}>{categories.map((value) => <option key={value} value={value}>{categoryLabel(value)}</option>)}</select></label><label>Vendor<input maxLength={160} value={vendor} onChange={(event) => setVendor(event.target.value)} /></label><label>Description<input required maxLength={240} value={description} onChange={(event) => setDescription(event.target.value)} /></label><label>Amount<input required min="0.01" step="0.01" inputMode="decimal" type="number" value={amount} onChange={(event) => setAmount(event.target.value)} /></label><label>Notes<textarea maxLength={2000} rows={4} value={notes} onChange={(event) => setNotes(event.target.value)} /></label><button className="primary" disabled={saving}>{saving ? "Saving…" : "Add expense"}</button></form>
-      <section className="panel expense-ledger"><div className="dashboard-section-heading"><div><p className="kicker">LEDGER</p><h2>Expense entries</h2></div></div>{loading ? <p className="muted">Loading expenses…</p> : !report?.rows.length ? <p className="dashboard-empty">No expenses were entered for this period.</p> : <div className="expense-list">{report.rows.map((expense) => <article key={expense.id}><time>{new Date(expense.incurredAt).toLocaleDateString()}</time><span><strong>{expense.description}</strong><small>{categoryLabel(expense.category)}{expense.vendor ? ` · ${expense.vendor}` : ""}{expense.notes ? ` · ${expense.notes}` : ""}</small></span><b>{money.format(expense.amountCents / 100)}</b><button className="secondary" type="button" onClick={() => void removeExpense(expense)}>Delete</button></article>)}</div>}</section>
+    <div className="expense-layout"><form className="panel expense-form" onSubmit={createExpense}><p className="kicker">NEW ENTRY</p><h2>Add expense</h2><label>Date<input required type="date" value={incurredAt} disabled={saving || deletingExpenseId !== null} onChange={(event) => setIncurredAt(event.target.value)} /></label><label>Category<select value={category} disabled={saving || deletingExpenseId !== null} onChange={(event) => setCategory(event.target.value as ExpenseCategory)}>{categories.map((value) => <option key={value} value={value}>{categoryLabel(value)}</option>)}</select></label><label>Vendor<input maxLength={160} value={vendor} disabled={saving || deletingExpenseId !== null} onChange={(event) => setVendor(event.target.value)} /></label><label>Description<input required maxLength={240} value={description} disabled={saving || deletingExpenseId !== null} onChange={(event) => setDescription(event.target.value)} /></label><label>Amount<input required min="0.01" step="0.01" inputMode="decimal" type="number" value={amount} disabled={saving || deletingExpenseId !== null} onChange={(event) => setAmount(event.target.value)} /></label><label>Notes<textarea maxLength={2000} rows={4} value={notes} disabled={saving || deletingExpenseId !== null} onChange={(event) => setNotes(event.target.value)} /></label><button className="primary" disabled={saving || deletingExpenseId !== null}>{saving ? "Saving…" : "Add expense"}</button></form>
+      <section className="panel expense-ledger"><div className="dashboard-section-heading"><div><p className="kicker">LEDGER</p><h2>Expense entries</h2></div></div>{loading ? <p className="muted">Loading expenses…</p> : !report?.rows.length ? <p className="dashboard-empty">No expenses were entered for this period.</p> : <div className="expense-list">{report.rows.map((expense) => <article key={expense.id}><time>{new Date(expense.incurredAt).toLocaleDateString()}</time><span><strong>{expense.description}</strong><small>{categoryLabel(expense.category)}{expense.vendor ? ` · ${expense.vendor}` : ""}{expense.notes ? ` · ${expense.notes}` : ""}</small></span><b>{money.format(expense.amountCents / 100)}</b><button className="secondary" type="button" disabled={saving || deletingExpenseId !== null} onClick={() => void removeExpense(expense)}>{deletingExpenseId === expense.id ? "Deleting…" : "Delete"}</button></article>)}</div>}</section>
     </div>
   </main>;
 }
