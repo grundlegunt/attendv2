@@ -148,15 +148,23 @@ describe("saved schedule publishing", () => {
 
   it("locks weekly plan saves before React updates the form", () => {
     assert.match(schedulingSource, /const savingPlanRef = useRef\(false\)/);
-    assert.match(schedulingSource, /async function saveSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current\) return;\s*savingPlanRef\.current = true/);
+    assert.match(schedulingSource, /async function saveSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current \|\| managingPlanRef\.current\) return;\s*savingPlanRef\.current = true/);
     assert.match(schedulingSource, /finally \{\s*savingPlanRef\.current = false;\s*setSavingPlan\(false\)/);
   });
 
   it("locks destructive plan deletion against saves and repeat clicks", () => {
     assert.match(schedulingSource, /const deletingPlanRef = useRef\(false\)/);
-    assert.match(schedulingSource, /async function deleteSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current\) return/);
+    assert.match(schedulingSource, /async function deleteSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current \|\| managingPlanRef\.current\) return/);
     assert.match(schedulingSource, /deletingPlanRef\.current = true;\s*setDeletingPlanId\(plan\.id\)/);
     assert.match(schedulingSource, /deletingPlanId === plan\.id \? "Deleting…" : "Delete"/);
+  });
+
+  it("serializes plan duplicate and rename operations", () => {
+    assert.match(schedulingSource, /const managingPlanRef = useRef\(false\)/);
+    assert.match(schedulingSource, /async function duplicateSchedulePlan[\s\S]*?managingPlanRef\.current = true;\s*setManagingPlan\(\{ id: plan\.id, action: "duplicate" \}\)/);
+    assert.match(schedulingSource, /async function renameSchedulePlan[\s\S]*?managingPlanRef\.current = true;\s*setManagingPlan\(\{ id: plan\.id, action: "rename" \}\)/);
+    assert.match(schedulingSource, /managingPlan\.action === "duplicate" \? "Duplicating…"/);
+    assert.match(schedulingSource, /managingPlan\.action === "rename" \? "Renaming…"/);
   });
 });
 
