@@ -14,9 +14,9 @@ export function ManagementPage({ section }: { section: DashboardSection | Contro
   return (
     <main className="admin-route-page">
       {section === "taxes" || section === "users" || section === "refunds" ? (
-        <ManagementControls accessToken={accessToken} permissions={employee.permissions} section={section} />
+        <ManagementControls accessToken={accessToken} permissions={employee.permissions} section={section} timeZone={employee.timezone} />
       ) : (
-        <ManagementDashboard accessToken={accessToken} permissions={employee.permissions} section={section} />
+        <ManagementDashboard accessToken={accessToken} permissions={employee.permissions} section={section} timeZone={employee.timezone} />
       )}
     </main>
   );

@@ -688,8 +688,12 @@ export function dedupePublicShowtimes(
   return [...unique.values()];
 }
 
-/** Return the UTC instant at which the supplied calendar day began locally. */
-export function startOfLocalDay(date: Date, timeZone: string): Date {
+function localMidnight(
+  year: number,
+  month: number,
+  day: number,
+  timeZone: string,
+): Date {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -700,17 +704,7 @@ export function startOfLocalDay(date: Date, timeZone: string): Date {
     second: "2-digit",
     hourCycle: "h23",
   });
-  const parts = Object.fromEntries(
-    formatter
-      .formatToParts(date)
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, Number(part.value)]),
-  );
-  const localMidnightAsUtc = Date.UTC(
-    parts.year!,
-    parts.month! - 1,
-    parts.day!,
-  );
+  const localMidnightAsUtc = Date.UTC(year, month - 1, day);
 
   // Resolve the zone offset at the target instant twice so this remains
   // correct across daylight-saving transitions as well as ordinary days.
@@ -733,6 +727,40 @@ export function startOfLocalDay(date: Date, timeZone: string): Date {
     candidate = localMidnightAsUtc - (representedAsUtc - candidate);
   }
   return new Date(candidate);
+}
+
+/** Return the UTC instant at which the supplied instant's local calendar day began. */
+export function startOfLocalDay(date: Date, timeZone: string): Date {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, Number(part.value)]),
+  );
+  return localMidnight(parts.year!, parts.month!, parts.day!, timeZone);
+}
+
+/** Return the UTC instant at which an explicit local calendar date began. */
+export function startOfCalendarDay(dateKey: string, timeZone: string): Date {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateKey);
+  if (!match) throw new RangeError("Invalid calendar date.");
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const validation = new Date(Date.UTC(year, month - 1, day));
+  if (
+    validation.getUTCFullYear() !== year ||
+    validation.getUTCMonth() !== month - 1 ||
+    validation.getUTCDate() !== day
+  ) {
+    throw new RangeError("Invalid calendar date.");
+  }
+  return localMidnight(year, month, day, timeZone);
 }
 
 export interface NowPlayingMovie {

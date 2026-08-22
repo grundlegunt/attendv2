@@ -13,10 +13,12 @@ type ExpenseReport = { totals: { totalExpenseCents: number; count: number; byCat
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const categoryLabel = (value: string) => value.toLowerCase().replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 export default function ExpensesPage() {
-  const { accessToken } = useAdminSession();
+  const { accessToken, employee } = useAdminSession();
+  const timeZone = employee.timezone;
   const today = useMemo(() => new Date(), []);
-  const [from, setFrom] = useState(localDateInputValue(new Date(today.getFullYear(), today.getMonth(), 1)));
-  const [through, setThrough] = useState(localDateInputValue(today));
+  const currentDateKey = localDateInputValue(today, timeZone);
+  const [from, setFrom] = useState(`${currentDateKey.slice(0, 8)}01`);
+  const [through, setThrough] = useState(currentDateKey);
   const [report, setReport] = useState<ExpenseReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,13 +28,13 @@ export default function ExpensesPage() {
   const [vendor, setVendor] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
-  const [incurredAt, setIncurredAt] = useState(localDateInputValue(today));
+  const [incurredAt, setIncurredAt] = useState(currentDateKey);
   const [notes, setNotes] = useState("");
   const mutationPendingRef = useRef(false);
   const expenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const deleteExpenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
-  const query = useMemo(() => new URLSearchParams(inclusiveReportRange(from, through)).toString(), [from, through]);
+  const query = useMemo(() => new URLSearchParams(inclusiveReportRange(from, through, timeZone)).toString(), [from, through, timeZone]);
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try { setReport(await apiFetch<ExpenseReport>(`/reports/expenses?${query}`, { accessToken })); }
@@ -49,7 +51,9 @@ export default function ExpensesPage() {
     if (mutationPendingRef.current) return;
     mutationPendingRef.current = true;
     setSaving(true);
-    const payload = { category, vendor: vendor || undefined, description, amountCents, incurredAt: new Date(`${incurredAt}T12:00:00`).toISOString(), notes: notes || undefined };
+    const incurredRange = inclusiveReportRange(incurredAt, incurredAt, timeZone);
+    const incurredAtInstant = new Date((Date.parse(incurredRange.from) + Date.parse(incurredRange.to)) / 2).toISOString();
+    const payload = { category, vendor: vendor || undefined, description, amountCents, incurredAt: incurredAtInstant, notes: notes || undefined };
     const fingerprint = JSON.stringify(payload);
     if (expenseAttemptRef.current?.fingerprint !== fingerprint) expenseAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {

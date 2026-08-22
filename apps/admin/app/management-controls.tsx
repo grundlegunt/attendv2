@@ -152,10 +152,12 @@ export function ManagementControls({
   accessToken,
   permissions,
   section,
+  timeZone,
 }: {
   accessToken: string;
   permissions: string[];
   section: ControlSection;
+  timeZone: string;
 }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [people, setPeople] = useState<People | null>(null);
@@ -251,10 +253,10 @@ export function ManagementControls({
     requestId: string;
   } | null>(null);
   const [historyFrom, setHistoryFrom] = useState(() =>
-    localDateInputValue(new Date(Date.now() - 30 * 86_400_000)),
+    localDateInputValue(new Date(Date.now() - 30 * 86_400_000), timeZone),
   );
   const [historyTo, setHistoryTo] = useState(() =>
-    localDateInputValue(new Date()),
+    localDateInputValue(new Date(), timeZone),
   );
   const canConfig = permissions.includes("ticket.price.edit");
   const canMenuConfig = permissions.includes("menu.edit");
@@ -282,7 +284,7 @@ export function ManagementControls({
             : null,
           section === "refunds" && canRefund
             ? apiFetch<Refunds>(
-                `/management/refunds/history?${new URLSearchParams({ ...inclusiveReportRange(historyFrom, historyTo), ...(refundQuery.trim() ? { query: refundQuery.trim() } : {}) }).toString()}`,
+                `/management/refunds/history?${new URLSearchParams({ ...inclusiveReportRange(historyFrom, historyTo, timeZone), ...(refundQuery.trim() ? { query: refundQuery.trim() } : {}) }).toString()}`,
                 { accessToken },
               )
             : null,

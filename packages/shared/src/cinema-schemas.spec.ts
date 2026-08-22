@@ -10,6 +10,7 @@ import {
   dedupePublicShowtimes,
   duplicateShowtimeDayRequestSchema,
   moveShowtimeGroupRequestSchema,
+  startOfCalendarDay,
   startOfLocalDay,
   showtimeWindowsOverlap,
   updateShowtimeRequestSchema,
@@ -321,6 +322,21 @@ describe("startOfLocalDay", () => {
         "America/Chicago",
       ).toISOString(),
     ).toBe("2026-01-15T06:00:00.000Z");
+  });
+
+  it("resolves explicit cinema calendar dates across daylight-saving changes", () => {
+    expect(
+      startOfCalendarDay("2026-03-08", "America/Chicago").toISOString(),
+    ).toBe("2026-03-08T06:00:00.000Z");
+    expect(
+      startOfCalendarDay("2026-03-09", "America/Chicago").toISOString(),
+    ).toBe("2026-03-09T05:00:00.000Z");
+  });
+
+  it("rejects invalid explicit calendar dates", () => {
+    expect(() =>
+      startOfCalendarDay("2026-02-30", "America/Chicago"),
+    ).toThrow("Invalid calendar date.");
   });
 });
 

@@ -41,9 +41,9 @@ const promotionBody = (draft: PromotionDraft, clearEmpty = false) => ({ code: dr
 
 type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
 
-export function ManagementDashboard({ accessToken, permissions, section }: { accessToken: string; permissions: string[]; section: ManagementSection }) {
-  const [from, setFrom] = useState(localDateInputValue(new Date(Date.now() - 30 * 86_400_000)));
-  const [to, setTo] = useState(localDateInputValue(new Date()));
+export function ManagementDashboard({ accessToken, permissions, section, timeZone }: { accessToken: string; permissions: string[]; section: ManagementSection; timeZone: string }) {
+  const [from, setFrom] = useState(localDateInputValue(new Date(Date.now() - 30 * 86_400_000), timeZone));
+  const [to, setTo] = useState(localDateInputValue(new Date(), timeZone));
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
   const [audienceOrigins, setAudienceOrigins] = useState<AudienceOriginsReport | null>(null);
   const [labor, setLabor] = useState<LaborReport | null>(null);
@@ -73,7 +73,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const promotionActionRef = useRef(false);
   const [promotionAction, setPromotionAction] = useState<{ kind: "create" | "save" | "toggle"; id?: string } | null>(null);
   const [promotionEdit, setPromotionEdit] = useState<{ id: string; draft: PromotionDraft } | null>(null);
-  const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000)));
+  const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000), timeZone));
   const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canFinancial = permissions.includes("reports.view.financial");
@@ -85,7 +85,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   async function refresh(appendAudit = false) {
     setError(null);
     try {
-      const reportRange = inclusiveReportRange(from, to);
+      const reportRange = inclusiveReportRange(from, to, timeZone);
       const range = new URLSearchParams(reportRange).toString();
       const auditQuery = new URLSearchParams({ limit: "50", offset: appendAudit ? String(audit.length) : "0", ...reportRange });
       if (auditAction.trim()) auditQuery.set("action", auditAction.trim());
@@ -104,7 +104,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
 
-  useEffect(() => { void refresh(); }, [accessToken, section]);
+  useEffect(() => { void refresh(); }, [accessToken, section, timeZone]);
 
   async function saveLocation(event: FormEvent) {
     event.preventDefault();
@@ -244,7 +244,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   }
   async function previewCustomerSegment(event: FormEvent) {
     event.preventDefault(); setError(null);
-    try { setCustomerSegment(await apiFetch<CustomerRecencySegment>(`/reports/customer-recency?inactiveSince=${encodeURIComponent(inclusiveDateCutoff(inactiveSince))}&limit=25`, { accessToken })); }
+    try { setCustomerSegment(await apiFetch<CustomerRecencySegment>(`/reports/customer-recency?inactiveSince=${encodeURIComponent(inclusiveDateCutoff(inactiveSince, timeZone))}&limit=25`, { accessToken })); }
     catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The customer segment could not be previewed."); }
   }
 
@@ -260,7 +260,7 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   }
 
   function exportHours() {
-    return downloadReport(`/reports/labor.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, "attend-hours.csv", "The hours export could not be downloaded.");
+    return downloadReport(`/reports/labor.csv?${new URLSearchParams(inclusiveReportRange(from, to, timeZone)).toString()}`, "attend-hours.csv", "The hours export could not be downloaded.");
   }
 
   function editShift(row: LaborRow) {
@@ -292,11 +292,11 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   }
 
   function exportRevenue() {
-    return downloadReport(`/reports/revenue.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, "attend-revenue.csv", "The revenue export could not be downloaded.");
+    return downloadReport(`/reports/revenue.csv?${new URLSearchParams(inclusiveReportRange(from, to, timeZone)).toString()}`, "attend-revenue.csv", "The revenue export could not be downloaded.");
   }
 
   function exportDistributorBoxOffice() {
-    return downloadReport(`/reports/distributor-box-office.csv?${new URLSearchParams(inclusiveReportRange(from, to)).toString()}`, "attend-distributor-box-office.csv", "The distributor box-office report could not be downloaded.");
+    return downloadReport(`/reports/distributor-box-office.csv?${new URLSearchParams(inclusiveReportRange(from, to, timeZone)).toString()}`, "attend-distributor-box-office.csv", "The distributor box-office report could not be downloaded.");
   }
 
   return <section className="management-stack">
