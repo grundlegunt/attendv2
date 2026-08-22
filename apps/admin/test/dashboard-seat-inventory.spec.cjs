@@ -51,3 +51,8 @@ test("started showtimes are not presented as active low-sales screenings", () =>
   assert.match(source, /hasStarted\s*\? "sales-normal"/);
   assert.match(source, /<em>\{hasStarted \? "Started"/);
 });
+
+test("daily schedule does not silently omit later showtimes", () => {
+  assert.match(source, /scheduleShowtimes\.map\(\(showtime\) =>/);
+  assert.doesNotMatch(source, /scheduleShowtimes\.slice\(/);
+});
