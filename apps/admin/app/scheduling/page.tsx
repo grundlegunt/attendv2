@@ -224,6 +224,7 @@ export default function AdminPage() {
   const moveShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const groupMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const undoMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const scheduleMoveActionRef = useRef(false);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
@@ -1386,6 +1387,8 @@ export default function AdminPage() {
     nextAuditoriumId: string,
     nextStartsAt: Date,
   ) {
+    if (scheduleMoveActionRef.current) return;
+    scheduleMoveActionRef.current = true;
     setError(null);
     const rollback = captureShowtimeMoves([showtime]);
     const move = [
@@ -1422,6 +1425,8 @@ export default function AdminPage() {
       }
       applyLocalMoves(rollback);
       showError(reason);
+    } finally {
+      scheduleMoveActionRef.current = false;
     }
   }
 
@@ -1432,6 +1437,8 @@ export default function AdminPage() {
       startsAt: Date;
     }>,
   ) {
+    if (scheduleMoveActionRef.current) return;
+    scheduleMoveActionRef.current = true;
     setError(null);
     const rollback = captureShowtimeMoves(
       moves.map(({ showtime }) => showtime),
@@ -1465,11 +1472,14 @@ export default function AdminPage() {
       }
       applyLocalMoves(rollback);
       showError(reason);
+    } finally {
+      scheduleMoveActionRef.current = false;
     }
   }
 
   async function undoLastMove() {
-    if (!undoMoves?.length || undoingMove) return;
+    if (!undoMoves?.length || scheduleMoveActionRef.current) return;
+    scheduleMoveActionRef.current = true;
     setError(null);
     setUndoingMove(true);
     const rollback = captureShowtimeMoves(
@@ -1516,6 +1526,7 @@ export default function AdminPage() {
       showError(reason);
     } finally {
       setUndoingMove(false);
+      scheduleMoveActionRef.current = false;
     }
   }
 

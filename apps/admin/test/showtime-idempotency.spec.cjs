@@ -70,3 +70,11 @@ test("calendar shortcuts serialize with showtime editor mutations", () => {
   assert.equal(source.match(/calendarShortcutActionRef\.current = false;/g)?.length, 3);
   assert.equal(source.match(/if \(showtimeEditorActionRef\.current \|\| calendarShortcutActionRef\.current\) return;/g)?.length, 3);
 });
+
+test("single, group, and undo moves share an immediate action lock", () => {
+  assert.match(source, /scheduleMoveActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(scheduleMoveActionRef\.current\) return;/g)?.length, 2);
+  assert.match(source, /if \(!undoMoves\?\.length \|\| scheduleMoveActionRef\.current\) return;/);
+  assert.equal(source.match(/scheduleMoveActionRef\.current = true;/g)?.length, 3);
+  assert.equal(source.match(/scheduleMoveActionRef\.current = false;/g)?.length, 3);
+});
