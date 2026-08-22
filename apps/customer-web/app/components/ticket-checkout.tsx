@@ -142,6 +142,7 @@ export function TicketCheckout({
   const [receiptRetryPending, setReceiptRetryPending] = useState(false);
   const [receiptRetryMessage, setReceiptRetryMessage] = useState<string | null>(null);
   const receiptRetryRequestIdRef = useRef<string | null>(null);
+  const receiptRetryPendingRef = useRef(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [accountRecognized, setAccountRecognized] = useState(false);
@@ -644,7 +645,8 @@ export function TicketCheckout({
   }
 
   async function retryReceipt() {
-    if (!confirmation || receiptRetryPending) return;
+    if (!confirmation || receiptRetryPendingRef.current) return;
+    receiptRetryPendingRef.current = true;
     setReceiptRetryPending(true);
     setReceiptRetryMessage(null);
     const requestId = receiptRetryRequestIdRef.current ?? crypto.randomUUID();
@@ -671,6 +673,7 @@ export function TicketCheckout({
           : "The ticket email could not be retried.",
       );
     } finally {
+      receiptRetryPendingRef.current = false;
       setReceiptRetryPending(false);
     }
   }
