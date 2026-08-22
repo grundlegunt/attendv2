@@ -855,7 +855,11 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .top-film-range button { min-height: 36px; padding: 7px 11px; border: 1px solid var(--color-border); border-left: 0; background: transparent; color: var(--color-text-secondary); font-size: .7rem; font-weight: 900; cursor: pointer; }
 .top-film-range button:first-child { border-left: 1px solid var(--color-border); }
 .top-film-range button.active { border-color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 14%, var(--color-bg-elevated)); color: var(--color-accent); }
-.top-film-row { display: grid; grid-template-columns: 28px minmax(130px, .7fr) minmax(180px, 1.3fr) 86px 80px; align-items: center; gap: 14px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--color-border); color: var(--color-text-primary); text-decoration: none; }
+.top-film-row { position: relative; display: grid; grid-template-columns: 28px minmax(130px, .7fr) minmax(180px, 1.3fr) 86px 80px; align-items: center; gap: 14px; min-height: 48px; padding: 8px 0; border-top: 1px solid var(--color-border); color: var(--color-text-primary); text-decoration: none; }
+.top-film-row:hover .top-film-seat-preview, .top-film-row:focus-visible .top-film-seat-preview { display: block; }
+.top-film-seat-preview { left: 44px; width: min(560px, calc(100vw - 390px)); }
+.report-movie-row { scroll-margin-top: 24px; }
+.report-movie-row:target { outline: 2px solid var(--color-accent); outline-offset: 3px; background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .top-film-row:hover > strong, .top-film-row:focus-visible > strong { color: var(--color-accent); }
 .top-film-row:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 .top-film-rank { color: var(--color-text-secondary); font-size: .72rem; font-weight: 900; }

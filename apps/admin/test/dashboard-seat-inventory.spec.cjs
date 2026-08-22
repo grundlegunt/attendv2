@@ -17,3 +17,10 @@ test("dashboard seat previews allow retry after a transient failure", () => {
   assert.match(source, /setInventoryError\(false\)/);
   assert.match(source, /if \(!controller\.signal\.aborted\) setInventoryError\(true\)/);
 });
+
+test("top films preview the closest showing and link to their revenue row", () => {
+  assert.match(source, /closestShowtimeByMovie/);
+  assert.match(source, /className="dashboard-seat-preview top-film-seat-preview"/);
+  assert.match(source, /href=\{`\/reports#movie-\$\{encodeURIComponent\(film\.movieId\)\}`\}/);
+  assert.match(source, /onMouseEnter=\{loadInventory\}/);
+});
