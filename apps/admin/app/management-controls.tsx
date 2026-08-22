@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { percentageToPermille } from "./lib/tax-rate";
 import { inclusiveReportRange, localDateInputValue } from "./report-range";
 
 type Settings = {
@@ -157,7 +158,7 @@ export function ManagementControls({
   const [tax, setTax] = useState({
     name: "",
     appliesTo: "ALL",
-    ratePermille: 0,
+    ratePercent: "",
   });
   const [charge, setCharge] = useState({
     name: "",
@@ -377,9 +378,21 @@ export function ManagementControls({
     event.preventDefault();
     setError(null);
     if (checkoutRuleActionRef.current) return;
+    let ratePermille: number;
+    try {
+      ratePermille = percentageToPermille(tax.ratePercent);
+    } catch (reason) {
+      showError(reason);
+      return;
+    }
     checkoutRuleActionRef.current = true;
     setCheckoutRuleAction({ kind: "create-tax" });
-    const body = { ...tax, active: true };
+    const body = {
+      name: tax.name,
+      appliesTo: tax.appliesTo,
+      ratePermille,
+      active: true,
+    };
     const fingerprint = JSON.stringify(body);
     if (taxAttemptRef.current?.fingerprint !== fingerprint) taxAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
@@ -390,7 +403,7 @@ export function ManagementControls({
         body: fingerprint,
       });
       taxAttemptRef.current = null;
-      setTax({ name: "", appliesTo: "ALL", ratePermille: 0 });
+      setTax({ name: "", appliesTo: "ALL", ratePercent: "" });
       await refresh();
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) taxAttemptRef.current = null;
@@ -1165,14 +1178,18 @@ export function ManagementControls({
                 </select>
               </label>
               <label>
-                Rate in tenths of a percent
+                Rate (%)
                 <input
                   type="number"
                   min="0"
-                  max="1000"
-                  value={tax.ratePermille}
+                  max="100"
+                  step="0.1"
+                  required
+                  inputMode="decimal"
+                  placeholder="9.8"
+                  value={tax.ratePercent}
                   onChange={(event) =>
-                    setTax({ ...tax, ratePermille: Number(event.target.value) })
+                    setTax({ ...tax, ratePercent: event.target.value })
                   }
                 />
               </label>
