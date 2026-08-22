@@ -67,7 +67,7 @@ function ColorField({ label, field, draft, setDraft }: { label: string; field: k
   return <label>{label}<span className="brand-color-input"><input type="color" value={value} onChange={(event) => setDraft({ ...draft, [field]: event.target.value })} /><input required pattern="#[0-9a-fA-F]{6}" value={value} onChange={(event) => setDraft({ ...draft, [field]: event.target.value })} /></span></label>;
 }
 
-export function BrandingSummary({ settings, onSave }: { settings: BrandingSettings; onSave: (draft: BrandingDraft) => Promise<void> }) {
+export function BrandingSummary({ settings, onSave, disabled = false }: { settings: BrandingSettings; onSave: (draft: BrandingDraft) => Promise<void>; disabled?: boolean }) {
   const [draft, setDraft] = useState(() => draftFrom(settings));
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
@@ -92,7 +92,7 @@ export function BrandingSummary({ settings, onSave }: { settings: BrandingSettin
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (savingRef.current) return;
+    if (savingRef.current || disabled) return;
     savingRef.current = true;
     setSaving(true);
     try { await onSave(draft); } finally { savingRef.current = false; setSaving(false); }
@@ -105,7 +105,7 @@ export function BrandingSummary({ settings, onSave }: { settings: BrandingSettin
     <div className="brand-editor-fields"><label>Public cinema name<input required maxLength={120} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} /></label><label>Logo URL<input value={draft.logoUrl} placeholder="https://… or /logo.svg" onChange={(event) => setDraft({ ...draft, logoUrl: event.target.value })} /></label></div>
     <h3>Customer website colors</h3><div className="brand-editor-fields">{([['Accent','accentColor'],['Muted accent','accentMutedColor'],['Background','backgroundColor'],['Background glow','backgroundGlowColor'],['Surface','surfaceColor'],['Text','textColor'],['Muted text','mutedTextColor']] as Array<[string, keyof BrandingDraft]>).map(([label, field]) => <ColorField key={field} label={label} field={field} draft={draft} setDraft={setDraft} />)}</div>
     <h3>Cinema admin colors</h3><div className="brand-editor-fields">{([['Accent','adminAccentColor'],['Muted accent','adminAccentMutedColor'],['Background','adminBackgroundColor'],['Surface','adminSurfaceColor'],['Text','adminTextColor'],['Muted text','adminMutedTextColor']] as Array<[string, keyof BrandingDraft]>).map(([label, field]) => <ColorField key={field} label={label} field={field} draft={draft} setDraft={setDraft} />)}</div>
-    <button className="primary" disabled={saving}>{saving ? "Saving brand…" : "Save brand"}</button>
+    <button className="primary" disabled={saving || disabled}>{saving ? "Saving brand…" : "Save brand"}</button>
   </form>;
 }
 
@@ -116,7 +116,7 @@ const siteCopySections = [
   ["dining", "Dining"],
 ] as const;
 
-export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCopy; onSave: (copy: CustomerSiteCopy) => Promise<void> }) {
+export function CustomerSiteCopyEditor({ copy, onSave, disabled = false }: { copy: CustomerSiteCopy; onSave: (copy: CustomerSiteCopy) => Promise<void>; disabled?: boolean }) {
   const [draft, setDraft] = useState(copy);
   const [aboutBody, setAboutBody] = useState(copy.about.body.join("\n\n"));
   const [saving, setSaving] = useState(false);
@@ -129,7 +129,7 @@ export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCop
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (savingRef.current) return;
+    if (savingRef.current || disabled) return;
     savingRef.current = true;
     setSaving(true);
     try {
@@ -160,6 +160,6 @@ export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCop
         <label>About paragraphs<textarea required maxLength={8000} value={aboutBody} onChange={(event) => setAboutBody(event.target.value)} /><span className="muted">Separate paragraphs with a blank line.</span></label>
       </section>
     </div>
-    <button className="primary" disabled={saving}>{saving ? "Publishing…" : "Publish website copy"}</button>
+    <button className="primary" disabled={saving || disabled}>{saving ? "Publishing…" : "Publish website copy"}</button>
   </form>;
 }

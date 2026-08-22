@@ -60,6 +60,8 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   const brandingAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const merchAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const siteCopyAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const publicSiteActionRef = useRef(false);
+  const [publicSiteAction, setPublicSiteAction] = useState<"branding" | "copy" | "merch" | null>(null);
   const [auditAction, setAuditAction] = useState("");
   const [auditEntityType, setAuditEntityType] = useState("");
   const [auditActorId, setAuditActorId] = useState("");
@@ -125,6 +127,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
   }
 
   async function saveBranding(draft: BrandingDraft) {
+    if (publicSiteActionRef.current) return;
+    publicSiteActionRef.current = true;
+    setPublicSiteAction("branding");
     setError(null);
     const body = JSON.stringify({ ...draft, logoUrl: draft.logoUrl.trim() || null });
     if (brandingAttemptRef.current?.fingerprint !== body) brandingAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
@@ -136,10 +141,16 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       if (reason instanceof ApiRequestError && reason.status < 500) brandingAttemptRef.current = null;
       setError(reason instanceof ApiRequestError ? reason.body.message : "Brand settings could not be saved.");
       throw reason;
+    } finally {
+      publicSiteActionRef.current = false;
+      setPublicSiteAction(null);
     }
   }
 
   async function saveSiteCopy(copy: CustomerSiteCopy) {
+    if (publicSiteActionRef.current) return;
+    publicSiteActionRef.current = true;
+    setPublicSiteAction("copy");
     setError(null);
     const body = JSON.stringify(copy);
     if (siteCopyAttemptRef.current?.fingerprint !== body) siteCopyAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
@@ -151,11 +162,17 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
       if (reason instanceof ApiRequestError && reason.status < 500) siteCopyAttemptRef.current = null;
       setError(reason instanceof ApiRequestError ? reason.body.message : "The customer website copy could not be published.");
       throw reason;
+    } finally {
+      publicSiteActionRef.current = false;
+      setPublicSiteAction(null);
     }
   }
 
   async function saveMerch(event: FormEvent) {
     event.preventDefault();
+    if (publicSiteActionRef.current) return;
+    publicSiteActionRef.current = true;
+    setPublicSiteAction("merch");
     setError(null);
     const body = JSON.stringify({ merchUrl: merchUrl.trim() || null });
     if (merchAttemptRef.current?.fingerprint !== body) merchAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
@@ -166,6 +183,9 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) merchAttemptRef.current = null;
       setError(reason instanceof ApiRequestError ? reason.body.message : "The merchandise shop link could not be saved.");
+    } finally {
+      publicSiteActionRef.current = false;
+      setPublicSiteAction(null);
     }
   }
 
@@ -307,14 +327,14 @@ export function ManagementDashboard({ accessToken, permissions, section }: { acc
     </section>}
 
     {settings && section === "branding" && <>
-      <BrandingSummary settings={settings} onSave={saveBranding} />
-      <CustomerSiteCopyEditor copy={settings.siteCopy} onSave={saveSiteCopy} />
+      <BrandingSummary settings={settings} onSave={saveBranding} disabled={publicSiteAction !== null} />
+      <CustomerSiteCopyEditor copy={settings.siteCopy} onSave={saveSiteCopy} disabled={publicSiteAction !== null} />
       <form className="panel location-settings" onSubmit={(event) => void saveMerch(event)}>
         <p className="kicker">MERCHANDISE</p><h2>External shop</h2>
         <p>Publish a link to the cinema’s existing merchandise store. Customers will see a Merch link that opens the shop in a new tab.</p>
         <label>Merchandise shop URL<input type="url" maxLength={2000} value={merchUrl} onChange={(event) => setMerchUrl(event.target.value)} placeholder="https://shop.example.com" /></label>
         <small>Leave this blank to remove Merch from the customer-site navigation.</small>
-        <button className="primary">Save and publish shop link</button>
+        <button className="primary" disabled={publicSiteAction !== null}>{publicSiteAction === "merch" ? "Publishing shop link…" : "Save and publish shop link"}</button>
       </form>
     </>}
     {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>
