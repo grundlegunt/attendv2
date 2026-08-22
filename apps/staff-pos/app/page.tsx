@@ -17,6 +17,15 @@ type StaffView = "scanner" | "seats" | "tabs" | "restaurant" | "box-office" | "t
 const STORAGE_KEY = "attend-staff-pos-session";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function isStaffLoginResponse(value: unknown): value is StaffLoginResponse {
+  if (!value || typeof value !== "object") return false;
+  const response = value as Partial<StaffLoginResponse>;
+  return typeof response.accessToken === "string"
+    && typeof response.refreshToken === "string"
+    && typeof response.expiresInSeconds === "number"
+    && Boolean(response.employee && typeof response.employee === "object");
+}
+
 interface NowPlayingResponse {
   location: { id: string; name: string; timezone: string };
   movies: NowPlayingMovie[];
@@ -248,10 +257,14 @@ export default function StaffLoginPage() {
     const requestedPassword = password;
     setError(null);
     try {
-      const res = await apiFetch<StaffLoginResponse>(
+      const res = await apiFetch<unknown>(
         "/auth/staff/login",
         { method: "POST", body: JSON.stringify({ email: requestedEmail, password: requestedPassword }) },
       );
+      if (!isStaffLoginResponse(res)) {
+        setError("Staff sign-in is still updating. Refresh and try again.");
+        return;
+      }
       storeSession(res);
       setCurrentPassword(requestedPassword);
       setPassword("");

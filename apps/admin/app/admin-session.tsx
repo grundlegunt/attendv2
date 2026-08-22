@@ -12,6 +12,15 @@ const STORAGE_KEY = "attend-admin-session";
 const AdminSessionContext = createContext<AdminSessionValue | null>(null);
 const AdminUiContext = createContext<AdminUiConfig>(adminUiDefaults);
 
+function isStaffLoginResponse(value: unknown): value is StaffLoginResponse {
+  if (!value || typeof value !== "object") return false;
+  const response = value as Partial<StaffLoginResponse>;
+  return typeof response.accessToken === "string"
+    && typeof response.refreshToken === "string"
+    && typeof response.expiresInSeconds === "number"
+    && Boolean(response.employee && typeof response.employee === "object");
+}
+
 export function useAdminSession() {
   const session = useContext(AdminSessionContext);
   if (!session) throw new Error("useAdminSession must be used inside AdminSessionProvider");
@@ -94,7 +103,11 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   async function login(event: FormEvent) {
     event.preventDefault(); setError(null);
     try {
-      const response = await apiFetch<StaffLoginResponse>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      const response = await apiFetch<unknown>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      if (!isStaffLoginResponse(response)) {
+        setError("Staff sign-in is still updating. Refresh and try again.");
+        return;
+      }
       const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
       storeSession(next); setCurrentPassword(password); setPassword("");
     } catch (reason) {

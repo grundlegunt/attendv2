@@ -51,6 +51,15 @@ type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee 
 const STORAGE_KEY = "attend-kds-session";
 const STATION_STORAGE_KEY = "attend-kds-station";
 
+function isStaffLoginResponse(value: unknown): value is StaffLoginResponse {
+  if (!value || typeof value !== "object") return false;
+  const response = value as Partial<StaffLoginResponse>;
+  return typeof response.accessToken === "string"
+    && typeof response.refreshToken === "string"
+    && typeof response.expiresInSeconds === "number"
+    && Boolean(response.employee && typeof response.employee === "object");
+}
+
 function ageClass(firedAt: string) {
   const ageMinutes = (Date.now() - new Date(firedAt).getTime()) / 60_000;
   if (ageMinutes >= 15) return "critical";
@@ -237,10 +246,14 @@ export default function KdsPage() {
     setError(null);
     setLoading(true);
     try {
-      const response = await apiFetch<StaffLoginResponse>("/auth/staff/login", {
+      const response = await apiFetch<unknown>("/auth/staff/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (!isStaffLoginResponse(response)) {
+        setError("Staff sign-in is still updating. Refresh and try again.");
+        return;
+      }
       storeSession(response);
     } catch (reason) {
       setError(
