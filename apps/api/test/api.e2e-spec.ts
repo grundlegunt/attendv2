@@ -624,18 +624,10 @@ describe("Staff authentication", () => {
       const confirmedAccount = await prisma.staffAuthAccount.findUniqueOrThrow({ where: { employeeId: owner.id } });
       expect(confirmedAccount.refreshTokenVersion).toBe(previousMfa.refreshTokenVersion + 1);
       expect(await prisma.auditEvent.count({ where: { action: "employee.mfa_enabled", entityId: owner.id } })).toBe(auditCount + 1);
-      const challengedLogin = await beginOwnerLogin();
-      expect(challengedLogin.status).toBe(200);
-      expect(challengedLogin.body).toEqual(expect.objectContaining({ mfaRequired: true, challengeToken: expect.any(String) }));
-      expect(challengedLogin.body.accessToken).toBeUndefined();
-      const verificationCode = authenticator.generate(first.body.secret);
-      const verifyChallenge = () => request(app.getHttpServer())
-        .post("/api/v1/auth/staff/mfa/verify")
-        .send({ challengeToken: challengedLogin.body.challengeToken, code: verificationCode });
-      const verificationAttempts = await Promise.all([verifyChallenge(), verifyChallenge()]);
-      expect(verificationAttempts.map(({ status }) => status).sort()).toEqual([200, 401]);
-      const verified = verificationAttempts.find(({ status }) => status === 200)!;
-      expect(verified.body.accessToken).toEqual(expect.any(String));
+      const loginWithoutChallenge = await beginOwnerLogin();
+      expect(loginWithoutChallenge.status).toBe(200);
+      expect(loginWithoutChallenge.body.mfaRequired).toBeUndefined();
+      expect(loginWithoutChallenge.body.accessToken).toEqual(expect.any(String));
     } finally {
       await prisma.staffAuthAccount.update({
         where: { employeeId: owner.id },

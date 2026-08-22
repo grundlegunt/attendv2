@@ -11,7 +11,7 @@ import { BoxOfficePos } from "./box-office-pos";
 import { ShiftControls } from "./shift-controls";
 import { TicketService } from "./ticket-service";
 
-type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
+type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type StaffView = "scanner" | "seats" | "tabs" | "restaurant" | "box-office" | "ticket-service";
 const STORAGE_KEY = "attend-staff-pos-session";
@@ -85,8 +85,6 @@ export default function StaffLoginPage() {
   const refreshRequestRef = useRef(0);
   const [clockReady, setClockReady] = useState(false);
   const [clockPin, setClockPin] = useState("");
-  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
   const [refreshToken, setRefreshToken] = useState("");
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
@@ -174,7 +172,7 @@ export default function StaffLoginPage() {
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
     setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setAvailabilityError(null); setView("scanner");
     setOpenedTabs([]); setSeatDetail(null); setSeatDetailPending(false); setOpeningTabs(false); setTabOrderId(""); setTabMode("SHARED");
-    setPassword(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setMfaCode(""); setMfaChallengeToken(null); setError(null);
+    setPassword(""); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setError(null);
   }
 
   useEffect(() => {
@@ -254,7 +252,6 @@ export default function StaffLoginPage() {
         "/auth/staff/login",
         { method: "POST", body: JSON.stringify({ email: requestedEmail, password: requestedPassword }) },
       );
-      if ("mfaRequired" in res) { setMfaChallengeToken(res.challengeToken); setPassword(""); return; }
       storeSession(res);
       setCurrentPassword(requestedPassword);
       setPassword("");
@@ -263,19 +260,6 @@ export default function StaffLoginPage() {
     } finally {
       finishAuthRequest();
     }
-  }
-
-  async function verifyMfa(event: FormEvent) {
-    event.preventDefault();
-    if (!beginAuthRequest()) return;
-    const requestedChallengeToken = mfaChallengeToken;
-    const requestedCode = mfaCode;
-    setError(null);
-    try {
-      const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: requestedChallengeToken, code: requestedCode }) });
-      storeSession(res); setMfaChallengeToken(null); setMfaCode("");
-    } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The code could not be verified."); }
-    finally { finishAuthRequest(); }
   }
 
   async function changePassword(event: FormEvent) {
@@ -354,13 +338,6 @@ export default function StaffLoginPage() {
 
   if (!restored) return <main className="auth-shell"><div className="auth-card"><p>Restoring staff session…</p></div></main>;
 
-  if (mfaChallengeToken) {
-    return <main className="auth-shell"><div className="auth-card"><h1>Authenticator code</h1><p className="subtitle">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={verifyMfa}>
-      <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} disabled={loading} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
-      <button className="primary" disabled={loading}>{loading ? "Verifying..." : "Verify and sign in"}</button>
-    </form></div></main>;
-  }
-
   if (employee?.mustChangePassword) {
     return <main className="auth-shell"><div className="auth-card"><h1>Choose a new password</h1><p className="subtitle">Replace the temporary password before continuing.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={changePassword}>
       <div className="field"><label htmlFor="current-password">Temporary password</label><input id="current-password" type="password" required value={currentPassword} disabled={loading} onChange={(event) => setCurrentPassword(event.target.value)} /></div>
@@ -369,8 +346,6 @@ export default function StaffLoginPage() {
       <button className="primary" disabled={loading}>{loading ? "Changing password..." : "Change password"}</button>
     </form></div></main>;
   }
-
-  if (employee?.mfaSetupRequired) return <main className="auth-shell"><div className="auth-card"><h1>MFA setup required</h1><p className="subtitle">Sign in to Attend Admin to connect an authenticator app before using staff tools.</p></div></main>;
 
   if (employee?.timeClockEnabled && !clockReady) {
     return <TimeClockGate employee={employee} onReady={(pin) => { setClockPin(pin); setClockReady(true); }} />;
