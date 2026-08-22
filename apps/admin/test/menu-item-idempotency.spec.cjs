@@ -62,3 +62,10 @@ test("menu presentation publishing retains a stable retry identity", () => {
   assert.match(source, /finally \{\s*menuPresentationPendingRef\.current = false;\s*setPublishingMenuPresentation\(false\)/);
   assert.match(source, /publishingMenuPresentation \? "Publishing…"/);
 });
+
+test("structured menu mutations share an immediate action lock", () => {
+  assert.match(source, /const menuMutationRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(menuMutationRef\.current\) return;\s*menuMutationRef\.current = true/g)?.length, 12);
+  assert.equal(source.match(/finally \{ menuMutationRef\.current = false; setMenuMutation\(false\); \}/g)?.length, 12);
+  assert.match(source, /aria-busy=\{menuMutation\}/);
+});
