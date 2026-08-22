@@ -127,7 +127,7 @@ export class ReportingService {
     const movies = new Map<string, { movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
     const showtimes = new Map<string, { showtimeId: string; movieId: string; title: string; startsAt: Date; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
-    const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
+    const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; ticketFeesCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const salesOperators = new Map<string, { employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const concessionSales = new Map<string, { menuItemId: string; name: string; unitsSold: number; salesCents: number }>();
     const dailyPerformance = new Map<string, { date: string; ticketsSold: number; ticketCollectedCents: number; fnbRevenueCents: number }>();
@@ -159,7 +159,7 @@ export class ReportingService {
     let ticketCollectedCents = 0;
     let ticketRefundedCents = 0;
     for (const order of ticketOrders) {
-      const salesChannel = salesChannels.get(order.channel) ?? { channel: order.channel, ticketsSold: 0, ticketRevenueCents: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 };
+      const salesChannel = salesChannels.get(order.channel) ?? { channel: order.channel, ticketsSold: 0, ticketRevenueCents: 0, ticketFeesCents: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 };
       salesChannel.grossCollectedCents += order.totalCents;
       const salesOperator = order.placedByEmployee
         ? salesOperators.get(order.placedByEmployee.id) ?? { employeeId: order.placedByEmployee.id, employeeName: order.placedByEmployee.name, ticketsSold: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 }
@@ -183,6 +183,7 @@ export class ReportingService {
         continue;
       }
       ticketFeesCents += order.feesCents;
+      salesChannel.ticketFeesCents += order.feesCents;
       ticketTaxCents += order.taxCents;
       ticketCollectedCents += order.totalCents;
       const orderDay = ensureDay(order.createdAt);
@@ -291,8 +292,8 @@ export class ReportingService {
       ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents, showtime.fnbRevenueCents])), "",
       row(["Admission type", "Tickets sold", "Ticket face value (cents)"]),
       ...report.admissionTypes.map((ticketType) => row([ticketType.name, ticketType.ticketsSold, ticketType.ticketRevenueCents])), "",
-      row(["Sales channel", "Tickets sold", "Ticket face value (cents)", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
-      ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents, channel.grossCollectedCents, channel.refundedCents, channel.netCollectedCents])),
+      row(["Sales channel", "Tickets sold", "Ticket face value (cents)", "Ticket fees (cents)", "Average fee per ticket (cents)", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
+      ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents, channel.ticketFeesCents, channel.ticketsSold ? Math.round(channel.ticketFeesCents / channel.ticketsSold) : 0, channel.grossCollectedCents, channel.refundedCents, channel.netCollectedCents])),
       "", row(["Box-office operator", "Tickets sold", "Gross collected (cents)", "Refunds (cents)", "Net collected (cents)"]),
       ...report.salesOperators.map((operator) => row([operator.employeeName, operator.ticketsSold, operator.grossCollectedCents, operator.refundedCents, operator.netCollectedCents])),
       "", row(["Concession item", "Units sold", "Sales value (cents)"]),

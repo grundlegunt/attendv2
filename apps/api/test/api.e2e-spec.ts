@@ -9168,8 +9168,8 @@ describe("Milestone 10 management reporting", () => {
     expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1700, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 1800, fnbRevenueCents: 700, ticketsSold: 1 }]);
     expect(response.body.admissionTypes).toEqual([{ ticketTypeId: ticketType.id, name: ticketType.name, ticketsSold: 2, ticketRevenueCents: 3500 }]);
     expect(response.body.salesChannels).toEqual([
-      { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 },
-      { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, grossCollectedCents: 2866, refundedCents: 800, netCollectedCents: 2066 },
+      { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, ticketFeesCents: 100, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 },
+      { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, ticketFeesCents: 200, grossCollectedCents: 2866, refundedCents: 800, netCollectedCents: 2066 },
     ]);
     expect(response.body.salesOperators).toEqual([{ employeeId: owner.id, employeeName: owner.name, ticketsSold: 1, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 }]);
     expect(response.body.concessionTopSellers).toEqual([{ menuItemId: menuItem.id, name: menuItem.name, unitsSold: 2, salesCents: (menuItem.priceCents + 50) * 2 }]);
@@ -9190,9 +9190,9 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain(`"${movie!.title}","2","3500","1200"`);
     expect(csv.text).toContain(`"Admission type","Tickets sold","Ticket face value (cents)"`);
     expect(csv.text).toContain(`"${ticketType.name}","2","3500"`);
-    expect(csv.text).toContain('"Sales channel","Tickets sold","Ticket face value (cents)","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
-    expect(csv.text).toContain('"BOX_OFFICE","1","1800","2400","400","2000"');
-    expect(csv.text).toContain('"ONLINE","1","1700","2866","800","2066"');
+    expect(csv.text).toContain('"Sales channel","Tickets sold","Ticket face value (cents)","Ticket fees (cents)","Average fee per ticket (cents)","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
+    expect(csv.text).toContain('"BOX_OFFICE","1","1800","100","100","2400","400","2000"');
+    expect(csv.text).toContain('"ONLINE","1","1700","200","200","2866","800","2066"');
     expect(csv.text).toContain('"Box-office operator","Tickets sold","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
     expect(csv.text).toContain(`"${owner.name}","1","2400","400","2000"`);
     expect(csv.text).toContain('"Concession item","Units sold","Sales value (cents)"');
