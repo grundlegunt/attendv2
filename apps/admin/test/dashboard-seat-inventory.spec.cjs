@@ -38,3 +38,10 @@ test("dashboard calendar ranges use the cinema timezone instead of the browser t
   assert.match(source, /scheduleRange\(scheduleDay, locationTimeZone\)/);
   assert.doesNotMatch(source, /from\.setHours\(0, 0, 0, 0\)/);
 });
+
+test("dashboard waits for cinema timezone before loading date-bound reports", () => {
+  assert.match(source, /if \(!canFinancial \|\| \(canCinema && !bootstrap\)\) return/);
+  assert.match(source, /if \(!canFinancial \|\| !canCinema \|\| !bootstrap\) return/);
+  assert.doesNotMatch(source, /key: "bootstrap" \| "revenue"/);
+  assert.doesNotMatch(source, /canSettings, locationTimeZone\]\)/);
+});

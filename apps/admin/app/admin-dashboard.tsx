@@ -222,10 +222,8 @@ export function AdminDashboard() {
     async function load() {
       setLoading(true);
       setErrors([]);
-      const { from, to } = dayRange(locationTimeZone);
-      const requests: Array<{ key: "bootstrap" | "revenue" | "activity" | "settings"; request: Promise<unknown> }> = [];
+      const requests: Array<{ key: "bootstrap" | "activity" | "settings"; request: Promise<unknown> }> = [];
       if (canCinema) requests.push({ key: "bootstrap", request: apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken }) });
-      if (canFinancial) requests.push({ key: "revenue", request: apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken }) });
       if (canAudit) requests.push({ key: "activity", request: apiFetch<AuditEvent[]>("/audit-events?limit=6", { accessToken }) });
       if (canSettings) requests.push({ key: "settings", request: apiFetch<Settings>("/management/settings", { accessToken }) });
       const results = await Promise.allSettled(requests.map((entry) => entry.request));
@@ -236,7 +234,6 @@ export function AdminDashboard() {
         if (!key) return;
         if (result.status === "rejected") { failures.push(messageFor(result.reason)); return; }
         if (key === "bootstrap") setBootstrap(result.value as Bootstrap);
-        if (key === "revenue") setRevenue(result.value as RevenueReport);
         if (key === "activity") setActivity(result.value as AuditEvent[]);
         if (key === "settings") setSettings(result.value as Settings);
       });
@@ -245,10 +242,20 @@ export function AdminDashboard() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [accessToken, canAudit, canCinema, canFinancial, canSettings, locationTimeZone]);
+  }, [accessToken, canAudit, canCinema, canSettings]);
 
   useEffect(() => {
-    if (!canFinancial) return;
+    if (!canFinancial || (canCinema && !bootstrap)) return;
+    let cancelled = false;
+    const { from, to } = dayRange(locationTimeZone);
+    apiFetch<RevenueReport>(`/reports/revenue?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`, { accessToken })
+      .then((result) => { if (!cancelled) setRevenue(result); })
+      .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); });
+    return () => { cancelled = true; };
+  }, [accessToken, bootstrap, canCinema, canFinancial, locationTimeZone]);
+
+  useEffect(() => {
+    if (!canFinancial || (canCinema && !bootstrap)) return;
     let cancelled = false;
     const { from, to } = performanceRange(filmRange, locationTimeZone);
     setFilmRevenueLoading(true);
@@ -257,10 +264,10 @@ export function AdminDashboard() {
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
       .finally(() => { if (!cancelled) setFilmRevenueLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken, canFinancial, filmRange, locationTimeZone]);
+  }, [accessToken, bootstrap, canCinema, canFinancial, filmRange, locationTimeZone]);
 
   useEffect(() => {
-    if (!canFinancial || !canCinema) return;
+    if (!canFinancial || !canCinema || !bootstrap) return;
     let cancelled = false;
     const { from, to } = scheduleRange(scheduleDay, locationTimeZone);
     setScheduleRevenueLoading(true);
@@ -269,7 +276,7 @@ export function AdminDashboard() {
       .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); })
       .finally(() => { if (!cancelled) setScheduleRevenueLoading(false); });
     return () => { cancelled = true; };
-  }, [accessToken, canCinema, canFinancial, locationTimeZone, scheduleDay]);
+  }, [accessToken, bootstrap, canCinema, canFinancial, locationTimeZone, scheduleDay]);
 
   const { from, to } = dayRange(locationTimeZone);
   const todaysShowtimes = (bootstrap?.showtimes ?? []).filter((showtime) => {
