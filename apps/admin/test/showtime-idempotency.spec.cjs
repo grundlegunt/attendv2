@@ -55,10 +55,18 @@ test("showtime creation retains stable retry identities", () => {
 
 test("showtime editor mutations share an immediate action lock", () => {
   assert.match(source, /showtimeEditorActionRef = useRef\(false\)/);
-  assert.equal(source.match(/if \(showtimeEditorActionRef\.current\) return;/g)?.length, 3);
+  assert.equal(source.match(/if \(showtimeEditorActionRef\.current(?: \|\| calendarShortcutActionRef\.current)?\) return;/g)?.length, 3);
   assert.equal(source.match(/showtimeEditorActionRef\.current = true;/g)?.length, 3);
   assert.equal(source.match(/showtimeEditorActionRef\.current = false;/g)?.length, 3);
   assert.match(source, /setShowtimeEditorAction\("save"\)/);
   assert.match(source, /setShowtimeEditorAction\("sale"\)/);
   assert.match(source, /setShowtimeEditorAction\("remove"\)/);
+});
+
+test("calendar shortcuts serialize with showtime editor mutations", () => {
+  assert.match(source, /calendarShortcutActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(calendarShortcutActionRef\.current \|\| showtimeEditorActionRef\.current\) return;/g)?.length, 3);
+  assert.equal(source.match(/calendarShortcutActionRef\.current = true;/g)?.length, 3);
+  assert.equal(source.match(/calendarShortcutActionRef\.current = false;/g)?.length, 3);
+  assert.equal(source.match(/if \(showtimeEditorActionRef\.current \|\| calendarShortcutActionRef\.current\) return;/g)?.length, 3);
 });
