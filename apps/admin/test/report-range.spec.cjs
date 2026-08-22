@@ -124,4 +124,17 @@ describe("Admin report date ranges", () => {
     assert.doesNotMatch(controls, /historyTo[\s\S]{0,100}toISOString\(\)\.slice\(0, 10\)/);
     assert.doesNotMatch(controls, /new Date\(`\$\{historyTo\}T00:00:00`\)/);
   });
+
+  it("renders management timestamps and expense dates in the cinema timezone", () => {
+    const dashboard = readFileSync(dashboardPath, "utf8");
+    const expenses = readFileSync(expensesPath, "utf8");
+
+    assert.match(dashboard, /const cinemaDate = .*toLocaleDateString\(\[\], \{ timeZone \}\)/);
+    assert.match(dashboard, /const cinemaDateTime = .*toLocaleString\(\[\], \{ timeZone \}\)/);
+    assert.match(dashboard, /cinemaDateTime\(row\.startsAt, timeZone\)/);
+    assert.match(dashboard, /cinemaDateTime\(row\.clockInAt, timeZone\)/);
+    assert.match(dashboard, /cinemaDate\(customer\.lastPurchaseAt, timeZone\)/);
+    assert.match(dashboard, /cinemaDateTime\(event\.occurredAt, timeZone\)/);
+    assert.match(expenses, /toLocaleDateString\(\[\], \{ timeZone \}\)/);
+  });
 });
