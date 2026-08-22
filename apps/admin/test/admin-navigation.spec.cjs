@@ -123,6 +123,14 @@ describe("film editor layout", () => {
   });
 });
 
+describe("historical showtime inventory", () => {
+  it("uses the authenticated Admin inventory route instead of public availability", () => {
+    assert.match(schedulingSource, /`\/cinema\/admin\/showtimes\/\$\{editingShowtimeId\}\/seats`/);
+    assert.match(schedulingSource, /\{ accessToken: token \}/);
+    assert.doesNotMatch(schedulingSource, /`\/cinema\/showtimes\/\$\{editingShowtimeId\}\/seats`/);
+  });
+});
+
 describe("auditorium layout editing", () => {
   it("preserves table metadata when an existing seat becomes ADA", () => {
     const seats = [

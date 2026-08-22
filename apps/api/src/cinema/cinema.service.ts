@@ -4483,12 +4483,24 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async seatAvailability(showtimeId: string, holderKey?: string) {
+  async adminSeatAvailability(actor: RequestActor, showtimeId: string) {
+    return this.seatAvailability(showtimeId, undefined, {
+      includeOffSale: true,
+      locationId: this.requireLocation(actor),
+    });
+  }
+
+  async seatAvailability(showtimeId: string, holderKey?: string, options?: { includeOffSale?: boolean; locationId?: string }) {
     const now = new Date();
+    const showtimeWhere = {
+      id: showtimeId,
+      ...(options?.includeOffSale ? {} : { onSale: true }),
+      ...(options?.locationId ? { auditorium: { locationId: options.locationId } } : {}),
+    };
     let generalAdmissionSeatIds: string[] | undefined;
     await prisma.$transaction(async (tx) => {
       const showtime = await tx.showtime.findFirst({
-        where: { id: showtimeId, onSale: true },
+        where: showtimeWhere,
         include: { auditorium: true },
       });
       if (!showtime) return;
@@ -4513,7 +4525,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       data: { releasedAt: now },
     });
     const showtime = await prisma.showtime.findFirst({
-      where: { id: showtimeId, onSale: true },
+      where: showtimeWhere,
       include: {
         movie: true,
         auditorium: { include: { location: { select: { timezone: true } } } },
