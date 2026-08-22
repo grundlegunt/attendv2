@@ -243,8 +243,10 @@ export default function AdminPage() {
   const [planWeek, setPlanWeek] = useState(currentWeekStart);
   const [savingPlan, setSavingPlan] = useState(false);
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
+  const [managingPlan, setManagingPlan] = useState<{ id: string; action: "duplicate" | "rename" } | null>(null);
   const savingPlanRef = useRef(false);
   const deletingPlanRef = useRef(false);
+  const managingPlanRef = useRef(false);
   const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicatePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const addPlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -296,7 +298,7 @@ export default function AdminPage() {
 
   async function saveSchedulePlan(event: FormEvent) {
     event.preventDefault();
-    if (savingPlanRef.current || deletingPlanRef.current) return;
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
     savingPlanRef.current = true;
     setError(null);
     setSavingPlan(true);
@@ -332,7 +334,7 @@ export default function AdminPage() {
   }
 
   async function deleteSchedulePlan(plan: SchedulePlan) {
-    if (savingPlanRef.current || deletingPlanRef.current) return;
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
     if (
       !window.confirm(
         `Delete the saved schedule plan “${plan.name}”? The live schedule will not change.`,
@@ -373,10 +375,13 @@ export default function AdminPage() {
   }
 
   async function duplicateSchedulePlan(plan: SchedulePlan) {
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
     const name = window
       .prompt("Name the new schedule plan:", `${plan.name} copy`)
       ?.trim();
     if (!name) return;
+    managingPlanRef.current = true;
+    setManagingPlan({ id: plan.id, action: "duplicate" });
     setError(null);
     const body = JSON.stringify({ name });
     const fingerprint = `${plan.id}:${body}`;
@@ -404,12 +409,18 @@ export default function AdminPage() {
         duplicatePlanAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      managingPlanRef.current = false;
+      setManagingPlan(null);
     }
   }
 
   async function renameSchedulePlan(plan: SchedulePlan) {
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
     const name = window.prompt("Rename this schedule plan:", plan.name)?.trim();
     if (!name || name === plan.name) return;
+    managingPlanRef.current = true;
+    setManagingPlan({ id: plan.id, action: "rename" });
     setError(null);
     const body = JSON.stringify({ name, expectedName: plan.name });
     const fingerprint = `${plan.id}:${body}`;
@@ -442,6 +453,9 @@ export default function AdminPage() {
         renamePlanAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      managingPlanRef.current = false;
+      setManagingPlan(null);
     }
   }
 
@@ -1529,7 +1543,7 @@ export default function AdminPage() {
                 required
                 maxLength={80}
                 value={planName}
-                disabled={savingPlan || deletingPlanId !== null}
+                disabled={savingPlan || deletingPlanId !== null || managingPlan !== null}
                 onChange={(event) => setPlanName(event.target.value)}
                 placeholder="Opening week · Plan A"
               />
@@ -1540,11 +1554,11 @@ export default function AdminPage() {
                 required
                 type="date"
                 value={planWeek}
-                disabled={savingPlan || deletingPlanId !== null}
+                disabled={savingPlan || deletingPlanId !== null || managingPlan !== null}
                 onChange={(event) => setPlanWeek(event.target.value)}
               />
             </label>
-            <button className="primary" disabled={savingPlan || deletingPlanId !== null}>
+            <button className="primary" disabled={savingPlan || deletingPlanId !== null || managingPlan !== null}>
               {savingPlan ? "Saving…" : "Save current week"}
             </button>
           </form>
@@ -1585,21 +1599,23 @@ export default function AdminPage() {
                 <button
                   type="button"
                   className="secondary"
+                  disabled={savingPlan || deletingPlanId !== null || managingPlan !== null}
                   onClick={() => void duplicateSchedulePlan(plan)}
                 >
-                  Duplicate
+                  {managingPlan?.id === plan.id && managingPlan.action === "duplicate" ? "Duplicating…" : "Duplicate"}
                 </button>
                 <button
                   type="button"
                   className="secondary"
+                  disabled={savingPlan || deletingPlanId !== null || managingPlan !== null}
                   onClick={() => void renameSchedulePlan(plan)}
                 >
-                  Rename
+                  {managingPlan?.id === plan.id && managingPlan.action === "rename" ? "Renaming…" : "Rename"}
                 </button>
                 <button
                   type="button"
                   className="secondary destructive-outline"
-                  disabled={savingPlan || deletingPlanId !== null}
+                  disabled={savingPlan || deletingPlanId !== null || managingPlan !== null}
                   onClick={() => void deleteSchedulePlan(plan)}
                 >
                   {deletingPlanId === plan.id ? "Deleting…" : "Delete"}
