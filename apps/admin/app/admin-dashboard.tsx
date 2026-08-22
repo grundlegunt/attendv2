@@ -81,12 +81,14 @@ function DashboardShowtimeRow({
   salesVisible,
   accessToken,
   now,
+  timeZone,
 }: {
   showtime: Bootstrap["showtimes"][number];
   ticketsSold: number;
   salesVisible: boolean;
   accessToken: string | null;
   now: number;
+  timeZone: string;
 }) {
   const [inventory, setInventory] = useState<ShowtimeSeatInventory | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -140,7 +142,7 @@ function DashboardShowtimeRow({
       onFocus={loadInventory}
       aria-label={`Open ${showtime.movie.title} seat map and sales`}
     >
-      <time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</time>
+      <time>{new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone })}</time>
       <span><strong>{showtime.movie.title}</strong><small>{showtime.auditorium.name}{salesVisible ? ` · ${ticketsSold}/${showtime.auditorium.capacity} seats` : ` · ${showtime.auditorium.capacity} seats`}</small></span>
       {salesVisible ? <span className="schedule-occupancy"><i><span style={{ width: `${occupancy}%` }} /></i><b>{occupancy}%</b></span> : <span aria-hidden="true" />}
       <em>{hasStarted ? "Started" : salesVisible && occupancy >= 80 ? "Selling fast" : salesVisible && showtime.onSale && occupancy < 20 ? "Low sales" : showtime.onSale ? "On sale" : "Draft"}</em>
@@ -158,12 +160,13 @@ function DashboardShowtimeRow({
   );
 }
 
-function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken }: {
+function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken, timeZone }: {
   film: RevenueReport["movies"][number];
   rank: number;
   topTicketCount: number;
   showtime: Bootstrap["showtimes"][number] | undefined;
   accessToken: string;
+  timeZone: string;
 }) {
   const [inventory, setInventory] = useState<ShowtimeSeatInventory | null>(null);
   const [inventoryLoading, setInventoryLoading] = useState(false);
@@ -194,7 +197,7 @@ function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken }: {
   return <Link className="top-film-row" href={`/reports#movie-${encodeURIComponent(film.movieId)}`} onMouseEnter={loadInventory} onFocus={loadInventory} aria-label={`Open ${film.title} revenue report`}>
     <span className="top-film-rank">{rank}</span><strong>{film.title}</strong><div className="top-film-track"><span style={{ width: `${Math.max(5, (film.ticketsSold / topTicketCount) * 100)}%` }} /></div><b>{film.ticketsSold} {film.ticketsSold === 1 ? "ticket" : "tickets"}</b><small>{money(film.ticketRevenueCents)}</small>
     <aside className="dashboard-seat-preview top-film-seat-preview">
-      <header><span><strong>{film.title}</strong><small>{showtime ? `${showtime.auditorium.name} · ${new Date(showtime.startsAt).toLocaleString()}` : "No scheduled showtime available"}</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
+      <header><span><strong>{film.title}</strong><small>{showtime ? `${showtime.auditorium.name} · ${new Date(showtime.startsAt).toLocaleString([], { timeZone })}` : "No scheduled showtime available"}</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
       {inventory ? <><SeatMap seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))} label={`${film.title} seat inventory preview`} /><footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer></> : inventoryError ? <p>Seat map unavailable.</p> : <p>{inventoryLoading ? "Loading live seat map…" : showtime ? "Hover to load the closest showing’s live seat map." : "Schedule a showing to preview its seat map."}</p>}
     </aside>
   </Link>;
@@ -313,7 +316,7 @@ export function AdminDashboard() {
 
   return <main className="admin-route-page dashboard-page">
     <section className="dashboard-heading">
-      <div><p className="kicker">OPERATIONS OVERVIEW</p><h1>Dashboard</h1><p>{bootstrap?.location.name ?? "Your cinema"} · {new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</p></div>
+      <div><p className="kicker">OPERATIONS OVERVIEW</p><h1>Dashboard</h1><p>{bootstrap?.location.name ?? "Your cinema"} · {now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", timeZone: locationTimeZone })}</p></div>
       <Link className="dashboard-primary-action" href={canCinema ? "/scheduling" : quickActions[0]?.href ?? "/"}>{canCinema ? "Open today’s schedule" : "Open management tools"}</Link>
     </section>
     {errors.map((error) => <div className="error-banner" role="alert" key={error}>{error}</div>)}
@@ -325,14 +328,14 @@ export function AdminDashboard() {
     </section>
     {canFinancial && <section className="panel dashboard-top-films" aria-labelledby="top-films-heading">
       <div className="dashboard-section-heading"><div><p className="kicker">TICKET SALES · {filmRangeLabel.toUpperCase()}</p><h2 id="top-films-heading">Top performing films</h2></div><div className="top-film-heading-actions"><div className="top-film-range" role="group" aria-label="Top performing films reporting period"><button type="button" className={filmRange === "today" ? "active" : ""} onClick={() => setFilmRange("today")}>Today</button><button type="button" className={filmRange === "7d" ? "active" : ""} onClick={() => setFilmRange("7d")}>7 days</button><button type="button" className={filmRange === "30d" ? "active" : ""} onClick={() => setFilmRange("30d")}>30 days</button></div><Link href="/reports">View report</Link></div></div>
-      {filmRevenueLoading && !filmRevenue ? <p className="dashboard-empty">Loading film performance…</p> : topFilms.length ? <div className={`top-film-list ${filmRevenueLoading ? "loading" : ""}`}>{topFilms.map((film, index) => <TopFilmRow film={film} rank={index + 1} topTicketCount={topTicketCount} showtime={closestShowtimeByMovie.get(film.movieId)} accessToken={accessToken} key={film.movieId} />)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
+      {filmRevenueLoading && !filmRevenue ? <p className="dashboard-empty">Loading film performance…</p> : topFilms.length ? <div className={`top-film-list ${filmRevenueLoading ? "loading" : ""}`}>{topFilms.map((film, index) => <TopFilmRow film={film} rank={index + 1} topTicketCount={topTicketCount} showtime={closestShowtimeByMovie.get(film.movieId)} accessToken={accessToken} timeZone={locationTimeZone} key={film.movieId} />)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
     </section>}
     <section className="dashboard-grid">
       {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">PROGRAMMING</p><h2 id="today-schedule-heading">Schedule</h2></div><div className="schedule-heading-actions"><div className="dashboard-day-switch" role="group" aria-label="Schedule day"><button type="button" className={scheduleDay === "today" ? "active" : ""} onClick={() => setScheduleDay("today")}>Today</button><button type="button" className={scheduleDay === "tomorrow" ? "active" : ""} onClick={() => setScheduleDay("tomorrow")}>Tomorrow</button></div><Link href="/scheduling">View calendar</Link></div></div>
         <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.map((showtime) => {
           const ticketsSold = scheduleSales.get(showtime.id) ?? 0;
           const salesVisible = canFinancial && scheduleRevenue !== null;
-          return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} now={now.getTime()} />;
+          return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} now={now.getTime()} timeZone={locationTimeZone} />;
         })}{!loading && scheduleShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled {scheduleDay}.</p>}</div>
       </section>}
       {canCinema && <section className="panel" aria-labelledby="setup-status-heading"><div className="dashboard-section-heading"><div><p className="kicker">READINESS</p><h2 id="setup-status-heading">Cinema setup</h2></div><Link href="/cinema-setup">Manage</Link></div>
