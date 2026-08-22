@@ -244,9 +244,11 @@ export default function AdminPage() {
   const [savingPlan, setSavingPlan] = useState(false);
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
   const [managingPlan, setManagingPlan] = useState<{ id: string; action: "duplicate" | "rename" } | null>(null);
+  const [planShowtimeMutation, setPlanShowtimeMutation] = useState<{ index: number | null; action: "add" | "change" | "remove" } | null>(null);
   const savingPlanRef = useRef(false);
   const deletingPlanRef = useRef(false);
   const managingPlanRef = useRef(false);
+  const planShowtimeMutationRef = useRef(false);
   const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicatePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const addPlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -298,7 +300,7 @@ export default function AdminPage() {
 
   async function saveSchedulePlan(event: FormEvent) {
     event.preventDefault();
-    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current || planShowtimeMutationRef.current) return;
     savingPlanRef.current = true;
     setError(null);
     setSavingPlan(true);
@@ -334,7 +336,7 @@ export default function AdminPage() {
   }
 
   async function deleteSchedulePlan(plan: SchedulePlan) {
-    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current || planShowtimeMutationRef.current) return;
     if (
       !window.confirm(
         `Delete the saved schedule plan “${plan.name}”? The live schedule will not change.`,
@@ -375,7 +377,7 @@ export default function AdminPage() {
   }
 
   async function duplicateSchedulePlan(plan: SchedulePlan) {
-    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current || planShowtimeMutationRef.current) return;
     const name = window
       .prompt("Name the new schedule plan:", `${plan.name} copy`)
       ?.trim();
@@ -416,7 +418,7 @@ export default function AdminPage() {
   }
 
   async function renameSchedulePlan(plan: SchedulePlan) {
-    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current) return;
+    if (savingPlanRef.current || deletingPlanRef.current || managingPlanRef.current || planShowtimeMutationRef.current) return;
     const name = window.prompt("Rename this schedule plan:", plan.name)?.trim();
     if (!name || name === plan.name) return;
     managingPlanRef.current = true;
@@ -464,12 +466,15 @@ export default function AdminPage() {
     index: number,
     title: string,
   ) {
+    if (planShowtimeMutationRef.current || planActionPendingRef.current) return;
     if (
       !window.confirm(
         `Remove ${title} from “${plan.name}”? The live showing will not be changed.`,
       )
     )
       return;
+    planShowtimeMutationRef.current = true;
+    setPlanShowtimeMutation({ index, action: "remove" });
     setError(null);
     const fingerprint = `${plan.id}:${index}`;
     if (removePlanShowtimeAttemptRef.current?.fingerprint !== fingerprint) {
@@ -500,6 +505,9 @@ export default function AdminPage() {
         removePlanShowtimeAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      planShowtimeMutationRef.current = false;
+      setPlanShowtimeMutation(null);
     }
   }
 
@@ -509,6 +517,7 @@ export default function AdminPage() {
     showtime: SchedulePlanShowtime,
     title: string,
   ) {
+    if (planShowtimeMutationRef.current || planActionPendingRef.current) return;
     const value = window
       .prompt(
         `Change the saved time for ${title}:`,
@@ -521,6 +530,8 @@ export default function AdminPage() {
       setError("Enter a valid date and time.");
       return;
     }
+    planShowtimeMutationRef.current = true;
+    setPlanShowtimeMutation({ index, action: "change" });
     setError(null);
     const body = JSON.stringify({
       startsAt: startsAt.toISOString(),
@@ -556,12 +567,18 @@ export default function AdminPage() {
         updatePlanShowtimeAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      planShowtimeMutationRef.current = false;
+      setPlanShowtimeMutation(null);
     }
   }
 
   async function addSchedulePlanShowtime(event: FormEvent, plan: SchedulePlan) {
     event.preventDefault();
     if (!data || !planShowtimeStartsAt) return;
+    if (planShowtimeMutationRef.current || planActionPendingRef.current) return;
+    planShowtimeMutationRef.current = true;
+    setPlanShowtimeMutation({ index: null, action: "add" });
     setError(null);
     const body = JSON.stringify({
       movieId: planShowtimeMovieId || data.location.organization.movies[0]?.id,
@@ -607,11 +624,14 @@ export default function AdminPage() {
         addPlanShowtimeAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      planShowtimeMutationRef.current = false;
+      setPlanShowtimeMutation(null);
     }
   }
 
   async function validateSchedulePlan(plan: SchedulePlan) {
-    if (planActionPendingRef.current) return;
+    if (planActionPendingRef.current || planShowtimeMutationRef.current) return;
     planActionPendingRef.current = true;
     setError(null);
     setPlanValidation(null);
@@ -634,7 +654,7 @@ export default function AdminPage() {
   }
 
   async function makeSchedulePlanLive(plan: SchedulePlan) {
-    if (planActionPendingRef.current) return;
+    if (planActionPendingRef.current || planShowtimeMutationRef.current) return;
     planActionPendingRef.current = true;
     setError(null);
     setPlanValidation(null);
@@ -1652,7 +1672,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   className="secondary"
-                  disabled={validatingPlan || publishingPlan}
+                  disabled={validatingPlan || publishingPlan || planShowtimeMutation !== null}
                   onClick={() => void validateSchedulePlan(selectedPlan)}
                 >
                   {validatingPlan ? "Checking…" : "Check plan"}
@@ -1660,7 +1680,7 @@ export default function AdminPage() {
                 <button
                   type="button"
                   className="primary"
-                  disabled={validatingPlan || publishingPlan}
+                  disabled={validatingPlan || publishingPlan || planShowtimeMutation !== null}
                   onClick={() => void makeSchedulePlanLive(selectedPlan)}
                 >
                   {publishingPlan
@@ -1795,7 +1815,9 @@ export default function AdminPage() {
                     <option value="SPECIAL_GUEST">Special guest</option>
                   </select>
                 </label>
-                <button className="secondary">Add to saved plan</button>
+                <button className="secondary" disabled={planShowtimeMutation !== null || validatingPlan || publishingPlan}>
+                  {planShowtimeMutation?.action === "add" ? "Adding…" : "Add to saved plan"}
+                </button>
               </form>
             )}
             {selectedPlanRows.length > 0 ? (
@@ -1843,6 +1865,7 @@ export default function AdminPage() {
                     <button
                       type="button"
                       className="secondary"
+                      disabled={planShowtimeMutation !== null || validatingPlan || publishingPlan}
                       onClick={() =>
                         void changeSchedulePlanShowtime(
                           selectedPlan,
@@ -1852,11 +1875,12 @@ export default function AdminPage() {
                         )
                       }
                     >
-                      Change time
+                      {planShowtimeMutation?.index === index && planShowtimeMutation.action === "change" ? "Changing…" : "Change time"}
                     </button>
                     <button
                       type="button"
                       className="secondary destructive-outline"
+                      disabled={planShowtimeMutation !== null || validatingPlan || publishingPlan}
                       onClick={() =>
                         void removeSchedulePlanShowtime(
                           selectedPlan,
@@ -1865,7 +1889,7 @@ export default function AdminPage() {
                         )
                       }
                     >
-                      Remove
+                      {planShowtimeMutation?.index === index && planShowtimeMutation.action === "remove" ? "Removing…" : "Remove"}
                     </button>
                   </article>
                 ))}

@@ -141,20 +141,20 @@ describe("saved schedule publishing", () => {
 
   it("serializes validation and publishing before React updates the buttons", () => {
     assert.match(schedulingSource, /const planActionPendingRef = useRef\(false\)/);
-    assert.match(schedulingSource, /async function validateSchedulePlan[\s\S]*?if \(planActionPendingRef\.current\) return;\s*planActionPendingRef\.current = true/);
-    assert.match(schedulingSource, /async function makeSchedulePlanLive[\s\S]*?if \(planActionPendingRef\.current\) return;\s*planActionPendingRef\.current = true/);
+    assert.match(schedulingSource, /async function validateSchedulePlan[\s\S]*?if \(planActionPendingRef\.current \|\| planShowtimeMutationRef\.current\) return;\s*planActionPendingRef\.current = true/);
+    assert.match(schedulingSource, /async function makeSchedulePlanLive[\s\S]*?if \(planActionPendingRef\.current \|\| planShowtimeMutationRef\.current\) return;\s*planActionPendingRef\.current = true/);
     assert.match(schedulingSource, /finally \{\s*planActionPendingRef\.current = false;\s*setPublishingPlan\(false\)/);
   });
 
   it("locks weekly plan saves before React updates the form", () => {
     assert.match(schedulingSource, /const savingPlanRef = useRef\(false\)/);
-    assert.match(schedulingSource, /async function saveSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current \|\| managingPlanRef\.current\) return;\s*savingPlanRef\.current = true/);
+    assert.match(schedulingSource, /async function saveSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current \|\| managingPlanRef\.current \|\| planShowtimeMutationRef\.current\) return;\s*savingPlanRef\.current = true/);
     assert.match(schedulingSource, /finally \{\s*savingPlanRef\.current = false;\s*setSavingPlan\(false\)/);
   });
 
   it("locks destructive plan deletion against saves and repeat clicks", () => {
     assert.match(schedulingSource, /const deletingPlanRef = useRef\(false\)/);
-    assert.match(schedulingSource, /async function deleteSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current \|\| managingPlanRef\.current\) return/);
+    assert.match(schedulingSource, /async function deleteSchedulePlan[\s\S]*?if \(savingPlanRef\.current \|\| deletingPlanRef\.current \|\| managingPlanRef\.current \|\| planShowtimeMutationRef\.current\) return/);
     assert.match(schedulingSource, /deletingPlanRef\.current = true;\s*setDeletingPlanId\(plan\.id\)/);
     assert.match(schedulingSource, /deletingPlanId === plan\.id \? "Deleting…" : "Delete"/);
   });
@@ -165,6 +165,15 @@ describe("saved schedule publishing", () => {
     assert.match(schedulingSource, /async function renameSchedulePlan[\s\S]*?managingPlanRef\.current = true;\s*setManagingPlan\(\{ id: plan\.id, action: "rename" \}\)/);
     assert.match(schedulingSource, /managingPlan\.action === "duplicate" \? "Duplicating…"/);
     assert.match(schedulingSource, /managingPlan\.action === "rename" \? "Renaming…"/);
+  });
+
+  it("serializes showtime edits inside a saved plan", () => {
+    assert.match(schedulingSource, /const planShowtimeMutationRef = useRef\(false\)/);
+    assert.match(schedulingSource, /setPlanShowtimeMutation\(\{ index: null, action: "add" \}\)/);
+    assert.match(schedulingSource, /setPlanShowtimeMutation\(\{ index, action: "change" \}\)/);
+    assert.match(schedulingSource, /setPlanShowtimeMutation\(\{ index, action: "remove" \}\)/);
+    assert.match(schedulingSource, /if \(planActionPendingRef\.current \|\| planShowtimeMutationRef\.current\) return/);
+    assert.match(schedulingSource, /planShowtimeMutation\.action === "remove" \? "Removing…"/);
   });
 });
 
