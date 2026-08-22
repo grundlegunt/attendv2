@@ -6,6 +6,7 @@ import {
   type NowPlayingMovie,
   type PublicShowtime,
 } from "@cinema/shared";
+import { TrailerTrigger } from "./trailer-modal";
 
 export function localDateKey(value: string | Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -88,6 +89,13 @@ export function MovieTile({
             />
           )}
         </Link>
+        <div className="program-tile__hover">
+          {movie.synopsis && <p>{movie.synopsis}</p>}
+          <div>
+            {movie.trailerUrl && <TrailerTrigger className="program-tile__hover-action" url={movie.trailerUrl} title={movie.title}>Trailer</TrailerTrigger>}
+            <Link className="program-tile__hover-action" href={`/movie/${movie.id}`}>Details</Link>
+          </div>
+        </div>
         <div className="program-tile__badges">
           {series.map((entry) => (
             <Link key={entry.id} href={`/film-series/${entry.id}`}>
