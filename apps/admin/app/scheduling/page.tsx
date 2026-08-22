@@ -232,6 +232,8 @@ export default function AdminPage() {
   const updateMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const archiveMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const restoreMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const movieActionRef = useRef(false);
+  const [movieAction, setMovieAction] = useState<"save" | "archive" | "restore" | "delete" | null>(null);
   const deleteMovieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [seatInventory, setSeatInventory] =
     useState<ShowtimeSeatInventory | null>(null);
@@ -799,6 +801,9 @@ export default function AdminPage() {
 
   async function createMovie(event: FormEvent) {
     event.preventDefault();
+    if (movieActionRef.current) return;
+    movieActionRef.current = true;
+    setMovieAction("save");
     setError(null);
     const body = JSON.stringify({
       title: movieTitle,
@@ -879,6 +884,9 @@ export default function AdminPage() {
         updateMovieAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      movieActionRef.current = false;
+      setMovieAction(null);
     }
   }
 
@@ -889,6 +897,9 @@ export default function AdminPage() {
       )
     )
       return;
+    if (movieActionRef.current) return;
+    movieActionRef.current = true;
+    setMovieAction("archive");
     setError(null);
     if (archiveMovieAttemptRef.current?.fingerprint !== movie.id) {
       archiveMovieAttemptRef.current = {
@@ -912,10 +923,16 @@ export default function AdminPage() {
         archiveMovieAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      movieActionRef.current = false;
+      setMovieAction(null);
     }
   }
 
   async function restoreMovie(movie: Movie) {
+    if (movieActionRef.current) return;
+    movieActionRef.current = true;
+    setMovieAction("restore");
     setError(null);
     if (restoreMovieAttemptRef.current?.fingerprint !== movie.id) {
       restoreMovieAttemptRef.current = {
@@ -938,6 +955,9 @@ export default function AdminPage() {
         restoreMovieAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      movieActionRef.current = false;
+      setMovieAction(null);
     }
   }
 
@@ -948,6 +968,9 @@ export default function AdminPage() {
       )
     )
       return;
+    if (movieActionRef.current) return;
+    movieActionRef.current = true;
+    setMovieAction("delete");
     setError(null);
     if (deleteMovieAttemptRef.current?.fingerprint !== movie.id) {
       deleteMovieAttemptRef.current = {
@@ -970,6 +993,9 @@ export default function AdminPage() {
         deleteMovieAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      movieActionRef.current = false;
+      setMovieAction(null);
     }
   }
 
@@ -2314,6 +2340,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 className="drawer-close"
+                disabled={movieAction !== null}
                 onClick={() => setMovieEditorOpen(false)}
                 aria-label="Close film editor"
               >
@@ -2725,12 +2752,13 @@ export default function AdminPage() {
                 )}
               </div>
             </fieldset>
-            <button className="primary">
-              {editingMovieId ? "Save film" : "Add to film library"}
+            <button className="primary" disabled={movieAction !== null}>
+              {movieAction === "save" ? "Saving…" : editingMovieId ? "Save film" : "Add to film library"}
             </button>
             <button
               type="button"
               className="secondary"
+              disabled={movieAction !== null}
               onClick={() => setMovieEditorOpen(false)}
             >
               Cancel

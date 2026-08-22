@@ -78,3 +78,14 @@ test("single, group, and undo moves share an immediate action lock", () => {
   assert.equal(source.match(/scheduleMoveActionRef\.current = true;/g)?.length, 3);
   assert.equal(source.match(/scheduleMoveActionRef\.current = false;/g)?.length, 3);
 });
+
+test("film library mutations share an immediate action lock", () => {
+  assert.match(source, /movieActionRef = useRef\(false\)/);
+  assert.equal(source.match(/if \(movieActionRef\.current\) return;/g)?.length, 4);
+  assert.equal(source.match(/movieActionRef\.current = true;/g)?.length, 4);
+  assert.equal(source.match(/movieActionRef\.current = false;/g)?.length, 4);
+  assert.match(source, /setMovieAction\("save"\)/);
+  assert.match(source, /setMovieAction\("archive"\)/);
+  assert.match(source, /setMovieAction\("restore"\)/);
+  assert.match(source, /setMovieAction\("delete"\)/);
+});
