@@ -62,6 +62,7 @@ export default function AccountPage() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreAttempt, setRestoreAttempt] = useState(0);
   const [loading, setLoading] = useState(false);
+  const loadingRef = useRef(false);
   const [restoring, setRestoring] = useState(true);
   const [accountLoading, setAccountLoading] = useState(false);
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
@@ -186,6 +187,8 @@ export default function AccountPage() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setError(null);
     setLoading(true);
     try {
@@ -215,12 +218,15 @@ export default function AccountPage() {
       );
     } finally {
       setAccountLoading(false);
+      loadingRef.current = false;
       setLoading(false);
     }
   }
 
   async function requestPasswordReset(event: FormEvent) {
     event.preventDefault();
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setError(null);
     setRecoveryMessage(null);
     const normalizedEmail = email.trim().toLowerCase();
@@ -242,18 +248,21 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "Please try again.",
       );
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }
 
   async function confirmPasswordReset(event: FormEvent) {
     event.preventDefault();
+    if (loadingRef.current) return;
     setError(null);
     setRecoveryMessage(null);
     if (password !== passwordConfirmation) {
       setError("Passwords do not match.");
       return;
     }
+    loadingRef.current = true;
     const fingerprint = JSON.stringify({ token: resetToken, newPassword: password });
     if (passwordResetAttemptRef.current?.fingerprint !== fingerprint) passwordResetAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setLoading(true);
@@ -276,6 +285,7 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "Please try again.",
       );
     } finally {
+      loadingRef.current = false;
       setLoading(false);
     }
   }
