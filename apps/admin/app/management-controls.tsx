@@ -160,6 +160,9 @@ export function ManagementControls({
     appliesTo: "ALL",
     ratePercent: "",
   });
+  const [taxNameDrafts, setTaxNameDrafts] = useState<Record<string, string>>({});
+  const [taxCategoryDrafts, setTaxCategoryDrafts] = useState<Record<string, string>>({});
+  const [taxRateDrafts, setTaxRateDrafts] = useState<Record<string, string>>({});
   const [charge, setCharge] = useState({
     name: "",
     appliesTo: "ALL",
@@ -279,6 +282,17 @@ export function ManagementControls({
       setRefunds(nextRefunds);
       setRefundHistory(nextRefundHistory);
       if (nextSettings) {
+        setTaxNameDrafts(
+          Object.fromEntries(nextSettings.taxRules.map((rule) => [rule.id, rule.name])),
+        );
+        setTaxCategoryDrafts(
+          Object.fromEntries(nextSettings.taxRules.map((rule) => [rule.id, rule.appliesTo])),
+        );
+        setTaxRateDrafts(
+          Object.fromEntries(
+            nextSettings.taxRules.map((rule) => [rule.id, (rule.ratePermille / 10).toFixed(1)]),
+          ),
+        );
         setPriceNameDrafts(
           Object.fromEntries(
             nextSettings.priceTiers.map((tier) => [tier.id, tier.name]),
@@ -612,7 +626,7 @@ export function ManagementControls({
   async function updateRule(
     kind: "tax" | "service",
     id: string,
-    changes: Record<string, boolean>,
+    changes: Record<string, string | number | boolean>,
   ) {
     setError(null);
     if (checkoutRuleActionRef.current) return;
@@ -644,6 +658,26 @@ export function ManagementControls({
       checkoutRuleActionRef.current = false;
       setCheckoutRuleAction(null);
     }
+  }
+
+  async function saveTaxRule(rule: Settings["taxRules"][number]) {
+    const name = taxNameDrafts[rule.id]?.trim();
+    if (!name) {
+      setError("Enter a tax rule name.");
+      return;
+    }
+    let ratePermille: number;
+    try {
+      ratePermille = percentageToPermille(taxRateDrafts[rule.id] ?? "");
+    } catch (reason) {
+      showError(reason);
+      return;
+    }
+    await updateRule("tax", rule.id, {
+      name,
+      appliesTo: taxCategoryDrafts[rule.id] ?? rule.appliesTo,
+      ratePermille,
+    });
   }
   async function createEmployee(event: FormEvent) {
     event.preventDefault();
@@ -1204,18 +1238,77 @@ export function ManagementControls({
                         {rule.appliesTo}
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={checkoutRuleAction !== null}
-                      onClick={() =>
-                        void updateRule("tax", rule.id, {
-                          active: !rule.active,
-                        })
-                      }
-                    >
-                      {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id ? "Updating…" : rule.active ? "Deactivate" : "Activate"}
-                    </button>
+                    <div className="rule-actions">
+                      <label>
+                        Name
+                        <input
+                          required
+                          maxLength={100}
+                          value={taxNameDrafts[rule.id] ?? ""}
+                          onChange={(event) =>
+                            setTaxNameDrafts((current) => ({
+                              ...current,
+                              [rule.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Category
+                        <select
+                          value={taxCategoryDrafts[rule.id] ?? rule.appliesTo}
+                          onChange={(event) =>
+                            setTaxCategoryDrafts((current) => ({
+                              ...current,
+                              [rule.id]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="ALL">All</option>
+                          <option value="FOOD">Food</option>
+                          <option value="ALCOHOL">Alcohol</option>
+                          <option value="NA_BEVERAGE">Non-alcoholic beverage</option>
+                        </select>
+                      </label>
+                      <label>
+                        Rate (%)
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.1"
+                          required
+                          inputMode="decimal"
+                          value={taxRateDrafts[rule.id] ?? ""}
+                          onChange={(event) =>
+                            setTaxRateDrafts((current) => ({
+                              ...current,
+                              [rule.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={checkoutRuleAction !== null || !taxNameDrafts[rule.id]?.trim()}
+                        onClick={() => void saveTaxRule(rule)}
+                      >
+                        {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id ? "Saving…" : "Save changes"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={checkoutRuleAction !== null}
+                        onClick={() =>
+                          void updateRule("tax", rule.id, {
+                            active: !rule.active,
+                          })
+                        }
+                      >
+                        {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id ? "Updating…" : rule.active ? "Deactivate" : "Activate"}
+                      </button>
+                    </div>
                   </article>
                 ))}
               </div>

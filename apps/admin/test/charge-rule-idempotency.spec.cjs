@@ -17,6 +17,14 @@ test("tax-rule updates retain a stable retry identity", () => {
   assert.match(source, /updateTaxAttemptRef\.current!\.requestId/);
 });
 
+test("tax rules expose editable name, category, and percentage fields", () => {
+  assert.match(source, /function saveTaxRule/);
+  assert.match(source, /const name = taxNameDrafts\[rule\.id\]/);
+  assert.match(source, /appliesTo: taxCategoryDrafts\[rule\.id\]/);
+  assert.match(source, /percentageToPermille\(taxRateDrafts\[rule\.id\]/);
+  assert.match(source, /: "Save changes"/);
+});
+
 test("service-charge updates retain a stable retry identity", () => {
   assert.match(source, /updateChargeAttemptRef = useRef/);
   assert.match(source, /updateChargeAttemptRef\.current!\.requestId/);
