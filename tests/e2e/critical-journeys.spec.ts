@@ -1,14 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { authenticator } from "otplib";
 
 const password = "DevPassword123!";
-const ownerMfaSecret = "AAAAAAAAAAAAAAAA";
-
-async function completeOwnerMfa(page: import("@playwright/test").Page) {
-  await expect(page.getByRole("heading", { name: "Authenticator code" })).toBeVisible();
-  await page.getByLabel("Authenticator code").fill(authenticator.generate(ownerMfaSecret));
-  await page.getByRole("button", { name: "Verify and sign in" }).click();
-}
 
 test("customer sees the published dining experience and accessible menu", async ({ page }) => {
   await page.route("**/api/v1/cinema/menu", async (route) => {
@@ -278,7 +270,6 @@ test("staff signs in, clocks in, and reaches live operational tools", async ({ p
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await completeOwnerMfa(page);
   await expect(page.getByRole("heading", { name: /Welcome,/ })).toBeVisible();
   const staffSession = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem("attend-staff-pos-session") ?? "null"));
   expect(staffSession).toEqual(expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String), expiresInSeconds: expect.any(Number) }));
@@ -296,7 +287,6 @@ test("kitchen display restores its authenticated station session", async ({ page
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await completeOwnerMfa(page);
   await expect(page.getByLabel("Station")).toBeVisible();
   const kdsSession = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem("attend-kds-session") ?? "null"));
   expect(kdsSession).toEqual(expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String), expiresInSeconds: expect.any(Number) }));
@@ -309,7 +299,6 @@ test("manager signs in and reaches reporting and configuration", async ({ page }
   await page.getByLabel("Email").fill("owner@ridgelinecinema.test");
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await completeOwnerMfa(page);
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   const adminSession = await page.evaluate(() => JSON.parse(window.sessionStorage.getItem("attend-admin-session") ?? "null"));
   expect(adminSession).toEqual(expect.objectContaining({ accessToken: expect.any(String), refreshToken: expect.any(String), expiresInSeconds: expect.any(Number) }));

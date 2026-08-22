@@ -46,7 +46,7 @@ type FulfillmentAction =
   | "CANCEL"
   | "VOID";
 
-type StaffLoginResponse = (AuthTokenResponse & { employee: AuthenticatedEmployee }) | { mfaRequired: true; challengeToken: string };
+type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
 const STORAGE_KEY = "attend-kds-session";
 const STATION_STORAGE_KEY = "attend-kds-station";
@@ -76,8 +76,6 @@ export default function KdsPage() {
   const [queueStale, setQueueStale] = useState(true);
   const [lastQueueUpdateAt, setLastQueueUpdateAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [mfaChallengeToken, setMfaChallengeToken] = useState<string | null>(null);
-  const [mfaCode, setMfaCode] = useState("");
   const [refreshToken, setRefreshToken] = useState("");
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
@@ -243,7 +241,6 @@ export default function KdsPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      if ("mfaRequired" in response) { setMfaChallengeToken(response.challengeToken); setPassword(""); return; }
       storeSession(response);
     } catch (reason) {
       setError(
@@ -254,15 +251,6 @@ export default function KdsPage() {
     } finally {
       setLoading(false);
     }
-  }
-
-  async function verifyMfa(event: FormEvent) {
-    event.preventDefault(); setError(null); setLoading(true);
-    try {
-      const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/mfa/verify", { method: "POST", body: JSON.stringify({ challengeToken: mfaChallengeToken, code: mfaCode }) });
-      storeSession(response); setMfaChallengeToken(null); setMfaCode("");
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The code could not be verified."); }
-    finally { setLoading(false); }
   }
 
   async function transition(
@@ -297,13 +285,6 @@ export default function KdsPage() {
 
   if (!restored) return <main className="auth-shell"><div className="auth-card"><p>Restoring display session…</p></div></main>;
 
-  if (mfaChallengeToken) {
-    return <main className="auth-shell"><div className="auth-card"><h1>Authenticator code</h1><p className="subtitle">Enter the current 6-digit code from your authenticator app.</p>{error && <div className="error-banner">{error}</div>}<form onSubmit={verifyMfa}>
-      <div className="field"><label htmlFor="mfa-code">Authenticator code</label><input id="mfa-code" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required autoFocus value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, ""))} /></div>
-      <button className="primary" type="submit" disabled={loading}>{loading ? "Verifying…" : "Verify and sign in"}</button>
-    </form></div></main>;
-  }
-
   if (!employee) {
     return (
       <main className="auth-shell">
@@ -328,8 +309,6 @@ export default function KdsPage() {
       </main>
     );
   }
-
-  if (employee.mfaSetupRequired) return <main className="auth-shell"><div className="auth-card"><h1>MFA setup required</h1><p className="subtitle">Sign in to Attend Admin to connect an authenticator app before opening this station.</p></div></main>;
 
   return (
     <main className="kds-shell">

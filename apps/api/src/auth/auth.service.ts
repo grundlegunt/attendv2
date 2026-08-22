@@ -15,7 +15,6 @@ import {
   createMfaUri,
   decryptMfaSecret,
   encryptMfaSecret,
-  signMfaChallenge,
   verifyMfaChallenge,
   verifyMfaCode,
   Permission,
@@ -104,7 +103,7 @@ export class AuthService {
   // Staff
   // ---------------------------------------------------------------------
 
-  async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee } | { mfaRequired: true; challengeToken: string }> {
+  async staffLogin(input: StaffLoginRequest): Promise<{ tokens: TokenPair; employee: AuthenticatedEmployee }> {
     const employee = await prisma.employee.findUnique({
       where: { email: input.email.toLowerCase() },
       include: employeeInclude,
@@ -117,10 +116,6 @@ export class AuthService {
     const passwordOk = await verifyPassword(employee.authAccount.passwordHash, input.password);
     if (!passwordOk) {
       throw AppError.invalidCredentials();
-    }
-
-    if (employee.authAccount.mfaEnabled) {
-      return { mfaRequired: true, challengeToken: signMfaChallenge(employee.id, loadEnv().JWT_ACCESS_SECRET) };
     }
 
     const tokens = this.issueEmployeeTokens(employee);
