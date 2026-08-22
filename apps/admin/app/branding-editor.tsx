@@ -1,7 +1,7 @@
 "use client";
 
 import { adminBrandingDefaults, customerBrandingDefaults } from "@cinema/shared";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 export type BrandingSettings = {
   name: string;
@@ -70,6 +70,7 @@ function ColorField({ label, field, draft, setDraft }: { label: string; field: k
 export function BrandingSummary({ settings, onSave }: { settings: BrandingSettings; onSave: (draft: BrandingDraft) => Promise<void> }) {
   const [draft, setDraft] = useState(() => draftFrom(settings));
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   useEffect(() => setDraft(draftFrom(settings)), [settings]);
   const customer = [
     ["Accent", settings.customerAccentColor ?? customerBrandingDefaults.accentColor],
@@ -90,8 +91,11 @@ export function BrandingSummary({ settings, onSave }: { settings: BrandingSettin
   ] as Array<[string, string]>;
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); setSaving(true);
-    try { await onSave(draft); } finally { setSaving(false); }
+    event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    try { await onSave(draft); } finally { savingRef.current = false; setSaving(false); }
   }
 
   return <form className="panel branding-summary brand-editor" onSubmit={(event) => void submit(event)}>
@@ -116,6 +120,7 @@ export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCop
   const [draft, setDraft] = useState(copy);
   const [aboutBody, setAboutBody] = useState(copy.about.body.join("\n\n"));
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   useEffect(() => { setDraft(copy); setAboutBody(copy.about.body.join("\n\n")); }, [copy]);
 
   function updateHeading(section: keyof Omit<CustomerSiteCopy, "about">, field: keyof SiteHeadingCopy, value: string) {
@@ -124,6 +129,8 @@ export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCop
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onSave({
@@ -133,7 +140,7 @@ export function CustomerSiteCopyEditor({ copy, onSave }: { copy: CustomerSiteCop
           body: aboutBody.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean),
         },
       });
-    } finally { setSaving(false); }
+    } finally { savingRef.current = false; setSaving(false); }
   }
 
   return <form className="panel site-copy-editor" onSubmit={(event) => void submit(event)}>
