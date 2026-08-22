@@ -6,11 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useAdminSession } from "./admin-session";
 import { isAdminItemActive, visibleAdminNavigation } from "./admin-navigation";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
+import { visibleOperationalSites } from "./lib/operational-sites";
 
 export function AdminNav() {
   const pathname = usePathname();
   const { employee, signOut } = useAdminSession();
   const groups = useMemo(() => visibleAdminNavigation(employee.permissions), [employee.permissions]);
+  const operationalSites = useMemo(() => visibleOperationalSites(employee.permissions), [employee.permissions]);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
@@ -56,7 +58,11 @@ export function AdminNav() {
           </section>;
         })}
       </nav>
-      <div className="admin-sidebar-account"><a className="admin-customer-site-link" href={CUSTOMER_WEB_URL} target="_blank" rel="noreferrer">View customer site <span aria-hidden="true">↗</span></a><span>Signed in as</span><strong>{employee.name}</strong><button type="button" className="secondary" onClick={signOut}>Sign out</button></div>
+      <div className="admin-sidebar-account">
+        <a className="admin-customer-site-link" href={CUSTOMER_WEB_URL} target="_blank" rel="noreferrer">View customer site <span aria-hidden="true">↗</span></a>
+        {operationalSites.map((site) => <a key={site.label} className="admin-customer-site-link" href={site.href} target="_blank" rel="noreferrer">{site.label} <span aria-hidden="true">↗</span></a>)}
+        <span>Signed in as</span><strong>{employee.name}</strong><button type="button" className="secondary" onClick={signOut}>Sign out</button>
+      </div>
     </aside>
   </>;
 }
