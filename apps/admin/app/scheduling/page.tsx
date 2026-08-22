@@ -242,6 +242,7 @@ export default function AdminPage() {
   const [planName, setPlanName] = useState("");
   const [planWeek, setPlanWeek] = useState(currentWeekStart);
   const [savingPlan, setSavingPlan] = useState(false);
+  const savingPlanRef = useRef(false);
   const schedulePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicatePlanAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const addPlanShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -293,6 +294,8 @@ export default function AdminPage() {
 
   async function saveSchedulePlan(event: FormEvent) {
     event.preventDefault();
+    if (savingPlanRef.current) return;
+    savingPlanRef.current = true;
     setError(null);
     setSavingPlan(true);
     const body = JSON.stringify({
@@ -321,6 +324,7 @@ export default function AdminPage() {
       }
       showError(reason);
     } finally {
+      savingPlanRef.current = false;
       setSavingPlan(false);
     }
   }
@@ -1517,6 +1521,7 @@ export default function AdminPage() {
                 required
                 maxLength={80}
                 value={planName}
+                disabled={savingPlan}
                 onChange={(event) => setPlanName(event.target.value)}
                 placeholder="Opening week · Plan A"
               />
@@ -1527,6 +1532,7 @@ export default function AdminPage() {
                 required
                 type="date"
                 value={planWeek}
+                disabled={savingPlan}
                 onChange={(event) => setPlanWeek(event.target.value)}
               />
             </label>

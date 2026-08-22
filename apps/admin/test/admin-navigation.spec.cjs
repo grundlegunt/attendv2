@@ -145,6 +145,12 @@ describe("saved schedule publishing", () => {
     assert.match(schedulingSource, /async function makeSchedulePlanLive[\s\S]*?if \(planActionPendingRef\.current\) return;\s*planActionPendingRef\.current = true/);
     assert.match(schedulingSource, /finally \{\s*planActionPendingRef\.current = false;\s*setPublishingPlan\(false\)/);
   });
+
+  it("locks weekly plan saves before React updates the form", () => {
+    assert.match(schedulingSource, /const savingPlanRef = useRef\(false\)/);
+    assert.match(schedulingSource, /async function saveSchedulePlan[\s\S]*?if \(savingPlanRef\.current\) return;\s*savingPlanRef\.current = true/);
+    assert.match(schedulingSource, /finally \{\s*savingPlanRef\.current = false;\s*setSavingPlan\(false\)/);
+  });
 });
 
 describe("showtime inspector layout", () => {
