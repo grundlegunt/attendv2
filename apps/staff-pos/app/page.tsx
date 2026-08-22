@@ -91,6 +91,7 @@ export default function StaffLoginPage() {
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
   const [restored, setRestored] = useState(false);
   const authRequestRef = useRef(false);
+  const signOutPendingRef = useRef(false);
   const passwordChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   function beginAuthRequest() {
@@ -152,6 +153,8 @@ export default function StaffLoginPage() {
   }
 
   function signOut() {
+    if (signOutPendingRef.current) return;
+    signOutPendingRef.current = true;
     refreshRequestRef.current += 1;
     programRequestRef.current += 1;
     availabilityRequestRef.current += 1;
@@ -160,7 +163,13 @@ export default function StaffLoginPage() {
     seatDetailPendingRef.current = false;
     openingTabsRequestRef.current += 1;
     openingTabsRef.current = false;
-    if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
+    if (accessToken) {
+      void apiFetch("/auth/staff/logout", { accessToken, method: "POST" })
+        .catch(() => undefined)
+        .finally(() => { signOutPendingRef.current = false; });
+    } else {
+      signOutPendingRef.current = false;
+    }
     window.sessionStorage.removeItem(STORAGE_KEY);
     setEmployee(null); setAccessToken(""); setRefreshToken(""); setExpiresInSeconds(0); setClockPin(""); setClockReady(false);
     setProgram(null); setSelectedShowtimeId(""); setAvailability(null); setAvailabilityError(null); setView("scanner");
