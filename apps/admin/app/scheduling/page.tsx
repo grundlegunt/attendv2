@@ -219,6 +219,7 @@ export default function AdminPage() {
   const [showtimeEditorAction, setShowtimeEditorAction] = useState<"save" | "sale" | "remove" | null>(null);
   const quickShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const duplicateDayAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const calendarShortcutActionRef = useRef(false);
   const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const moveShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const groupMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -976,6 +977,8 @@ export default function AdminPage() {
     targetDates: string[],
     saleStatus: "PRESERVE" | "DRAFT" | "ON_SALE",
   ) {
+    if (calendarShortcutActionRef.current || showtimeEditorActionRef.current) return;
+    calendarShortcutActionRef.current = true;
     setError(null);
     const body = JSON.stringify({ sourceDate, targetDates, saleStatus });
     if (duplicateDayAttemptRef.current?.fingerprint !== body) {
@@ -998,12 +1001,14 @@ export default function AdminPage() {
         duplicateDayAttemptRef.current = null;
       }
       throw reason;
+    } finally {
+      calendarShortcutActionRef.current = false;
     }
   }
 
   async function createShowtime(event: FormEvent) {
     event.preventDefault();
-    if (showtimeEditorActionRef.current) return;
+    if (showtimeEditorActionRef.current || calendarShortcutActionRef.current) return;
     showtimeEditorActionRef.current = true;
     setShowtimeEditorAction("save");
     setError(null);
@@ -1166,6 +1171,8 @@ export default function AdminPage() {
     date: Date,
     selectedMovieId: string,
   ) {
+    if (calendarShortcutActionRef.current || showtimeEditorActionRef.current) return;
+    calendarShortcutActionRef.current = true;
     setError(null);
     const body = JSON.stringify({
       movieId: selectedMovieId,
@@ -1187,6 +1194,8 @@ export default function AdminPage() {
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) quickShowtimeAttemptRef.current = null;
       showError(reason);
+    } finally {
+      calendarShortcutActionRef.current = false;
     }
   }
 
@@ -1199,7 +1208,7 @@ export default function AdminPage() {
 
   async function changeSaleStatus() {
     if (!editingShowtimeId) return;
-    if (showtimeEditorActionRef.current) return;
+    if (showtimeEditorActionRef.current || calendarShortcutActionRef.current) return;
     showtimeEditorActionRef.current = true;
     setShowtimeEditorAction("sale");
     setError(null);
@@ -1250,7 +1259,7 @@ export default function AdminPage() {
       )
     )
       return;
-    if (showtimeEditorActionRef.current) return;
+    if (showtimeEditorActionRef.current || calendarShortcutActionRef.current) return;
     showtimeEditorActionRef.current = true;
     setShowtimeEditorAction("remove");
     setError(null);
@@ -1290,6 +1299,8 @@ export default function AdminPage() {
       )
     )
       return;
+    if (calendarShortcutActionRef.current || showtimeEditorActionRef.current) return;
+    calendarShortcutActionRef.current = true;
     setError(null);
     if (removeShowtimeAttemptRef.current?.fingerprint !== showtime.id) {
       removeShowtimeAttemptRef.current = {
@@ -1316,6 +1327,8 @@ export default function AdminPage() {
         removeShowtimeAttemptRef.current = null;
       }
       showError(reason);
+    } finally {
+      calendarShortcutActionRef.current = false;
     }
   }
 
