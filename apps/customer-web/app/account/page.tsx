@@ -67,6 +67,7 @@ export default function AccountPage() {
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
   const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
   const receiptAttemptRef = useRef<Record<string, string>>({});
+  const receiptPendingRef = useRef<string | null>(null);
   const [printOrderId, setPrintOrderId] = useState<string | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -300,6 +301,8 @@ export default function AccountPage() {
   }
 
   async function resendReceipt(order: CustomerTicketOrderSummary) {
+    if (receiptPendingRef.current) return;
+    receiptPendingRef.current = order.id;
     const requestId = receiptAttemptRef.current[order.id] ?? crypto.randomUUID();
     receiptAttemptRef.current[order.id] = requestId;
     setReceiptOrderId(order.id);
@@ -320,7 +323,10 @@ export default function AccountPage() {
         err instanceof ApiRequestError ? err.body.message : "The ticket email could not be sent.",
       );
     } finally {
-      setReceiptOrderId(null);
+      if (receiptPendingRef.current === order.id) {
+        receiptPendingRef.current = null;
+        setReceiptOrderId(null);
+      }
     }
   }
 
