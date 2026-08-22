@@ -58,4 +58,7 @@ test("modifier updates retain a stable retry identity", () => {
 test("menu presentation publishing retains a stable retry identity", () => {
   assert.match(source, /menuPresentationAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": menuPresentationAttemptRef\.current\.requestId/);
+  assert.match(source, /if \(menuPresentationPendingRef\.current\) return;\s*menuPresentationPendingRef\.current = true/);
+  assert.match(source, /finally \{\s*menuPresentationPendingRef\.current = false;\s*setPublishingMenuPresentation\(false\)/);
+  assert.match(source, /publishingMenuPresentation \? "Publishing…"/);
 });
