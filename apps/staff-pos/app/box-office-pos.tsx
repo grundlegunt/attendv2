@@ -46,6 +46,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
   const pricingRequestRef = useRef(0);
   const giftCardRequestRef = useRef(0);
   const customerSearchRequestRef = useRef(0);
+  const customerSearchPendingRef = useRef(false);
   const saleActionRequestRef = useRef(0);
   const busyRequestRef = useRef(0);
   const activeHoldsRef = useRef<{ showtimeId: string; tokens: string[] } | null>(null);
@@ -57,6 +58,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     pricingRequestRef.current += 1;
     giftCardRequestRef.current += 1;
     customerSearchRequestRef.current += 1;
+    customerSearchPendingRef.current = false;
     saleActionRequestRef.current += 1;
     busyRequestRef.current += 1;
     busyRef.current = false;
@@ -283,6 +285,8 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
   async function searchCustomers() {
     const query = customerQuery.trim();
     if (query.length < 2 || query.length > 100) { setMessage("Enter 2 to 100 characters to find a customer."); return; }
+    if (busyRef.current || customerSearchPendingRef.current) return;
+    customerSearchPendingRef.current = true;
     const requestId = ++customerSearchRequestRef.current;
     setCustomerSearching(true);
     setMessage(null);
@@ -291,7 +295,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       if (requestId !== customerSearchRequestRef.current) return;
       setCustomerResults(results);
       if (!results.length) setMessage("No matching ticket customers were found. You can enter new customer details below.");
-    } catch (error) { if (requestId === customerSearchRequestRef.current) { setMessage(errorMessage(error)); setCustomerResults([]); } } finally { if (requestId === customerSearchRequestRef.current) setCustomerSearching(false); }
+    } catch (error) { if (requestId === customerSearchRequestRef.current) { setMessage(errorMessage(error)); setCustomerResults([]); } } finally { if (requestId === customerSearchRequestRef.current) { customerSearchPendingRef.current = false; setCustomerSearching(false); } }
   }
 
   async function checkout() {
