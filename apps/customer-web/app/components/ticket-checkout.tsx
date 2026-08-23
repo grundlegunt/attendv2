@@ -176,7 +176,6 @@ export function TicketCheckout({
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
   const nameDirtyRef = useRef(false);
-  const emailDirtyRef = useRef(false);
 
   const checkoutStorageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
   const holdExpired = isCheckoutHoldExpired(holdRemainingSeconds);
@@ -199,7 +198,9 @@ export function TicketCheckout({
       }
       if (!active) return;
       if (!nameDirtyRef.current && account.customer.name) setName(account.customer.name);
-      if (!emailDirtyRef.current && account.customer.email) setEmail(account.customer.email);
+      // A signed-in checkout must stay attached to the signed-in account.
+      // Always replace any email typed while session restoration was pending.
+      if (account.customer.email) setEmail(account.customer.email);
       setAccountRecognized(true);
     }
     void loadCustomer();
@@ -812,7 +813,7 @@ export function TicketCheckout({
         <form className="checkout-form" onSubmit={beginCheckout}>
           <div className="checkout-panel">
             <h3>Receipt</h3>
-            {accountRecognized && <p className="configuration-note">Using your signed-in account details. You can edit them for this order.</p>}
+            {accountRecognized && <p className="configuration-note">This purchase will be saved to your signed-in account. You can change the receipt name for this order.</p>}
             <label className="field">
               <span>Name</span>
               <input autoComplete="name" value={name} onChange={(event) => { nameDirtyRef.current = true; setName(event.target.value); }} />
@@ -824,8 +825,11 @@ export function TicketCheckout({
                 required
                 value={email}
                 autoComplete="email"
-                onChange={(event) => { emailDirtyRef.current = true; setEmail(event.target.value); }}
+                readOnly={accountRecognized}
+                aria-describedby={accountRecognized ? "signed-in-checkout-email-note" : undefined}
+                onChange={(event) => setEmail(event.target.value)}
               />
+              {accountRecognized && <small id="signed-in-checkout-email-note">Sign out from Account to purchase under a different email.</small>}
             </label>
             <label className="field">
               <span>Promotion code</span>

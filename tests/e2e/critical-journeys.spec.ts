@@ -143,9 +143,10 @@ test("signed-in customer details carry into ticket checkout", async ({ page }) =
   await seatMap.locator("button:not([disabled])").first().click();
   await page.getByRole("button", { name: "Continue to tickets" }).click();
 
-  await expect(page.getByText("Using your signed-in account details.", { exact: false })).toBeVisible();
+  await expect(page.getByText("This purchase will be saved to your signed-in account.", { exact: false })).toBeVisible();
   await expect(page.getByLabel("Name")).toHaveValue("Casey Customer");
   await expect(page.getByLabel("Email")).toHaveValue("customer@ridgelinecinema.test");
+  await expect(page.getByLabel("Email")).toHaveAttribute("readonly", "");
 });
 
 test("guest checkout details carry into account registration", async ({ page }) => {
