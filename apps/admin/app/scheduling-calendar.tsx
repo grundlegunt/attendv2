@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import type { AdminUiConfig, AuditoriumSeatingMode } from "@cinema/shared";
 
 import { downloadScheduleWorkbook } from "./schedule-export";
+import {
+  cinemaDateTimeInputInstant,
+  cinemaDateTimeInputValue,
+} from "./cinema-date-time";
 
 export interface ScheduleAuditorium {
   id: string;
@@ -69,6 +73,7 @@ function mergeScheduleAuditoriums(
 interface SchedulingCalendarProps {
   labels: AdminUiConfig["labels"];
   locationName: string;
+  timeZone: string;
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
   archivedMovies: ScheduleMovie[];
@@ -108,20 +113,37 @@ const TOTAL_HOURS = 18;
 // remain proportional to runtime, while the inspector stays fixed beside it.
 const HOUR_WIDTH = 58;
 
-function startOfCinemaDay(date: Date) {
-  const result = new Date(date);
-  result.setHours(START_HOUR, 0, 0, 0);
-  return result;
+function cinemaDayStart(dateKey: string, timeZone: string) {
+  return new Date(cinemaDateTimeInputInstant(`${dateKey}T${String(START_HOUR).padStart(2, "0")}:00`, timeZone));
 }
 
-function dateInputValue(date: Date) {
-  const local = new Date(date);
-  local.setMinutes(local.getMinutes() - local.getTimezoneOffset());
-  return local.toISOString().slice(0, 10);
+function cinemaDateKey(value: string | Date, timeZone: string) {
+  const instant = typeof value === "string" ? value : value.toISOString();
+  return cinemaDateTimeInputValue(instant, timeZone).slice(0, 10);
 }
 
-function formatTime(value: string | Date) {
-  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+function addDateKey(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatDateKey(
+  dateKey: string,
+  options: Intl.DateTimeFormatOptions,
+) {
+  return new Date(`${dateKey}T12:00:00Z`).toLocaleDateString([], {
+    ...options,
+    timeZone: "UTC",
+  });
+}
+
+function formatTime(value: string | Date, timeZone: string) {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone,
+  });
 }
 
 function minutesFrom(start: Date, value: string | Date) {
@@ -131,6 +153,7 @@ function minutesFrom(start: Date, value: string | Date) {
 export function SchedulingCalendar({
   labels,
   locationName,
+  timeZone,
   auditoriums,
   movies,
   archivedMovies,
@@ -154,7 +177,7 @@ export function SchedulingCalendar({
   onDeleteMovie,
   onDuplicateDay,
 }: SchedulingCalendarProps) {
-  const [selectedDate, setSelectedDate] = useState(() => dateInputValue(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => cinemaDateKey(new Date(), timeZone));
   const [view, setView] = useState<"day" | "week">("day");
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [selectedShowtimeIds, setSelectedShowtimeIds] = useState<string[]>([]);
@@ -170,7 +193,7 @@ export function SchedulingCalendar({
   const [duplicateSaleStatus, setDuplicateSaleStatus] = useState<"PRESERVE" | "DRAFT" | "ON_SALE">("PRESERVE");
   const [duplicating, setDuplicating] = useState(false);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
-  const dayStart = useMemo(() => startOfCinemaDay(new Date(`${selectedDate}T12:00:00`)), [selectedDate]);
+  const dayStart = useMemo(() => cinemaDayStart(selectedDate, timeZone), [selectedDate, timeZone]);
   const dayEnd = useMemo(() => new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000), [dayStart]);
   const now = new Date();
 
@@ -188,14 +211,12 @@ export function SchedulingCalendar({
 
   const hours = Array.from({ length: TOTAL_HOURS + 1 }, (_, index) => {
     const date = new Date(dayStart.getTime() + index * 60 * 60000);
-    return { index, label: formatTime(date) };
+    return { index, label: formatTime(date, timeZone) };
   });
 
   function changeDay(days: number) {
     setSelectedShowtimeIds([]);
-    const next = new Date(`${selectedDate}T12:00:00`);
-    next.setDate(next.getDate() + days);
-    setSelectedDate(dateInputValue(next));
+    setSelectedDate(addDateKey(selectedDate, days));
   }
 
   function selectVisibleDay() {
@@ -371,16 +392,18 @@ export function SchedulingCalendar({
     const showtimeId = key?.startsWith("showtime:") ? key.slice("showtime:".length) : key;
     const showtime = showtimes.find((item) => item.id === showtimeId);
     if (!showtime) return;
-    const sourceStart = startOfCinemaDay(new Date(showtime.startsAt));
-    if (new Date(showtime.startsAt).getHours() < START_HOUR) sourceStart.setDate(sourceStart.getDate() - 1);
+    const localStart = cinemaDateTimeInputValue(showtime.startsAt, timeZone);
+    const localHour = Number(localStart.slice(11, 13));
+    const sourceDate = localHour < START_HOUR
+      ? addDateKey(localStart.slice(0, 10), -1)
+      : localStart.slice(0, 10);
+    const sourceStart = cinemaDayStart(sourceDate, timeZone);
     const offsetMinutes = minutesFrom(sourceStart, showtime.startsAt);
     await onMove(showtime, auditoriumId, new Date(targetDay.getTime() + offsetMinutes * 60000));
   }
 
   const weekDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(dayStart);
-    date.setDate(date.getDate() + index);
-    return date;
+    return cinemaDayStart(addDateKey(selectedDate, index), timeZone);
   });
 
   const selectedLibraryMovie = movies.find((movie) => movie.id === selectedMovieId) ?? null;
@@ -401,11 +424,11 @@ export function SchedulingCalendar({
   const filteredArchivedMovies = archivedMovies.filter((movie) => !normalizedFilmQuery || movie.title.toLocaleLowerCase().includes(normalizedFilmQuery));
 
   async function quickAddToSchedule(movie: ScheduleMovie) {
-    const dayStart = startOfCinemaDay(new Date(`${selectedDate}T12:00:00`));
+    const dayStart = cinemaDayStart(selectedDate, timeZone);
     const dayEnd = new Date(dayStart.getTime() + TOTAL_HOURS * 60 * 60000);
     const now = new Date();
     let cursor = dayStart;
-    if (dateInputValue(now) === selectedDate && now > dayStart) {
+    if (cinemaDateKey(now, timeZone) === selectedDate && now > dayStart) {
       cursor = new Date(Math.ceil(now.getTime() / (5 * 60000)) * 5 * 60000);
     }
     const durationMs = (preShowBufferMinutes + movie.runtimeMinutes + cleaningBufferMinutes) * 60000;
@@ -475,9 +498,7 @@ export function SchedulingCalendar({
           }
         }}>{exporting ? "Preparing…" : labels.export}</button>
         <button type="button" className="duplicate-day-button" onClick={() => {
-          const next = new Date(`${selectedDate}T12:00:00`);
-          next.setDate(next.getDate() + 1);
-          setDuplicateTarget(dateInputValue(next));
+          setDuplicateTarget(addDateKey(selectedDate, 1));
           setDuplicateTargets([]);
           setDuplicateError(null);
           setDuplicateOpen(true);
@@ -488,7 +509,7 @@ export function SchedulingCalendar({
       </div>
       <div className="date-controls">
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? -7 : -1)} aria-label={`Previous ${view}`}>←</button>
-        <button type="button" className="calendar-today" onClick={() => { setSelectedShowtimeIds([]); setSelectedDate(dateInputValue(new Date())); }}>{labels.today}</button>
+        <button type="button" className="calendar-today" onClick={() => { setSelectedShowtimeIds([]); setSelectedDate(cinemaDateKey(new Date(), timeZone)); }}>{labels.today}</button>
         <input aria-label="Schedule date" type="date" value={selectedDate} onChange={(event) => { setSelectedShowtimeIds([]); setSelectedDate(event.target.value); }} />
         <button type="button" className="calendar-nav" onClick={() => changeDay(view === "week" ? 7 : 1)} aria-label={`Next ${view}`}>→</button>
       </div>
@@ -521,7 +542,7 @@ export function SchedulingCalendar({
             className="drag-time-indicator"
             aria-live="polite"
             style={{ left: `${Math.max(74, Math.min(TOTAL_HOURS * HOUR_WIDTH - 74, previewLeft))}px` }}
-          >{formatTime(resolvedDropPreview.startsAt)}<small>{previewAuditorium?.name}</small></output>}
+          >{formatTime(resolvedDropPreview.startsAt, timeZone)}<small>{previewAuditorium?.name}</small></output>}
         </div>
 
         {visibleAuditoriums.map((auditorium) => {
@@ -605,8 +626,8 @@ export function SchedulingCalendar({
                     }
                   }} onDoubleClick={(event) => { event.preventDefault(); event.stopPropagation(); setSelectedShowtimeIds([showtime.id]); onEdit(showtime); }} title={isPast ? `Edit ${showtime.movie.title}` : `Select ${showtime.movie.title}; double-click to edit`} aria-pressed={!isPast ? selectedShowtimeIds.includes(showtime.id) : undefined}>
                   <strong>{showtime.movie.title}</strong>
-                  <span>{formatTime(showtime.startsAt)} · Feature {formatTime(showtime.featureStartsAt)}</span>
-                  <small>Ready {formatTime(showtime.roomReadyAt)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
+                  <span>{formatTime(showtime.startsAt, timeZone)} · Feature {formatTime(showtime.featureStartsAt, timeZone)}</span>
+                  <small>Ready {formatTime(showtime.roomReadyAt, timeZone)} · {showtime.onSale ? "On sale" : "Draft"}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                   </button>
                   {canChange && <button type="button" className="showtime-quick-remove" aria-label={`Remove ${showtime.movie.title} from schedule`} title="Remove from schedule" onClick={(event) => { event.stopPropagation(); void onRemoveShowtime(showtime); }}>×</button>}
                   {canChange && <button type="button" className="showtime-quick-duplicate" aria-label={`Schedule ${showtime.movie.title} again afterward`} title="Schedule this film again afterward" onClick={(event) => { event.stopPropagation(); void duplicateAfter(showtime); }}>+</button>}
@@ -630,7 +651,7 @@ export function SchedulingCalendar({
           });
           const dayAuditoriums = mergeScheduleAuditoriums(auditoriums, dayShowtimes);
           return <section className="week-day" key={date.toISOString()}>
-            <header><strong>{date.toLocaleDateString([], { weekday: "short" })}</strong><span>{date.toLocaleDateString([], { month: "short", day: "numeric" })}</span></header>
+            <header><strong>{date.toLocaleDateString([], { weekday: "short", timeZone })}</strong><span>{date.toLocaleDateString([], { month: "short", day: "numeric", timeZone })}</span></header>
             {dayAuditoriums.map((auditorium) => {
               const roomShowtimes = dayShowtimes.filter((showtime) => showtime.auditorium.id === auditorium.id);
               const isArchived = auditorium.active === false;
@@ -657,7 +678,7 @@ export function SchedulingCalendar({
                       setDraggingKey(key);
                     } : undefined}
                     onDragEnd={() => { setDraggingKey(null); setDropPreview(null); }}
-                  ><time>{formatTime(showtime.startsAt)}</time><span>{showtime.movie.title}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}</span></button>;
+                  ><time>{formatTime(showtime.startsAt, timeZone)}</time><span>{showtime.movie.title}{showtime.filmSeries ? ` · ${showtime.filmSeries.name}` : ""}</span></button>;
                 }) : <small>Open</small>}
               </div>;
             })}
@@ -707,7 +728,7 @@ export function SchedulingCalendar({
               <h4>Upcoming appearances</h4>
               {upcomingMovieShowtimes.length ? <ul>{upcomingMovieShowtimes.map((showtime) => <li key={showtime.id}>
                 <button type="button" onClick={() => onEdit(showtime)}>
-                  <span>{new Date(showtime.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} · {formatTime(showtime.startsAt)}</span>
+                  <span>{new Date(showtime.startsAt).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", timeZone })} · {formatTime(showtime.startsAt, timeZone)}</span>
                   <strong>{showtime.auditorium.name}</strong>
                   <small>{showtime.filmSeries?.name || "Regular engagement"}{showtime.presentation && showtime.presentation !== "STANDARD" ? ` · ${presentationLabel(showtime.presentation)}` : ""}</small>
                 </button>
@@ -795,7 +816,7 @@ export function SchedulingCalendar({
         } finally { setDuplicating(false); }
       }}>
         <div className="drawer-heading"><div><p className="kicker">SCHEDULING</p><h2>Duplicate day</h2></div><button type="button" className="drawer-close" onClick={() => setDuplicateOpen(false)}>×</button></div>
-        <p>Copy every showing from <strong>{new Date(`${selectedDate}T12:00:00`).toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}</strong>. Conflicts stop the copy before anything is changed.</p>
+        <p>Copy every showing from <strong>{formatDateKey(selectedDate, { weekday: "long", month: "long", day: "numeric" })}</strong>. Conflicts stop the copy before anything is changed.</p>
         <label>Target day<div className="duplicate-target-input"><input type="date" min={selectedDate} value={duplicateTarget} onChange={(event) => { setDuplicateTarget(event.target.value); setDuplicateError(null); }} /><button type="button" onClick={() => {
           if (duplicateTarget === selectedDate) {
             setDuplicateError("Choose a target day different from the source day.");
@@ -806,7 +827,7 @@ export function SchedulingCalendar({
             setDuplicateError(null);
           }
         }}>Add</button></div></label>
-        <div className="duplicate-targets">{duplicateTargets.map((date) => <button type="button" key={date} onClick={() => setDuplicateTargets((current) => current.filter((item) => item !== date))}>{new Date(`${date}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} ×</button>)}</div>
+        <div className="duplicate-targets">{duplicateTargets.map((date) => <button type="button" key={date} onClick={() => setDuplicateTargets((current) => current.filter((item) => item !== date))}>{formatDateKey(date, { weekday: "short", month: "short", day: "numeric" })} ×</button>)}</div>
         <label>Sale status<select value={duplicateSaleStatus} onChange={(event) => setDuplicateSaleStatus(event.target.value as typeof duplicateSaleStatus)}><option value="PRESERVE">Preserve each showing</option><option value="ON_SALE">Open all for sale</option><option value="DRAFT">Copy all as drafts</option></select></label>
         {duplicateError && <div className="error-banner duplicate-day-error" role="alert">{duplicateError}</div>}
         <button className="primary" disabled={duplicating}>{duplicating ? "Copying…" : "Duplicate schedule"}</button>
