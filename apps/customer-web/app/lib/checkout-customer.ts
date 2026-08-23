@@ -1,4 +1,6 @@
-import { verifyAccessToken } from "@cinema/auth";
+// Import the token module directly so the customer-site serverless bundle does
+// not pull in @cinema/auth's native password-hashing dependency.
+import { verifyAccessToken } from "@cinema/auth/src/tokens";
 import { prisma } from "@cinema/database";
 
 const CUSTOMER_ACCESS_COOKIE = "attend_customer_access";
