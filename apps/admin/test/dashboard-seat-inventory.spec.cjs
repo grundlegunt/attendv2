@@ -69,5 +69,6 @@ test("dashboard date and time labels use the cinema timezone", () => {
   assert.match(source, /toLocaleTimeString\(\[\], \{ hour: "numeric", minute: "2-digit", timeZone \}\)/);
   assert.match(source, /toLocaleString\(\[\], \{ timeZone \}\)/);
   assert.match(source, /timeZone: locationTimeZone/);
+  assert.match(source, /event\.occurredAt\)\.toLocaleDateString\(\[\], \{ month: "short", day: "numeric", timeZone: locationTimeZone \}\)/);
   assert.doesNotMatch(source, /new Date\(\)\.toLocaleDateString/);
 });
