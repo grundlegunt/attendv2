@@ -85,11 +85,15 @@ const giftCardStatusSchema = z.object({ status: z.enum(["ACTIVE", "DEACTIVATED"]
 const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max(100) }).strict();
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
+const globalSearchSchema = z.object({ query: z.string().trim().min(2).max(100) }).strict();
 
 @Controller("management")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 export class ManagementController {
   constructor(private readonly management: ManagementService, private readonly refunds: ManagementRefundService) {}
+
+  @Get("search") @RequirePermissions(Permission.PaymentRefund)
+  globalSearch(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(globalSearchSchema)) query: unknown) { return this.management.globalSearch(this.location(actor), globalSearchSchema.parse(query).query); }
 
   @Get("settings") @RequirePermissions(Permission.TicketPriceEdit)
   settings(@CurrentActor() actor: RequestActor) { return this.management.settings(this.location(actor)); }

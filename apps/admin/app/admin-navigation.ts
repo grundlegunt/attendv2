@@ -11,7 +11,10 @@ export type AdminNavGroup = {
 };
 
 export const adminNavigation: readonly AdminNavGroup[] = [
-  { label: "Dashboard", items: [{ href: "/", label: "Dashboard", permissions: [] }] },
+  { label: "Dashboard", items: [
+    { href: "/", label: "Dashboard", permissions: [] },
+    { href: "/search", label: "Search", permissions: ["payment.refund"] },
+  ] },
   { label: "Films", items: [
     { href: "/scheduling", label: "Schedule", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
     { href: "/film-series", label: "Film Series", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
