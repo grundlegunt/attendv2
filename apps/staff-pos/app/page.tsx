@@ -254,6 +254,7 @@ export default function StaffLoginPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!beginAuthRequest()) return;
+    const requestId = ++refreshRequestRef.current;
     const requestedEmail = email;
     const requestedPassword = password;
     setError(null);
@@ -262,6 +263,7 @@ export default function StaffLoginPage() {
         "/auth/staff/login",
         { method: "POST", body: JSON.stringify({ email: requestedEmail, password: requestedPassword }) },
       );
+      if (requestId !== refreshRequestRef.current) return;
       if (!isStaffLoginResponse(res)) {
         setError("Staff sign-in is still updating. Refresh and try again.");
         return;
@@ -270,7 +272,7 @@ export default function StaffLoginPage() {
       setCurrentPassword(requestedPassword);
       setPassword("");
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
+      if (requestId === refreshRequestRef.current) setError(err instanceof ApiRequestError ? err.body.message : "Something went wrong. Please try again.");
     } finally {
       finishAuthRequest();
     }
@@ -281,15 +283,17 @@ export default function StaffLoginPage() {
     if (newPassword.length > 200) { setError("New passwords cannot exceed 200 characters."); return; }
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
     if (!beginAuthRequest()) return;
+    const requestId = ++refreshRequestRef.current;
     const requestedCurrentPassword = currentPassword;
     const requestedNewPassword = newPassword;
     const body = JSON.stringify({ currentPassword: requestedCurrentPassword, newPassword: requestedNewPassword });
     if (passwordChangeAttemptRef.current?.fingerprint !== body) passwordChangeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     try {
       const res = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken, method: "POST", headers: { "Idempotency-Key": passwordChangeAttemptRef.current.requestId }, body });
+      if (requestId !== refreshRequestRef.current) return;
       passwordChangeAttemptRef.current = null;
       storeSession(res); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
-    } catch (err) { setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
+    } catch (err) { if (requestId === refreshRequestRef.current) setError(err instanceof ApiRequestError ? err.body.message : "The password could not be changed."); }
     finally { finishAuthRequest(); }
   }
 

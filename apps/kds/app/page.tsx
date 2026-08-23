@@ -95,6 +95,8 @@ export default function KdsPage() {
   } | null>(null);
   const queueRefreshPendingRef = useRef(false);
   const queueRefreshRequestRef = useRef(0);
+  const sessionRequestRef = useRef(0);
+  const stationRequestRef = useRef(0);
   const [transitioningTicketIds, setTransitioningTicketIds] = useState<string[]>([]);
 
   function storeSession(next: ActiveStaffSession) {
@@ -103,11 +105,21 @@ export default function KdsPage() {
   }
 
   async function refreshSession(token: string) {
-    const next = await apiFetch<ActiveStaffSession>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken: token }) });
+    const requestId = ++sessionRequestRef.current;
+    let next: ActiveStaffSession;
+    try {
+      next = await apiFetch<ActiveStaffSession>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken: token }) });
+    } catch (reason) {
+      if (requestId !== sessionRequestRef.current) return;
+      throw reason;
+    }
+    if (requestId !== sessionRequestRef.current) return;
     storeSession(next);
   }
 
   function signOut() {
+    sessionRequestRef.current += 1;
+    stationRequestRef.current += 1;
     if (accessToken) void apiFetch("/auth/staff/logout", { accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY);
     queueRefreshRequestRef.current += 1; queueRefreshPendingRef.current = false;
@@ -176,9 +188,11 @@ export default function KdsPage() {
 
   useEffect(() => {
     if (!accessToken) return;
+    const requestId = ++stationRequestRef.current;
     setError(null);
     apiFetch<Station[]>("/fulfillment/stations", { accessToken })
       .then((response) => {
+        if (requestId !== stationRequestRef.current) return;
         setStations(response);
         const remembered = window.localStorage.getItem(STATION_STORAGE_KEY);
         const nextStationId =
@@ -196,6 +210,7 @@ export default function KdsPage() {
         }
       })
       .catch((reason) => {
+        if (requestId !== stationRequestRef.current) return;
         setStations([]);
         setStationId("");
         if (reason instanceof ApiRequestError) {
@@ -214,6 +229,7 @@ export default function KdsPage() {
         }
         setError("The station list could not be loaded. Check the API connection and try again.");
       });
+    return () => { stationRequestRef.current += 1; };
   }, [accessToken]);
 
   useEffect(() => {
@@ -243,6 +259,7 @@ export default function KdsPage() {
 
   async function login(event: FormEvent) {
     event.preventDefault();
+    const requestId = ++sessionRequestRef.current;
     setError(null);
     setLoading(true);
     try {
@@ -250,13 +267,14 @@ export default function KdsPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (requestId !== sessionRequestRef.current) return;
       if (!isStaffLoginResponse(response)) {
         setError("Staff sign-in is still updating. Refresh and try again.");
         return;
       }
       storeSession(response);
     } catch (reason) {
-      setError(
+      if (requestId === sessionRequestRef.current) setError(
         reason instanceof ApiRequestError
           ? reason.body.message
           : "Something went wrong. Please try again.",
