@@ -418,8 +418,8 @@ importers:
   packages/payments:
     dependencies:
       stripe:
-        specifier: ^17.4.0
-        version: 17.7.0
+        specifier: ^22.5.0
+        version: 22.5.0(@types/node@26.2.0)
     devDependencies:
       '@types/jest':
         specifier: ^30.0.0
@@ -4041,9 +4041,14 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
-  stripe@17.7.0:
-    resolution: {integrity: sha512-aT2BU9KkizY9SATf14WhhYVv2uOapBWX0OFWF4xvcj1mPaNotlSc2CsxpS4DS46ZueSppmCF5BX1sNYBtwBvfw==}
-    engines: {node: '>=12.*'}
+  stripe@22.5.0:
+    resolution: {integrity: sha512-QVwMwriC0bbySx6R4dpsvJ0W//GojC1kwWVS6rPSoVqDUIZX4Hy3TaUrd2AZeXEAaKbfWIjQjvo3vKAReHZ0vQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   strtok3@10.3.5:
     resolution: {integrity: sha512-ki4hZQfh5rX0QDLLkOCj+h+CVNkqmp/CMf8v8kZpkNVK6jGQooMytqzLZYUVYIZcFZ6yDB70EfD8POcFXiF5oA==}
@@ -8404,10 +8409,9 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  stripe@17.7.0:
-    dependencies:
+  stripe@22.5.0(@types/node@26.2.0):
+    optionalDependencies:
       '@types/node': 26.2.0
-      qs: 6.15.3
 
   strtok3@10.3.5:
     dependencies:
