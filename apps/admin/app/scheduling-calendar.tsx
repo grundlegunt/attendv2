@@ -492,7 +492,7 @@ export function SchedulingCalendar({
         <button type="button" className="export-schedule-button" disabled={exporting} onClick={async () => {
           setExporting(true);
           try {
-            await downloadScheduleWorkbook({ locationName, selectedDate, view, auditoriums, showtimes });
+            await downloadScheduleWorkbook({ locationName, timeZone, selectedDate, view, auditoriums, showtimes });
           } finally {
             setExporting(false);
           }
