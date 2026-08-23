@@ -41,6 +41,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
+  const brandingRequestRef = useRef(0);
 
   function storeSession(next: Session) {
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -103,10 +104,13 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   }, [session?.accessToken, session?.expiresInSeconds, session?.refreshToken, session?.supportSession]);
 
   useEffect(() => {
+    const requestId = ++brandingRequestRef.current;
     const locationId = session?.employee.locationId ?? process.env.NEXT_PUBLIC_LOCATION_ID;
+    setPublicBranding(null);
     apiFetch<PublicAdminBranding>(`/cinema/admin-branding${locationId ? `?locationId=${encodeURIComponent(locationId)}` : ""}`)
-      .then(setPublicBranding)
+      .then((nextBranding) => { if (requestId === brandingRequestRef.current) setPublicBranding(nextBranding); })
       .catch(() => undefined);
+    return () => { brandingRequestRef.current += 1; };
   }, [session?.employee.locationId]);
 
   async function login(event: FormEvent) {
