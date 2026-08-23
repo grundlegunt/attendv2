@@ -58,6 +58,7 @@ type CustomerHistory = {
   phone: string | null;
   isGuest: boolean;
   createdAt: string;
+  membership: { membershipNumber: string; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: string | null } | null;
   summary: {
     orderCount: number;
     ticketCount: number;
@@ -126,6 +127,12 @@ export default function GlobalSearchPage() {
   const [customerHistory, setCustomerHistory] = useState<CustomerHistory | null>(null);
   const [customerLoadingId, setCustomerLoadingId] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState<"tickets" | "dining" | null>(null);
+  const [membershipNumber, setMembershipNumber] = useState("");
+  const [membershipTier, setMembershipTier] = useState("");
+  const [membershipStatus, setMembershipStatus] = useState<"ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED">("ACTIVE");
+  const [membershipExpiresAt, setMembershipExpiresAt] = useState("");
+  const [membershipSaving, setMembershipSaving] = useState(false);
+  const membershipAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const requestRef = useRef(0);
 
   async function search(event: FormEvent) {
@@ -159,11 +166,12 @@ export default function GlobalSearchPage() {
     setCustomerLoadingId(customerId);
     setError(null);
     try {
-      setCustomerHistory(
-        await apiFetch<CustomerHistory>(`/management/customers/${customerId}`, {
-          accessToken,
-        }),
-      );
+      const next = await apiFetch<CustomerHistory>(`/management/customers/${customerId}`, { accessToken });
+      setCustomerHistory(next);
+      setMembershipNumber(next.membership?.membershipNumber ?? "");
+      setMembershipTier(next.membership?.tier ?? "");
+      setMembershipStatus(next.membership?.status ?? "ACTIVE");
+      setMembershipExpiresAt(next.membership?.expiresAt?.slice(0, 10) ?? "");
     } catch (reason) {
       setError(reason instanceof ApiRequestError ? reason.body.message : "Customer history could not be loaded.");
     } finally {
@@ -227,6 +235,30 @@ export default function GlobalSearchPage() {
           ? reason.body.message
           : "Customer history could not be exported.",
       );
+    }
+  }
+
+  async function saveMembership(event: FormEvent) {
+    event.preventDefault();
+    if (!customerHistory || !membershipNumber.trim() || !membershipTier.trim()) return;
+    setMembershipSaving(true);
+    setError(null);
+    const payload = { membershipNumber: membershipNumber.trim(), tier: membershipTier.trim(), status: membershipStatus, expiresAt: membershipExpiresAt ? `${membershipExpiresAt}T00:00:00.000Z` : null };
+    const fingerprint = JSON.stringify({ customerId: customerHistory.id, ...payload });
+    if (membershipAttemptRef.current?.fingerprint !== fingerprint) membershipAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
+    try {
+      const membership = await apiFetch<CustomerHistory["membership"]>(`/management/customers/${customerHistory.id}/membership`, {
+        method: "PATCH",
+        accessToken,
+        headers: { "Idempotency-Key": membershipAttemptRef.current.requestId },
+        body: JSON.stringify(payload),
+      });
+      membershipAttemptRef.current = null;
+      setCustomerHistory((current) => current ? { ...current, membership } : current);
+    } catch (reason) {
+      setError(reason instanceof ApiRequestError ? reason.body.message : "Membership could not be saved.");
+    } finally {
+      setMembershipSaving(false);
     }
   }
 
@@ -321,6 +353,17 @@ export default function GlobalSearchPage() {
                         <small>Customer type</small>
                       </div>
                     </div>
+                    {employee.permissions.includes("ticket.price.edit") && (
+                      <form className="customer-membership-form" onSubmit={(event) => void saveMembership(event)}>
+                        <h4>External membership</h4>
+                        <p>Record an existing cinema membership for lookup. Attend does not sell or renew memberships.</p>
+                        <label><span>Membership number</span><input value={membershipNumber} maxLength={100} required onChange={(event) => setMembershipNumber(event.target.value)} /></label>
+                        <label><span>Tier</span><input value={membershipTier} maxLength={100} required onChange={(event) => setMembershipTier(event.target.value)} /></label>
+                        <label><span>Status</span><select value={membershipStatus} onChange={(event) => setMembershipStatus(event.target.value as typeof membershipStatus)}><option value="ACTIVE">Active</option><option value="EXPIRED">Expired</option><option value="SUSPENDED">Suspended</option><option value="CANCELED">Canceled</option></select></label>
+                        <label><span>Expires (optional)</span><input type="date" value={membershipExpiresAt} onChange={(event) => setMembershipExpiresAt(event.target.value)} /></label>
+                        <button className="primary" disabled={membershipSaving || !membershipNumber.trim() || !membershipTier.trim()}>{membershipSaving ? "Saving…" : customerHistory.membership ? "Update membership" : "Attach membership"}</button>
+                      </form>
+                    )}
                     <button
                       className="secondary customer-history-export"
                       type="button"
