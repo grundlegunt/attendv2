@@ -68,6 +68,7 @@ export default function BrandingDashboard() {
   }, []);
   useEffect(() => {
     if (!session) return;
+    let active = true;
     setLoading(true);
     request<Overview>("/platform/overview", undefined, session.accessToken)
       .then((overview) =>
@@ -81,13 +82,14 @@ export default function BrandingDashboard() {
           ),
         ),
       )
-      .then(setOrganizations)
+      .then((nextOrganizations) => { if (active) setOrganizations(nextOrganizations); })
       .catch((reason: unknown) =>
-        setError(
+        active && setError(
           reason instanceof Error ? reason.message : "Could not load branding.",
         ),
       )
-      .finally(() => setLoading(false));
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [session]);
   const rows = useMemo(
     () =>

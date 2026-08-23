@@ -18,7 +18,17 @@ export default function ContentStudioDashboard() {
   const [session, setSession] = useState<Session | null>(null); const [restored, setRestored] = useState(false); const [organizations, setOrganizations] = useState<OrganizationContent[]>([]); const [query, setQuery] = useState("");
   const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(false);
   useEffect(() => { setSession(readPlatformSession(STORAGE_KEY)); setRestored(true); }, []);
-  useEffect(() => { if (!session) return; setLoading(true); request<Overview>("/platform/overview", undefined, session.accessToken).then((overview) => Promise.all(overview.organizations.map((organization) => request<OrganizationContent>(`/platform/organizations/${organization.id}`, undefined, session.accessToken)))).then(setOrganizations).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load Content Studio." )).finally(() => setLoading(false)); }, [session]);
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    setLoading(true);
+    request<Overview>("/platform/overview", undefined, session.accessToken)
+      .then((overview) => Promise.all(overview.organizations.map((organization) => request<OrganizationContent>(`/platform/organizations/${organization.id}`, undefined, session.accessToken))))
+      .then((nextOrganizations) => { if (active) setOrganizations(nextOrganizations); })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load Content Studio."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [session]);
   const rows = useMemo(() => organizations.flatMap((organization) => organization.locations.map((location) => ({ organization, location, draftChanges: JSON.stringify(location.content.draft) !== JSON.stringify(location.content.published) }))).filter(({ organization, location }) => `${organization.name} ${location.name}`.toLowerCase().includes(query.toLowerCase().trim())).sort((left, right) => Number(right.draftChanges) - Number(left.draftChanges) || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)), [organizations, query]);
   async function login(event: FormEvent) { event.preventDefault(); setError(null); try { const result = await request<Session>("/platform/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result)); setSession(result); setPassword(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Sign in failed."); } }
   function signOut() { window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setOrganizations([]); setError(null); }
