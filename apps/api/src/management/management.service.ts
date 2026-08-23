@@ -725,7 +725,7 @@ export class ManagementService {
     });
   }
 
-  async customer(locationId: string, customerId: string) {
+  async customer(locationId: string, customerId: string, page = { ticketOffset: 0, diningOffset: 0 }) {
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }] },
       select: {
@@ -738,6 +738,7 @@ export class ManagementService {
         ticketOrders: {
           where: { locationId },
           orderBy: { createdAt: "desc" },
+          skip: page.ticketOffset,
           take: 50,
           select: {
             id: true,
@@ -763,6 +764,7 @@ export class ManagementService {
         restaurantTabs: {
           where: { locationId },
           orderBy: { openedAt: "desc" },
+          skip: page.diningOffset,
           take: 50,
           select: {
             id: true,
@@ -805,9 +807,9 @@ export class ManagementService {
         diningCurrency: customer.restaurantTabs[0]?.location.currency ?? "USD",
       },
       historyWindow: {
-        ticketOrdersShown: customer.ticketOrders.length,
+        ticketOrdersShown: Math.min(orderCount, page.ticketOffset + customer.ticketOrders.length),
         ticketOrdersTotal: orderCount,
-        diningVisitsShown: customer.restaurantTabs.length,
+        diningVisitsShown: Math.min(diningVisitCount, page.diningOffset + customer.restaurantTabs.length),
         diningVisitsTotal: diningVisitCount,
       },
     };

@@ -87,6 +87,7 @@ const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
 const globalSearchSchema = z.object({ query: z.string().trim().min(2).max(100) }).strict();
+const customerHistorySchema = z.object({ ticketOffset: z.coerce.number().int().min(0).max(10_000).default(0), diningOffset: z.coerce.number().int().min(0).max(10_000).default(0) }).strict();
 
 @Controller("management")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -180,7 +181,7 @@ export class ManagementController {
   updateGiftCardStatus(@CurrentActor() actor: RequestActor, @Param("giftCardId") giftCardId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(giftCardStatusSchema)) body: unknown) { return this.management.updateGiftCardStatus({ ...giftCardStatusSchema.parse(body), giftCardId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
-  customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string) { return this.management.customer(this.location(actor), customerId); }
+  customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Query(new ZodValidationPipe(customerHistorySchema)) query: unknown) { return this.management.customer(this.location(actor), customerId, customerHistorySchema.parse(query)); }
 
   @Get("payment-methods/:paymentMethodId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   paymentMethod(@CurrentActor() actor: RequestActor, @Param("paymentMethodId") paymentMethodId: string) { return this.management.paymentMethod(this.location(actor), paymentMethodId); }
