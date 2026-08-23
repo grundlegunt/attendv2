@@ -721,9 +721,53 @@ export class ManagementService {
   }
 
   async customer(locationId: string, customerId: string) {
-    const customer = await prisma.customer.findFirst({ where: { id: customerId, ticketOrders: { some: { locationId } } }, select: { id: true, name: true, email: true, phone: true } });
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, ticketOrders: { some: { locationId } } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        isGuest: true,
+        createdAt: true,
+        ticketOrders: {
+          where: { locationId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            channel: true,
+            totalCents: true,
+            currency: true,
+            guestName: true,
+            guestEmail: true,
+            createdAt: true,
+            tickets: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                status: true,
+                ticketType: { select: { name: true } },
+                showtimeSeat: { select: { seat: { select: { label: true } }, showtime: { select: { startsAt: true, movie: { select: { title: true } }, auditorium: { select: { name: true } } } } } },
+              },
+            },
+          },
+        },
+      },
+    });
     if (!customer) throw AppError.notFound("Customer was not found.");
-    return customer;
+    const paidStatuses = new Set(["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"]);
+    return {
+      ...customer,
+      summary: {
+        orderCount: customer.ticketOrders.length,
+        ticketCount: customer.ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0),
+        lifetimeSpendCents: customer.ticketOrders.reduce((sum, order) => sum + (paidStatuses.has(order.status) ? order.totalCents : 0), 0),
+        currency: customer.ticketOrders[0]?.currency ?? "USD",
+      },
+    };
   }
 
   async paymentMethod(locationId: string, paymentMethodId: string) {

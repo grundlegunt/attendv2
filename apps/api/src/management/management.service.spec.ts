@@ -76,6 +76,28 @@ describe("ManagementService global search", () => {
   });
 });
 
+describe("ManagementService customer history", () => {
+  it("returns only the active location's orders and summarizes completed spend", async () => {
+    const findFirst = jest.spyOn(prisma.customer, "findFirst").mockResolvedValue({
+      id: "customer-1", name: "Jane", email: "jane@example.com", phone: null, isGuest: false, createdAt: new Date(),
+      ticketOrders: [
+        { id: "order-1", orderNumber: "A1", status: "PAID", channel: "ONLINE", totalCents: 2400, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date(), tickets: [{ id: "ticket-1" }, { id: "ticket-2" }] },
+        { id: "order-2", orderNumber: "A2", status: "REFUNDED", channel: "ONLINE", totalCents: 1200, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date(), tickets: [{ id: "ticket-3" }] },
+      ],
+    } as never);
+    try {
+      const customer = await new ManagementService().customer("location-1", "customer-1");
+      expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: "customer-1", ticketOrders: { some: { locationId: "location-1" } } },
+        select: expect.objectContaining({ ticketOrders: expect.objectContaining({ where: { locationId: "location-1" }, take: 50 }) }),
+      }));
+      expect(customer.summary).toEqual({ orderCount: 2, ticketCount: 3, lifetimeSpendCents: 2400, currency: "USD" });
+    } finally {
+      findFirst.mockRestore();
+    }
+  });
+});
+
 describe("ManagementService attention inbox", () => {
   it("queries only durable action states within the active location", async () => {
     const orders = jest.spyOn(prisma.ticketOrder, "findMany").mockResolvedValue([]);
