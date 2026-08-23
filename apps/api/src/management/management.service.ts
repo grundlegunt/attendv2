@@ -755,6 +755,29 @@ export class ManagementService {
             },
           },
         },
+        restaurantTabs: {
+          where: { locationId },
+          orderBy: { openedAt: "desc" },
+          take: 50,
+          select: {
+            id: true,
+            label: true,
+            status: true,
+            fulfillmentMode: true,
+            totalCents: true,
+            prepaidCents: true,
+            openedAt: true,
+            closedAt: true,
+            location: { select: { currency: true } },
+            showtime: { select: { movie: { select: { title: true } }, auditorium: { select: { name: true } } } },
+            seats: { orderBy: { createdAt: "asc" }, select: { showtimeSeat: { select: { seat: { select: { label: true } } } } } },
+            orders: {
+              where: { status: { not: "CANCELED" } },
+              orderBy: { createdAt: "asc" },
+              select: { items: { where: { status: { not: "VOIDED" } }, orderBy: { createdAt: "asc" }, select: { quantity: true, menuItem: { select: { name: true } } } } },
+            },
+          },
+        },
       },
     });
     if (!customer) throw AppError.notFound("Customer was not found.");
@@ -766,6 +789,9 @@ export class ManagementService {
         ticketCount: customer.ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0),
         lifetimeSpendCents: customer.ticketOrders.reduce((sum, order) => sum + (paidStatuses.has(order.status) ? order.totalCents : 0), 0),
         currency: customer.ticketOrders[0]?.currency ?? "USD",
+        diningVisitCount: customer.restaurantTabs.length,
+        diningSpendCents: customer.restaurantTabs.reduce((sum, tab) => sum + (["CLOSED", "REFUNDED"].includes(tab.status) ? (tab.totalCents ?? 0) : 0), 0),
+        diningCurrency: customer.restaurantTabs[0]?.location.currency ?? "USD",
       },
     };
   }

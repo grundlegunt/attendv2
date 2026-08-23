@@ -84,6 +84,10 @@ describe("ManagementService customer history", () => {
         { id: "order-1", orderNumber: "A1", status: "PAID", channel: "ONLINE", totalCents: 2400, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date(), tickets: [{ id: "ticket-1" }, { id: "ticket-2" }] },
         { id: "order-2", orderNumber: "A2", status: "REFUNDED", channel: "ONLINE", totalCents: 1200, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date(), tickets: [{ id: "ticket-3" }] },
       ],
+      restaurantTabs: [
+        { id: "tab-1", status: "CLOSED", totalCents: 3200, location: { currency: "USD" } },
+        { id: "tab-2", status: "OPEN", totalCents: 900, location: { currency: "USD" } },
+      ],
     } as never);
     try {
       const customer = await new ManagementService().customer("location-1", "customer-1");
@@ -91,7 +95,7 @@ describe("ManagementService customer history", () => {
         where: { id: "customer-1", ticketOrders: { some: { locationId: "location-1" } } },
         select: expect.objectContaining({ ticketOrders: expect.objectContaining({ where: { locationId: "location-1" }, take: 50 }) }),
       }));
-      expect(customer.summary).toEqual({ orderCount: 2, ticketCount: 3, lifetimeSpendCents: 2400, currency: "USD" });
+      expect(customer.summary).toEqual({ orderCount: 2, ticketCount: 3, lifetimeSpendCents: 2400, currency: "USD", diningVisitCount: 2, diningSpendCents: 3200, diningCurrency: "USD" });
     } finally {
       findFirst.mockRestore();
     }
