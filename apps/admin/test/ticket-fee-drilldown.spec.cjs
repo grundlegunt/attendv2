@@ -11,3 +11,11 @@ test("revenue reports show ticket fee totals and averages by sales channel", () 
   assert.match(source, /row\.ticketFeesCents \/ row\.ticketsSold/);
   assert.match(source, /key=\{`fee-\$\{row\.channel\}`\}/);
 });
+
+test("ticket fee totals expand into order-level details", () => {
+  assert.match(source, /View ticket-fee order details/);
+  assert.match(source, /revenue\.ticketFeeDetails\.map/);
+  assert.match(source, /row\.orderNumber/);
+  assert.match(source, /money\(row\.averageFeeCents\)/);
+  assert.match(source, /money\(row\.ticketFeesCents\)/);
+});

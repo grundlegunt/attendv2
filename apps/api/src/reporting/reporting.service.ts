@@ -281,6 +281,10 @@ export class ReportingService {
       showtimes: [...showtimes.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
       admissionTypes: [...admissionTypes.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.name.localeCompare(b.name)),
       salesChannels: [...salesChannels.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.channel.localeCompare(b.channel)),
+      ticketFeeDetails: ticketOrders
+        .filter((order) => order.status !== "REFUNDED" && order.feesCents > 0 && order.tickets.length > 0)
+        .map((order) => ({ orderId: order.id, orderNumber: order.orderNumber, createdAt: order.createdAt, channel: order.channel, ticketsSold: order.tickets.length, ticketFeesCents: order.feesCents, averageFeeCents: Math.round(order.feesCents / order.tickets.length), movieTitles: [...new Set(order.tickets.map((ticket) => ticket.showtimeSeat.showtime.movie.title))].sort() }))
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime() || a.orderNumber.localeCompare(b.orderNumber)),
       salesOperators: [...salesOperators.values()].sort((a, b) => b.netCollectedCents - a.netCollectedCents || a.employeeName.localeCompare(b.employeeName)),
       concessionTopSellers: [...concessionSales.values()].sort((a, b) => b.unitsSold - a.unitsSold || b.salesCents - a.salesCents || a.name.localeCompare(b.name)),
       dailyPerformance: [...dailyPerformance.values()].sort((a, b) => a.date.localeCompare(b.date)).map((day) => ({ ...day, combinedRevenueCents: day.ticketCollectedCents + day.fnbRevenueCents, averageTotalSpendPerPatronCents: day.ticketsSold ? Math.round((day.ticketCollectedCents + day.fnbRevenueCents) / day.ticketsSold) : 0 })),

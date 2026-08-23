@@ -9172,6 +9172,10 @@ describe("Milestone 10 management reporting", () => {
       { channel: "BOX_OFFICE", ticketsSold: 1, ticketRevenueCents: 1800, ticketFeesCents: 100, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 },
       { channel: "ONLINE", ticketsSold: 1, ticketRevenueCents: 1700, ticketFeesCents: 200, grossCollectedCents: 2866, refundedCents: 800, netCollectedCents: 2066 },
     ]);
+    expect(response.body.ticketFeeDetails).toEqual([
+      { orderId: secondOrder.id, orderNumber: secondOrder.orderNumber, createdAt: "2024-01-12T12:00:00.000Z", channel: "BOX_OFFICE", ticketsSold: 1, ticketFeesCents: 100, averageFeeCents: 100, movieTitles: [movie!.title] },
+      { orderId: firstOrder.id, orderNumber: firstOrder.orderNumber, createdAt: "2024-01-10T12:00:00.000Z", channel: "ONLINE", ticketsSold: 1, ticketFeesCents: 200, averageFeeCents: 200, movieTitles: [movie!.title] },
+    ]);
     expect(response.body.salesOperators).toEqual([{ employeeId: owner.id, employeeName: owner.name, ticketsSold: 1, grossCollectedCents: 2400, refundedCents: 400, netCollectedCents: 2000 }]);
     expect(response.body.concessionTopSellers).toEqual([{ menuItemId: menuItem.id, name: menuItem.name, unitsSold: 2, salesCents: (menuItem.priceCents + 50) * 2 }]);
     expect(response.body.dailyPerformance).toEqual([
