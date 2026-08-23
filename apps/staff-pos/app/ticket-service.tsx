@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import type { NowPlayingMovie } from "@cinema/shared";
 import { QRCodeSVG } from "qrcode.react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
+import { formatCinemaDateTime } from "./cinema-date-time";
 
 type TicketOrder = {
   id: string;
@@ -62,10 +63,12 @@ export function TicketService({
   accessToken,
   movies,
   canExchange,
+  timeZone,
 }: {
   accessToken: string;
   movies: NowPlayingMovie[];
   canExchange: boolean;
+  timeZone: string;
 }) {
   const [query, setQuery] = useState("");
   const [orders, setOrders] = useState<TicketOrder[]>([]);
@@ -373,7 +376,7 @@ export function TicketService({
                   <div>
                     <strong>{showtime.movie.title} · Seat {ticket.showtimeSeat.seat.label}</strong>
                     <span>
-                      {new Date(showtime.startsAt).toLocaleString()} · {showtime.auditorium.name} · {ticket.ticketType.name}
+                      {formatCinemaDateTime(showtime.startsAt, timeZone)} · {showtime.auditorium.name} · {ticket.ticketType.name}
                     </span>
                   </div>
                   <button
@@ -408,7 +411,7 @@ export function TicketService({
               <option value="">Choose a showtime</option>
               {movies.flatMap((movie) => movie.showtimes.map((showtime) => (
                 <option key={showtime.id} value={showtime.id}>
-                  {movie.title} · {new Date(showtime.startsAt).toLocaleString()} · {showtime.auditorium.name}
+                  {movie.title} · {formatCinemaDateTime(showtime.startsAt, timeZone)} · {showtime.auditorium.name}
                 </option>
               )))}
             </select>
@@ -436,7 +439,7 @@ export function TicketService({
         <section className="ticket-reprint" aria-label="Printable replacement ticket">
           <span className="eyebrow">REPLACEMENT TICKET</span>
           <h2>{printable.movie}</h2>
-          <p>{new Date(printable.startsAt).toLocaleString()}</p>
+          <p>{formatCinemaDateTime(printable.startsAt, timeZone)}</p>
           <p>{printable.auditorium} · Seat {printable.seat} · {printable.ticketType}</p>
           <QRCodeSVG value={printable.credential} size={220} level="M" includeMargin />
           <strong>{printable.orderNumber}</strong>
