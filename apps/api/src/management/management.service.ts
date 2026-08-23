@@ -168,6 +168,31 @@ export class ManagementService {
     });
   }
 
+  async bulkUpdatePriceTiers(input: { locationId: string; employeeId: string; requestId: string; priceTierIds: string[]; adjustmentMinor: number }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const priceTierIds = [...new Set(input.priceTierIds)].sort();
+    if (!priceTierIds.length || priceTierIds.length > 50) throw AppError.validationFailed("Select between one and 50 ticket price groups.");
+    if (!Number.isInteger(input.adjustmentMinor) || input.adjustmentMinor === 0) throw AppError.validationFailed("Enter a non-zero whole-cent adjustment.");
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const requestFingerprint = createHash("sha256").update(JSON.stringify({ priceTierIds, adjustmentMinor: input.adjustmentMinor })).digest("hex");
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "ticket.price_tiers_bulk_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The bulk price idempotency key was already used with different details.");
+        return tx.priceTier.findMany({ where: { organizationId: location.organizationId, id: { in: priceTierIds } }, orderBy: { name: "asc" } });
+      }
+      const tiers = await tx.priceTier.findMany({ where: { organizationId: location.organizationId, id: { in: priceTierIds } }, orderBy: { id: "asc" } });
+      if (tiers.length !== priceTierIds.length) throw AppError.notFound("One or more selected ticket price groups were not found.");
+      const changes = tiers.map((tier) => ({ ...tier, nextPrice: tier.ticketPriceMinor + input.adjustmentMinor }));
+      if (changes.some((tier) => tier.nextPrice < 0 || tier.nextPrice > 1_000_000)) throw AppError.validationFailed("The adjustment would put a ticket price outside the allowed range.");
+      const updated = await Promise.all(changes.map((tier) => tx.priceTier.update({ where: { id: tier.id }, data: { ticketPriceMinor: tier.nextPrice } })));
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tiers_bulk_updated", entityType: "PriceTier", entityId: location.organizationId, beforeState: { prices: tiers.map((tier) => ({ id: tier.id, ticketPriceMinor: tier.ticketPriceMinor })) }, afterState: { requestId: input.requestId, requestFingerprint, adjustmentMinor: input.adjustmentMinor, prices: updated.map((tier) => ({ id: tier.id, ticketPriceMinor: tier.ticketPriceMinor })) } } });
+      return updated.sort((left, right) => left.name.localeCompare(right.name));
+    });
+  }
+
   async createTicketType(input: { locationId: string; employeeId: string; requestId: string; name: string; priceAdjustmentMinor: number }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     const requestFingerprint = createHash("sha256").update(JSON.stringify({ locationId: input.locationId, name: input.name, priceAdjustmentMinor: input.priceAdjustmentMinor })).digest("hex");

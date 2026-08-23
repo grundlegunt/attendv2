@@ -14,7 +14,9 @@ test("price-group and admission-type creation use stable retry identities", () =
 
 test("price-group updates use a stable retry identity", () => {
   assert.match(source, /updatePriceAttemptRef = useRef/);
+  assert.match(source, /bulkPriceAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": updatePriceAttemptRef\.current\.requestId/);
+  assert.match(source, /"Idempotency-Key": bulkPriceAttemptRef\.current\.requestId/);
 });
 
 test("admission-type updates use a stable retry identity", () => {
@@ -24,12 +26,13 @@ test("admission-type updates use a stable retry identity", () => {
 
 test("ticket pricing mutations share an immediate action lock", () => {
   assert.match(source, /ticketPricingActionRef = useRef\(false\)/);
-  assert.equal(source.match(/if \(ticketPricingActionRef\.current\) return;/g)?.length, 5);
-  assert.equal(source.match(/ticketPricingActionRef\.current = true;/g)?.length, 5);
-  assert.equal(source.match(/ticketPricingActionRef\.current = false;/g)?.length, 5);
+  assert.equal(source.match(/if \(ticketPricingActionRef\.current\) return;/g)?.length, 6);
+  assert.equal(source.match(/ticketPricingActionRef\.current = true;/g)?.length, 6);
+  assert.equal(source.match(/ticketPricingActionRef\.current = false;/g)?.length, 6);
   assert.match(source, /setTicketPricingAction\(\{ kind: "create-price" \}\)/);
   assert.match(source, /setTicketPricingAction\(\{ kind: "create-type" \}\)/);
   assert.match(source, /setTicketPricingAction\(\{ kind: "save-price", id: tier\.id \}\)/);
   assert.match(source, /setTicketPricingAction\(\{ kind: "toggle-price", id: tier\.id \}\)/);
+  assert.match(source, /setTicketPricingAction\(\{ kind: "bulk-price" \}\)/);
   assert.match(source, /setTicketPricingAction\(\{ kind: "update-type", id: ticketType\.id \}\)/);
 });
