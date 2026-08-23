@@ -341,13 +341,15 @@ export default function AttendMaster() {
 
   useEffect(() => {
     if (!session) return;
+    let active = true;
     request<Overview>("/platform/overview", undefined, session.accessToken)
-      .then(setOverview)
+      .then((nextOverview) => { if (active) setOverview(nextOverview); })
       .catch((reason: unknown) =>
-        setError(
+        active && setError(
           reason instanceof Error ? reason.message : "Could not load clients.",
         ),
       );
+    return () => { active = false; };
   }, [session]);
 
   useEffect(() => {
@@ -379,6 +381,7 @@ export default function AttendMaster() {
       setOrganization(null);
       return;
     }
+    let active = true;
     setOrganizationLoading(true);
     setError(null);
     request<OrganizationDetail>(
@@ -387,6 +390,7 @@ export default function AttendMaster() {
       session.accessToken,
     )
       .then((nextOrganization) => {
+        if (!active) return;
         setOrganization(nextOrganization);
         const params = new URLSearchParams(window.location.search);
         const section = params.get("section");
@@ -403,13 +407,14 @@ export default function AttendMaster() {
         if (location && section === "branding") beginLocationEdit(location);
       })
       .catch((reason: unknown) =>
-        setError(
+        active && setError(
           reason instanceof Error
             ? reason.message
             : "Could not load this cinema.",
         ),
       )
-      .finally(() => setOrganizationLoading(false));
+      .finally(() => { if (active) setOrganizationLoading(false); });
+    return () => { active = false; };
   }, [selectedOrganizationId, session]);
 
   useEffect(() => {
