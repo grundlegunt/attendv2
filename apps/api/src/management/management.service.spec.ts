@@ -59,8 +59,12 @@ describe("ManagementService global search", () => {
       }));
       expect(customers).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({
-          AND: expect.arrayContaining([{ OR: [{ ticketOrders: { some: { locationId: "location-1" } } }, { restaurantTabs: { some: { locationId: "location-1" } } }] }]),
+          AND: expect.arrayContaining([
+            { OR: [{ email: { contains: "jane@example.com", mode: "insensitive" } }, { phone: { contains: "jane@example.com" } }, { name: { contains: "jane@example.com", mode: "insensitive" } }, { memberships: { some: { organizationId: "organization-1", membershipNumber: { contains: "jane@example.com", mode: "insensitive" } } } }] },
+            { OR: [{ ticketOrders: { some: { locationId: "location-1" } } }, { restaurantTabs: { some: { locationId: "location-1" } } }, { memberships: { some: { organizationId: "organization-1" } } }] },
+          ]),
         }),
+        select: expect.objectContaining({ memberships: { where: { organizationId: "organization-1" }, select: { membershipNumber: true, tier: true, status: true }, take: 1 } }),
       }));
       expect(giftCards).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({ organizationId: "organization-1" }),

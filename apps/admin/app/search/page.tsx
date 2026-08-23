@@ -24,6 +24,7 @@ type SearchResults = {
     name: string | null;
     email: string | null;
     phone: string | null;
+    memberships: Array<{ membershipNumber: string; tier: string; status: string }>;
     _count: { ticketOrders: number; restaurantTabs: number };
   }>;
   tickets: Array<{
@@ -316,6 +317,7 @@ export default function GlobalSearchPage() {
                     <small>
                       {customer.email ?? "No email"}
                       {customer.phone ? ` · ${customer.phone}` : ""}
+                      {customer.memberships[0] ? ` · Member #${customer.memberships[0].membershipNumber} · ${customer.memberships[0].tier}` : ""}
                     </small>
                   </div>
                   <span>

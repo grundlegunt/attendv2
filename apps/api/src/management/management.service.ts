@@ -79,11 +79,11 @@ export class ManagementService {
       prisma.customer.findMany({
         where: {
           AND: [
-            { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { phone: { contains: normalized } }, { name: { contains: normalized, mode: "insensitive" } }] },
-            { OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }] },
+            { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { phone: { contains: normalized } }, { name: { contains: normalized, mode: "insensitive" } }, { memberships: { some: { organizationId: location.organizationId, membershipNumber: { contains: normalized, mode: "insensitive" } } } }] },
+            { OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }, { memberships: { some: { organizationId: location.organizationId } } }] },
           ],
         },
-        select: { id: true, name: true, email: true, phone: true, updatedAt: true, _count: { select: { ticketOrders: { where: { locationId } }, restaurantTabs: { where: { locationId } } } } }, orderBy: { updatedAt: "desc" }, take: 10,
+        select: { id: true, name: true, email: true, phone: true, updatedAt: true, memberships: { where: { organizationId: location.organizationId }, select: { membershipNumber: true, tier: true, status: true }, take: 1 }, _count: { select: { ticketOrders: { where: { locationId } }, restaurantTabs: { where: { locationId } } } } }, orderBy: { updatedAt: "desc" }, take: 10,
       }),
       exactTicketId || exactTicketCredential ? prisma.ticket.findMany({
         where: { OR: [...(exactTicketId ? [{ id: normalized }] : []), ...(exactTicketCredential ? [{ qrToken: normalized }] : [])], showtimeSeat: { showtime: { auditorium: { locationId } } } },
