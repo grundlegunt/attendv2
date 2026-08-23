@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   adminUiDefaults,
   seatMapLayoutSchema,
@@ -333,6 +333,7 @@ export default function AttendMaster() {
   const [paymentFilter, setPaymentFilter] = useState("ALL");
   const [locationFilter, setLocationFilter] = useState("ALL");
   const [locationCountFilter, setLocationCountFilter] = useState("ALL");
+  const authRequestRef = useRef(0);
 
   useEffect(() => {
     setSession(readPlatformSession(STORAGE_KEY));
@@ -475,21 +476,24 @@ export default function AttendMaster() {
 
   async function login(event: FormEvent) {
     event.preventDefault();
+    const requestId = ++authRequestRef.current;
     setError(null);
     try {
       const result = await request<Session>("/platform/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (requestId !== authRequestRef.current) return;
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
       setSession(result);
       setPassword("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Sign in failed.");
+      if (requestId === authRequestRef.current) setError(reason instanceof Error ? reason.message : "Sign in failed.");
     }
   }
 
   function signOut() {
+    authRequestRef.current += 1;
     window.sessionStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setOverview(null);

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession } from "../platform-session";
 
@@ -62,6 +62,7 @@ export default function BrandingDashboard() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const authRequestRef = useRef(0);
   useEffect(() => {
     setSession(readPlatformSession(STORAGE_KEY));
     setRestored(true);
@@ -118,20 +119,23 @@ export default function BrandingDashboard() {
   );
   async function login(event: FormEvent) {
     event.preventDefault();
+    const requestId = ++authRequestRef.current;
     setError(null);
     try {
       const result = await request<Session>("/platform/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (requestId !== authRequestRef.current) return;
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
       setSession(result);
       setPassword("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Sign in failed.");
+      if (requestId === authRequestRef.current) setError(reason instanceof Error ? reason.message : "Sign in failed.");
     }
   }
   function signOut() {
+    authRequestRef.current += 1;
     window.sessionStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setOrganizations([]);
