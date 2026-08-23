@@ -9164,8 +9164,8 @@ describe("Milestone 10 management reporting", () => {
     expect(segment.body.preview[0]).toEqual(expect.objectContaining({ id: expect.any(String), name: expect.any(String), email: expect.any(String), lastPurchaseAt: expect.any(String), lastOrderNumber: expect.any(String), lastOrderTotalCents: expect.any(Number) }));
 
     const response = await request(app.getHttpServer()).get(`/api/v1/reports/revenue?from=${period.from.toISOString()}&to=${period.to.toISOString()}`).set("Authorization", `Bearer ${ownerAccessToken}`).expect(200);
-    expect(response.body.totals).toMatchObject({ grossRevenueCents: 6766, refundedCents: 1500, ticketRefundedCents: 1200, fnbRefundedCents: 300, ticketRevenueCents: 3500, ticketFeesCents: 300, ticketTaxCents: 266, ticketCollectedCents: 4066, fnbRevenueCents: 1200, combinedRevenueCents: 5266, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600, averageTotalSpendPerPatronCents: 2633, concessionAttachRatePercent: 100 });
-    expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, ticketRevenueCents: 3500, ticketsSold: 2, fnbRevenueCents: 1200 }]);
+    expect(response.body.totals).toMatchObject({ grossRevenueCents: 6766, refundedCents: 1500, ticketRefundedCents: 1200, fnbRefundedCents: 300, ticketRevenueCents: 3500, ticketFeesCents: 300, ticketTaxCents: 266, ticketCollectedCents: 4066, distributorRevenueCents: 0, cinemaFilmRevenueCents: 0, unallocatedFilmRevenueCents: 3500, fnbRevenueCents: 1200, combinedRevenueCents: 5266, ticketsSold: 2, fnbOrders: 2, averageFnbSpendPerOrderCents: 600, averageFnbSpendPerSeatCents: 600, averageTotalSpendPerPatronCents: 2633, concessionAttachRatePercent: 100 });
+    expect(response.body.movies).toEqual([{ movieId: movie!.id, title: movie!.title, distributorName: null, ticketRevenueCents: 3500, ticketsSold: 2, fnbRevenueCents: 1200, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 3500, allocationComplete: false }]);
     expect(response.body.showtimes.map((row: { ticketRevenueCents: number; fnbRevenueCents: number; ticketsSold: number }) => ({ ticketRevenueCents: row.ticketRevenueCents, fnbRevenueCents: row.fnbRevenueCents, ticketsSold: row.ticketsSold }))).toEqual([{ ticketRevenueCents: 1700, fnbRevenueCents: 500, ticketsSold: 1 }, { ticketRevenueCents: 1800, fnbRevenueCents: 700, ticketsSold: 1 }]);
     expect(response.body.admissionTypes).toEqual([{ ticketTypeId: ticketType.id, name: ticketType.name, ticketsSold: 2, ticketRevenueCents: 3500 }]);
     expect(response.body.salesChannels).toEqual([
@@ -9186,9 +9186,10 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain('"Ticket fees (cents)","300"');
     expect(csv.text).toContain('"Ticket tax (cents)","266"');
     expect(csv.text).toContain('"Ticket total collected (cents)","4066"');
+    expect(csv.text).toContain('"Unallocated film revenue (cents)","3500"');
     expect(csv.text).toContain('"Average total spend per patron (cents)","2633"');
     expect(csv.text).toContain('"Concession attach rate (percent)","100"');
-    expect(csv.text).toContain(`"${movie!.title}","2","3500","1200"`);
+    expect(csv.text).toContain(`"${movie!.title}","","2","3500","0","0","3500","1200"`);
     expect(csv.text).toContain(`"Admission type","Tickets sold","Ticket face value (cents)"`);
     expect(csv.text).toContain(`"${ticketType.name}","2","3500"`);
     expect(csv.text).toContain('"Sales channel","Tickets sold","Ticket face value (cents)","Ticket fees (cents)","Average fee per ticket (cents)","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
