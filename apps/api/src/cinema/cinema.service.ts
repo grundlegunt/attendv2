@@ -75,6 +75,14 @@ export function privateEventPreferredDate(value: string, timeZone: string): Date
   return new Date((start.getTime() + end.getTime()) / 2);
 }
 
+export function schedulePlanWeekWindow(weekStartsAt: Date, timeZone: string) {
+  const dateKey = weekStartsAt.toISOString().slice(0, 10);
+  return {
+    startsAt: startOfCalendarDay(dateKey, timeZone),
+    endsAt: startOfCalendarDay(addIsoDays(dateKey, 7), timeZone),
+  };
+}
+
 function localDateTime(value: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone,
@@ -436,8 +444,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     const requestFingerprint = createHash("sha256")
       .update(JSON.stringify({ locationId, ...input }))
       .digest("hex");
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: { timezone: true },
+    });
+    if (!location) throw AppError.notFound("Location not found.");
     const weekStartsAt = new Date(input.weekStartsAt);
-    const weekEndsAt = new Date(weekStartsAt.getTime() + 7 * 86_400_000);
+    const weekWindow = schedulePlanWeekWindow(weekStartsAt, location.timezone);
     try {
       return await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
@@ -473,7 +486,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         const showtimes = await tx.showtime.findMany({
           where: {
             auditorium: { locationId },
-            startsAt: { gte: weekStartsAt, lt: weekEndsAt },
+            startsAt: { gte: weekWindow.startsAt, lt: weekWindow.endsAt },
           },
           select: {
             movieId: true,
@@ -581,7 +594,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     const rawSnapshot = Array.isArray(plan.snapshotJson)
       ? plan.snapshotJson
       : [];
-    const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
+    const weekWindow = schedulePlanWeekWindow(plan.weekStartsAt, location.timezone);
     const auditoriumIds = new Set(
       location.auditoriums.map((auditorium) => auditorium.id),
     );
@@ -628,7 +641,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       const startsAtDate = new Date(parsed.data.startsAt);
-      if (startsAtDate < plan.weekStartsAt || startsAtDate >= weekEndsAt)
+      if (startsAtDate < weekWindow.startsAt || startsAtDate >= weekWindow.endsAt)
         issues.push({ index, message: "Showing falls outside the plan week." });
       const movie = movies.get(parsed.data.movieId);
       if (!movie)
@@ -777,13 +790,6 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           throw AppError.conflict(
             "This plan changed after it was checked. Check it again before publishing.",
           );
-        if (plan.weekStartsAt <= new Date())
-          throw AppError.conflict(
-            "Only a future schedule week can be published from a saved plan.",
-          );
-        const weekEndsAt = new Date(
-          plan.weekStartsAt.getTime() + 7 * 86_400_000,
-        );
         const location = await tx.location.findUnique({
           where: { id: locationId },
           select: {
@@ -794,6 +800,14 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           },
         });
         if (!location) throw AppError.notFound("Location not found.");
+        const weekWindow = schedulePlanWeekWindow(
+          plan.weekStartsAt,
+          location.timezone,
+        );
+        if (weekWindow.startsAt <= new Date())
+          throw AppError.conflict(
+            "Only a future schedule week can be published from a saved plan.",
+          );
         const snapshot = plan.snapshotJson as Array<Record<string, unknown>>;
         const parsed = snapshot.map((raw) => {
           const normalized = { ...raw };
@@ -866,7 +880,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         const live = await tx.showtime.findMany({
           where: {
             auditorium: { locationId },
-            startsAt: { gte: plan.weekStartsAt, lt: weekEndsAt },
+            startsAt: { gte: weekWindow.startsAt, lt: weekWindow.endsAt },
           },
         });
         const key = (showtime: {
@@ -1209,13 +1223,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       prisma.schedulePlan.findFirst({ where: { id, locationId } }),
       prisma.location.findUnique({
         where: { id: locationId },
-        select: { organizationId: true },
+        select: { organizationId: true, timezone: true },
       }),
     ]);
     if (!plan || !location) throw AppError.notFound("Schedule plan not found.");
     const startsAt = new Date(input.startsAt);
-    const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
-    if (startsAt < plan.weekStartsAt || startsAt >= weekEndsAt)
+    const weekWindow = schedulePlanWeekWindow(plan.weekStartsAt, location.timezone);
+    if (startsAt < weekWindow.startsAt || startsAt >= weekWindow.endsAt)
       throw AppError.validationFailed(
         "The showing must stay within this plan's week.",
       );
@@ -1555,6 +1569,11 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       throw AppError.validationFailed("Idempotency key must be a UUID.");
     }
     const startsAt = new Date(startsAtValue);
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: { timezone: true },
+    });
+    if (!location) throw AppError.notFound("Location not found.");
     const requestFingerprint = createHash("sha256")
       .update(JSON.stringify({
         locationId,
@@ -1606,8 +1625,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (index >= snapshot.length) {
         throw AppError.validationFailed("Saved showtime not found in this plan.");
       }
-      const weekEndsAt = new Date(plan.weekStartsAt.getTime() + 7 * 86_400_000);
-      if (startsAt < plan.weekStartsAt || startsAt >= weekEndsAt) {
+      const weekWindow = schedulePlanWeekWindow(plan.weekStartsAt, location.timezone);
+      if (startsAt < weekWindow.startsAt || startsAt >= weekWindow.endsAt) {
         throw AppError.validationFailed(
           "The showing must stay within this plan's week.",
         );
