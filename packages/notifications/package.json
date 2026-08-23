@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.16.11",
+    "@types/node": "^26.2.0",
     "@types/qrcode": "^1.5.5",
     "jest": "^30.4.2",
     "ts-jest": "^29.2.5",
