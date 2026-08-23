@@ -913,11 +913,13 @@ describe("Attend platform authentication boundary", () => {
     const created = await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Platform Support", email, password: "PlatformSupportPassword123!" }).expect(201);
     expect(created.body).toMatchObject({ email, role: "OPERATOR", active: true });
     await request(app.getHttpServer()).post("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).send({ name: "Duplicate", email, password: "PlatformSupportPassword123!" }).expect(409);
+    const originalLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(200);
 
     const resetPassword = "ResetPlatformPassword456!";
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}/credentials`).set("Authorization", `Bearer ${ownerAccessToken}`).send({ password: resetPassword }).expect(403);
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}/credentials`).set("Authorization", `Bearer ${platformAccessToken}`).send({ password: "too-short" }).expect(400);
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}/credentials`).set("Authorization", `Bearer ${platformAccessToken}`).send({ password: resetPassword }).expect(200).expect(({ body }) => expect(body).toEqual({ id: created.body.id, passwordReset: true }));
+    await request(app.getHttpServer()).get("/api/v1/platform/overview").set("Authorization", `Bearer ${originalLogin.body.accessToken}`).expect(401);
     await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);
 
     const supportLogin = await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: resetPassword }).expect(200);
@@ -935,7 +937,7 @@ describe("Attend platform authentication boundary", () => {
     await request(app.getHttpServer()).patch(`/api/v1/platform/organizations/${operatorOrganization.id}`).set("Authorization", `Bearer ${viewerLogin.body.accessToken}`).send({ name: operatorOrganization.name }).expect(403);
     await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${viewerLogin.body.accessToken}`).expect(403);
     await request(app.getHttpServer()).patch(`/api/v1/platform/team/${created.body.id}`).set("Authorization", `Bearer ${platformAccessToken}`).send({ active: false }).expect(200);
-    expect(supportLogin.body.accessToken).toEqual(expect.any(String));
+    await request(app.getHttpServer()).get("/api/v1/platform/overview").set("Authorization", `Bearer ${supportLogin.body.accessToken}`).expect(401);
     await request(app.getHttpServer()).post("/api/v1/platform/auth/login").send({ email, password: "PlatformSupportPassword123!" }).expect(401);
 
     const audit = await request(app.getHttpServer()).get("/api/v1/platform/audit-events?action=platform.user_").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
