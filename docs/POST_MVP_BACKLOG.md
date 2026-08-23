@@ -39,7 +39,7 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 - **Real fundraising campaign management** — multiple campaigns against targets, pledges, grant/restricted-fund compliance deadlines. Different from just recording a donation correctly.
 - **Segmented marketing/communications** — campaigns to "everyone who donated last year" or "members who haven't renewed," distinct from the transactional receipts/alerts the current `Notification` entity handles.
 - **General merchandise/retail sales** (books, posters, branded items) — would likely reuse most of the existing menu-item/counter-sale machinery rather than needing something new.
-- **A richer CRM view** — one person's full history (tickets, donations, memberships, communications) in one place, household/family links, custom fields. Mostly a missing query/screen layer over data that already exists across the schema, not missing data.
+- **Expanded CRM relationships and engagement** — the admin search now opens a location-scoped customer record with ticket history, films, seats, account type, and completed spend. Donations, memberships, communications, household/family links, and custom fields still require their own product models.
 - **Real cross-venue member recognition** (e.g., reciprocal benefits across theaters, like the Art House Convergence network) — noted as a genuinely interesting long-term differentiator if enough independent theaters end up on the platform, but doesn't fit today's per-tenant isolated design and isn't worth building for a first customer.
 
 ## Resolved since this backlog was drafted
