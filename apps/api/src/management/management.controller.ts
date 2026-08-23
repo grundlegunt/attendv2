@@ -88,6 +88,12 @@ const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string()
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
 const globalSearchSchema = z.object({ query: z.string().trim().min(2).max(100) }).strict();
 const customerHistorySchema = z.object({ ticketOffset: z.coerce.number().int().min(0).max(10_000).default(0), diningOffset: z.coerce.number().int().min(0).max(10_000).default(0) }).strict();
+const membershipSchema = z.object({
+  membershipNumber: z.string().trim().min(1).max(100),
+  tier: z.string().trim().min(1).max(100),
+  status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]),
+  expiresAt: z.coerce.date().nullable(),
+}).strict();
 
 @Controller("management")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -189,6 +195,11 @@ export class ManagementController {
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="customer-history.csv"');
     response.send(csv);
+  }
+
+  @Patch("customers/:customerId/membership") @RequirePermissions(Permission.TicketPriceEdit)
+  updateCustomerMembership(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(membershipSchema)) body: unknown) {
+    return this.management.updateCustomerMembership({ ...membershipSchema.parse(body), customerId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() });
   }
 
   @Get("payment-methods/:paymentMethodId") @RequirePermissions(Permission.PaymentViewDisplaySafe)

@@ -80,6 +80,7 @@ describe("ManagementService customer history", () => {
   it("returns only the active location's orders and summarizes completed spend", async () => {
     const findFirst = jest.spyOn(prisma.customer, "findFirst").mockResolvedValue({
       id: "customer-1", name: "Jane", email: "jane@example.com", phone: null, isGuest: false, createdAt: new Date(),
+      memberships: [],
       ticketOrders: [
         { id: "order-1", orderNumber: "A1", status: "PAID", channel: "ONLINE", totalCents: 2400, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date(), tickets: [{ id: "ticket-1" }, { id: "ticket-2" }] },
         { id: "order-2", orderNumber: "A2", status: "REFUNDED", channel: "ONLINE", totalCents: 1200, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date(), tickets: [{ id: "ticket-3" }] },
@@ -103,6 +104,7 @@ describe("ManagementService customer history", () => {
       expect(ticketSpend).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } });
       expect(diningSpend).toHaveBeenCalledWith({ where: { primaryCustomerId: "customer-1", locationId: "location-1", status: "CLOSED" }, _sum: { totalCents: true } });
       expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD" });
+      expect(customer.membership).toBeNull();
       expect(customer.historyWindow).toEqual({ ticketOrdersShown: 2, ticketOrdersTotal: 72, diningVisitsShown: 2, diningVisitsTotal: 64 });
     } finally {
       findFirst.mockRestore();
