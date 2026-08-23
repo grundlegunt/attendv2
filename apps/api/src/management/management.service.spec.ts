@@ -98,7 +98,7 @@ describe("ManagementService customer history", () => {
       const customer = await new ManagementService().customer("location-1", "customer-1");
       expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
         where: { id: "customer-1", OR: [{ ticketOrders: { some: { locationId: "location-1" } } }, { restaurantTabs: { some: { locationId: "location-1" } } }] },
-        select: expect.objectContaining({ ticketOrders: expect.objectContaining({ where: { locationId: "location-1" }, take: 50 }) }),
+        select: expect.objectContaining({ ticketOrders: expect.objectContaining({ where: { locationId: "location-1" }, skip: 0, take: 50 }) }),
       }));
       expect(ticketSpend).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } });
       expect(diningSpend).toHaveBeenCalledWith({ where: { primaryCustomerId: "customer-1", locationId: "location-1", status: "CLOSED" }, _sum: { totalCents: true } });
