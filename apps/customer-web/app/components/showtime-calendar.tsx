@@ -5,18 +5,18 @@ import { useEffect, useMemo, useState } from "react";
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function parseDateKey(dateKey: string) {
-  return new Date(`${dateKey}T12:00:00`);
+  return new Date(`${dateKey}T00:00:00Z`);
 }
 
 function dateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
 function monthKey(date: Date) {
-  return date.getFullYear() * 12 + date.getMonth();
+  return date.getUTCFullYear() * 12 + date.getUTCMonth();
 }
 
 export function ShowtimeCalendar({
@@ -33,7 +33,7 @@ export function ShowtimeCalendar({
   onSelect: (date: string) => void;
 }) {
   const initialDate = parseDateKey(selectedDate ?? availableDates.find((date) => date >= today) ?? today);
-  const [visibleMonth, setVisibleMonth] = useState(() => new Date(initialDate.getFullYear(), initialDate.getMonth(), 1, 12));
+  const [visibleMonth, setVisibleMonth] = useState(() => new Date(Date.UTC(initialDate.getUTCFullYear(), initialDate.getUTCMonth(), 1)));
   const availableSet = useMemo(() => new Set(availableDates), [availableDates]);
   const firstAvailable = parseDateKey(availableDates[0] ?? today);
   const lastAvailable = parseDateKey(availableDates.at(-1) ?? today);
@@ -52,19 +52,19 @@ export function ShowtimeCalendar({
   }, [onClose]);
 
   const cells = useMemo(() => {
-    const year = visibleMonth.getFullYear();
-    const month = visibleMonth.getMonth();
-    const firstWeekday = new Date(year, month, 1, 12).getDay();
-    const days = new Date(year, month + 1, 0, 12).getDate();
+    const year = visibleMonth.getUTCFullYear();
+    const month = visibleMonth.getUTCMonth();
+    const firstWeekday = new Date(Date.UTC(year, month, 1)).getUTCDay();
+    const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
     return Array.from({ length: 42 }, (_, index) => {
       const day = index - firstWeekday + 1;
-      return day >= 1 && day <= days ? new Date(year, month, day, 12) : null;
+      return day >= 1 && day <= days ? new Date(Date.UTC(year, month, day)) : null;
     });
   }, [visibleMonth]);
 
   const canGoPrevious = monthKey(visibleMonth) > monthKey(firstAvailable);
   const canGoNext = monthKey(visibleMonth) < monthKey(lastAvailable);
-  const monthLabel = visibleMonth.toLocaleDateString([], { month: "long", year: "numeric" });
+  const monthLabel = visibleMonth.toLocaleDateString([], { month: "long", year: "numeric", timeZone: "UTC" });
 
   return (
     <div className="showtime-calendar" role="dialog" aria-modal="true" aria-labelledby="showtime-calendar-title">
@@ -75,7 +75,7 @@ export function ShowtimeCalendar({
             type="button"
             aria-label="Previous month"
             disabled={!canGoPrevious}
-            onClick={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1, 12))}
+            onClick={() => setVisibleMonth((month) => new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1)))}
           >
             ‹
           </button>
@@ -84,7 +84,7 @@ export function ShowtimeCalendar({
             type="button"
             aria-label="Next month"
             disabled={!canGoNext}
-            onClick={() => setVisibleMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1, 12))}
+            onClick={() => setVisibleMonth((month) => new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)))}
           >
             ›
           </button>
@@ -107,14 +107,14 @@ export function ShowtimeCalendar({
                 type="button"
                 disabled={!available}
                 className={`${isToday ? "today" : ""} ${isSelected ? "selected" : ""}`.trim()}
-                aria-label={`${date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })}${isToday ? ", today" : ""}`}
+                aria-label={`${date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" })}${isToday ? ", today" : ""}`}
                 aria-pressed={isSelected}
                 onClick={() => {
                   onSelect(key);
                   onClose();
                 }}
               >
-                <strong>{date.getDate()}</strong>
+                <strong>{date.getUTCDate()}</strong>
                 {isToday && <small>Today</small>}
               </button>
             );

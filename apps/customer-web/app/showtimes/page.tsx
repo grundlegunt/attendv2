@@ -139,7 +139,7 @@ function ShowtimesContent() {
       {!openCaptionsOnly && !selectedShowtimeId && visibleDates.length > 0 && (
         <nav className="date-bar" aria-label="Showtime dates">
           {visibleDates.map((dateKey) => {
-            const date = new Date(`${dateKey}T12:00:00`);
+            const date = new Date(`${dateKey}T00:00:00Z`);
             return (
               <button
                 key={dateKey}
@@ -149,12 +149,13 @@ function ShowtimesContent() {
                 <span>
                   {dateKey === todayKey
                     ? "Today"
-                    : date.toLocaleDateString([], { weekday: "long" })}
+                    : date.toLocaleDateString([], { weekday: "long", timeZone: "UTC" })}
                 </span>
                 <strong>
                   {date.toLocaleDateString([], {
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}
                 </strong>
               </button>
