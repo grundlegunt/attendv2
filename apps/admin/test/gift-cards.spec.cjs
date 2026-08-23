@@ -40,4 +40,10 @@ describe("gift card admin resilience", () => {
     assert.match(source, /statusAttemptRef = useRef/);
     assert.match(source, /"Idempotency-Key": statusAttemptRef\.current\.requestId/);
   });
+
+  it("shows issuance and transaction times in the cinema timezone", () => {
+    assert.match(source, /const \{ accessToken, employee \} = useAdminSession\(\)/);
+    assert.match(source, /new Date\(card\.createdAt\)\.toLocaleString\(\[\], \{ timeZone \}\)/);
+    assert.match(source, /new Date\(transaction\.createdAt\)\.toLocaleString\(\[\], \{ timeZone \}\)/);
+  });
 });

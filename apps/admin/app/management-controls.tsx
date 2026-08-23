@@ -1860,6 +1860,7 @@ export function ManagementControls({
           onSearch={() => void refresh()}
           historyFrom={historyFrom}
           historyTo={historyTo}
+          timeZone={timeZone}
           onHistoryFromChange={setHistoryFrom}
           onHistoryToChange={setHistoryTo}
           refundPending={refundPending}
@@ -1880,6 +1881,7 @@ function RefundWorkbench({
   query,
   historyFrom,
   historyTo,
+  timeZone,
   onReasonChange,
   onDrawerChange,
   onQueryChange,
@@ -1896,6 +1898,7 @@ function RefundWorkbench({
   query: string;
   historyFrom: string;
   historyTo: string;
+  timeZone: string;
   onReasonChange: (value: string) => void;
   onDrawerChange: (value: string) => void;
   onQueryChange: (value: string) => void;
@@ -2010,6 +2013,7 @@ function RefundWorkbench({
                   {order.payment?.refunds.map((attempt, index) => (
                     <RefundAttemptBadge
                       attempt={attempt}
+                      timeZone={timeZone}
                       key={`${attempt.createdAt}-${index}`}
                     />
                   ))}
@@ -2075,6 +2079,7 @@ function RefundWorkbench({
                     .map((attempt, index) => (
                       <RefundAttemptBadge
                         attempt={attempt}
+                        timeZone={timeZone}
                         key={`${attempt.createdAt}-${index}`}
                       />
                     ))}
@@ -2123,12 +2128,12 @@ function RefundWorkbench({
         </label>
         <button className="secondary">Refresh history</button>
       </form>
-      <RefundHistoryList history={history} />
+      <RefundHistoryList history={history} timeZone={timeZone} />
     </section>
   );
 }
 
-function RefundHistoryList({ history }: { history: Refunds | null }) {
+function RefundHistoryList({ history, timeZone }: { history: Refunds | null; timeZone: string }) {
   if (!history) return null;
   return (
     <div className="refund-list refund-history-list">
@@ -2147,6 +2152,7 @@ function RefundHistoryList({ history }: { history: Refunds | null }) {
               {order.payment?.refunds.map((attempt, index) => (
                 <RefundAttemptBadge
                   attempt={attempt}
+                  timeZone={timeZone}
                   key={`${attempt.createdAt}-${index}`}
                 />
               ))}
@@ -2179,6 +2185,7 @@ function RefundHistoryList({ history }: { history: Refunds | null }) {
                 .map((attempt, index) => (
                   <RefundAttemptBadge
                     attempt={attempt}
+                    timeZone={timeZone}
                     key={`${attempt.createdAt}-${index}`}
                   />
                 ))}
@@ -2195,11 +2202,11 @@ function RefundHistoryList({ history }: { history: Refunds | null }) {
   );
 }
 
-function RefundAttemptBadge({ attempt }: { attempt: RefundAttempt }) {
+function RefundAttemptBadge({ attempt, timeZone }: { attempt: RefundAttempt; timeZone: string }) {
   const attention = unresolvedRefund(attempt.status);
   const details = [
     money(attempt.amountCents),
-    new Date(attempt.createdAt).toLocaleString(),
+    new Date(attempt.createdAt).toLocaleString([], { timeZone }),
     attempt.reason,
   ]
     .filter(Boolean)

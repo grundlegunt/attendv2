@@ -37,4 +37,10 @@ describe("private-event inquiry management", () => {
     assert.match(source, /finally \{\s*statusActionRef\.current = false;\s*setStatusActionId\(null\)/);
     assert.match(source, /disabled=\{statusActionId !== null\}/);
   });
+
+  it("shows preferred and received dates in the cinema timezone", () => {
+    assert.match(source, /const \{ accessToken, employee \} = useAdminSession\(\)/);
+    assert.match(source, /item\.preferredDate\)\.toLocaleDateString\(\[\], \{ timeZone \}\)/);
+    assert.match(source, /item\.createdAt\)\.toLocaleString\(\[\], \{ timeZone \}\)/);
+  });
 });

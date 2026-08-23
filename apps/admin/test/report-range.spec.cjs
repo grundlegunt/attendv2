@@ -128,6 +128,7 @@ describe("Admin report date ranges", () => {
   it("renders management timestamps and expense dates in the cinema timezone", () => {
     const dashboard = readFileSync(dashboardPath, "utf8");
     const expenses = readFileSync(expensesPath, "utf8");
+    const controls = readFileSync(controlsPath, "utf8");
 
     assert.match(dashboard, /const cinemaDate = .*toLocaleDateString\(\[\], \{ timeZone \}\)/);
     assert.match(dashboard, /const cinemaDateTime = .*toLocaleString\(\[\], \{ timeZone \}\)/);
@@ -136,5 +137,6 @@ describe("Admin report date ranges", () => {
     assert.match(dashboard, /cinemaDate\(customer\.lastPurchaseAt, timeZone\)/);
     assert.match(dashboard, /cinemaDateTime\(event\.occurredAt, timeZone\)/);
     assert.match(expenses, /toLocaleDateString\(\[\], \{ timeZone \}\)/);
+    assert.match(controls, /attempt\.createdAt\)\.toLocaleString\(\[\], \{ timeZone \}\)/);
   });
 });
