@@ -27,11 +27,13 @@ export function CustomerBrandingProvider({ children }: { children: ReactNode }) 
   const [brandingResolved, setBrandingResolved] = useState(false);
   const [content, setContent] = useState<CinemaContent>(cinemaContentDefaults);
   useEffect(() => {
-    apiFetch<PublicBranding>("/cinema/branding")
+    const controller = new AbortController();
+    apiFetch<PublicBranding>("/cinema/branding", { signal: controller.signal })
       .then(setBranding)
       .catch(() => undefined)
-      .finally(() => setBrandingResolved(true));
-    apiFetch<{ content: CinemaContent }>("/cinema/content").then((response) => setContent(response.content)).catch(() => undefined);
+      .finally(() => { if (!controller.signal.aborted) setBrandingResolved(true); });
+    apiFetch<{ content: CinemaContent }>("/cinema/content", { signal: controller.signal }).then((response) => setContent(response.content)).catch(() => undefined);
+    return () => controller.abort();
   }, []);
   useLayoutEffect(() => {
     if (!brandingResolved) return;

@@ -22,17 +22,19 @@ export default function DirectionsPage() {
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     setError(null);
 
-    apiFetch<LocationResponse>("/cinema/now-playing")
+    apiFetch<LocationResponse>("/cinema/now-playing", { signal: controller.signal })
       .then((response) => setLocation(response.location))
-      .catch((err) =>
-        setError(
+      .catch((err) => {
+        if (!controller.signal.aborted) setError(
           err instanceof ApiRequestError
             ? err.body.message
             : "Location details are unavailable.",
-        ),
-      );
+        );
+      });
+    return () => controller.abort();
   }, [loadAttempt]);
 
   const directionsUrl = location?.address

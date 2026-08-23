@@ -32,17 +32,19 @@ export default function FilmSeriesDetailPage() {
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     setError(null);
 
-    apiFetch<FilmSeriesResponse>("/cinema/film-series")
+    apiFetch<FilmSeriesResponse>("/cinema/film-series", { signal: controller.signal })
       .then(setProgram)
-      .catch((err) =>
-        setError(
+      .catch((err) => {
+        if (!controller.signal.aborted) setError(
           err instanceof ApiRequestError
             ? err.body.message
             : "Film series are unavailable.",
-        ),
-      );
+        );
+      });
+    return () => controller.abort();
   }, [loadAttempt]);
 
   useEffect(() => {
