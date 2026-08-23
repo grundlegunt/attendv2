@@ -80,6 +80,7 @@ export function ManagementDashboard({ accessToken, permissions, section, timeZon
   const [inactiveSince, setInactiveSince] = useState(localDateInputValue(new Date(Date.now() - 365 * 86_400_000), timeZone));
   const [customerSegment, setCustomerSegment] = useState<CustomerRecencySegment | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const refreshRequestRef = useRef(0);
   const canFinancial = permissions.includes("reports.view.financial");
   const canReports = permissions.includes("reports.view");
   const canEditEmployees = permissions.includes("employee.edit");
@@ -87,6 +88,7 @@ export function ManagementDashboard({ accessToken, permissions, section, timeZon
   const canSettings = permissions.includes("ticket.price.edit");
 
   async function refresh(appendAudit = false) {
+    const requestId = ++refreshRequestRef.current;
     setError(null);
     try {
       const reportRange = inclusiveReportRange(from, to, timeZone);
@@ -102,13 +104,17 @@ export function ManagementDashboard({ accessToken, permissions, section, timeZon
         section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?${auditQuery.toString()}`, { accessToken }) : [],
         (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
+      if (requestId !== refreshRequestRef.current) return;
       setRevenue(nextRevenue); setAudienceOrigins(nextAudienceOrigins); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
       if (section === "branding" && nextSettings) setMerchUrl(nextSettings.merchUrl ?? "");
       if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
+    } catch (reason) { if (requestId === refreshRequestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
 
-  useEffect(() => { void refresh(); }, [accessToken, section, timeZone]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequestRef.current += 1; };
+  }, [accessToken, section, timeZone]);
 
   async function saveLocation(event: FormEvent) {
     event.preventDefault();
