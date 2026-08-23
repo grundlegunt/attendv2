@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession } from "../platform-session";
 
@@ -50,6 +50,7 @@ export default function PlatformAuditLog() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const eventsRequestRef = useRef(0);
 
   useEffect(() => {
     setSession(readPlatformSession(STORAGE_KEY));
@@ -57,6 +58,7 @@ export default function PlatformAuditLog() {
   }, []);
 
   const loadEvents = useCallback(async (currentSession: Session, filters?: { organizationId: string; actorId: string; action: string; from: string; to: string }) => {
+    const requestId = ++eventsRequestRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -67,20 +69,23 @@ export default function PlatformAuditLog() {
       if (filters?.from) params.set("from", new Date(`${filters.from}T00:00:00`).toISOString());
       if (filters?.to) params.set("to", new Date(`${filters.to}T23:59:59.999`).toISOString());
       const result = await request<AuditResponse>(`/platform/audit-events?${params}`, undefined, currentSession.accessToken);
+      if (requestId !== eventsRequestRef.current) return;
       setEvents(result.events);
       setTotal(result.total);
       setActors(result.actors);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not load the audit log.");
-    } finally { setLoading(false); }
+      if (requestId === eventsRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load the audit log.");
+    } finally { if (requestId === eventsRequestRef.current) setLoading(false); }
   }, []);
 
   useEffect(() => {
     if (!session) return;
+    let active = true;
     void Promise.all([
-      request<Overview>("/platform/overview", undefined, session.accessToken).then((result) => setOrganizations(result.organizations)),
+      request<Overview>("/platform/overview", undefined, session.accessToken).then((result) => { if (active) setOrganizations(result.organizations); }),
       loadEvents(session),
-    ]).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load audit filters."));
+    ]).catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load audit filters."); });
+    return () => { active = false; eventsRequestRef.current += 1; };
   }, [session, loadEvents]);
 
   async function login(event: FormEvent) {
@@ -106,6 +111,7 @@ export default function PlatformAuditLog() {
 
   function signOut() {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    eventsRequestRef.current += 1;
     setSession(null); setEvents([]); setError(null);
   }
 
