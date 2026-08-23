@@ -1,17 +1,12 @@
 # Post-MVP Backlog
 
-Status: Living reference, reconciled August 22, 2026 — tracks real gaps and opportunities surfaced in `COMPETITIVE_LANDSCAPE.md`, `OPEN_QUESTIONS.md`, `PROGRAMMING_AND_SCHEDULING.md`, `TIMED_ENTRY_EXPANSION_PLAN.md`, and the documentation-only review PRs retired by this reconciliation. None of this is sequenced into `IMPLEMENTATION_PLAN.md`'s Milestones 0–11 on purpose: that list records the MVP foundation for the core customer (an independent dine-in cinema), and mixing it with open-ended expansion ideas would blur "done" with "someday." Promote an item into active work when a concrete business need, customer, or partner makes its requirements real.
+Status: Living reference, reconciled August 23, 2026 — tracks real gaps and opportunities surfaced in `COMPETITIVE_LANDSCAPE.md`, `OPEN_QUESTIONS.md`, `PROGRAMMING_AND_SCHEDULING.md`, `TIMED_ENTRY_EXPANSION_PLAN.md`, and the documentation-only review PRs retired by this reconciliation. None of this is sequenced into `IMPLEMENTATION_PLAN.md`'s Milestones 0–11 on purpose: that list records the MVP foundation for the core customer (an independent dine-in cinema), and mixing it with open-ended expansion ideas would blur "done" with "someday." Promote an item into active work when a concrete business need, customer, or partner makes its requirements real.
 
 ## 1. Concrete product work still worth prioritizing
 
 These items have a clear operator or customer benefit and can be scoped without inventing an outside business relationship.
 
-- **Distributor and cinema revenue split reporting.** Movie distributor terms are captured, and distributor box-office reporting exists, but Revenue Overview still does not calculate and present distributor-versus-cinema amounts by film and distributor. Before implementing the calculation, validate the supported deal-term shapes (flat percentage, week tiers, minimum guarantee, or another structure) against real entries. Reuse the existing report range and location scoping.
-- **Ticket-fee drill-down.** Add a detail view behind the ticket-fee total showing tickets sold and fee collected. Do not invent an Attend/cinema allocation: the current fee is Attend revenue until the billing model explicitly defines a split.
-- **Admin global search.** Search orders, customer email/name, tickets, and gift cards from one manager-facing entry point instead of requiring staff to know which operational page owns the record.
-- **Consolidated attention inbox.** Bring existing signals—box-office attention items, refund follow-up, unanswered private-event inquiries, failed payments, and other actionable exceptions—into one manager view. Keep informational metrics separate from items that require action.
 - **Attend Master client-health signals.** Once multiple real clients are operating, add trend, refund-rate, and payment-failure indicators alongside revenue. Validate thresholds against real operating history rather than hardcoding speculative alerts.
-- **Customer self-service in-seat ordering.** A seat-linked restaurant tab can be viewed and tipped by the customer, but customers cannot add items themselves. A future flow should use a short-lived seat/tab credential, submit into the existing restaurant/KDS pipeline, and avoid exposing staff authorization.
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
 - **Production observability.** Add application error tracking and alerting across the public site, Admin, Attend Master, Staff POS, KDS, and API. Ensure sensitive authentication, payment, and customer data is redacted.
 - **Analytics and consent.** Instrument the public funnel only after choosing an analytics policy and consent behavior. Keep essential ticketing storage independent from optional marketing consent.
@@ -51,6 +46,11 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 ## Resolved since this backlog was drafted
 
+- **Distributor and cinema revenue split reporting** — Revenue Overview calculates theatrical-week distributor and cinema shares from validated film terms, identifies unallocated revenue, and exports distributor box-office detail without treating settlement as a register-time payment split.
+- **Ticket-fee drill-down** — Revenue Overview expands fee totals into order-level ticket counts, channel, average fee, and collected fee detail while preserving Attend's current fee treatment.
+- **Admin global search** — managers can search orders, customer names and email addresses, tickets, and gift cards from one location-scoped entry point.
+- **Consolidated attention inbox** — actionable box-office, refund, private-event, and payment exceptions are available together without mixing them into informational dashboard metrics.
+- **Customer self-service in-seat ordering** — short-lived guest tab credentials allow customers to add published menu items and modifiers through the existing restaurant order and KDS pipeline, with idempotent creation, item, and send operations.
 - **Schedule and pricing bulk actions** — managers can select multiple showtimes and update their ticket group or sale status together, with location scoping, optimistic concurrency checks, idempotent retries, and one auditable batch mutation.
 - **Sold-out waitlists** — sold-out reserved-seat and general-admission showtimes offer rate-limited, idempotent email signup; entries expire at showtime, returned inventory is claimed safely across API instances, failed email delivery retries, and notifications explicitly avoid promising that tickets remain available.
 - **Cinema programming and scheduling workspace** — the scheduling foundation is implemented in the cinema Admin app; `PROGRAMMING_AND_SCHEDULING.md` remains its product reference.
