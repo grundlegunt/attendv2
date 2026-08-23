@@ -124,6 +124,8 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   const [menuAssetType, setMenuAssetType] = useState<"IMAGE" | "PDF">("IMAGE");
   const [publishingMenuPresentation, setPublishingMenuPresentation] = useState(false);
   const menuPresentationPendingRef = useRef(false);
+  const menuPresentationDirtyRef = useRef(false);
+  const menuPresentationRequestRef = useRef(0);
   const menuPresentationAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [savedMenuPresentation, setSavedMenuPresentation] = useState<{
     assetUrl: string;
@@ -194,17 +196,22 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
   useEffect(refresh, [refresh]);
 
   useEffect(() => {
+    const requestId = ++menuPresentationRequestRef.current;
     apiFetch<{ assetUrl: string | null; assetType: "IMAGE" | "PDF" | null }>("/management/settings/menu-presentation", { accessToken })
       .then((presentation) => {
+        if (requestId !== menuPresentationRequestRef.current) return;
         const loadedPresentation = {
           assetUrl: presentation.assetUrl ?? "",
           assetType: presentation.assetType ?? "IMAGE",
         };
-        setMenuAssetUrl(loadedPresentation.assetUrl);
-        setMenuAssetType(loadedPresentation.assetType);
+        if (!menuPresentationDirtyRef.current) {
+          setMenuAssetUrl(loadedPresentation.assetUrl);
+          setMenuAssetType(loadedPresentation.assetType);
+        }
         setSavedMenuPresentation(loadedPresentation);
       })
-      .catch((error) => showError(error, "Published menu presentation could not load."));
+      .catch((error) => { if (requestId === menuPresentationRequestRef.current) showError(error, "Published menu presentation could not load."); });
+    return () => { menuPresentationRequestRef.current += 1; };
   }, [accessToken]);
 
   async function saveMenuPresentation(event: FormEvent) {
@@ -225,6 +232,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         body,
       });
       menuPresentationAttemptRef.current = null;
+      menuPresentationDirtyRef.current = false;
       setSavedMenuPresentation({
         assetUrl: menuAssetUrl.trim(),
         assetType: menuAssetType,
@@ -680,14 +688,14 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         <div className="two-fields">
           <label>
             Asset type
-            <select value={menuAssetType} disabled={publishingMenuPresentation} onChange={(event) => setMenuAssetType(event.target.value as "IMAGE" | "PDF")}>
+            <select value={menuAssetType} disabled={publishingMenuPresentation} onChange={(event) => { menuPresentationDirtyRef.current = true; setMenuAssetType(event.target.value as "IMAGE" | "PDF"); }}>
               <option value="IMAGE">Image</option>
               <option value="PDF">PDF document</option>
             </select>
           </label>
           <label>
             Menu image or PDF URL
-            <input type="url" value={menuAssetUrl} disabled={publishingMenuPresentation} onChange={(event) => setMenuAssetUrl(event.target.value)} placeholder="https://…" />
+            <input type="url" value={menuAssetUrl} disabled={publishingMenuPresentation} onChange={(event) => { menuPresentationDirtyRef.current = true; setMenuAssetUrl(event.target.value); }} placeholder="https://…" />
           </label>
         </div>
         {menuAssetUrl && <div className="menu-presentation-preview">
@@ -702,7 +710,7 @@ export function MenuManager({ accessToken }: { accessToken: string }) {
         </div>}
         <div className="rule-actions">
           <button className="primary" disabled={!menuPresentationChanged || publishingMenuPresentation}>{publishingMenuPresentation ? "Publishing…" : menuPresentationChanged ? "Publish menu design" : "Menu design is live"}</button>
-          {menuAssetUrl && <button className="secondary" type="button" disabled={publishingMenuPresentation} onClick={() => setMenuAssetUrl("")}>Clear field</button>}
+          {menuAssetUrl && <button className="secondary" type="button" disabled={publishingMenuPresentation} onClick={() => { menuPresentationDirtyRef.current = true; setMenuAssetUrl(""); }}>Clear field</button>}
         </div>
         {menuPresentationChanged && <p className="secondary-copy">These changes are only a preview until you publish them.</p>}
       </form>
