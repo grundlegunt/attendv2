@@ -77,6 +77,7 @@ interface SchedulingCalendarProps {
   auditoriums: ScheduleAuditorium[];
   movies: ScheduleMovie[];
   archivedMovies: ScheduleMovie[];
+  priceTiers: CalendarShowtime["priceTier"][];
   initialSelectedMovieId?: string | null;
   showtimes: CalendarShowtime[];
   preShowBufferMinutes: number;
@@ -87,6 +88,7 @@ interface SchedulingCalendarProps {
   onRemoveShowtime: (showtime: CalendarShowtime) => Promise<void>;
   onMove: (showtime: CalendarShowtime, auditoriumId: string, startsAt: Date) => Promise<void>;
   onMoveMany: (moves: Array<{ showtime: CalendarShowtime; auditoriumId: string; startsAt: Date }>) => Promise<void>;
+  onBulkUpdate: (showtimes: CalendarShowtime[], changes: { onSale?: boolean; priceTierId?: string }) => Promise<void>;
   canUndoMove: boolean;
   undoingMove: boolean;
   onUndoMove: () => Promise<void>;
@@ -157,6 +159,7 @@ export function SchedulingCalendar({
   auditoriums,
   movies,
   archivedMovies,
+  priceTiers,
   initialSelectedMovieId = null,
   showtimes,
   preShowBufferMinutes,
@@ -167,6 +170,7 @@ export function SchedulingCalendar({
   onRemoveShowtime,
   onMove,
   onMoveMany,
+  onBulkUpdate,
   canUndoMove,
   undoingMove,
   onUndoMove,
@@ -182,6 +186,9 @@ export function SchedulingCalendar({
   const [draggingKey, setDraggingKey] = useState<string | null>(null);
   const [selectedShowtimeIds, setSelectedShowtimeIds] = useState<string[]>([]);
   const [shiftMinutes, setShiftMinutes] = useState(60);
+  const [bulkPriceTierId, setBulkPriceTierId] = useState("");
+  const [bulkSaleStatus, setBulkSaleStatus] = useState<"" | "ON_SALE" | "DRAFT">("");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const [dropPreview, setDropPreview] = useState<{ auditoriumId: string; startsAt: Date } | null>(null);
   const [dropTargetShowtimeId, setDropTargetShowtimeId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -239,6 +246,24 @@ export function SchedulingCalendar({
       return;
     }
     await onMoveMany(moves);
+  }
+
+  async function updateSelection() {
+    const selected = showtimes.filter((showtime) => selectedShowtimeIds.includes(showtime.id));
+    if (!selected.length || (!bulkPriceTierId && !bulkSaleStatus) || bulkUpdating) return;
+    setBulkUpdating(true);
+    try {
+      await onBulkUpdate(selected, {
+        ...(bulkPriceTierId ? { priceTierId: bulkPriceTierId } : {}),
+        ...(bulkSaleStatus ? { onSale: bulkSaleStatus === "ON_SALE" } : {}),
+      });
+      setBulkPriceTierId("");
+      setBulkSaleStatus("");
+    } catch {
+      // The parent surfaces the structured API error in the scheduling workspace.
+    } finally {
+      setBulkUpdating(false);
+    }
   }
 
   function roundToFive(date: Date, direction: "nearest" | "up" = "nearest") {
@@ -528,6 +553,9 @@ export function SchedulingCalendar({
           <label><span className="sr-only">Shift minutes</span><input type="number" min="5" max="720" step="5" value={shiftMinutes} onChange={(event) => setShiftMinutes(Math.min(720, Math.max(5, Number(event.target.value) || 5)))} /> min</label>
           <button type="button" onClick={() => void shiftSelection(-1)}>← Earlier</button>
           <button type="button" onClick={() => void shiftSelection(1)}>Later →</button>
+          <label><span className="sr-only">Bulk ticket group</span><select value={bulkPriceTierId} onChange={(event) => setBulkPriceTierId(event.target.value)}><option value="">Keep ticket group</option>{priceTiers.map((tier) => <option key={tier.id} value={tier.id}>{tier.name}</option>)}</select></label>
+          <label><span className="sr-only">Bulk sale status</span><select value={bulkSaleStatus} onChange={(event) => setBulkSaleStatus(event.target.value as "" | "ON_SALE" | "DRAFT")}><option value="">Keep sale status</option><option value="ON_SALE">Put on sale</option><option value="DRAFT">Take off sale</option></select></label>
+          <button type="button" disabled={bulkUpdating || (!bulkPriceTierId && !bulkSaleStatus)} onClick={() => void updateSelection()}>{bulkUpdating ? "Applying…" : "Apply changes"}</button>
           <button type="button" onClick={() => setSelectedShowtimeIds([])}>Clear</button>
         </> : <span className="selection-hint">Hold Command or Ctrl while clicking to select multiple showtimes.</span>}
       </div>

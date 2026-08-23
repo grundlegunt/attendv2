@@ -3417,6 +3417,118 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  async bulkUpdateShowtimes(
+    actor: RequestActor,
+    input: {
+      showtimes: Array<{ id: string; expectedUpdatedAt: string }>;
+      onSale?: boolean;
+      priceTierId?: string;
+    },
+    requestId: string = randomUUID(),
+  ) {
+    const locationId = this.requireLocation(actor);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) {
+      throw AppError.validationFailed("Idempotency key must be a UUID.");
+    }
+    const requested = [...input.showtimes].sort((left, right) => left.id.localeCompare(right.id));
+    if (new Set(requested.map((showtime) => showtime.id)).size !== requested.length) {
+      throw AppError.validationFailed("Each showtime may only be selected once.");
+    }
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({
+      locationId,
+      showtimes: requested,
+      onSale: input.onSale ?? null,
+      priceTierId: input.priceTierId ?? null,
+    })).digest("hex");
+    const updateAttempt = () => prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.auditEvent.findFirst({
+        where: {
+          locationId,
+          action: "showtime.bulk_updated",
+          afterState: { path: ["requestId"], equals: requestId },
+        },
+      });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string; showtimeIds?: string[] } | null;
+        if (state?.requestFingerprint !== requestFingerprint) {
+          throw AppError.conflict("The bulk-update key was already used with different changes.");
+        }
+        return tx.showtime.findMany({
+          where: { id: { in: state.showtimeIds ?? [] }, auditorium: { locationId } },
+          include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+          orderBy: { startsAt: "asc" },
+        });
+      }
+      for (const showtime of requested) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${showtime.id}))`;
+      }
+      const existing = await tx.showtime.findMany({
+        where: { id: { in: requested.map((showtime) => showtime.id) }, auditorium: { locationId } },
+        include: { auditorium: { include: { location: true } } },
+      });
+      if (existing.length !== requested.length) throw AppError.notFound("One or more selected showtimes were not found.");
+      const expectedById = new Map(requested.map((showtime) => [showtime.id, showtime.expectedUpdatedAt]));
+      if (existing.some((showtime) => showtime.updatedAt.toISOString() !== expectedById.get(showtime.id))) {
+        throw AppError.conflict("One or more selected showtimes changed in another session. Refresh before applying bulk changes.");
+      }
+      if (input.priceTierId) {
+        const organizationIds = new Set(existing.map((showtime) => showtime.auditorium.location.organizationId));
+        if (organizationIds.size !== 1) throw AppError.conflict("Selected showtimes must belong to one organization.");
+        const priceTier = await tx.priceTier.findFirst({
+          where: { id: input.priceTierId, organizationId: [...organizationIds][0], active: true },
+          select: { id: true },
+        });
+        if (!priceTier) throw AppError.notFound("Ticket group not found.");
+      }
+      await tx.showtime.updateMany({
+        where: { id: { in: requested.map((showtime) => showtime.id) }, auditorium: { locationId } },
+        data: {
+          ...(input.onSale === undefined ? {} : { onSale: input.onSale }),
+          ...(input.priceTierId === undefined ? {} : { priceTierId: input.priceTierId }),
+        },
+      });
+      await tx.auditEvent.create({
+        data: {
+          actorType: AuditActorType.EMPLOYEE,
+          actorId: actor.sub,
+          locationId,
+          action: "showtime.bulk_updated",
+          entityType: "ShowtimeBatch",
+          entityId: requestId,
+          beforeState: {
+            showtimes: existing.map((showtime) => ({ id: showtime.id, onSale: showtime.onSale, priceTierId: showtime.priceTierId })),
+          },
+          afterState: {
+            showtimeIds: requested.map((showtime) => showtime.id),
+            onSale: input.onSale ?? null,
+            priceTierId: input.priceTierId ?? null,
+            requestId,
+            requestFingerprint,
+          },
+        },
+      });
+      return tx.showtime.findMany({
+        where: { id: { in: requested.map((showtime) => showtime.id) }, auditorium: { locationId } },
+        include: { movie: true, auditorium: true, priceTier: true, filmSeries: true },
+        orderBy: { startsAt: "asc" },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await updateAttempt();
+      } catch (error) {
+        const serializationFailure =
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2034";
+        if (!serializationFailure || attempt === 2) throw error;
+      }
+    }
+    throw AppError.conflict(
+      "The bulk showtime update could not be completed. Try again.",
+    );
+  }
+
   async updateShowtime(
     actor: RequestActor,
     id: string,

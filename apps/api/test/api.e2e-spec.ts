@@ -1746,6 +1746,52 @@ describe("Milestone 1 cinema configuration", () => {
     expect(showtime.priceTier.id).toBeTruthy();
   });
 
+  it("bulk-updates selected showtime pricing and sale status exactly once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const selected = await prisma.showtime.findMany({
+      where: { id: { in: [firstShowtimeId, secondShowtimeId] } },
+      include: { auditorium: { include: { location: true } } },
+      orderBy: { id: "asc" },
+    });
+    const organizationId = selected[0]!.auditorium.location.organizationId;
+    const tier = await prisma.priceTier.create({
+      data: {
+        organizationId,
+        name: `Bulk tier ${crypto.randomUUID()}`,
+        ticketPriceMinor: 1900,
+        feeMinor: 175,
+        appliesOnWeekdays: [],
+      },
+    });
+    const requestId = crypto.randomUUID();
+    const payload = {
+      showtimes: selected.map((showtime) => ({ id: showtime.id, expectedUpdatedAt: showtime.updatedAt.toISOString() })),
+      onSale: false,
+      priceTierId: tier.id,
+    };
+    const update = () => request(app.getHttpServer())
+      .patch("/api/v1/cinema/showtimes/bulk")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", requestId)
+      .send(payload);
+    const updated = await update().expect(200);
+    const replayed = await update().expect(200);
+    expect(updated.body).toHaveLength(2);
+    expect(replayed.body).toEqual(updated.body);
+    expect(updated.body.every((showtime: { onSale: boolean; priceTier: { id: string } }) => !showtime.onSale && showtime.priceTier.id === tier.id)).toBe(true);
+    expect(await prisma.auditEvent.count({ where: { action: "showtime.bulk_updated", entityId: requestId } })).toBe(1);
+    await request(app.getHttpServer())
+      .patch("/api/v1/cinema/showtimes/bulk")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .send({ ...payload, onSale: true })
+      .expect(409);
+    await prisma.$transaction([
+      ...selected.map((showtime) => prisma.showtime.update({ where: { id: showtime.id }, data: { onSale: showtime.onSale, priceTierId: showtime.priceTierId } })),
+      prisma.priceTier.delete({ where: { id: tier.id } }),
+    ]);
+  });
+
   it("keeps complete past schedule days available to Admin", async () => {
     const { prisma } = await import("@cinema/database");
     const reference = await prisma.showtime.findUniqueOrThrow({

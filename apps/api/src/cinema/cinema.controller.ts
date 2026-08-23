@@ -37,6 +37,13 @@ const updateSchedulePlanShowtimeSchema = z.object({
 }).strict();
 const publishSchedulePlanSchema = z.object({ expectedUpdatedAt: z.string().datetime() }).strict();
 const joinShowtimeWaitlistSchema = z.object({ email: z.string().trim().email().max(200) }).strict();
+const bulkUpdateShowtimesSchema = z.object({
+  showtimes: z.array(z.object({ id: z.string().uuid(), expectedUpdatedAt: z.string().datetime() }).strict()).min(1).max(100),
+  onSale: z.boolean().optional(),
+  priceTierId: z.string().uuid().optional(),
+}).strict().refine((input) => input.onSale !== undefined || input.priceTierId !== undefined, {
+  message: "Choose a ticket group or sale status to update.",
+});
 
 @Controller("cinema")
 export class CinemaController {
@@ -518,6 +525,21 @@ export class CinemaController {
     return this.cinemaService.moveShowtimeGroup(
       actor,
       body as ReturnType<typeof moveShowtimeGroupRequestSchema.parse>,
+      requestId,
+    );
+  }
+
+  @Patch("showtimes/bulk")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.ShowtimeManage)
+  bulkUpdateShowtimes(
+    @CurrentActor() actor: RequestActor,
+    @Headers("idempotency-key") requestId: string | undefined,
+    @Body(new ZodValidationPipe(bulkUpdateShowtimesSchema)) body: unknown,
+  ) {
+    return this.cinemaService.bulkUpdateShowtimes(
+      actor,
+      bulkUpdateShowtimesSchema.parse(body),
       requestId,
     );
   }

@@ -87,12 +87,12 @@ test("calendar shortcuts serialize with showtime editor mutations", () => {
   assert.equal(source.match(/if \(showtimeEditorActionRef\.current \|\| calendarShortcutActionRef\.current\) return;/g)?.length, 3);
 });
 
-test("single, group, and undo moves share an immediate action lock", () => {
+test("single, group, bulk, and undo schedule mutations share an immediate action lock", () => {
   assert.match(source, /scheduleMoveActionRef = useRef\(false\)/);
-  assert.equal(source.match(/if \(scheduleMoveActionRef\.current\) return;/g)?.length, 2);
+  assert.equal(source.match(/if \(scheduleMoveActionRef\.current\) return;/g)?.length, 3);
   assert.match(source, /if \(!undoMoves\?\.length \|\| scheduleMoveActionRef\.current\) return;/);
-  assert.equal(source.match(/scheduleMoveActionRef\.current = true;/g)?.length, 3);
-  assert.equal(source.match(/scheduleMoveActionRef\.current = false;/g)?.length, 3);
+  assert.equal(source.match(/scheduleMoveActionRef\.current = true;/g)?.length, 4);
+  assert.equal(source.match(/scheduleMoveActionRef\.current = false;/g)?.length, 4);
 });
 
 test("film library mutations share an immediate action lock", () => {
