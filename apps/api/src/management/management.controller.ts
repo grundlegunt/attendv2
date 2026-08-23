@@ -92,6 +92,9 @@ const globalSearchSchema = z.object({ query: z.string().trim().min(2).max(100) }
 export class ManagementController {
   constructor(private readonly management: ManagementService, private readonly refunds: ManagementRefundService) {}
 
+  @Get("attention") @RequirePermissions(Permission.PaymentRefund, Permission.ReportsView)
+  attentionInbox(@CurrentActor() actor: RequestActor) { return this.management.attentionInbox(this.location(actor)); }
+
   @Get("search") @RequirePermissions(Permission.PaymentRefund)
   globalSearch(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(globalSearchSchema)) query: unknown) { return this.management.globalSearch(this.location(actor), globalSearchSchema.parse(query).query); }
 

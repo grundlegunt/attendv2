@@ -34,6 +34,36 @@ const applySiteCopy = (content: CinemaContent, copy: CustomerSiteCopy): CinemaCo
 
 @Injectable()
 export class ManagementService {
+  async attentionInbox(locationId: string) {
+    const [boxOfficeOrders, restaurantTabs, failedRefunds, privateEventInquiries] = await Promise.all([
+      prisma.ticketOrder.findMany({
+        where: { locationId, channel: "BOX_OFFICE", status: "PAYMENT_FAILED" },
+        select: { id: true, orderNumber: true, totalCents: true, currency: true, guestName: true, guestEmail: true, updatedAt: true },
+        orderBy: { updatedAt: "asc" },
+        take: 50,
+      }),
+      prisma.restaurantTab.findMany({
+        where: { locationId, status: { in: ["PAYMENT_FAILED", "MANAGER_REVIEW"] } },
+        select: { id: true, label: true, status: true, totalCents: true, updatedAt: true, location: { select: { currency: true } }, primaryCustomer: { select: { name: true, email: true } }, showtime: { select: { movie: { select: { title: true } }, auditorium: { select: { name: true } } } } },
+        orderBy: { updatedAt: "asc" },
+        take: 50,
+      }),
+      prisma.refund.findMany({
+        where: { status: "FAILED", payment: { OR: [{ ticketOrder: { locationId } }, { restaurantTab: { locationId } }] } },
+        select: { id: true, amountCents: true, reason: true, scope: true, status: true, updatedAt: true, payment: { select: { currency: true, ticketOrder: { select: { orderNumber: true } }, restaurantTab: { select: { id: true, label: true } } } } },
+        orderBy: { updatedAt: "asc" },
+        take: 50,
+      }),
+      prisma.privateEventInquiry.findMany({
+        where: { locationId, status: "NEW" },
+        select: { id: true, name: true, email: true, eventType: true, preferredDate: true, guestCount: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+      }),
+    ]);
+    return { boxOfficeOrders, restaurantTabs, failedRefunds, privateEventInquiries };
+  }
+
   async globalSearch(locationId: string, query: string) {
     const normalized = query.trim();
     if (normalized.length < 2) throw AppError.validationFailed("Enter at least two characters.");
