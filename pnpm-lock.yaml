@@ -181,6 +181,9 @@ importers:
 
   apps/customer-web:
     dependencies:
+      '@cinema/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@cinema/config':
         specifier: workspace:*
         version: link:../../packages/config
