@@ -64,7 +64,7 @@ export class CinemaController {
   @Post("private-event-inquiries")
   @UseGuards(RequestRateLimitGuard)
   @RateLimit({ scope: "checkout", identity: "email" })
-  privateEventInquiry(@Query("locationId") locationId: string | undefined, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(z.object({ name: z.string().trim().min(1).max(120), email: z.string().trim().email().max(200), phone: z.string().trim().max(40).optional(), eventType: z.string().trim().min(1).max(100), preferredDate: z.string().datetime().optional(), guestCount: z.number().int().min(1).max(5000).optional(), message: z.string().trim().min(1).max(2000) }).strict())) body: unknown) { return this.cinemaService.createPrivateEventInquiry(locationId, body as never, requestId); }
+  privateEventInquiry(@Query("locationId") locationId: string | undefined, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(z.object({ name: z.string().trim().min(1).max(120), email: z.string().trim().email().max(200), phone: z.string().trim().max(40).optional(), eventType: z.string().trim().min(1).max(100), preferredDate: z.union([z.string().date(), z.string().datetime()]).optional(), guestCount: z.number().int().min(1).max(5000).optional(), message: z.string().trim().min(1).max(2000) }).strict())) body: unknown) { return this.cinemaService.createPrivateEventInquiry(locationId, body as never, requestId); }
 
   @Post("gift-cards/balance")
   @UseGuards(RequestRateLimitGuard)

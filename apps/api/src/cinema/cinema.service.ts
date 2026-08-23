@@ -23,6 +23,7 @@ import {
   cinemaContentDefaults,
   cinemaContentSchema,
   dedupePublicShowtimes,
+  startOfCalendarDay,
 } from "@cinema/shared";
 import type {
   PublicDiningMenuResponse,
@@ -65,6 +66,13 @@ function addIsoDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+export function privateEventPreferredDate(value: string, timeZone: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(value);
+  const start = startOfCalendarDay(value, timeZone);
+  const end = startOfCalendarDay(addIsoDays(value, 1), timeZone);
+  return new Date((start.getTime() + end.getTime()) / 2);
 }
 
 function localDateTime(value: Date, timeZone: string) {
@@ -241,7 +249,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         "Guest count must be between 1 and 5000.",
       );
     const preferredDate = input.preferredDate
-      ? new Date(input.preferredDate)
+      ? privateEventPreferredDate(input.preferredDate, location.timezone)
       : null;
     if (preferredDate && Number.isNaN(preferredDate.getTime()))
       throw AppError.validationFailed("Preferred date is invalid.");
