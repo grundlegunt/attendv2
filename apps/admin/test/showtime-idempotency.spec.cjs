@@ -53,6 +53,15 @@ test("showtime creation retains stable retry identities", () => {
   assert.match(source, /"Idempotency-Key": publishPlanAttemptRef\.current!\.requestId/);
 });
 
+test("showtime editor reads and writes times in the cinema timezone", () => {
+  assert.match(source, /const timeZone = employee\?\.timezone \?\? "UTC"/);
+  assert.match(source, /startsAtInstant = cinemaDateTimeInputInstant\(startsAt, timeZone\)/);
+  assert.match(source, /setStartsAt\(cinemaDateTimeInputValue\(showtime\.startsAt, timeZone\)\)/);
+  assert.match(source, /cinemaDateTimeInputInstant\(planShowtimeStartsAt, timeZone\)/);
+  assert.match(source, /timeZone,\n\s+\}\);/);
+  assert.doesNotMatch(source, /startsAt: new Date\(startsAt\)\.toISOString\(\)/);
+});
+
 test("showtime editor mutations share an immediate action lock", () => {
   assert.match(source, /showtimeEditorActionRef = useRef\(false\)/);
   assert.equal(source.match(/if \(showtimeEditorActionRef\.current(?: \|\| calendarShortcutActionRef\.current)?\) return;/g)?.length, 3);

@@ -20,6 +20,10 @@ import {
   type ShowtimeMoveSnapshot,
 } from "../schedule-undo";
 import { useAdminSession, useAdminUi } from "../admin-session";
+import {
+  cinemaDateTimeInputInstant,
+  cinemaDateTimeInputValue,
+} from "../cinema-date-time";
 
 interface Auditorium {
   id: string;
@@ -151,11 +155,6 @@ interface SchedulePlanValidation {
   expectedUpdatedAt: string;
 }
 
-function dateTimeInputValue(date: Date) {
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
 function currentWeekStart() {
   const date = new Date();
   const day = date.getDay();
@@ -166,6 +165,7 @@ function currentWeekStart() {
 
 export default function AdminPage() {
   const { employee, accessToken: token, supportSession } = useAdminSession();
+  const timeZone = employee?.timezone ?? "UTC";
   const adminUi = useAdminUi();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -527,20 +527,22 @@ export default function AdminPage() {
     const value = window
       .prompt(
         `Change the saved time for ${title}:`,
-        dateTimeInputValue(new Date(showtime.startsAt)),
+        cinemaDateTimeInputValue(showtime.startsAt, timeZone),
       )
       ?.trim();
     if (!value) return;
-    const startsAt = new Date(value);
-    if (Number.isNaN(startsAt.getTime())) {
-      setError("Enter a valid date and time.");
+    let startsAt: string;
+    try {
+      startsAt = cinemaDateTimeInputInstant(value, timeZone);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Enter a valid date and time.");
       return;
     }
     planShowtimeMutationRef.current = true;
     setPlanShowtimeMutation({ index, action: "change" });
     setError(null);
     const body = JSON.stringify({
-      startsAt: startsAt.toISOString(),
+      startsAt,
       expectedStartsAt: showtime.startsAt,
     });
     const fingerprint = `${plan.id}:${index}:${body}`;
@@ -583,6 +585,13 @@ export default function AdminPage() {
     event.preventDefault();
     if (!data || !planShowtimeStartsAt) return;
     if (planShowtimeMutationRef.current || planActionPendingRef.current) return;
+    let startsAtInstant: string;
+    try {
+      startsAtInstant = cinemaDateTimeInputInstant(planShowtimeStartsAt, timeZone);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Choose a valid local date and time.");
+      return;
+    }
     planShowtimeMutationRef.current = true;
     setPlanShowtimeMutation({ index: null, action: "add" });
     setError(null);
@@ -592,7 +601,7 @@ export default function AdminPage() {
         planShowtimeAuditoriumId || data.location.auditoriums[0]?.id,
       priceTierId:
         planShowtimePriceTierId || data.location.organization.priceTiers[0]?.id,
-      startsAt: new Date(planShowtimeStartsAt).toISOString(),
+      startsAt: startsAtInstant,
       onSale: false,
       presentation: planShowtimePresentation,
       filmSeriesId: null,
@@ -1036,6 +1045,13 @@ export default function AdminPage() {
   async function createShowtime(event: FormEvent) {
     event.preventDefault();
     if (showtimeEditorActionRef.current || calendarShortcutActionRef.current) return;
+    let startsAtInstant: string;
+    try {
+      startsAtInstant = cinemaDateTimeInputInstant(startsAt, timeZone);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Choose a valid local date and time.");
+      return;
+    }
     showtimeEditorActionRef.current = true;
     setShowtimeEditorAction("save");
     setError(null);
@@ -1043,7 +1059,7 @@ export default function AdminPage() {
       movieId,
       auditoriumId,
       priceTierId: priceTierId || undefined,
-      startsAt: new Date(startsAt).toISOString(),
+      startsAt: startsAtInstant,
       onSale,
       filmSeriesId: filmSeriesId || null,
       presentation,
@@ -1100,12 +1116,11 @@ export default function AdminPage() {
   }
 
   function editShowtime(showtime: CalendarShowtime) {
-    const local = new Date(showtime.startsAt);
     setEditingShowtimeId(showtime.id);
     setEditingShowtimeUpdatedAt(showtime.updatedAt);
     setMovieId(showtime.movie.id);
     setAuditoriumId(showtime.auditorium.id);
-    setStartsAt(dateTimeInputValue(local));
+    setStartsAt(cinemaDateTimeInputValue(showtime.startsAt, timeZone));
     setOnSale(showtime.onSale);
     setPriceTierId(showtime.priceTier.id);
     setFilmSeriesId(showtime.filmSeries?.id ?? "");
@@ -1181,11 +1196,10 @@ export default function AdminPage() {
       );
       return;
     }
-    const local = new Date(date);
     setEditingShowtimeId(null);
     setMovieId(selectedMovieId ?? "");
     setAuditoriumId(auditorium);
-    setStartsAt(dateTimeInputValue(local));
+    setStartsAt(cinemaDateTimeInputValue(date.toISOString(), timeZone));
     setOnSale(true);
     setPriceTierId("");
     setFilmSeriesId("");
@@ -1229,9 +1243,13 @@ export default function AdminPage() {
 
   function shiftShowtime(minutes: number) {
     if (!startsAt) return;
-    const next = new Date(startsAt);
-    next.setMinutes(next.getMinutes() + minutes);
-    setStartsAt(dateTimeInputValue(next));
+    try {
+      const next = new Date(cinemaDateTimeInputInstant(startsAt, timeZone));
+      next.setMinutes(next.getMinutes() + minutes);
+      setStartsAt(cinemaDateTimeInputValue(next.toISOString(), timeZone));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Choose a valid local date and time.");
+    }
   }
 
   async function changeSaleStatus() {
@@ -1376,7 +1394,12 @@ export default function AdminPage() {
     "Dining special headline";
   const selectedTiming = useMemo(() => {
     if (!startsAt || !selectedMovie || !data) return null;
-    const doors = new Date(startsAt);
+    let doors: Date;
+    try {
+      doors = new Date(cinemaDateTimeInputInstant(startsAt, timeZone));
+    } catch {
+      return null;
+    }
     const feature = new Date(
       doors.getTime() + data.location.preShowBufferMinutes * 60000,
     );
@@ -1388,10 +1411,14 @@ export default function AdminPage() {
         Math.max(15, data.location.cleaningBufferMinutes) * 60000,
     );
     return { doors, feature, ends, ready };
-  }, [data, selectedMovie, startsAt]);
+  }, [data, selectedMovie, startsAt, timeZone]);
 
   function displayTime(value: Date) {
-    return value.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return value.toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone,
+    });
   }
 
   function applyLocalMoves(moves: ShowtimeMoveSnapshot[]) {
@@ -1904,6 +1931,7 @@ export default function AdminPage() {
                         day: "numeric",
                         hour: "numeric",
                         minute: "2-digit",
+                        timeZone,
                       })}
                     </time>
                     <div>
