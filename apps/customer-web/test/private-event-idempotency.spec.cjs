@@ -18,3 +18,8 @@ test("private event form blocks duplicate submissions while pending", () => {
   assert.match(source, /finally \{ pendingRef\.current = false; setPending\(false\); \}/);
   assert.match(source, /disabled=\{pending\}/);
 });
+
+test("private event preferred dates remain calendar dates for server-side resolution", () => {
+  assert.match(source, /preferredDate: draft\.preferredDate \|\| undefined/);
+  assert.doesNotMatch(source, /new Date\(`\$\{draft\.preferredDate\}T12:00:00`\)\.toISOString\(\)/);
+});
