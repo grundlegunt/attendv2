@@ -12,11 +12,13 @@ export default function AboutPage() {
   const [locationError, setLocationError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   useEffect(() => {
+    const controller = new AbortController();
     setLocationError(null);
 
-    void apiFetch<PublicDiningMenuResponse>("/cinema/menu")
+    void apiFetch<PublicDiningMenuResponse>("/cinema/menu", { signal: controller.signal })
       .then((response) => setLocation(response.location))
-      .catch((reason) => setLocationError(reason instanceof ApiRequestError ? reason.body.message : "Contact details are unavailable."));
+      .catch((reason) => { if (!controller.signal.aborted) setLocationError(reason instanceof ApiRequestError ? reason.body.message : "Contact details are unavailable."); });
+    return () => controller.abort();
   }, [loadAttempt]);
   const directionsUrl = location?.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.address)}` : null;
 
