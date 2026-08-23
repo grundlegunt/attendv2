@@ -307,6 +307,7 @@ export class AuthService {
       {
         sub: employee.id,
         actorType: "EMPLOYEE",
+        tokenVersion: employee.authAccount!.refreshTokenVersion,
         locationId: employee.locationId,
         permissions: employee.authAccount!.mustChangePassword ? [] : flattenEmployeePermissions(employee),
       },

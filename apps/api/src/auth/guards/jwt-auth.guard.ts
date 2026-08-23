@@ -37,13 +37,31 @@ export class JwtAuthGuard implements CanActivate {
         throw AppError.forbidden("Attend support sessions are read-only.");
       }
       if (actor.actorType === "EMPLOYEE") {
-        if (!actor.locationId) throw AppError.unauthenticated("Staff session is missing its location.");
-        const location = await prisma.location.findUnique({
-          where: { id: actor.locationId },
-          select: { organization: { select: { active: true } } },
+        if (!actor.locationId) throw AppError.unauthenticated("Staff session is invalid.");
+        if (actor.supportSession) {
+          const location = await prisma.location.findUnique({
+            where: { id: actor.locationId },
+            select: { active: true, organization: { select: { active: true } } },
+          });
+          if (!location?.active || !location.organization.active) throw AppError.unauthenticated("This cinema account is currently inactive.");
+          request.actor = actor;
+          return true;
+        }
+        if (!Number.isInteger(actor.tokenVersion)) throw AppError.unauthenticated("Staff session is invalid.");
+        const employee = await prisma.employee.findUnique({
+          where: { id: actor.sub },
+          select: {
+            active: true,
+            locationId: true,
+            location: { select: { organization: { select: { active: true } } } },
+            authAccount: { select: { refreshTokenVersion: true } },
+          },
         });
-        if (!location?.organization.active) {
-          throw AppError.unauthenticated("This cinema account is currently inactive.");
+        if (!employee?.active || employee.locationId !== actor.locationId || !employee.location.organization.active) {
+          throw AppError.unauthenticated("This staff account is currently inactive.");
+        }
+        if (!employee.authAccount || employee.authAccount.refreshTokenVersion !== actor.tokenVersion) {
+          throw AppError.unauthenticated("Session has been invalidated. Please log in again.");
         }
       } else if (actor.actorType === "CUSTOMER") {
         if (!Number.isInteger(actor.tokenVersion)) throw AppError.unauthenticated();

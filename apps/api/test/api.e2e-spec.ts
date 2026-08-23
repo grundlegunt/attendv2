@@ -726,7 +726,13 @@ describe("Staff authentication", () => {
       .set("Idempotency-Key", passwordChangeRequestId)
       .send({ currentPassword: "TemporaryPassword123!", newPassword: SEED_PASSWORD });
     const changed = await changePassword().expect(200);
-    const replayedChange = await changePassword().expect(200);
+    await request(app.getHttpServer()).get("/api/v1/auth/staff/me").set("Authorization", `Bearer ${temporary.body.accessToken}`).expect(401);
+    const replayedChange = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/change-password")
+      .set("Authorization", `Bearer ${changed.body.accessToken}`)
+      .set("Idempotency-Key", passwordChangeRequestId)
+      .send({ currentPassword: "TemporaryPassword123!", newPassword: SEED_PASSWORD })
+      .expect(200);
     expect(changed.body.employee.mustChangePassword).toBe(false);
     expect(changed.body.employee.permissions.length).toBeGreaterThan(0);
     expect(replayedChange.body.employee).toEqual(changed.body.employee);
@@ -758,7 +764,7 @@ describe("Staff authentication", () => {
     expect(res.body.refreshToken).toEqual(expect.any(String));
   });
 
-  it("invalidates outstanding refresh tokens on logout", async () => {
+  it("invalidates outstanding access and refresh tokens on logout", async () => {
     const logoutRes = await request(app.getHttpServer())
       .post("/api/v1/auth/staff/logout")
       .set("Authorization", `Bearer ${ownerAccessToken}`);
@@ -769,9 +775,12 @@ describe("Staff authentication", () => {
       .send({ refreshToken: ownerRefreshToken });
     expect(refreshAfterLogout.status).toBe(401);
 
-    // Access token itself remains valid until its own short TTL expires —
-    // logout invalidates the refresh token, not already-issued access
-    // tokens. Re-establish a fresh session for the tests that follow.
+    await request(app.getHttpServer())
+      .get("/api/v1/auth/staff/me")
+      .set("Authorization", `Bearer ${ownerAccessToken}`)
+      .expect(401);
+
+    // Re-establish a fresh session for the tests that follow.
     const loginAgain = await loginOwner();
     ownerAccessToken = loginAgain.body.accessToken;
   });
@@ -5809,17 +5818,22 @@ describe("Milestone 5 seat-linked dining tabs", () => {
     const { prisma } = await import("@cinema/database");
     const { signTokenPair, Permission } = await import("@cinema/auth");
     const location = await prisma.location.findFirstOrThrow();
+    const doorEmployee = await prisma.employee.create({
+      data: { locationId: location.id, name: "Door Permission Test", email: `door-${crypto.randomUUID()}@${SEED_SUFFIX}`, authAccount: { create: { passwordHash: "unused" } } },
+      include: { authAccount: true },
+    });
     const doorAccessToken = signTokenPair(
       {
-        sub: "00000000-0000-0000-0000-000000000098",
+        sub: doorEmployee.id,
         actorType: "EMPLOYEE",
+        tokenVersion: doorEmployee.authAccount!.refreshTokenVersion,
         locationId: location.id,
         permissions: [Permission.TicketScan],
       },
       {
-        sub: "00000000-0000-0000-0000-000000000098",
+        sub: doorEmployee.id,
         actorType: "EMPLOYEE",
-        tokenVersion: 0,
+        tokenVersion: doorEmployee.authAccount!.refreshTokenVersion,
       },
       {
         accessSecret: process.env.JWT_ACCESS_SECRET!,
@@ -6062,18 +6076,23 @@ describe("Milestone 5 seat-linked dining tabs", () => {
         name: "Other Cinema",
       },
     });
+    const otherEmployee = await prisma.employee.create({
+      data: { locationId: otherLocation.id, name: "Other Location Test", email: `other-${crypto.randomUUID()}@${SEED_SUFFIX}`, authAccount: { create: { passwordHash: "unused" } } },
+      include: { authAccount: true },
+    });
     const { signTokenPair, Permission } = await import("@cinema/auth");
     const otherLocationToken = signTokenPair(
       {
-        sub: "00000000-0000-0000-0000-000000000099",
+        sub: otherEmployee.id,
         actorType: "EMPLOYEE",
+        tokenVersion: otherEmployee.authAccount!.refreshTokenVersion,
         locationId: otherLocation.id,
         permissions: [Permission.RestaurantOrderCreate],
       },
       {
-        sub: "00000000-0000-0000-0000-000000000099",
+        sub: otherEmployee.id,
         actorType: "EMPLOYEE",
-        tokenVersion: 0,
+        tokenVersion: otherEmployee.authAccount!.refreshTokenVersion,
       },
       {
         accessSecret: process.env.JWT_ACCESS_SECRET!,
@@ -9394,7 +9413,7 @@ describe("Milestone 10 management reporting", () => {
   it("enforces the full role and cross-tenant isolation matrix", async () => {
     const { prisma } = await import("@cinema/database");
     const { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, signTokenPair } = await import("@cinema/auth");
-    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` }, include: { authAccount: true } });
     const tenantB = await prisma.organization.create({ data: { name: `Tenant B ${crypto.randomUUID()}`, locations: { create: { name: "Tenant B Cinema" } } }, include: { locations: true } });
     const locationB = tenantB.locations[0]!;
     const auditoriumB = await prisma.auditorium.create({ data: { locationId: locationB.id, name: "Tenant B Room", capacity: 1, seatMap: { create: { name: "Tenant B Map", seats: { create: { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0 } } } } }, include: { seatMap: { include: { seats: true } } } });
@@ -9417,8 +9436,8 @@ describe("Milestone 10 management reporting", () => {
     for (const role of Object.values(RoleKey)) {
       const rolePermissions = DEFAULT_ROLE_PERMISSIONS[role];
       const token = signTokenPair(
-        { sub: crypto.randomUUID(), actorType: "EMPLOYEE", locationId: owner.locationId, permissions: rolePermissions },
-        { sub: crypto.randomUUID(), actorType: "EMPLOYEE", tokenVersion: 0 },
+        { sub: owner.id, actorType: "EMPLOYEE", tokenVersion: owner.authAccount!.refreshTokenVersion, locationId: owner.locationId, permissions: rolePermissions },
+        { sub: owner.id, actorType: "EMPLOYEE", tokenVersion: owner.authAccount!.refreshTokenVersion },
         { accessSecret: process.env.JWT_ACCESS_SECRET!, refreshSecret: process.env.JWT_REFRESH_SECRET!, accessTtlSeconds: 900, refreshTtlSeconds: 3600 },
       ).accessToken;
       const auth = { Authorization: `Bearer ${token}` };
