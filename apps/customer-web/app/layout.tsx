@@ -37,8 +37,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Suspense fallback={null}>
             <SiteHeader />
           </Suspense>
-          {children}
           <AnalyticsConsent />
+          {children}
         </CustomerBrandingProvider>
       </body>
     </html>

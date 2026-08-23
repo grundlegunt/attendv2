@@ -16,3 +16,10 @@ test("consent is versioned, reversible, and separate from marketing", () => {
   assert.match(source, /Privacy choices/);
   assert.match(source, /href="\/privacy"/);
 });
+
+test("the initial consent notice stays in document flow instead of covering ticket controls", () => {
+  const css = fs.readFileSync(path.join(__dirname, "../app/globals.css"), "utf8");
+  const block = css.match(/\.analytics-consent \{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.doesNotMatch(block, /position:\s*fixed/);
+  assert.match(block, /margin:\s*18px auto 0/);
+});
