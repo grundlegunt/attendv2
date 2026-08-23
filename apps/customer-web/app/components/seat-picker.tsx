@@ -63,6 +63,7 @@ export function SeatPicker({
   const [pendingSeatIds, setPendingSeatIds] = useState<Record<string, true>>({});
   const [optimisticSeatStates, setOptimisticSeatStates] = useState<Record<string, boolean>>({});
   const [now, setNow] = useState(Date.now());
+  const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [closing, setClosing] = useState(false);
   const refreshRequestRef = useRef(0);
@@ -85,6 +86,8 @@ export function SeatPicker({
         `/cinema/showtimes/${showtimeId}/seats?holderKey=${encodeURIComponent(holderKey)}`,
       );
       if (requestId !== refreshRequestRef.current) return;
+      const serverTimestamp = Date.parse(nextAvailability.serverTime);
+      setServerClockOffsetMs(Number.isFinite(serverTimestamp) ? serverTimestamp - Date.now() : 0);
       setAvailability(nextAvailability);
       setError(null);
     } catch (requestError) {
@@ -132,7 +135,7 @@ export function SeatPicker({
     Infinity,
   );
   const remainingSeconds = Number.isFinite(expiresAt)
-    ? Math.max(0, Math.ceil((expiresAt - now) / 1000))
+    ? Math.max(0, Math.ceil((expiresAt - (now + serverClockOffsetMs)) / 1000))
     : 0;
 
   async function toggleSeat(seat: AvailabilitySeat) {
