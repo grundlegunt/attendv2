@@ -9186,9 +9186,10 @@ describe("Milestone 10 management reporting", () => {
     expect(csv.text).toContain('"Ticket fees (cents)","300"');
     expect(csv.text).toContain('"Ticket tax (cents)","266"');
     expect(csv.text).toContain('"Ticket total collected (cents)","4066"');
+    expect(csv.text).toContain('"Unallocated film revenue (cents)","3500"');
     expect(csv.text).toContain('"Average total spend per patron (cents)","2633"');
     expect(csv.text).toContain('"Concession attach rate (percent)","100"');
-    expect(csv.text).toContain(`"${movie!.title}","2","3500","1200"`);
+    expect(csv.text).toContain(`"${movie!.title}","","2","3500","0","0","3500","1200"`);
     expect(csv.text).toContain(`"Admission type","Tickets sold","Ticket face value (cents)"`);
     expect(csv.text).toContain(`"${ticketType.name}","2","3500"`);
     expect(csv.text).toContain('"Sales channel","Tickets sold","Ticket face value (cents)","Ticket fees (cents)","Average fee per ticket (cents)","Gross collected (cents)","Refunds (cents)","Net collected (cents)"');
