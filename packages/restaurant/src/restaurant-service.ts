@@ -740,6 +740,7 @@ export class RestaurantService {
     tabId: string;
     locationId: string;
     actorId: string;
+    actorType?: "EMPLOYEE" | "CUSTOMER";
     showtimeSeatId?: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
@@ -757,6 +758,7 @@ export class RestaurantService {
       const requestFingerprint = JSON.stringify({
         tabId: input.tabId,
         actorId: input.actorId,
+        actorType: input.actorType ?? "EMPLOYEE",
         showtimeSeatId: input.showtimeSeatId ?? null,
       });
       const replay = await tx.restaurantOrder.findUnique({
@@ -790,7 +792,8 @@ export class RestaurantService {
           idempotencyKey: input.requestId,
           requestFingerprint,
           restaurantTabId: tab.id,
-          serverEmployeeId: input.actorId,
+          serverEmployeeId: input.actorType === "CUSTOMER" ? null : input.actorId,
+          source: input.actorType === "CUSTOMER" ? "ONLINE_ORDER_AHEAD" : "STAFF",
           showtimeSeatId: input.showtimeSeatId,
         },
       });
@@ -801,6 +804,7 @@ export class RestaurantService {
     requestId: string;
     orderId: string;
     locationId: string;
+    restaurantTabId?: string;
     menuItemId: string;
     quantity: number;
     modifierIds: string[];
@@ -814,6 +818,7 @@ export class RestaurantService {
       const order = await tx.restaurantOrder.findFirst({
         where: {
           id: input.orderId,
+          restaurantTabId: input.restaurantTabId,
           restaurantTab: { locationId: input.locationId },
         },
       });
@@ -973,10 +978,12 @@ export class RestaurantService {
     requestId: string;
     locationId: string;
     actorId: string;
+    actorType?: "EMPLOYEE" | "CUSTOMER";
+    restaurantTabId?: string;
   }) {
     return this.prisma.$transaction(async (tx) => {
       const existingOrder = await tx.restaurantOrder.findFirst({
-        where: { id: input.orderId, restaurantTab: { locationId: input.locationId } },
+        where: { id: input.orderId, restaurantTabId: input.restaurantTabId, restaurantTab: { locationId: input.locationId } },
         select: { restaurantTabId: true },
       });
       if (!existingOrder) {
@@ -1088,6 +1095,7 @@ export class RestaurantService {
             restaurantTabId: order.restaurantTabId,
             showtimeSeatId: order.showtimeSeatId,
             serverEmployeeId: order.serverEmployeeId,
+            source: order.source,
           },
         });
         rejectedOrderId = rejectedOrder.id;
@@ -1153,7 +1161,7 @@ export class RestaurantService {
       }
       await tx.auditEvent.create({
         data: {
-          actorType: "EMPLOYEE",
+          actorType: input.actorType ?? "EMPLOYEE",
           actorId: input.actorId,
           action: "restaurant_order.sent",
           entityType: "RestaurantOrder",

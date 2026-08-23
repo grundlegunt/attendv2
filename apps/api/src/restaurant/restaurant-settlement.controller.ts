@@ -9,9 +9,12 @@ import {
 import { randomUUID } from "node:crypto";
 import { Permission } from "@cinema/auth";
 import {
+  addRestaurantOrderItemRequestSchema,
+  createRestaurantOrderRequestSchema,
   customerPayRestaurantTabRequestSchema,
   finalizeRestaurantTabRequestSchema,
   restaurantTipRequestSchema,
+  sendRestaurantOrderRequestSchema,
 } from "@cinema/shared";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
@@ -21,6 +24,7 @@ import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { RestaurantSettlementService } from "./restaurant-settlement.service";
+import { RestaurantService } from "./restaurant.service";
 
 @Controller("restaurant-settlement")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -152,7 +156,7 @@ export class CustomerRestaurantTabController {
 
 @Controller("public/restaurant-tabs")
 export class PublicRestaurantTabController {
-  constructor(private readonly settlement: RestaurantSettlementService) {}
+  constructor(private readonly settlement: RestaurantSettlementService, private readonly restaurant: RestaurantService) {}
 
   @Get(":token")
   tab(@Param("token") token: string) {
@@ -182,5 +186,26 @@ export class PublicRestaurantTabController {
       ...customerPayRestaurantTabRequestSchema.parse(body),
       token,
     });
+  }
+
+  @Post(":token/orders")
+  async createOrder(@Param("token") token: string, @Body(new ZodValidationPipe(createRestaurantOrderRequestSchema)) body: unknown) {
+    const context = await this.settlement.guestOrderContext(token);
+    const parsed = createRestaurantOrderRequestSchema.parse(body);
+    return this.restaurant.createOrder({ ...parsed, requestId: parsed.requestId ?? randomUUID(), tabId: context.tabId, locationId: context.locationId, actorId: context.customerId, actorType: "CUSTOMER" });
+  }
+
+  @Post(":token/orders/:orderId/items")
+  async addOrderItem(@Param("token") token: string, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(addRestaurantOrderItemRequestSchema)) body: unknown) {
+    const context = await this.settlement.guestOrderContext(token);
+    const parsed = addRestaurantOrderItemRequestSchema.parse(body);
+    return this.restaurant.addOrderItem({ ...parsed, requestId: parsed.requestId ?? randomUUID(), orderId, restaurantTabId: context.tabId, locationId: context.locationId });
+  }
+
+  @Post(":token/orders/:orderId/send")
+  async sendOrder(@Param("token") token: string, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(sendRestaurantOrderRequestSchema)) body: unknown) {
+    const context = await this.settlement.guestOrderContext(token);
+    const parsed = sendRestaurantOrderRequestSchema.parse(body);
+    return this.restaurant.sendOrder({ orderId, requestId: parsed.requestId ?? randomUUID(), restaurantTabId: context.tabId, locationId: context.locationId, actorId: context.customerId, actorType: "CUSTOMER" });
   }
 }
