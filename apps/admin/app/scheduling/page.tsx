@@ -223,6 +223,7 @@ export default function AdminPage() {
   const removeShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const moveShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const groupMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const bulkShowtimeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const undoMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const scheduleMoveActionRef = useRef(false);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
@@ -1531,6 +1532,38 @@ export default function AdminPage() {
     }
   }
 
+  async function bulkUpdateShowtimes(
+    showtimes: CalendarShowtime[],
+    changes: { onSale?: boolean; priceTierId?: string },
+  ) {
+    if (scheduleMoveActionRef.current) return;
+    scheduleMoveActionRef.current = true;
+    setError(null);
+    const body = JSON.stringify({
+      showtimes: showtimes.map((showtime) => ({ id: showtime.id, expectedUpdatedAt: showtime.updatedAt })),
+      ...changes,
+    });
+    if (bulkShowtimeAttemptRef.current?.fingerprint !== body) {
+      bulkShowtimeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    }
+    try {
+      await apiFetch("/cinema/showtimes/bulk", {
+        accessToken: token ?? undefined,
+        method: "PATCH",
+        body,
+        headers: { "Idempotency-Key": bulkShowtimeAttemptRef.current.requestId },
+      });
+      bulkShowtimeAttemptRef.current = null;
+      await refresh();
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) bulkShowtimeAttemptRef.current = null;
+      showError(reason);
+      throw reason;
+    } finally {
+      scheduleMoveActionRef.current = false;
+    }
+  }
+
   async function undoLastMove() {
     if (!undoMoves?.length || scheduleMoveActionRef.current) return;
     scheduleMoveActionRef.current = true;
@@ -2013,6 +2046,7 @@ export default function AdminPage() {
             auditoriums={data.location.auditoriums}
             movies={data.location.organization.movies}
             archivedMovies={data.archivedMovies}
+            priceTiers={data.location.organization.priceTiers}
             initialSelectedMovieId={linkedMovieId}
             showtimes={data.showtimes}
             preShowBufferMinutes={data.location.preShowBufferMinutes}
@@ -2026,6 +2060,7 @@ export default function AdminPage() {
             onRemoveShowtime={quickRemoveShowtime}
             onMove={moveShowtime}
             onMoveMany={moveManyShowtimes}
+            onBulkUpdate={bulkUpdateShowtimes}
             canUndoMove={Boolean(undoMoves?.length)}
             undoingMove={undoingMove}
             onUndoMove={undoLastMove}

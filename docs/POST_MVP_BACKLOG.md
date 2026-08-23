@@ -10,7 +10,6 @@ These items have a clear operator or customer benefit and can be scoped without 
 - **Ticket-fee drill-down.** Add a detail view behind the ticket-fee total showing tickets sold and fee collected. Do not invent an Attend/cinema allocation: the current fee is Attend revenue until the billing model explicitly defines a split.
 - **Admin global search.** Search orders, customer email/name, tickets, and gift cards from one manager-facing entry point instead of requiring staff to know which operational page owns the record.
 - **Consolidated attention inbox.** Bring existing signals—box-office attention items, refund follow-up, unanswered private-event inquiries, failed payments, and other actionable exceptions—into one manager view. Keep informational metrics separate from items that require action.
-- **Schedule and pricing bulk actions.** After single-record editing is stable, support carefully scoped multi-showtime edits and ticket-group price changes with the same validation, idempotency, and audit protections as individual mutations.
 - **Attend Master client-health signals.** Once multiple real clients are operating, add trend, refund-rate, and payment-failure indicators alongside revenue. Validate thresholds against real operating history rather than hardcoding speculative alerts.
 - **Customer self-service in-seat ordering.** A seat-linked restaurant tab can be viewed and tipped by the customer, but customers cannot add items themselves. A future flow should use a short-lived seat/tab credential, submit into the existing restaurant/KDS pipeline, and avoid exposing staff authorization.
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
@@ -52,6 +51,7 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 ## Resolved since this backlog was drafted
 
+- **Schedule and pricing bulk actions** — managers can select multiple showtimes and update their ticket group or sale status together, with location scoping, optimistic concurrency checks, idempotent retries, and one auditable batch mutation.
 - **Sold-out waitlists** — sold-out reserved-seat and general-admission showtimes offer rate-limited, idempotent email signup; entries expire at showtime, returned inventory is claimed safely across API instances, failed email delivery retries, and notifications explicitly avoid promising that tickets remain available.
 - **Cinema programming and scheduling workspace** — the scheduling foundation is implemented in the cinema Admin app; `PROGRAMMING_AND_SCHEDULING.md` remains its product reference.
 - **Public-site scope for `customer-web`** — resolved toward a broader theater website, with public navigation and content pages alongside the transactional ticket-buying flow.
