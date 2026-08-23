@@ -7,6 +7,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
 
 type SiteHeadingCopy = { eyebrow: string; title: string; intro: string };
+export const canonicalMembershipNumber = (value: string) => value.trim().toUpperCase();
 type CustomerSiteCopy = {
   showtimes: SiteHeadingCopy;
   comingSoon: SiteHeadingCopy;
@@ -833,39 +834,47 @@ export class ManagementService {
 
   async updateCustomerMembership(input: { locationId: string; employeeId: string; customerId: string; requestId: string; membershipNumber: string; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: Date | null }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
-    const requestFingerprint = createHash("sha256").update(JSON.stringify({ customerId: input.customerId, membershipNumber: input.membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt?.toISOString() ?? null })).digest("hex");
-    return prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
-      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "customer.membership_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
-      if (replay) {
-        const state = replay.afterState as { requestFingerprint?: string } | null;
-        if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The membership idempotency key was already used with different details.");
-        return tx.membership.findUniqueOrThrow({ where: { id: replay.entityId } });
+    const membershipNumber = canonicalMembershipNumber(input.membershipNumber);
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ customerId: input.customerId, membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt?.toISOString() ?? null })).digest("hex");
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+        const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "customer.membership_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The membership idempotency key was already used with different details.");
+          return tx.membership.findUniqueOrThrow({ where: { id: replay.entityId } });
+        }
+        const location = await tx.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
+        if (!location) throw AppError.notFound("Location was not found.");
+        const customer = await tx.customer.findFirst({
+          where: {
+            id: input.customerId,
+            OR: [
+              { ticketOrders: { some: { locationId: input.locationId } } },
+              { restaurantTabs: { some: { locationId: input.locationId } } },
+              { memberships: { some: { organizationId: location.organizationId } } },
+            ],
+          },
+          select: { id: true },
+        });
+        if (!customer) throw AppError.notFound("Customer was not found.");
+        const before = await tx.membership.findUnique({ where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } } });
+        const membership = await tx.membership.upsert({
+          where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } },
+          create: { organizationId: location.organizationId, customerId: customer.id, membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
+          update: { membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
+        });
+        const state = (value: typeof membership) => ({ membershipNumber: value.membershipNumber, tier: value.tier, status: value.status, expiresAt: value.expiresAt });
+        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "customer.membership_updated", entityType: "Membership", entityId: membership.id, beforeState: before ? state(before) : undefined, afterState: { ...state(membership), requestId: input.requestId, requestFingerprint } } });
+        return membership;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw AppError.conflict("That membership number is already assigned to another customer.");
       }
-      const location = await tx.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
-      if (!location) throw AppError.notFound("Location was not found.");
-      const customer = await tx.customer.findFirst({
-        where: {
-          id: input.customerId,
-          OR: [
-            { ticketOrders: { some: { locationId: input.locationId } } },
-            { restaurantTabs: { some: { locationId: input.locationId } } },
-            { memberships: { some: { organizationId: location.organizationId } } },
-          ],
-        },
-        select: { id: true },
-      });
-      if (!customer) throw AppError.notFound("Customer was not found.");
-      const before = await tx.membership.findUnique({ where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } } });
-      const membership = await tx.membership.upsert({
-        where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } },
-        create: { organizationId: location.organizationId, customerId: customer.id, membershipNumber: input.membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
-        update: { membershipNumber: input.membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
-      });
-      const state = (value: typeof membership) => ({ membershipNumber: value.membershipNumber, tier: value.tier, status: value.status, expiresAt: value.expiresAt });
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "customer.membership_updated", entityType: "Membership", entityId: membership.id, beforeState: before ? state(before) : undefined, afterState: { ...state(membership), requestId: input.requestId, requestFingerprint } } });
-      return membership;
-    });
+      throw error;
+    }
   }
 
   async customerHistoryCsv(locationId: string, customerId: string) {
