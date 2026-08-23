@@ -81,9 +81,19 @@ export default function PlatformDashboard() {
 
   useEffect(() => {
     if (!session) return;
+    let active = true;
+    const revenueRequestId = ++revenueRequestRef.current;
     Promise.all([request<Overview>("/platform/overview", undefined, session.accessToken), request<RevenueReport>(revenueRange(7), undefined, session.accessToken)])
-      .then(([nextOverview, nextRevenue]) => { setOverview(nextOverview); setRevenue(nextRevenue); })
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load platform health."));
+      .then(([nextOverview, nextRevenue]) => {
+        if (!active) return;
+        setOverview(nextOverview);
+        if (revenueRequestId === revenueRequestRef.current) setRevenue(nextRevenue);
+      })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load platform health."); });
+    return () => {
+      active = false;
+      if (revenueRequestId === revenueRequestRef.current) revenueRequestRef.current += 1;
+    };
   }, [session]);
 
   async function loadRevenue(days: number) {
@@ -141,6 +151,7 @@ export default function PlatformDashboard() {
 
   function signOut() {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    revenueRequestRef.current += 1;
     setSession(null);
     setOverview(null);
     setRevenue(null);
