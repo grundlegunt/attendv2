@@ -16,11 +16,17 @@ test("box-office customer results disclose membership details and handle phone-o
   assert.match(source, /customer\.membership\.tier/);
   assert.match(source, /customer\.membership\.status\.toLowerCase\(\)/);
   assert.match(source, /customer\.membership\.membershipNumber/);
-  assert.match(source, /disabled=\{busy \|\| !customer\.email\}/);
   assert.match(source, /customer\.name \|\| customer\.email \|\| customer\.phone/);
 });
 
 test("box-office search invites membership-number lookup", () => {
   assert.match(source, /Find by name, email, phone, or membership number/);
   assert.match(source, /customer\.membership\.membershipNumber/);
+});
+
+test("selected lookup customers attach to checkout by id without requiring email", () => {
+  assert.match(source, /setSelectedCustomerId\(customer\.id\)/);
+  assert.match(source, /customerId: selectedCustomerId \?\? undefined/);
+  assert.doesNotMatch(source, /disabled=\{busy \|\| !customer\.email\}/);
+  assert.match(source, /setCustomerEmail\(customer\.email \?\? ""\)/);
 });

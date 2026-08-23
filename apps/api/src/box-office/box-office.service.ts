@@ -201,7 +201,7 @@ export class BoxOfficeService {
     holdTokens: string[]; holderKey: string; ticketTypeId: string; ticketTypeSelections?: TicketTypeSelection[];
     promotionCode?: string; cashDrawerId?: string; cashCents: number;
     cardCents: number; giftCardCents: number; giftCardCode?: string; readerId?: string; cashReceivedCents?: number;
-    customerEmail?: string; customerName?: string;
+    customerId?: string; customerEmail?: string; customerName?: string;
   }) {
     const existing = await prisma.ticketOrder.findUnique({
       where: { checkoutIdempotencyKey: input.requestId },
@@ -226,6 +226,7 @@ export class BoxOfficeService {
         && order.holdTokens.length === holdTokens.length
         && order.holdTokens.every((token, index) => token === holdTokens[index])
         && JSON.stringify(savedSelections) === JSON.stringify(requestedSelections)
+        && (!input.customerId || order.customerId === input.customerId)
         && order.guestEmail === (input.customerEmail?.toLowerCase() ?? null)
         && order.guestName === (input.customerName ?? null)
         && (order.payment?.amountCents ?? 0) === input.cardCents
@@ -255,11 +256,23 @@ export class BoxOfficeService {
       if (giftCard.currency !== quote.currency) throw AppError.validationFailed("Gift card currency does not match this sale.");
       if (giftCard.balanceCents < input.giftCardCents) throw AppError.paymentRequired("Gift card balance is insufficient.");
     }
-    const customer = input.customerEmail ? await prisma.customer.upsert({
-      where: { email: input.customerEmail.toLowerCase() },
-      create: { email: input.customerEmail.toLowerCase(), name: input.customerName, isGuest: true },
-      update: input.customerName ? { name: input.customerName } : {},
-    }) : null;
+    const customer = input.customerId
+      ? await prisma.customer.findFirst({
+          where: {
+            id: input.customerId,
+            OR: [
+              { ticketOrders: { some: { locationId: input.locationId } } },
+              { restaurantTabs: { some: { locationId: input.locationId } } },
+              { memberships: { some: { organizationId: location.organizationId } } },
+            ],
+          },
+        })
+      : input.customerEmail ? await prisma.customer.upsert({
+          where: { email: input.customerEmail.toLowerCase() },
+          create: { email: input.customerEmail.toLowerCase(), name: input.customerName, isGuest: true },
+          update: input.customerName ? { name: input.customerName } : {},
+        }) : null;
+    if (input.customerId && !customer) throw AppError.notFound("Customer was not found.");
     let order = existing;
     if (!order) {
       try {

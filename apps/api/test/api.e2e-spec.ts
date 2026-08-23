@@ -8742,6 +8742,8 @@ describe("Milestone 9 box office and workforce", () => {
     const cashCents = Math.floor(quote.body.totalCents / 2);
     const cardCents = quote.body.totalCents - cashCents;
     const customerEmail = `box-office-${crypto.randomUUID()}@example.test`;
+    const ownerLocation = await prisma.location.findUniqueOrThrow({ where: { id: owner.locationId }, select: { organizationId: true } });
+    const boxOfficeCustomer = await prisma.customer.create({ data: { name: "Box Office Customer", email: customerEmail, isGuest: true, memberships: { create: { organizationId: ownerLocation.organizationId, membershipNumber: `E2E-${crypto.randomUUID()}`, tier: "Member" } } } });
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
     const { TestEmailProvider } = await import("@cinema/notifications");
     const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
@@ -8751,7 +8753,7 @@ describe("Milestone 9 box office and workforce", () => {
       requestId: saleRequestId, holdTokens: [holds.body[0].holdToken], holderKey,
       ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cardCents,
       cashReceivedCents: cashCents + 500, readerId: "tmr_e2e_box",
-      customerName: "Box Office Customer", customerEmail,
+      customerId: boxOfficeCustomer.id, customerName: "Box Office Customer", customerEmail,
     };
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send(salePayload).expect(201);

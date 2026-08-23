@@ -78,6 +78,7 @@ export const boxOfficeCheckoutRequestSchema = boxOfficeQuoteRequestSchema.extend
   giftCardCode: z.string().trim().min(20).max(40).optional(),
   readerId: z.string().trim().min(1).max(200).optional(),
   cashReceivedCents: z.number().int().nonnegative().optional(),
+  customerId: z.string().uuid().optional(),
   customerEmail: z.string().email().max(320).optional(),
   customerName: z.string().trim().min(1).max(120).optional(),
 }).superRefine((value, context) => {
