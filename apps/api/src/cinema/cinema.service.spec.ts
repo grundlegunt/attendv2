@@ -1,4 +1,8 @@
-import { CinemaService, privateEventPreferredDate } from "./cinema.service";
+import {
+  CinemaService,
+  privateEventPreferredDate,
+  schedulePlanWeekWindow,
+} from "./cinema.service";
 
 describe("private-event preferred dates", () => {
   it("resolves calendar dates inside the cinema-local day across DST", () => {
@@ -10,6 +14,28 @@ describe("private-event preferred dates", () => {
 
   it("keeps legacy timestamp submissions compatible", () => {
     expect(privateEventPreferredDate("2026-09-12T12:00:00.000Z", "America/Chicago").toISOString()).toBe("2026-09-12T12:00:00.000Z");
+  });
+});
+
+describe("schedule-plan week windows", () => {
+  it("uses seven cinema calendar days across spring daylight saving", () => {
+    const window = schedulePlanWeekWindow(
+      new Date("2026-03-02T00:00:00.000Z"),
+      "America/Chicago",
+    );
+    expect(window.startsAt.toISOString()).toBe("2026-03-02T06:00:00.000Z");
+    expect(window.endsAt.toISOString()).toBe("2026-03-09T05:00:00.000Z");
+    expect(window.endsAt.getTime() - window.startsAt.getTime()).toBe(167 * 60 * 60 * 1000);
+  });
+
+  it("uses seven cinema calendar days across fall daylight saving", () => {
+    const window = schedulePlanWeekWindow(
+      new Date("2026-10-26T00:00:00.000Z"),
+      "America/Chicago",
+    );
+    expect(window.startsAt.toISOString()).toBe("2026-10-26T05:00:00.000Z");
+    expect(window.endsAt.toISOString()).toBe("2026-11-02T06:00:00.000Z");
+    expect(window.endsAt.getTime() - window.startsAt.getTime()).toBe(169 * 60 * 60 * 1000);
   });
 });
 
