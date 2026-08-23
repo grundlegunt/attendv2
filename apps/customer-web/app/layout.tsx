@@ -5,6 +5,7 @@ import "./globals.css";
 import { SiteHeader } from "./components/site-header";
 import { CustomerBrandingProvider } from "./components/customer-branding";
 import { customerSiteUrl } from "./lib/site-url";
+import { AnalyticsConsent } from "./components/analytics-consent";
 
 export const metadata: Metadata = {
   metadataBase: new URL(customerSiteUrl),
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <SiteHeader />
           </Suspense>
           {children}
+          <AnalyticsConsent />
         </CustomerBrandingProvider>
       </body>
     </html>
