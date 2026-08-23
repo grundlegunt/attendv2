@@ -265,8 +265,10 @@ export function ManagementControls({
   const canRefund =
     permissions.includes("payment.refund") ||
     permissions.includes("ticket.refund");
+  const refreshRequestRef = useRef(0);
 
   async function refresh() {
+    const requestId = ++refreshRequestRef.current;
     try {
       const [nextSettings, nextPeople, nextRefunds, nextRefundHistory] =
         await Promise.all([
@@ -289,6 +291,7 @@ export function ManagementControls({
               )
             : null,
         ]);
+      if (requestId !== refreshRequestRef.current) return;
       setSettings(nextSettings);
       setPeople(nextPeople);
       setRefunds(nextRefunds);
@@ -355,6 +358,7 @@ export function ManagementControls({
         );
       }
     } catch (reason) {
+      if (requestId !== refreshRequestRef.current) return;
       setError(
         reason instanceof ApiRequestError
           ? reason.body.message
@@ -364,6 +368,7 @@ export function ManagementControls({
   }
   useEffect(() => {
     void refresh();
+    return () => { refreshRequestRef.current += 1; };
   }, [accessToken, section]);
 
   const selectedRole = useMemo(
