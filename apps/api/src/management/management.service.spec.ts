@@ -1,5 +1,11 @@
 import { prisma } from "@cinema/database";
-import { ManagementService } from "./management.service";
+import { canonicalMembershipNumber, ManagementService } from "./management.service";
+
+describe("membership identity", () => {
+  it("uses one canonical value for case-insensitive Admin and POS lookup", () => {
+    expect(canonicalMembershipNumber("  member-a17  ")).toBe("MEMBER-A17");
+  });
+});
 
 describe("ManagementService private-event inquiry export", () => {
   it("keeps inquiry searches location-scoped and applies the selected status", async () => {
