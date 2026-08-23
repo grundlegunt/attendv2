@@ -1,4 +1,5 @@
 import type { CalendarShowtime, ScheduleAuditorium } from "./scheduling-calendar";
+import { cinemaDateTimeInputInstant } from "./cinema-date-time";
 
 const START_HOUR = 10;
 const TOTAL_HOURS = 18;
@@ -6,24 +7,33 @@ const SLOT_MINUTES = 5;
 
 interface ExportScheduleOptions {
   locationName: string;
+  timeZone: string;
   selectedDate: string;
   view: "day" | "week";
   auditoriums: ScheduleAuditorium[];
   showtimes: CalendarShowtime[];
 }
 
-function startOfCinemaDay(value: string | Date) {
-  const date = typeof value === "string" ? new Date(`${value}T12:00:00`) : new Date(value);
-  date.setHours(START_HOUR, 0, 0, 0);
-  return date;
+function startOfCinemaDay(dateKey: string, timeZone: string) {
+  return new Date(cinemaDateTimeInputInstant(`${dateKey}T${String(START_HOUR).padStart(2, "0")}:00`, timeZone));
 }
 
-function formatDate(date: Date) {
-  return date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+function addDateKey(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
-function safeSheetName(date: Date) {
-  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }).slice(0, 31);
+function formatDate(date: Date, timeZone: string) {
+  return date.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone });
+}
+
+function safeSheetName(date: Date, timeZone: string) {
+  return date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric", timeZone }).slice(0, 31);
+}
+
+function formatTime(date: Date, timeZone: string) {
+  return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZone });
 }
 
 function statusLabel(showtime: CalendarShowtime) {
@@ -33,6 +43,7 @@ function statusLabel(showtime: CalendarShowtime) {
 
 export async function downloadScheduleWorkbook({
   locationName,
+  timeZone,
   selectedDate,
   view,
   auditoriums,
@@ -45,11 +56,9 @@ export async function downloadScheduleWorkbook({
   workbook.subject = view === "week" ? "Weekly cinema schedule" : "Daily cinema schedule";
   workbook.created = new Date();
 
-  const firstDay = startOfCinemaDay(selectedDate);
   const days = Array.from({ length: view === "week" ? 7 : 1 }, (_, index) => {
-    const date = new Date(firstDay);
-    date.setDate(date.getDate() + index);
-    return date;
+    const dateKey = addDateKey(selectedDate, index);
+    return startOfCinemaDay(dateKey, timeZone);
   });
 
   for (const dayStart of days) {
@@ -60,7 +69,7 @@ export async function downloadScheduleWorkbook({
         return startsAt >= dayStart && startsAt < dayEnd;
       })
       .sort((a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime());
-    const sheet = workbook.addWorksheet(safeSheetName(dayStart), {
+    const sheet = workbook.addWorksheet(safeSheetName(dayStart, timeZone), {
       views: [{ state: "frozen", xSplit: 1, ySplit: 6 }],
       properties: { defaultRowHeight: 18 },
       pageSetup: { orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
@@ -70,7 +79,7 @@ export async function downloadScheduleWorkbook({
     const lastColumn = Math.max(2, auditoriums.length + 1);
     sheet.mergeCells(1, 1, 1, lastColumn);
     const title = sheet.getCell(1, 1);
-    title.value = `${locationName} · ${formatDate(dayStart)}`;
+    title.value = `${locationName} · ${formatDate(dayStart, timeZone)}`;
     title.font = { name: "Georgia", size: 20, bold: true, color: { argb: "FFF4EFE5" } };
     title.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1C1118" } };
     title.alignment = { vertical: "middle" };
@@ -108,8 +117,7 @@ export async function downloadScheduleWorkbook({
       const row = sheet.getRow(rowNumber);
       row.height = 13;
       const timeCell = row.getCell(1);
-      timeCell.value = slotStart;
-      timeCell.numFmt = "h:mm AM/PM";
+      timeCell.value = formatTime(slotStart, timeZone);
       timeCell.font = { size: 8, color: { argb: slot % 12 === 0 ? "FF332D28" : "FF8D857D" } };
       timeCell.alignment = { vertical: "middle", horizontal: "right" };
       if (slot % 12 !== 0) timeCell.value = null;
@@ -140,7 +148,7 @@ export async function downloadScheduleWorkbook({
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: colors.fill } };
         cell.font = { size: 8, bold: isFirstSlot || isFeatureStart || isCleaningStart, color: { argb: colors.font } };
         cell.alignment = { vertical: "middle", wrapText: false };
-        if (isFirstSlot) cell.value = `${showtime.movie.title} · Doors ${startsAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+        if (isFirstSlot) cell.value = `${showtime.movie.title} · Doors ${formatTime(startsAt, timeZone)}`;
         else if (isFeatureStart) cell.value = `${showtime.movie.title} · Feature`;
         else if (isCleaningStart) cell.value = "Cleaning";
       });
@@ -166,13 +174,12 @@ export async function downloadScheduleWorkbook({
         showtime.movie.title,
         showtime.movie.runtimeMinutes,
         showtime.auditorium.name,
-        new Date(showtime.startsAt),
-        new Date(showtime.featureStartsAt),
-        new Date(showtime.endsAt),
-        new Date(showtime.roomReadyAt),
+        formatTime(new Date(showtime.startsAt), timeZone),
+        formatTime(new Date(showtime.featureStartsAt), timeZone),
+        formatTime(new Date(showtime.endsAt), timeZone),
+        formatTime(new Date(showtime.roomReadyAt), timeZone),
         statusLabel(showtime),
       ];
-      [4, 5, 6, 7].forEach((column) => { row.getCell(column).numFmt = "h:mm AM/PM"; });
     });
   }
 
