@@ -786,16 +786,22 @@ export class ManagementService {
       },
     });
     if (!customer) throw AppError.notFound("Customer was not found.");
-    const paidStatuses = new Set(["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"]);
+    const [orderCount, ticketCount, ticketSpend, diningVisitCount, diningSpend] = await Promise.all([
+      prisma.ticketOrder.count({ where: { customerId, locationId } }),
+      prisma.ticket.count({ where: { ticketOrder: { customerId, locationId } } }),
+      prisma.ticketOrder.aggregate({ where: { customerId, locationId, status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } }),
+      prisma.restaurantTab.count({ where: { primaryCustomerId: customerId, locationId } }),
+      prisma.restaurantTab.aggregate({ where: { primaryCustomerId: customerId, locationId, status: "CLOSED" }, _sum: { totalCents: true } }),
+    ]);
     return {
       ...customer,
       summary: {
-        orderCount: customer.ticketOrders.length,
-        ticketCount: customer.ticketOrders.reduce((sum, order) => sum + order.tickets.length, 0),
-        lifetimeSpendCents: customer.ticketOrders.reduce((sum, order) => sum + (paidStatuses.has(order.status) ? order.totalCents : 0), 0),
+        orderCount,
+        ticketCount,
+        lifetimeSpendCents: ticketSpend._sum.totalCents ?? 0,
         currency: customer.ticketOrders[0]?.currency ?? "USD",
-        diningVisitCount: customer.restaurantTabs.length,
-        diningSpendCents: customer.restaurantTabs.reduce((sum, tab) => sum + (["CLOSED", "REFUNDED"].includes(tab.status) ? (tab.totalCents ?? 0) : 0), 0),
+        diningVisitCount,
+        diningSpendCents: diningSpend._sum.totalCents ?? 0,
         diningCurrency: customer.restaurantTabs[0]?.location.currency ?? "USD",
       },
     };

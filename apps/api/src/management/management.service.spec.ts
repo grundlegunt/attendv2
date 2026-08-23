@@ -89,15 +89,27 @@ describe("ManagementService customer history", () => {
         { id: "tab-2", status: "OPEN", totalCents: 900, location: { currency: "USD" } },
       ],
     } as never);
+    const orderCount = jest.spyOn(prisma.ticketOrder, "count").mockResolvedValue(72);
+    const ticketCount = jest.spyOn(prisma.ticket, "count").mockResolvedValue(118);
+    const ticketSpend = jest.spyOn(prisma.ticketOrder, "aggregate").mockResolvedValue({ _sum: { totalCents: 125_000 } } as never);
+    const diningVisitCount = jest.spyOn(prisma.restaurantTab, "count").mockResolvedValue(64);
+    const diningSpend = jest.spyOn(prisma.restaurantTab, "aggregate").mockResolvedValue({ _sum: { totalCents: 83_500 } } as never);
     try {
       const customer = await new ManagementService().customer("location-1", "customer-1");
       expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
         where: { id: "customer-1", OR: [{ ticketOrders: { some: { locationId: "location-1" } } }, { restaurantTabs: { some: { locationId: "location-1" } } }] },
         select: expect.objectContaining({ ticketOrders: expect.objectContaining({ where: { locationId: "location-1" }, take: 50 }) }),
       }));
-      expect(customer.summary).toEqual({ orderCount: 2, ticketCount: 3, lifetimeSpendCents: 2400, currency: "USD", diningVisitCount: 2, diningSpendCents: 3200, diningCurrency: "USD" });
+      expect(ticketSpend).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } });
+      expect(diningSpend).toHaveBeenCalledWith({ where: { primaryCustomerId: "customer-1", locationId: "location-1", status: "CLOSED" }, _sum: { totalCents: true } });
+      expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD" });
     } finally {
       findFirst.mockRestore();
+      orderCount.mockRestore();
+      ticketCount.mockRestore();
+      ticketSpend.mockRestore();
+      diningVisitCount.mockRestore();
+      diningSpend.mockRestore();
     }
   });
 });
