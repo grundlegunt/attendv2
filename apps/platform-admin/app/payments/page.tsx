@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession } from "../platform-session";
 
@@ -44,6 +44,7 @@ export default function PlatformPayments() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [workingOrganizationId, setWorkingOrganizationId] = useState<string | null>(null);
+  const overviewRequestRef = useRef(0);
 
   useEffect(() => {
     setSession(readPlatformSession(STORAGE_KEY));
@@ -51,13 +52,19 @@ export default function PlatformPayments() {
   }, []);
 
   async function loadOverview(activeSession: Session) {
-    const result = await request<Overview>("/platform/overview", undefined, activeSession.accessToken);
-    setOverview(result);
+    const requestId = ++overviewRequestRef.current;
+    try {
+      const result = await request<Overview>("/platform/overview", undefined, activeSession.accessToken);
+      if (requestId === overviewRequestRef.current) setOverview(result);
+    } catch (reason) {
+      if (requestId === overviewRequestRef.current) throw reason;
+    }
   }
 
   useEffect(() => {
     if (!session) return;
     void loadOverview(session).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load payment readiness."));
+    return () => { overviewRequestRef.current += 1; };
   }, [session]);
 
   useEffect(() => {
@@ -98,6 +105,7 @@ export default function PlatformPayments() {
 
   function signOut() {
     window.sessionStorage.removeItem(STORAGE_KEY);
+    overviewRequestRef.current += 1;
     setSession(null);
     setOverview(null);
     setError(null);
