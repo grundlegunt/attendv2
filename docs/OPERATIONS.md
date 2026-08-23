@@ -19,6 +19,7 @@ Deploy migrations as a separate pre-release job. They must finish before applica
 - `/api/v1/health/live`: process liveness only.
 - `/api/v1/health/ready`: PostgreSQL and Redis readiness. Route traffic only when it returns 200.
 - `/api/v1/health/operations`: protected with `OBSERVABILITY_TOKEN`; returns only aggregate operational counters, never tenant or payment credentials.
+- `ERROR_ALERT_WEBHOOK_URL` is optional and vendor-neutral. When configured, unexpected API failures send a short alert containing the environment, request id, method, path, error class, stack fingerprint, and code frames. Exception messages, request/query data, credentials, and customer/payment data are never forwarded.
 
 Minimum alerts:
 

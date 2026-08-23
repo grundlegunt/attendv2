@@ -7,6 +7,7 @@ import { AppModule } from "./app.module";
 import { GlobalExceptionFilter } from "./common/http-exception.filter";
 import { StructuredLogger } from "./common/logger.service";
 import { isCorsOriginAllowed } from "./common/cors-origin";
+import { ErrorAlertReporter } from "./common/error-alert-reporter";
 
 async function bootstrap() {
   // Validate configuration before anything else boots. Fails fast and loud
@@ -31,7 +32,7 @@ async function bootstrap() {
     },
     credentials: true,
   });
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalFilters(new GlobalExceptionFilter(new ErrorAlertReporter(env.ERROR_ALERT_WEBHOOK_URL)));
   app.setGlobalPrefix("api/v1");
 
   await app.listen(env.PORT);

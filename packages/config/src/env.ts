@@ -118,6 +118,10 @@ const envSchema = z.object({
   // Protects the machine-facing operational metrics endpoint. This is a
   // distinct secret from application/session credentials.
   OBSERVABILITY_TOKEN: z.string().min(32).optional(),
+  // Optional vendor-neutral destination for redacted unexpected-error alerts.
+  // The API never forwards exception messages, request bodies, query strings,
+  // authentication headers, or payment/customer data.
+  ERROR_ALERT_WEBHOOK_URL: z.string().url().optional(),
 
   CORS_ORIGINS: z.string().default("http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,http://localhost:3004,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,http://127.0.0.1:3004"),
 }).superRefine((env, context) => {
@@ -169,6 +173,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ...source,
     CUSTOMER_WEB_URL:
       source.CUSTOMER_WEB_URL ?? source.NEXT_PUBLIC_CUSTOMER_WEB_URL,
+    ERROR_ALERT_WEBHOOK_URL: source.ERROR_ALERT_WEBHOOK_URL || undefined,
   };
   const result = envSchema.safeParse(normalized);
   if (!result.success) {
