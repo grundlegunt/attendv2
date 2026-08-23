@@ -22,6 +22,7 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionsGuard } from "../auth/guards/permissions.guard";
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { RestaurantSettlementService } from "./restaurant-settlement.service";
 import { RestaurantService } from "./restaurant.service";
@@ -189,6 +190,8 @@ export class PublicRestaurantTabController {
   }
 
   @Post(":token/orders")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
   async createOrder(@Param("token") token: string, @Body(new ZodValidationPipe(createRestaurantOrderRequestSchema)) body: unknown) {
     const context = await this.settlement.guestOrderContext(token);
     const parsed = createRestaurantOrderRequestSchema.parse(body);
@@ -196,6 +199,8 @@ export class PublicRestaurantTabController {
   }
 
   @Post(":token/orders/:orderId/items")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
   async addOrderItem(@Param("token") token: string, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(addRestaurantOrderItemRequestSchema)) body: unknown) {
     const context = await this.settlement.guestOrderContext(token);
     const parsed = addRestaurantOrderItemRequestSchema.parse(body);
@@ -203,6 +208,8 @@ export class PublicRestaurantTabController {
   }
 
   @Post(":token/orders/:orderId/send")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
   async sendOrder(@Param("token") token: string, @Param("orderId") orderId: string, @Body(new ZodValidationPipe(sendRestaurantOrderRequestSchema)) body: unknown) {
     const context = await this.settlement.guestOrderContext(token);
     const parsed = sendRestaurantOrderRequestSchema.parse(body);

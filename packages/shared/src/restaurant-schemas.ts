@@ -147,6 +147,15 @@ export interface PublicMenuItem {
   priceCents: number;
   isVegan: boolean;
   isGlutenFree: boolean;
+  modifierGroups: Array<{
+    id: string;
+    name: string;
+    selectionType: "SINGLE" | "MULTIPLE";
+    required: boolean;
+    minSelections: number;
+    maxSelections: number | null;
+    modifiers: Array<{ id: string; name: string; priceDeltaCents: number }>;
+  }>;
 }
 
 export interface PublicMenuCategory {

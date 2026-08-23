@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { PublicDiningMenuResponse, PublicMenuItem } from "@cinema/shared";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 
 interface LiveTab {
   id: string;
+  locationId: string;
   status: string;
   checkDroppedAt: string | null;
   selectedTipCents: number | null;
@@ -46,14 +48,22 @@ export function LiveRestaurantTab({
   const [tipError, setTipError] = useState("");
   const [tipPending, setTipPending] = useState(false);
   const [paymentPending, setPaymentPending] = useState(false);
+  const [menu, setMenu] = useState<PublicDiningMenuResponse | null>(null);
+  const [orderPendingId, setOrderPendingId] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState("");
+  const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const tipPendingRef = useRef(false);
   const paymentPendingRef = useRef(false);
+  const orderPendingRef = useRef(false);
   const refreshPendingRef = useRef(false);
   const refreshRequestRef = useRef(0);
   const tabIdentityRef = useRef(0);
   const tipHydratedRef = useRef(false);
   const tipAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const paymentAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const orderAttemptRef = useRef<{ fingerprint: string; createId: string; itemId: string; sendId: string } | null>(null);
+  const menuRequestedRef = useRef(false);
 
   async function refresh() {
     if (refreshPendingRef.current || tipPendingRef.current || paymentPendingRef.current) return;
@@ -66,6 +76,12 @@ export function LiveRestaurantTab({
       );
       if (requestId !== refreshRequestRef.current) return;
       setTab(nextTab);
+      if (guestToken && !menuRequestedRef.current) {
+        menuRequestedRef.current = true;
+        void apiFetch<PublicDiningMenuResponse>(`/cinema/menu?locationId=${encodeURIComponent(nextTab.locationId)}`)
+          .then(setMenu)
+          .catch((reason) => { menuRequestedRef.current = false; setOrderError(reason instanceof ApiRequestError ? reason.body.message : "The menu is unavailable."); });
+      }
       if (!tipHydratedRef.current) {
         const persistedTipCents = nextTab.selectedTipCents ?? 0;
         setTipCents(persistedTipCents);
@@ -97,8 +113,15 @@ export function LiveRestaurantTab({
     paymentAttemptRef.current = null;
     tipPendingRef.current = false;
     paymentPendingRef.current = false;
+    orderPendingRef.current = false;
     setTipPending(false);
     setPaymentPending(false);
+    setMenu(null);
+    setOrderError("");
+    setModifierSelections({});
+    setQuantities({});
+    orderAttemptRef.current = null;
+    menuRequestedRef.current = false;
     void refresh();
     const timer = window.setInterval(() => void refresh(), 2_000);
     return () => {
@@ -225,6 +248,52 @@ export function LiveRestaurantTab({
     }
   }
 
+  function chooseModifier(item: PublicMenuItem, groupId: string, modifierId: string, checked: boolean) {
+    const group = item.modifierGroups.find((entry) => entry.id === groupId);
+    if (!group) return;
+    const groupIds = new Set(group.modifiers.map((modifier) => modifier.id));
+    setModifierSelections((current) => {
+      const existing = current[item.id] ?? [];
+      const withoutGroup = existing.filter((id) => !groupIds.has(id));
+      const withinGroup = existing.filter((id) => groupIds.has(id) && id !== modifierId);
+      const nextGroup = group.selectionType === "SINGLE" ? (checked ? [modifierId] : []) : (checked ? [...withinGroup, modifierId] : withinGroup);
+      return { ...current, [item.id]: [...withoutGroup, ...nextGroup] };
+    });
+  }
+
+  async function sendItem(item: PublicMenuItem) {
+    if (!guestToken || orderPendingRef.current) return;
+    const modifierIds = [...(modifierSelections[item.id] ?? [])].sort();
+    for (const group of item.modifierGroups) {
+      const groupIds = new Set(group.modifiers.map((modifier) => modifier.id));
+      const count = modifierIds.filter((id) => groupIds.has(id)).length;
+      const minimum = group.required ? Math.max(1, group.minSelections) : group.minSelections;
+      if (count < minimum || (group.maxSelections != null && count > group.maxSelections)) { setOrderError(`Check your selections for ${group.name}.`); return; }
+    }
+    const quantity = quantities[item.id] ?? 1;
+    const fingerprint = JSON.stringify({ itemId: item.id, quantity, modifierIds });
+    if (orderAttemptRef.current?.fingerprint !== fingerprint) orderAttemptRef.current = { fingerprint, createId: crypto.randomUUID(), itemId: crypto.randomUUID(), sendId: crypto.randomUUID() };
+    orderPendingRef.current = true;
+    setOrderPendingId(item.id);
+    setOrderError("");
+    try {
+      const order = await apiFetch<{ id: string }>(`/public/restaurant-tabs/${encodeURIComponent(guestToken)}/orders`, { method: "POST", body: JSON.stringify({ requestId: orderAttemptRef.current.createId }) });
+      await apiFetch(`/public/restaurant-tabs/${encodeURIComponent(guestToken)}/orders/${order.id}/items`, { method: "POST", body: JSON.stringify({ requestId: orderAttemptRef.current.itemId, menuItemId: item.id, quantity, modifierIds }) });
+      await apiFetch(`/public/restaurant-tabs/${encodeURIComponent(guestToken)}/orders/${order.id}/send`, { method: "POST", body: JSON.stringify({ requestId: orderAttemptRef.current.sendId }) });
+      orderAttemptRef.current = null;
+      setModifierSelections((current) => ({ ...current, [item.id]: [] }));
+      setQuantities((current) => ({ ...current, [item.id]: 1 }));
+      setMessage(`${item.name} was sent to the kitchen.`);
+      await refresh();
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) orderAttemptRef.current = null;
+      setOrderError(reason instanceof ApiRequestError ? reason.body.message : "Your order could not be sent.");
+    } finally {
+      orderPendingRef.current = false;
+      setOrderPendingId(null);
+    }
+  }
+
   if (!tab) {
     return (
       <section className="account-panel">
@@ -258,6 +327,15 @@ export function LiveRestaurantTab({
       <button className="link" onClick={onClose}>Back to showtimes</button>
       <h2>Your live tab</h2>
       <p>{statusCopy}</p>
+      {guestToken && ["PREAUTHORIZED", "OPEN"].includes(tab.status) && <details className="live-tab-ordering"><summary>Order food &amp; drinks</summary>
+        {!menu && <p>Loading the menu…</p>}
+        {menu?.categories.map((category) => <section key={category.id}><h3>{category.name}</h3>{category.items.map((item) => <article key={item.id}><div><strong>{item.name}</strong><span>${(item.priceCents / 100).toFixed(2)}</span>{item.description && <small>{item.description}</small>}</div>
+          {item.modifierGroups.map((group) => <fieldset key={group.id}><legend>{group.name}{group.required ? " (required)" : ""}</legend>{group.modifiers.map((modifier) => <label className="check" key={modifier.id}><input type={group.selectionType === "SINGLE" ? "radio" : "checkbox"} name={`${item.id}-${group.id}`} checked={(modifierSelections[item.id] ?? []).includes(modifier.id)} onChange={(event) => chooseModifier(item, group.id, modifier.id, event.target.checked)} />{modifier.name}{modifier.priceDeltaCents ? ` (+$${(modifier.priceDeltaCents / 100).toFixed(2)})` : ""}</label>)}</fieldset>)}
+          <label>Quantity<input type="number" min="1" max="99" value={quantities[item.id] ?? 1} onChange={(event) => setQuantities((current) => ({ ...current, [item.id]: Math.min(99, Math.max(1, Number(event.target.value) || 1)) }))} /></label>
+          <button className="secondary" disabled={orderPendingId !== null} onClick={() => void sendItem(item)}>{orderPendingId === item.id ? "Sending…" : "Send to kitchen"}</button>
+        </article>)}</section>)}
+        {orderError && <div className="error-banner" role="alert">{orderError}</div>}
+      </details>}
       {tab.orders.flatMap((order) =>
         order.items.map((item) => (
           <div key={item.id}>
