@@ -804,6 +804,12 @@ export class ManagementService {
         diningSpendCents: diningSpend._sum.totalCents ?? 0,
         diningCurrency: customer.restaurantTabs[0]?.location.currency ?? "USD",
       },
+      historyWindow: {
+        ticketOrdersShown: customer.ticketOrders.length,
+        ticketOrdersTotal: orderCount,
+        diningVisitsShown: customer.restaurantTabs.length,
+        diningVisitsTotal: diningVisitCount,
+      },
     };
   }
 

@@ -103,6 +103,7 @@ describe("ManagementService customer history", () => {
       expect(ticketSpend).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } });
       expect(diningSpend).toHaveBeenCalledWith({ where: { primaryCustomerId: "customer-1", locationId: "location-1", status: "CLOSED" }, _sum: { totalCents: true } });
       expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD" });
+      expect(customer.historyWindow).toEqual({ ticketOrdersShown: 2, ticketOrdersTotal: 72, diningVisitsShown: 2, diningVisitsTotal: 64 });
     } finally {
       findFirst.mockRestore();
       orderCount.mockRestore();
