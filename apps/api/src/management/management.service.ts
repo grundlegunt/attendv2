@@ -725,7 +725,8 @@ export class ManagementService {
     });
   }
 
-  async customer(locationId: string, customerId: string, page = { ticketOffset: 0, diningOffset: 0 }) {
+  async customer(locationId: string, customerId: string, page: { ticketOffset: number; diningOffset: number; pageSize?: number } = { ticketOffset: 0, diningOffset: 0 }) {
+    const pageSize = page.pageSize ?? 50;
     const customer = await prisma.customer.findFirst({
       where: { id: customerId, OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }] },
       select: {
@@ -739,7 +740,7 @@ export class ManagementService {
           where: { locationId },
           orderBy: { createdAt: "desc" },
           skip: page.ticketOffset,
-          take: 50,
+          take: pageSize,
           select: {
             id: true,
             orderNumber: true,
@@ -755,6 +756,7 @@ export class ManagementService {
               select: {
                 id: true,
                 status: true,
+                priceCentsPaid: true,
                 ticketType: { select: { name: true } },
                 showtimeSeat: { select: { seat: { select: { label: true } }, showtime: { select: { startsAt: true, movie: { select: { title: true } }, auditorium: { select: { name: true } } } } } },
               },
@@ -765,7 +767,7 @@ export class ManagementService {
           where: { locationId },
           orderBy: { openedAt: "desc" },
           skip: page.diningOffset,
-          take: 50,
+          take: pageSize,
           select: {
             id: true,
             label: true,
@@ -813,6 +815,33 @@ export class ManagementService {
         diningVisitsTotal: diningVisitCount,
       },
     };
+  }
+
+  async customerHistoryCsv(locationId: string, customerId: string) {
+    const customer = await this.customer(locationId, customerId, { ticketOffset: 0, diningOffset: 0, pageSize: 10_000 });
+    if (customer.historyWindow.ticketOrdersTotal > 10_000 || customer.historyWindow.diningVisitsTotal > 10_000) {
+      throw AppError.validationFailed("Customer history is too large for a single CSV export.");
+    }
+    const cell = (value: unknown) => {
+      const raw = String(value ?? "");
+      const safe = /^[\t\r ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    const identity = [customer.name, customer.email, customer.phone];
+    const ticketRows = customer.ticketOrders.flatMap((order) => order.tickets.map((ticket) => [
+      "Ticket", order.createdAt.toISOString(), order.orderNumber, order.status, ticket.showtimeSeat.showtime.movie.title,
+      ticket.ticketType.name, 1, ticket.showtimeSeat.seat.label, ticket.showtimeSeat.showtime.auditorium.name,
+      ticket.priceCentsPaid, order.currency, ...identity,
+    ]));
+    const diningRows = customer.restaurantTabs.flatMap((tab) => tab.orders.flatMap((order) => order.items.map((item) => [
+      "Dining", tab.openedAt.toISOString(), tab.label ?? tab.id, tab.status, tab.showtime?.movie.title ?? "",
+      item.menuItem.name, item.quantity, tab.seats.map((seat) => seat.showtimeSeat.seat.label).join(" "), tab.showtime?.auditorium.name ?? "Counter",
+      "", tab.location.currency, ...identity,
+    ])));
+    return [
+      "Activity,Date,Reference,Status,Film,Item or ticket type,Quantity,Seat,Auditorium or channel,Amount cents,Currency,Customer name,Customer email,Customer phone",
+      ...[...ticketRows, ...diningRows].sort((a, b) => String(b[1]).localeCompare(String(a[1]))).map((row) => row.map(cell).join(",")),
+    ].join("\n");
   }
 
   async paymentMethod(locationId: string, paymentMethodId: string) {

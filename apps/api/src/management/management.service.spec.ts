@@ -113,6 +113,21 @@ describe("ManagementService customer history", () => {
       diningSpend.mockRestore();
     }
   });
+
+  it("exports spreadsheet-safe ticket and dining rows", async () => {
+    const customer = jest.spyOn(ManagementService.prototype, "customer").mockResolvedValue({
+      id: "customer-1", name: "=Jane", email: "jane@example.com", phone: null, isGuest: false, createdAt: new Date(), summary: {} as never, historyWindow: {} as never,
+      ticketOrders: [{ id: "order-1", orderNumber: "AT-1", status: "PAID", channel: "ONLINE", totalCents: 1200, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date("2026-08-20T12:00:00Z"), tickets: [{ id: "ticket-1", status: "ISSUED", priceCentsPaid: 1200, ticketType: { name: "Standard" }, showtimeSeat: { seat: { label: "A1" }, showtime: { startsAt: new Date(), movie: { title: "Film, One" }, auditorium: { name: "Theater 1" } } } }] }],
+      restaurantTabs: [{ id: "tab-1", label: "Bar", status: "CLOSED", fulfillmentMode: "COUNTER_PICKUP", totalCents: 900, prepaidCents: 0, openedAt: new Date("2026-08-21T12:00:00Z"), closedAt: new Date(), location: { currency: "USD" }, showtime: null, seats: [], orders: [{ items: [{ quantity: 1, menuItem: { name: "Popcorn" } }] }] }],
+    } as never);
+    try {
+      const csv = await new ManagementService().customerHistoryCsv("location-1", "customer-1");
+      expect(customer).toHaveBeenCalledWith("location-1", "customer-1", { ticketOffset: 0, diningOffset: 0, pageSize: 10_000 });
+      expect(csv).toContain('"Film, One"');
+      expect(csv).toContain('"\'=Jane"');
+      expect(csv.indexOf('"Dining"')).toBeLessThan(csv.indexOf('"Ticket"'));
+    } finally { customer.mockRestore(); }
+  });
 });
 
 describe("ManagementService attention inbox", () => {
