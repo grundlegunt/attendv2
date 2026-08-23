@@ -155,11 +155,11 @@ interface SchedulePlanValidation {
   expectedUpdatedAt: string;
 }
 
-function currentWeekStart() {
-  const date = new Date();
-  const day = date.getDay();
-  date.setDate(date.getDate() - ((day + 6) % 7));
-  date.setHours(0, 0, 0, 0);
+function currentWeekStart(timeZone: string) {
+  const today = cinemaDateTimeInputValue(new Date().toISOString(), timeZone).slice(0, 10);
+  const date = new Date(`${today}T12:00:00Z`);
+  const day = date.getUTCDay();
+  date.setUTCDate(date.getUTCDate() - ((day + 6) % 7));
   return date.toISOString().slice(0, 10);
 }
 
@@ -246,7 +246,7 @@ export default function AdminPage() {
   const [undoingMove, setUndoingMove] = useState(false);
   const [schedulePlans, setSchedulePlans] = useState<SchedulePlan[]>([]);
   const [planName, setPlanName] = useState("");
-  const [planWeek, setPlanWeek] = useState(currentWeekStart);
+  const [planWeek, setPlanWeek] = useState(() => currentWeekStart(timeZone));
   const [savingPlan, setSavingPlan] = useState(false);
   const [deletingPlanId, setDeletingPlanId] = useState<string | null>(null);
   const [managingPlan, setManagingPlan] = useState<{ id: string; action: "duplicate" | "rename" } | null>(null);
@@ -312,7 +312,7 @@ export default function AdminPage() {
     setSavingPlan(true);
     const body = JSON.stringify({
       name: planName.trim(),
-      weekStartsAt: new Date(`${planWeek}T00:00:00`).toISOString(),
+      weekStartsAt: `${planWeek}T00:00:00.000Z`,
     });
     if (schedulePlanAttemptRef.current?.fingerprint !== body) {
       schedulePlanAttemptRef.current = {

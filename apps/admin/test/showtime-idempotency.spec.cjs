@@ -62,6 +62,13 @@ test("showtime editor reads and writes times in the cinema timezone", () => {
   assert.doesNotMatch(source, /startsAt: new Date\(startsAt\)\.toISOString\(\)/);
 });
 
+test("saved schedule weeks remain stable date keys across manager timezones", () => {
+  assert.match(source, /currentWeekStart\(timeZone: string\)/);
+  assert.match(source, /cinemaDateTimeInputValue\(new Date\(\)\.toISOString\(\), timeZone\)\.slice\(0, 10\)/);
+  assert.match(source, /weekStartsAt: `\$\{planWeek\}T00:00:00\.000Z`/);
+  assert.doesNotMatch(source, /new Date\(`\$\{planWeek\}T00:00:00`\)\.toISOString\(\)/);
+});
+
 test("showtime editor mutations share an immediate action lock", () => {
   assert.match(source, /showtimeEditorActionRef = useRef\(false\)/);
   assert.equal(source.match(/if \(showtimeEditorActionRef\.current(?: \|\| calendarShortcutActionRef\.current)?\) return;/g)?.length, 3);
