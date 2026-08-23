@@ -3,6 +3,7 @@ import { Request, Response } from "express";
 import { ApiErrorBody, ApiErrorCode } from "@cinema/shared";
 import { AppError } from "./app-error";
 import { StructuredLogger } from "./logger.service";
+import { ErrorAlertReporter, redactedErrorDetails } from "./error-alert-reporter";
 
 /**
  * Every error response, whether an intentional AppError, a NestJS built-in
@@ -14,6 +15,8 @@ import { StructuredLogger } from "./logger.service";
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new StructuredLogger(GlobalExceptionFilter.name);
+
+  constructor(private readonly alerts = new ErrorAlertReporter()) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -41,10 +44,20 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       return;
     }
 
+    const redacted = redactedErrorDetails(exception);
+    const alert = {
+      environment: process.env.NODE_ENV ?? "development",
+      ...redacted,
+      method: request.method,
+      path: request.path,
+      requestId,
+      occurredAt: new Date().toISOString(),
+    };
     this.logger.error("Unhandled exception", {
       requestId,
-      error: exception instanceof Error ? { message: exception.message, stack: exception.stack } : exception,
+      error: redacted,
     });
+    this.alerts.report(alert);
 
     const body: ApiErrorBody = {
       code: ApiErrorCode.Internal,
