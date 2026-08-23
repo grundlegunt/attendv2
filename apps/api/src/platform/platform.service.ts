@@ -2120,6 +2120,7 @@ export class PlatformService {
       {
         sub: userId,
         actorType: "PLATFORM",
+        tokenVersion,
         permissions: permissionsForPlatformRole(role),
       },
       { sub: userId, actorType: "PLATFORM", tokenVersion },

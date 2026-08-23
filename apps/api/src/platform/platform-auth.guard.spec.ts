@@ -1,13 +1,20 @@
 import { ExecutionContext } from "@nestjs/common";
 import { signTokenPair } from "@cinema/auth";
 import { __resetEnvCacheForTests } from "@cinema/config/env";
+import { prisma } from "@cinema/database";
 import { PlatformAuthGuard } from "./platform-auth.guard";
 
 const accessSecret = "platform-access-secret-for-unit-tests";
 
+jest.mock("@cinema/database", () => ({
+  prisma: { platformUser: { findUnique: jest.fn() } },
+}));
+
+const mockPlatformUserFindUnique = prisma.platformUser.findUnique as jest.Mock;
+
 function token(actorType: "PLATFORM" | "EMPLOYEE") {
   return signTokenPair(
-    { sub: `${actorType.toLowerCase()}-1`, actorType, permissions: [] },
+    { sub: `${actorType.toLowerCase()}-1`, actorType, tokenVersion: 0, permissions: [] },
     { sub: `${actorType.toLowerCase()}-1`, actorType, tokenVersion: 0 },
     { accessSecret, refreshSecret: "platform-refresh-secret-for-tests", accessTtlSeconds: 900, refreshTtlSeconds: 900 },
   ).accessToken;
@@ -35,16 +42,23 @@ describe("PlatformAuthGuard", () => {
     process.env.PAYMENT_PROVIDER = "test";
     process.env.NODE_ENV = "test";
     __resetEnvCacheForTests();
+    mockPlatformUserFindUnique.mockResolvedValue({ active: true, refreshTokenVersion: 0 });
   });
 
-  it("accepts a dedicated platform token", () => {
+  it("accepts a dedicated platform token", async () => {
     const { executionContext, request } = context(`Bearer ${token("PLATFORM")}`);
-    expect(new PlatformAuthGuard().canActivate(executionContext)).toBe(true);
+    await expect(new PlatformAuthGuard().canActivate(executionContext)).resolves.toBe(true);
     expect(request.actor).toMatchObject({ actorType: "PLATFORM" });
   });
 
-  it("rejects an ordinary cinema employee token", () => {
+  it("rejects an ordinary cinema employee token", async () => {
     const { executionContext } = context(`Bearer ${token("EMPLOYEE")}`);
-    expect(() => new PlatformAuthGuard().canActivate(executionContext)).toThrow("Attend platform access is required.");
+    await expect(new PlatformAuthGuard().canActivate(executionContext)).rejects.toThrow("Attend platform access is required.");
+  });
+
+  it("rejects an invalidated platform token", async () => {
+    mockPlatformUserFindUnique.mockResolvedValue({ active: true, refreshTokenVersion: 1 });
+    const { executionContext } = context(`Bearer ${token("PLATFORM")}`);
+    await expect(new PlatformAuthGuard().canActivate(executionContext)).rejects.toThrow("session is no longer valid");
   });
 });
