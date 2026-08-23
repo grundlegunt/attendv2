@@ -61,11 +61,21 @@ export class BoxOfficeService {
         ],
         ticketOrders: { some: { locationId } },
       },
-      select: { id: true, name: true, email: true, phone: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        memberships: {
+          where: { organization: { locations: { some: { id: locationId } } } },
+          select: { membershipNumber: true, tier: true, status: true, expiresAt: true },
+          take: 1,
+        },
+      },
       take: 10,
       orderBy: { updatedAt: "desc" },
     });
-    return customers.map((customer) => ({ ...customer, membership: null }));
+    return customers.map(({ memberships, ...customer }) => ({ ...customer, membership: memberships[0] ?? null }));
   }
 
   async orderLookup(locationId: string, query: string) {
