@@ -70,6 +70,7 @@ export default function PlatformDashboard() {
   const [revenueDays, setRevenueDays] = useState(7);
   const [revenueLoading, setRevenueLoading] = useState(false);
   const revenueRequestRef = useRef(0);
+  const authRequestRef = useRef(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -135,21 +136,24 @@ export default function PlatformDashboard() {
 
   async function login(event: FormEvent) {
     event.preventDefault();
+    const requestId = ++authRequestRef.current;
     setError(null);
     try {
       const result = await request<Session>("/platform/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
+      if (requestId !== authRequestRef.current) return;
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result));
       setSession(result);
       setPassword("");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Sign in failed.");
+      if (requestId === authRequestRef.current) setError(reason instanceof Error ? reason.message : "Sign in failed.");
     }
   }
 
   function signOut() {
+    authRequestRef.current += 1;
     window.sessionStorage.removeItem(STORAGE_KEY);
     revenueRequestRef.current += 1;
     setSession(null);
