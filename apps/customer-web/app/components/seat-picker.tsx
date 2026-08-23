@@ -177,6 +177,8 @@ export function SeatPicker({
 
   async function changeGeneralAdmissionQuantity(quantity: number) {
     if (!holderKey || !availability || pendingSeatIdsRef.current.size > 0) return;
+    refreshRequestRef.current += 1;
+    refreshPendingRef.current = false;
     const target = Math.max(0, Math.min(10, quantity));
     const current = availability.seats.filter((seat) => seat.heldByMe);
     const marker = "general-admission";
