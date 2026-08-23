@@ -335,10 +335,20 @@ export class AuthService {
     if (requestId.length < 16) throw AppError.validationFailed("A valid registration idempotency key is required.");
     const normalizedEmail = input.email.toLowerCase();
     const normalizedName = input.name ?? null;
-    const customer = await prisma.$transaction(async (tx) => {
+    const registration = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${normalizedEmail})::bigint)`;
       const existing = await tx.customer.findUnique({ where: { email: normalizedEmail }, include: { authAccount: true } });
       if (existing?.authAccount?.passwordHash) {
+        if (!existing.authAccount.emailVerifiedAt) {
+          const started = await tx.auditEvent.findMany({
+            where: { actorType: "CUSTOMER", actorId: existing.id, action: "customer.registration_claim_started", entityType: "Customer", entityId: existing.id },
+            select: { afterState: true },
+          });
+          const replay = started.map(({ afterState }) => afterState && typeof afterState === "object" && !Array.isArray(afterState) ? afterState as Record<string, unknown> : undefined).find((state) => state?.requestId === requestId);
+          const matches = replay?.email === normalizedEmail && await verifyPassword(existing.authAccount.passwordHash, input.password);
+          if (!matches) throw AppError.conflict("An account setup is already pending for this email. Use the verification email or reset the password.");
+          return { customer: existing, claimPending: true };
+        }
         const completed = await tx.auditEvent.findMany({
           where: { actorType: "CUSTOMER", actorId: existing.id, action: "customer.registered", entityType: "Customer", entityId: existing.id },
           select: { afterState: true },
@@ -347,25 +357,28 @@ export class AuthService {
         if (!replay) throw AppError.conflict("An account with this email already exists.");
         const matches = replay.email === normalizedEmail && replay.name === normalizedName && await verifyPassword(existing.authAccount.passwordHash, input.password);
         if (!matches) throw AppError.conflict("The registration request id was already used with different details.");
-        return existing;
+        return { customer: existing, claimPending: false };
       }
       const passwordHash = await hashPassword(input.password);
-      const registered = existing
-        ? await tx.customer.update({
+      if (existing) {
+        const pending = await tx.customer.update({
           where: { id: existing.id },
-          data: {
-            name: normalizedName,
-            isGuest: false,
-            authAccount: { create: { passwordHash } },
-          },
+          data: { authAccount: { create: { passwordHash } } },
           include: { authAccount: true },
-        })
-        : await tx.customer.create({
+        });
+        await this.audit.record({
+          actorType: "CUSTOMER", actorId: pending.id, action: "customer.registration_claim_started",
+          entityType: "Customer", entityId: pending.id,
+          afterState: { requestId, email: normalizedEmail },
+        }, tx);
+        return { customer: pending, claimPending: true };
+      }
+      const registered = await tx.customer.create({
           data: {
             email: normalizedEmail,
             name: normalizedName,
             isGuest: false,
-            authAccount: { create: { passwordHash } },
+            authAccount: { create: { passwordHash, emailVerifiedAt: new Date() } },
           },
           include: { authAccount: true },
         });
@@ -374,9 +387,14 @@ export class AuthService {
         entityType: "Customer", entityId: registered.id,
         afterState: { requestId, email: normalizedEmail, name: normalizedName },
       }, tx);
-      return registered;
+      return { customer: registered, claimPending: false };
     });
 
+    if (registration.claimPending) {
+      await this.requestCustomerPasswordReset({ email: normalizedEmail }, requestId);
+      throw AppError.conflict("Check your email to verify ownership and finish creating this account.");
+    }
+    const customer = registration.customer;
     const tokens = this.issueCustomerTokens(customer.id, customer.authAccount!.refreshTokenVersion);
     return { tokens, customer: this.customerToProfile(customer) };
   }
@@ -387,7 +405,7 @@ export class AuthService {
       include: { authAccount: true },
     });
 
-    if (!customer || !customer.authAccount || !customer.authAccount.passwordHash) {
+    if (!customer || !customer.authAccount || !customer.authAccount.passwordHash || !customer.authAccount.emailVerifiedAt) {
       throw AppError.invalidCredentials();
     }
 
@@ -411,7 +429,7 @@ export class AuthService {
       include: { authAccount: true },
     });
 
-    if (!customer || !customer.authAccount) throw AppError.unauthenticated();
+    if (!customer || !customer.authAccount?.emailVerifiedAt) throw AppError.unauthenticated();
     if (customer.authAccount.refreshTokenVersion !== payload.tokenVersion) {
       throw AppError.unauthenticated("Session has been invalidated. Please log in again.");
     }
@@ -596,11 +614,15 @@ export class AuthService {
       const passwordHash = await hashPassword(input.newPassword);
       const result = await tx.customerAuthAccount.updateMany({
         where: { customerId: customer.id, refreshTokenVersion: payload.tokenVersion },
-        data: { passwordHash, refreshTokenVersion: { increment: 1 } },
+        data: { passwordHash, emailVerifiedAt: new Date(), refreshTokenVersion: { increment: 1 } },
       });
       if (result.count !== 1) {
         throw AppError.validationFailed("This password reset link is invalid or expired.");
       }
+      await tx.customer.update({
+        where: { id: customer.id },
+        data: { isGuest: false },
+      });
       await this.audit.record({
         actorType: "CUSTOMER",
         actorId: customer.id,

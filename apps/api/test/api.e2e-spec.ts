@@ -5063,26 +5063,54 @@ describe("Customer authentication", () => {
     expect(res.body.code).toBe("CONFLICT");
   });
 
-  it("upgrades a ticket-checkout guest without losing their customer identity", async () => {
+  it("requires email ownership before exposing a ticket-checkout guest's history", async () => {
     const guestEmail = "ticket-guest-upgrade@m0test.local";
     const { prisma } = await import("@cinema/database");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { TestEmailProvider } = await import("@cinema/notifications");
+    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const deliveriesBefore = emailProvider.sentCustomerPasswordResets.length;
     const guest = await prisma.customer.create({
       data: { email: guestEmail, name: "Ticket Guest", isGuest: true },
     });
 
+    const registrationRequestId = crypto.randomUUID();
     const res = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/register")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .set("Idempotency-Key", crypto.randomUUID())
+      .set("Idempotency-Key", registrationRequestId)
       .send({
         email: guestEmail.toUpperCase(),
         password: "customer-password-2",
         name: "Registered Customer",
       });
 
-    expect(res.status).toBe(201);
-    expect(res.body.customer.id).toBe(guest.id);
-    expect(res.body.customer.isGuest).toBe(false);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toMatch(/verify ownership/i);
+    expect(setCookieHeaders(res)).toHaveLength(0);
+    expect(emailProvider.sentCustomerPasswordResets).toHaveLength(deliveriesBefore + 1);
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ email: guestEmail, password: "customer-password-2" })
+      .expect(401);
+
+    const delivery = emailProvider.sentCustomerPasswordResets.at(-1)!;
+    const token = new URL(delivery.resetUrl).hash.replace("#resetPassword=", "");
+    await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/password-reset/confirm")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .set("Idempotency-Key", crypto.randomUUID())
+      .send({ token, newPassword: "verified-customer-password-3" })
+      .expect(200, { reset: true });
+
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/auth/customers/login")
+      .set("Origin", CUSTOMER_WEB_ORIGIN)
+      .send({ email: guestEmail, password: "verified-customer-password-3" })
+      .expect(200);
+    expect(login.body.customer.id).toBe(guest.id);
+    expect(login.body.customer.isGuest).toBe(false);
   });
 
   it("logs the customer in without exposing either token to JavaScript", async () => {
