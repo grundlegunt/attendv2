@@ -29,9 +29,8 @@ Real, scoped work exists (or has been assessed), but building now would be guess
 
 ## 4. Adjacent-market expansion (nonprofit / general-admission venues)
 
-Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre, Nashville) as a stand-in for a whole class of venue the platform doesn't currently fit: nonprofit, general-admission, membership/donation-funded rather than dine-in-driven. None of this matters for the core dine-in customer (Meridian and similar); it only matters if/when pursuing this adjacent segment deliberately.
+Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre, Nashville) as a stand-in for a membership/donation-funded venue rather than a dine-in cinema. General admission is now supported; the remaining items matter only if/when pursuing the nonprofit segment deliberately.
 
-- **General-admission ticketing mode — the structural item.** No seat map; a `Showtime`/`Auditorium` `seatingMode` of `RESERVED` or `GENERAL_ADMISSION` selling against a capacity count instead of individual seats, with the same concurrency discipline as seat holds (locked capacity decrement instead of per-seat lock). Worth building on its own merits eventually — most small/older/community cinemas and nearly all film festivals run general admission, not reserved seating — but it's a real expansion of the addressable market, not a one-off accommodation for one theater.
 - **Real membership/giving-tier program with correct tax mechanics.** A paid membership with benefits is legally a charitable contribution with quid pro quo — the fair market value of benefits received must be disclosed, and only the excess is tax-deductible. Needs a real `MembershipTier`/`MembershipGift` concept, `Payment.purpose` gaining `DONATION`/`MEMBERSHIP_GIFT`, and receipts that state the deductible amount correctly.
 - **A standalone donate flow** — one-time and recurring giving with nothing purchased in return; every payment today originates from a ticket or a tab.
 - **Nonprofit-specific reporting** — donor/membership reports and program-level attendance, extending Milestone 10's reporting scope rather than a new subsystem.
@@ -45,6 +44,7 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 ## Resolved since this backlog was drafted
 
+- **General-admission ticketing** — auditoriums can sell capacity-backed GA inventory without exposing a seat map, with concurrency-safe customer and box-office checkout plus support in setup, onboarding, receipts, scanning, waitlists, reporting, and schedule exports.
 - **Production observability** — unexpected API failures and root crashes across the customer site, Admin, Attend Master, Staff POS, and KDS produce vendor-neutral alerts with rate limiting, stable fingerprints, safe code frames, and recovery screens; exception messages, query strings, credentials, and customer/payment data are excluded.
 - **Distributor and cinema revenue split reporting** — Revenue Overview calculates theatrical-week distributor and cinema shares from validated film terms, identifies unallocated revenue, and exports distributor box-office detail without treating settlement as a register-time payment split.
 - **Ticket-fee drill-down** — Revenue Overview expands fee totals into order-level ticket counts, channel, average fee, and collected fee detail while preserving Attend's current fee treatment.
