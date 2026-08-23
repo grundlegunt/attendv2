@@ -728,7 +728,14 @@ export class ManagementService {
   async customer(locationId: string, customerId: string, page: { ticketOffset: number; diningOffset: number; pageSize?: number } = { ticketOffset: 0, diningOffset: 0 }) {
     const pageSize = page.pageSize ?? 50;
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }] },
+      where: {
+        id: customerId,
+        OR: [
+          { ticketOrders: { some: { locationId } } },
+          { restaurantTabs: { some: { locationId } } },
+          { memberships: { some: { organization: { locations: { some: { id: locationId } } } } } },
+        ],
+      },
       select: {
         id: true,
         name: true,
@@ -837,7 +844,17 @@ export class ManagementService {
       }
       const location = await tx.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
       if (!location) throw AppError.notFound("Location was not found.");
-      const customer = await tx.customer.findFirst({ where: { id: input.customerId, OR: [{ ticketOrders: { some: { locationId: input.locationId } } }, { restaurantTabs: { some: { locationId: input.locationId } } }] }, select: { id: true } });
+      const customer = await tx.customer.findFirst({
+        where: {
+          id: input.customerId,
+          OR: [
+            { ticketOrders: { some: { locationId: input.locationId } } },
+            { restaurantTabs: { some: { locationId: input.locationId } } },
+            { memberships: { some: { organizationId: location.organizationId } } },
+          ],
+        },
+        select: { id: true },
+      });
       if (!customer) throw AppError.notFound("Customer was not found.");
       const before = await tx.membership.findUnique({ where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } } });
       const membership = await tx.membership.upsert({
