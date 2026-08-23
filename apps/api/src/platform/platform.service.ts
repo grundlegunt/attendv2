@@ -130,6 +130,20 @@ export class PlatformService {
     };
   }
 
+  async logout(userId: string): Promise<void> {
+    await prisma.platformUser.update({
+      where: { id: userId },
+      data: { refreshTokenVersion: { increment: 1 } },
+    });
+    await this.audit.record({
+      actorType: "PLATFORM",
+      actorId: userId,
+      action: "platform.logout",
+      entityType: "PlatformUser",
+      entityId: userId,
+    });
+  }
+
   async overview() {
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },

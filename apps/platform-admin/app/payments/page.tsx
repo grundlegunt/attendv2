@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
-import { platformRequest, readPlatformSession } from "../platform-session";
+import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -108,6 +108,7 @@ export default function PlatformPayments() {
 
   function signOut() {
     authRequestRef.current += 1;
+    void revokePlatformSession(API_BASE_URL, session?.accessToken);
     window.sessionStorage.removeItem(STORAGE_KEY);
     overviewRequestRef.current += 1;
     setSession(null);

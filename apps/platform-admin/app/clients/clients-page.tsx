@@ -16,6 +16,7 @@ import {
   platformDownload,
   platformRequest,
   readPlatformSession,
+  revokePlatformSession,
 } from "../platform-session";
 
 const API_BASE_URL =
@@ -494,6 +495,7 @@ export default function AttendMaster() {
 
   function signOut() {
     authRequestRef.current += 1;
+    void revokePlatformSession(API_BASE_URL, session?.accessToken);
     window.sessionStorage.removeItem(STORAGE_KEY);
     setSession(null);
     setOverview(null);

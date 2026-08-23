@@ -821,6 +821,30 @@ describe("Attend platform authentication boundary", () => {
       .expect(401);
   });
 
+  it("invalidates Attend Master access and refresh tokens on logout", async () => {
+    const { prisma } = await import("@cinema/database");
+    const login = await request(app.getHttpServer())
+      .post("/api/v1/platform/auth/login")
+      .send({ email: "platform@attend.test", password: SEED_PASSWORD })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post("/api/v1/platform/auth/logout")
+      .set("Authorization", `Bearer ${login.body.accessToken}`)
+      .expect(204);
+    await request(app.getHttpServer())
+      .get("/api/v1/platform/overview")
+      .set("Authorization", `Bearer ${login.body.accessToken}`)
+      .expect(401);
+    await request(app.getHttpServer())
+      .post("/api/v1/platform/auth/refresh")
+      .send({ refreshToken: login.body.refreshToken })
+      .expect(401);
+    expect(await prisma.auditEvent.count({ where: { action: "platform.logout", actorId: login.body.user.id } })).toBeGreaterThan(0);
+    const restored = await loginPlatformOwner();
+    platformAccessToken = restored.body.accessToken;
+    platformRefreshToken = restored.body.refreshToken;
+  });
+
   it("rejects a cinema employee token from the Attend Master API", async () => {
     const res = await request(app.getHttpServer())
       .get("/api/v1/platform/overview")

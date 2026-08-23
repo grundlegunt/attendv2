@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
-import { platformRequest, readPlatformSession } from "../platform-session";
+import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
@@ -114,6 +114,7 @@ export default function PlatformAuditLog() {
 
   function signOut() {
     authRequestRef.current += 1;
+    void revokePlatformSession(API_BASE_URL, session?.accessToken);
     window.sessionStorage.removeItem(STORAGE_KEY);
     eventsRequestRef.current += 1;
     setSession(null); setEvents([]); setError(null);
