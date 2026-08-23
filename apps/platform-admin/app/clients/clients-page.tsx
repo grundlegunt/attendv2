@@ -233,6 +233,7 @@ type AuditoriumDraft = {
   locationId: string;
   name: string;
   seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+  seatingStyle: SeatMapLayout["seatingStyle"];
   capacity: number;
   rows: number;
   seatsPerRow: number;
@@ -1019,7 +1020,7 @@ export default function AttendMaster() {
   }
 
   function auditoriumLayout(draft: AuditoriumDraft): SeatMapLayout {
-    if (draft.sourceLayout) return draft.sourceLayout;
+    if (draft.sourceLayout) return { ...draft.sourceLayout, seatingStyle: draft.seatingStyle };
     const aisleX = Math.ceil(draft.seatsPerRow / 2);
     return {
       mode: "BASIC",
@@ -1028,7 +1029,7 @@ export default function AttendMaster() {
         height: draft.rows,
       },
       screenPosition: "TOP",
-      seatingStyle: "SINGLE",
+      seatingStyle: draft.seatingStyle,
       levels: [
         {
           id: "main",
@@ -2045,6 +2046,7 @@ export default function AttendMaster() {
                                   locationId: location.id,
                                   name: `Theater ${location.auditoriums.length + 1}`,
                                   seatingMode: organization.defaultSeatingMode,
+                                  seatingStyle: "SINGLE",
                                   capacity: 96,
                                   rows: 8,
                                   seatsPerRow: 12,
@@ -2188,6 +2190,25 @@ export default function AttendMaster() {
                                     });
                                   }}
                                 />
+                              </label>
+                              <label>
+                                Seating style
+                                <select
+                                  value={auditoriumDraft.seatingStyle}
+                                  onChange={(event) =>
+                                    setAuditoriumDraft({
+                                      ...auditoriumDraft,
+                                      seatingStyle: event.target.value as SeatMapLayout["seatingStyle"],
+                                    })
+                                  }
+                                >
+                                  <option value="SINGLE">Single</option>
+                                  <option value="PAIR">Pairs</option>
+                                  <option value="LOVESEAT">Love seat</option>
+                                  <option value="TABLE_2">Table · 2</option>
+                                  <option value="TABLE_4">Table · 4</option>
+                                  <option value="BENCH">Bench / sofa</option>
+                                </select>
                               </label>
                               <label>
                                 Accessible pairs
@@ -2334,6 +2355,9 @@ export default function AttendMaster() {
                                     name: auditorium.name,
                                     seatingMode:
                                       auditorium.seatingMode ?? "RESERVED",
+                                    seatingStyle:
+                                      auditorium.seatMap?.layout?.seatingStyle ??
+                                      "SINGLE",
                                     capacity: auditorium.capacity,
                                     rows,
                                     seatsPerRow,
