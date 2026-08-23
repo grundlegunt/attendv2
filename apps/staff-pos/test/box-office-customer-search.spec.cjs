@@ -19,3 +19,8 @@ test("box-office customer results disclose membership details and handle phone-o
   assert.match(source, /disabled=\{busy \|\| !customer\.email\}/);
   assert.match(source, /customer\.name \|\| customer\.email \|\| customer\.phone/);
 });
+
+test("box-office search invites membership-number lookup", () => {
+  assert.match(source, /Find by name, email, phone, or membership number/);
+  assert.match(source, /customer\.membership\.membershipNumber/);
+});

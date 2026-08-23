@@ -54,12 +54,19 @@ export class BoxOfficeService {
     if (normalized.length > 100) throw AppError.validationFailed("Customer searches cannot exceed 100 characters.");
     const customers = await prisma.customer.findMany({
       where: {
-        OR: [
-          { email: { contains: normalized, mode: "insensitive" } },
-          { phone: { contains: normalized } },
-          { name: { contains: normalized, mode: "insensitive" } },
+        AND: [
+          { OR: [
+            { email: { contains: normalized, mode: "insensitive" } },
+            { phone: { contains: normalized } },
+            { name: { contains: normalized, mode: "insensitive" } },
+            { memberships: { some: { membershipNumber: { contains: normalized, mode: "insensitive" }, organization: { locations: { some: { id: locationId } } } } } },
+          ] },
+          { OR: [
+            { ticketOrders: { some: { locationId } } },
+            { restaurantTabs: { some: { locationId } } },
+            { memberships: { some: { organization: { locations: { some: { id: locationId } } } } } },
+          ] },
         ],
-        ticketOrders: { some: { locationId } },
       },
       select: {
         id: true,
