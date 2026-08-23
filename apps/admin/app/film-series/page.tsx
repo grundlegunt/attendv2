@@ -41,13 +41,23 @@ export default function FilmSeriesPage() {
   const archiveSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
   const restoreSeriesAttemptRef = useRef<{ seriesId: string; requestId: string } | null>(null);
   const reorderSeriesAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const refreshRequestRef = useRef(0);
 
   async function refresh() {
     if (!accessToken) return;
-    setData(await apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken }));
+    const requestId = ++refreshRequestRef.current;
+    try {
+      const nextData = await apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken });
+      if (requestId === refreshRequestRef.current) setData(nextData);
+    } catch (reason) {
+      if (requestId === refreshRequestRef.current) showError(reason);
+    }
   }
 
-  useEffect(() => { refresh().catch(showError); }, [accessToken]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequestRef.current += 1; };
+  }, [accessToken]);
 
   function showError(reason: unknown) {
     if (reason instanceof ApiRequestError && reason.status === 401) {
