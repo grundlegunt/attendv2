@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AuditoriumSeatingMode, SeatMapLayout } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { useAdminSession } from "../admin-session";
@@ -35,13 +35,23 @@ export default function CinemaSetupPage() {
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedAuditoriumId, setSelectedAuditoriumId] = useState<string | null>(null);
+  const refreshRequestRef = useRef(0);
 
   async function refresh() {
     if (!accessToken) return;
-    setData(await apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken }));
+    const requestId = ++refreshRequestRef.current;
+    try {
+      const nextData = await apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken });
+      if (requestId === refreshRequestRef.current) setData(nextData);
+    } catch (reason) {
+      if (requestId === refreshRequestRef.current) showError(reason);
+    }
   }
 
-  useEffect(() => { refresh().catch(showError); }, [accessToken]);
+  useEffect(() => {
+    void refresh();
+    return () => { refreshRequestRef.current += 1; };
+  }, [accessToken]);
 
   useEffect(() => {
     const auditoriums = data?.location.auditoriums ?? [];
