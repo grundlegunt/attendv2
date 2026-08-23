@@ -32,6 +32,7 @@ export function useAdminUi() { return useContext(AdminUiContext); }
 export function AdminSessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
+  const sessionRequestRef = useRef(0);
   const passwordChangeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -47,7 +48,15 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   }
 
   async function refreshSession(refreshToken: string) {
-    const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken }) });
+    const requestId = ++sessionRequestRef.current;
+    let response: AuthTokenResponse & { employee: AuthenticatedEmployee };
+    try {
+      response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/refresh", { method: "POST", body: JSON.stringify({ refreshToken }) });
+    } catch (reason) {
+      if (requestId !== sessionRequestRef.current) return null;
+      throw reason;
+    }
+    if (requestId !== sessionRequestRef.current) return null;
     const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
     storeSession(next);
     return next;
@@ -102,8 +111,10 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
 
   async function login(event: FormEvent) {
     event.preventDefault(); setError(null);
+    const requestId = ++sessionRequestRef.current;
     try {
       const response = await apiFetch<unknown>("/auth/staff/login", { method: "POST", body: JSON.stringify({ email, password }) });
+      if (requestId !== sessionRequestRef.current) return;
       if (!isStaffLoginResponse(response)) {
         setError("Staff sign-in is still updating. Refresh and try again.");
         return;
@@ -111,7 +122,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
       const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
       storeSession(next); setCurrentPassword(password); setPassword("");
     } catch (reason) {
-      setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
+      if (requestId === sessionRequestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : "The request could not be completed.");
     }
   }
 
@@ -120,15 +131,18 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     if (newPassword !== confirmPassword) { setError("New passwords do not match."); return; }
     const body = JSON.stringify({ currentPassword, newPassword });
     if (passwordChangeAttemptRef.current?.fingerprint !== body) passwordChangeAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    const requestId = ++sessionRequestRef.current;
     try {
       const response = await apiFetch<AuthTokenResponse & { employee: AuthenticatedEmployee }>("/auth/staff/change-password", { accessToken: session!.accessToken, method: "POST", headers: { "Idempotency-Key": passwordChangeAttemptRef.current.requestId }, body });
+      if (requestId !== sessionRequestRef.current) return;
       const next = { employee: response.employee, accessToken: response.accessToken, refreshToken: response.refreshToken, expiresInSeconds: response.expiresInSeconds };
       passwordChangeAttemptRef.current = null;
       storeSession(next); setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
-    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
+    } catch (reason) { if (requestId === sessionRequestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
   }
 
   const value = useMemo(() => session ? { ...session, signOut: () => {
+    sessionRequestRef.current += 1;
     if (!session.supportSession) void apiFetch("/auth/staff/logout", { accessToken: session.accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY); setSession(null);
   } } : null, [session]);
