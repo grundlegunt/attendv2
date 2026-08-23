@@ -526,10 +526,40 @@ model Showtime {
   updatedAt       DateTime        @updatedAt
   showtimeSeats   ShowtimeSeat[]
   restaurantTabs  RestaurantTab[]
+  waitlistEntries ShowtimeWaitlistEntry[]
 
   @@index([auditoriumId, startsAt])
   @@index([movieId, startsAt])
   @@map("showtimes")
+}
+
+enum ShowtimeWaitlistStatus {
+  ACTIVE
+  NOTIFIED
+  CANCELLED
+  EXPIRED
+}
+
+model ShowtimeWaitlistEntry {
+  id                    String                 @id @default(uuid())
+  showtimeId            String
+  showtime              Showtime               @relation(fields: [showtimeId], references: [id], onDelete: Cascade)
+  email                 String
+  status                ShowtimeWaitlistStatus @default(ACTIVE)
+  expiresAt             DateTime
+  requestId             String                 @unique
+  requestFingerprint    String
+  notifiedAt            DateTime?
+  notificationClaimedAt DateTime?
+  notificationMessageId String?
+  notificationError     String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  @@unique([showtimeId, email])
+  @@index([status, expiresAt, createdAt])
+  @@index([status, notificationClaimedAt, createdAt])
+  @@map("showtime_waitlist_entries")
 }
 
 model ShowtimeSeat {

@@ -1618,6 +1618,10 @@ button.link {
   background: rgba(19, 13, 17, 0.96);
   backdrop-filter: blur(12px);
 }
+.showtime-waitlist { display: grid; gap: 10px; margin: 24px 0; padding: 20px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.showtime-waitlist h3, .showtime-waitlist p { margin: 0; }
+.showtime-waitlist > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.showtime-waitlist label { display: grid; gap: 6px; }
 .seat-picker__summary strong {
   display: block;
   margin-top: 4px;

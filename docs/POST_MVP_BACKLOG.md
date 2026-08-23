@@ -14,7 +14,6 @@ These items have a clear operator or customer benefit and can be scoped without 
 - **Attend Master client-health signals.** Once multiple real clients are operating, add trend, refund-rate, and payment-failure indicators alongside revenue. Validate thresholds against real operating history rather than hardcoding speculative alerts.
 - **Customer self-service in-seat ordering.** A seat-linked restaurant tab can be viewed and tipped by the customer, but customers cannot add items themselves. A future flow should use a short-lived seat/tab credential, submit into the existing restaurant/KDS pipeline, and avoid exposing staff authorization.
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
-- **Sold-out waitlists.** Let customers request a notification when inventory returns, with rate limiting, expiry, and no promise that a released seat remains available.
 - **Production observability.** Add application error tracking and alerting across the public site, Admin, Attend Master, Staff POS, KDS, and API. Ensure sensitive authentication, payment, and customer data is redacted.
 - **Analytics and consent.** Instrument the public funnel only after choosing an analytics policy and consent behavior. Keep essential ticketing storage independent from optional marketing consent.
 
@@ -53,6 +52,7 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 ## Resolved since this backlog was drafted
 
+- **Sold-out waitlists** — sold-out reserved-seat and general-admission showtimes offer rate-limited, idempotent email signup; entries expire at showtime, returned inventory is claimed safely across API instances, failed email delivery retries, and notifications explicitly avoid promising that tickets remain available.
 - **Cinema programming and scheduling workspace** — the scheduling foundation is implemented in the cinema Admin app; `PROGRAMMING_AND_SCHEDULING.md` remains its product reference.
 - **Public-site scope for `customer-web`** — resolved toward a broader theater website, with public navigation and content pages alongside the transactional ticket-buying flow.
 - **Gift cards and vouchers** — implemented across admin issuance and ledger management, staff balance checks and redemption, cash/card/terminal split tenders, refunds, online checkout, customer balance lookup, and recipient email delivery with retry handling.

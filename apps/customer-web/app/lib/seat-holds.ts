@@ -21,7 +21,7 @@ export async function getSeatAvailability(showtimeId: string, holderKey?: string
     where: { id: showtimeId, onSale: true },
     include: {
       movie: true,
-      auditorium: true,
+      auditorium: { include: { location: { select: { timezone: true } } } },
       priceTier: true,
       showtimeSeats: {
         include: {
@@ -41,15 +41,45 @@ export async function getSeatAvailability(showtimeId: string, holderKey?: string
     },
   });
   if (!showtime) throw new SeatHoldError("Showtime not found.", 404, "NOT_FOUND");
+  const seats = showtime.showtimeSeats
+    .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
+    .map((inventory) => {
+      const hold = inventory.holds[0];
+      const heldByMe = Boolean(hold && holderKey && hold.holderKey === holderKey);
+      return {
+        id: inventory.seat.id,
+        inventoryId: inventory.id,
+        label: inventory.seat.label,
+        rowLabel: inventory.seat.rowLabel,
+        number: inventory.seat.number,
+        x: inventory.seat.x,
+        y: inventory.seat.y,
+        type: inventory.seat.type,
+        tableGroupId: inventory.seat.tableGroupId,
+        tablePosition: inventory.seat.tablePosition,
+        state: inventory.blockedAt
+          ? "BLOCKED"
+          : inventory.tickets.length
+            ? "SOLD"
+            : hold
+              ? "HELD"
+              : "AVAILABLE",
+        heldByMe,
+        holdToken: heldByMe ? hold?.holdToken : undefined,
+        expiresAt: heldByMe ? hold?.expiresAt.toISOString() : undefined,
+      };
+    });
   return {
     showtime: {
       id: showtime.id,
       startsAt: showtime.startsAt.toISOString(),
+      timezone: showtime.auditorium.location.timezone,
       movie: { id: showtime.movie.id, title: showtime.movie.title },
       auditorium: {
         id: showtime.auditorium.id,
         name: showtime.auditorium.name,
         capacity: showtime.auditorium.capacity,
+        seatingMode: showtime.auditorium.seatingMode,
       },
       priceTier: {
         ticketPriceMinor: showtime.priceTier.ticketPriceMinor,
@@ -59,34 +89,13 @@ export async function getSeatAvailability(showtimeId: string, holderKey?: string
     },
     serverTime: now.toISOString(),
     holdDurationSeconds: 300,
-    seats: showtime.showtimeSeats
-      .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
-      .map((inventory) => {
-        const hold = inventory.holds[0];
-        const heldByMe = Boolean(hold && holderKey && hold.holderKey === holderKey);
-        return {
-          id: inventory.seat.id,
-          inventoryId: inventory.id,
-          label: inventory.seat.label,
-          rowLabel: inventory.seat.rowLabel,
-          number: inventory.seat.number,
-          x: inventory.seat.x,
-          y: inventory.seat.y,
-          type: inventory.seat.type,
-          tableGroupId: inventory.seat.tableGroupId,
-          tablePosition: inventory.seat.tablePosition,
-          state: inventory.blockedAt
-            ? "BLOCKED"
-            : inventory.tickets.length
-              ? "SOLD"
-              : hold
-                ? "HELD"
-                : "AVAILABLE",
-          heldByMe,
-          holdToken: heldByMe ? hold?.holdToken : undefined,
-          expiresAt: heldByMe ? hold?.expiresAt.toISOString() : undefined,
-        };
-      }),
+    seats,
+    counts: {
+      available: seats.filter((seat) => seat.state === "AVAILABLE").length,
+      held: seats.filter((seat) => seat.state === "HELD").length,
+      sold: seats.filter((seat) => seat.state === "SOLD").length,
+      blocked: seats.filter((seat) => seat.state === "BLOCKED").length,
+    },
   };
 }
 

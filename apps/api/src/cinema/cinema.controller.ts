@@ -36,6 +36,7 @@ const updateSchedulePlanShowtimeSchema = z.object({
   expectedStartsAt: z.string().datetime(),
 }).strict();
 const publishSchedulePlanSchema = z.object({ expectedUpdatedAt: z.string().datetime() }).strict();
+const joinShowtimeWaitlistSchema = z.object({ email: z.string().trim().email().max(200) }).strict();
 
 @Controller("cinema")
 export class CinemaController {
@@ -89,6 +90,13 @@ export class CinemaController {
   @Get("showtimes/:id/seats")
   seatAvailability(@Param("id") id: string, @Query("holderKey") holderKey?: string) {
     return this.cinemaService.seatAvailability(id, holderKey);
+  }
+
+  @Post("showtimes/:id/waitlist")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout", identity: "email" })
+  joinShowtimeWaitlist(@Param("id") id: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(joinShowtimeWaitlistSchema)) body: unknown) {
+    return this.cinemaService.joinShowtimeWaitlist(id, joinShowtimeWaitlistSchema.parse(body).email, requestId);
   }
 
   @Post("showtimes/:id/holds")

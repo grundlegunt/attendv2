@@ -78,6 +78,15 @@ export interface CustomerEmailChangeDelivery {
   expiresInMinutes: number;
 }
 
+export interface ShowtimeWaitlistDelivery {
+  to: string;
+  theaterName: string;
+  movieTitle: string;
+  startsAt: Date;
+  timeZone: string;
+  purchaseUrl: string;
+}
+
 export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
@@ -93,5 +102,8 @@ export interface EmailProvider {
   ): Promise<{ messageId: string }>;
   sendCustomerEmailChange(
     delivery: CustomerEmailChangeDelivery,
+  ): Promise<{ messageId: string }>;
+  sendShowtimeWaitlistAvailability(
+    delivery: ShowtimeWaitlistDelivery,
   ): Promise<{ messageId: string }>;
 }

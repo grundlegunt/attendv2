@@ -1,6 +1,8 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
 import { AuditActorType, Prisma, prisma } from "@cinema/database";
+import { loadEnv } from "@cinema/config/env";
+import type { EmailProvider } from "@cinema/notifications";
 import {
   adminUiConfigSchema,
   adminUiDefaults,
@@ -32,6 +34,7 @@ import type {
 import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 import { StructuredLogger } from "../common/logger.service";
+import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 
 type AuditoriumInput = ReturnType<typeof createAuditoriumRequestSchema.parse>;
 type AuditoriumLayoutUpdateInput = ReturnType<
@@ -133,6 +136,7 @@ function zonedDate(
 
 @Injectable()
 export class CinemaService implements OnModuleInit, OnModuleDestroy {
+  constructor(@Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider) {}
   private async sellableSeatIds(
     tx: Prisma.TransactionClient,
     auditorium: {
@@ -333,11 +337,42 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     this.expirySweepRunning = true;
     try {
       await this.expireSeatHolds();
+      await this.notifyAvailableWaitlists();
     } catch (error) {
       this.logger.error("Seat-hold expiry sweep failed.", String(error));
     } finally {
       this.expirySweepRunning = false;
     }
+  }
+
+  async notifyAvailableWaitlists() {
+    const now = new Date();
+    await prisma.showtimeWaitlistEntry.updateMany({ where: { status: "ACTIVE", expiresAt: { lte: now } }, data: { status: "EXPIRED" } });
+    const staleClaim = new Date(now.getTime() - 5 * 60_000);
+    const entries = await prisma.showtimeWaitlistEntry.findMany({
+      where: {
+        status: "ACTIVE",
+        expiresAt: { gt: now },
+        OR: [{ notificationClaimedAt: null }, { notificationClaimedAt: { lt: staleClaim } }],
+        showtime: { onSale: true, startsAt: { gt: now }, showtimeSeats: { some: { blockedAt: null, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: now } } } } } },
+      },
+      include: { showtime: { include: { movie: true, auditorium: { include: { location: true } } } } },
+      orderBy: { createdAt: "asc" },
+      take: 25,
+    });
+    let notified = 0;
+    for (const entry of entries) {
+      const claimed = await prisma.showtimeWaitlistEntry.updateMany({ where: { id: entry.id, status: "ACTIVE", OR: [{ notificationClaimedAt: null }, { notificationClaimedAt: { lt: staleClaim } }] }, data: { notificationClaimedAt: now, notificationError: null } });
+      if (!claimed.count) continue;
+      try {
+        const { messageId } = await this.emailProvider.sendShowtimeWaitlistAvailability({ to: entry.email, theaterName: entry.showtime.auditorium.location.name, movieTitle: entry.showtime.movie.title, startsAt: entry.showtime.startsAt, timeZone: entry.showtime.auditorium.location.timezone, purchaseUrl: `${loadEnv().CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(entry.showtime.auditorium.locationId)}` });
+        await prisma.showtimeWaitlistEntry.update({ where: { id: entry.id }, data: { status: "NOTIFIED", notifiedAt: new Date(), notificationMessageId: messageId, notificationClaimedAt: null } });
+        notified += 1;
+      } catch (error) {
+        await prisma.showtimeWaitlistEntry.updateMany({ where: { id: entry.id, status: "ACTIVE" }, data: { notificationClaimedAt: null, notificationError: error instanceof Error ? error.message.slice(0, 1000) : "Waitlist email failed." } });
+      }
+    }
+    return notified;
   }
 
   private requireLocation(actor: RequestActor): string {
@@ -4641,6 +4676,30 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
         blocked: seats.filter((seat) => seat.state === "BLOCKED").length,
       },
     };
+  }
+
+  async joinShowtimeWaitlist(showtimeId: string, email: string, suppliedRequestId?: string) {
+    const requestId = suppliedRequestId ?? randomUUID();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const normalizedEmail = email.trim().toLowerCase();
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ showtimeId, email: normalizedEmail })).digest("hex");
+    const availability = await this.seatAvailability(showtimeId);
+    if (new Date(availability.showtime.startsAt) <= new Date()) throw AppError.conflict("This showtime has already started.");
+    if (availability.counts.available > 0) throw AppError.conflict("Tickets are currently available for this showtime.");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${requestId}))`;
+      const replay = await tx.showtimeWaitlistEntry.findUnique({ where: { requestId } });
+      if (replay) {
+        if (replay.requestFingerprint !== requestFingerprint) throw AppError.conflict("The waitlist request key was already used with different details.");
+        return { joined: true, expiresAt: replay.expiresAt };
+      }
+      const entry = await tx.showtimeWaitlistEntry.upsert({
+        where: { showtimeId_email: { showtimeId, email: normalizedEmail } },
+        create: { showtimeId, email: normalizedEmail, expiresAt: new Date(availability.showtime.startsAt), requestId, requestFingerprint },
+        update: { status: "ACTIVE", expiresAt: new Date(availability.showtime.startsAt), requestId, requestFingerprint, notifiedAt: null, notificationClaimedAt: null, notificationMessageId: null, notificationError: null },
+      });
+      return { joined: true, expiresAt: entry.expiresAt };
+    });
   }
 
   async holdSeats(showtimeId: string, seatIds: string[], holderKey: string) {
