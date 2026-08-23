@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { platformDownload, platformRequest, readPlatformSession } from "./platform-session";
 import { CompanySignIn } from "./company-sign-in";
 
@@ -69,6 +69,7 @@ export default function PlatformDashboard() {
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
   const [revenueDays, setRevenueDays] = useState(7);
   const [revenueLoading, setRevenueLoading] = useState(false);
+  const revenueRequestRef = useRef(0);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -87,10 +88,14 @@ export default function PlatformDashboard() {
 
   async function loadRevenue(days: number) {
     if (!session) return;
+    const requestId = ++revenueRequestRef.current;
     setRevenueDays(days); setRevenueLoading(true); setError(null);
-    try { setRevenue(await request<RevenueReport>(revenueRange(days), undefined, session.accessToken)); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load platform revenue."); }
-    finally { setRevenueLoading(false); }
+    try {
+      const nextRevenue = await request<RevenueReport>(revenueRange(days), undefined, session.accessToken);
+      if (requestId === revenueRequestRef.current) setRevenue(nextRevenue);
+    }
+    catch (reason) { if (requestId === revenueRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load platform revenue."); }
+    finally { if (requestId === revenueRequestRef.current) setRevenueLoading(false); }
   }
 
   async function downloadRevenue() {

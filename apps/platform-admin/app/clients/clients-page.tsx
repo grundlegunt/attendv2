@@ -417,21 +417,24 @@ export default function AttendMaster() {
       setRevenue(null);
       return;
     }
+    let active = true;
     setRevenueLoading(true);
+    setError(null);
     request<RevenueReport>(
       revenuePath(selectedOrganizationId, revenueDays),
       undefined,
       session.accessToken,
     )
-      .then(setRevenue)
+      .then((nextRevenue) => { if (active) setRevenue(nextRevenue); })
       .catch((reason: unknown) =>
-        setError(
+        active && setError(
           reason instanceof Error
             ? reason.message
             : "Could not load client revenue.",
         ),
       )
-      .finally(() => setRevenueLoading(false));
+      .finally(() => { if (active) setRevenueLoading(false); });
+    return () => { active = false; };
   }, [selectedOrganizationId, session, revenueDays]);
 
   async function downloadClientRevenue() {
