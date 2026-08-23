@@ -45,6 +45,15 @@ export class JwtAuthGuard implements CanActivate {
         if (!location?.organization.active) {
           throw AppError.unauthenticated("This cinema account is currently inactive.");
         }
+      } else if (actor.actorType === "CUSTOMER") {
+        if (!Number.isInteger(actor.tokenVersion)) throw AppError.unauthenticated();
+        const account = await prisma.customerAuthAccount.findUnique({
+          where: { customerId: actor.sub },
+          select: { emailVerifiedAt: true, refreshTokenVersion: true },
+        });
+        if (!account?.emailVerifiedAt || account.refreshTokenVersion !== actor.tokenVersion) {
+          throw AppError.unauthenticated("Session has been invalidated. Please log in again.");
+        }
       }
       request.actor = actor;
     } catch (err) {

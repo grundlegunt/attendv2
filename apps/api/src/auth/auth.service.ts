@@ -1077,7 +1077,7 @@ export class AuthService {
   private issueCustomerTokens(customerId: string, tokenVersion: number): TokenPair {
     const env = loadEnv();
     return signTokenPair(
-      { sub: customerId, actorType: "CUSTOMER", permissions: [] },
+      { sub: customerId, actorType: "CUSTOMER", permissions: [], tokenVersion },
       { sub: customerId, actorType: "CUSTOMER", tokenVersion },
       {
         accessSecret: env.JWT_ACCESS_SECRET,

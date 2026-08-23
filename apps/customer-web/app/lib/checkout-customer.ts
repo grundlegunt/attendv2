@@ -43,10 +43,17 @@ export async function trustedCheckoutEmail(
   } catch {
     throw new CheckoutSessionError();
   }
-  if (actor.actorType !== "CUSTOMER") throw new CheckoutSessionError();
+  if (actor.actorType !== "CUSTOMER" || !Number.isInteger(actor.tokenVersion)) {
+    throw new CheckoutSessionError();
+  }
 
   const customer = await prisma.customer.findFirst({
-    where: { id: actor.sub, authAccount: { isNot: null } },
+    where: {
+      id: actor.sub,
+      authAccount: {
+        is: { emailVerifiedAt: { not: null }, refreshTokenVersion: actor.tokenVersion },
+      },
+    },
     select: { email: true },
   });
   if (!customer?.email) throw new CheckoutSessionError();
