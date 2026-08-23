@@ -20,8 +20,9 @@ function money(cents: number, currency: string) {
   );
 }
 
-function dateTime(value: string) {
+function dateTime(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("en-US", {
+    timeZone,
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -515,7 +516,7 @@ export default function AccountPage() {
                   <h3>{order.locationName}</h3>
                   <p>
                     {statusLabel(order.status)} · Ordered{" "}
-                    {dateTime(order.createdAt)}
+                    {dateTime(order.createdAt, order.locationTimezone)}
                   </p>
                 </div>
                 <div>
@@ -563,7 +564,7 @@ export default function AccountPage() {
                           {statusLabel(ticket.status)}
                         </span>
                         <h4>{ticket.movieTitle}</h4>
-                        <p>{dateTime(ticket.startsAt)}</p>
+                        <p>{dateTime(ticket.startsAt, order.locationTimezone)}</p>
                         <p>
                           {ticket.auditoriumName} · Seat {ticket.seatLabel}
                         </p>

@@ -151,6 +151,7 @@ export interface CustomerTicketOrderSummary {
   currency: string;
   createdAt: string;
   locationName: string;
+  locationTimezone: string;
   tickets: CustomerTicketSummary[];
 }
 
