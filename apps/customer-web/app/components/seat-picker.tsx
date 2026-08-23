@@ -119,6 +119,10 @@ export function SeatPicker({
     () => availability?.seats.filter((seat) => seat.heldByMe) ?? [],
     [availability],
   );
+  const checkoutSeats = useMemo(() => ({
+    holdTokens: mySeats.flatMap((seat) => seat.holdToken ? [seat.holdToken] : []),
+    labels: mySeats.map((seat) => seat.label),
+  }), [mySeats]);
   const displayedSeats = useMemo(
     () => availability?.seats.filter((seat) => optimisticSeatStates[seat.id] ?? seat.heldByMe) ?? [],
     [availability, optimisticSeatStates],
@@ -266,9 +270,9 @@ export function SeatPicker({
     return (
       <TicketCheckout
         showtimeId={showtimeId}
-        holdTokens={mySeats.map((seat) => seat.holdToken!)}
+        holdTokens={checkoutSeats.holdTokens}
         holderKey={holderKey}
-        seats={mySeats.map((seat) => seat.label)}
+        seats={checkoutSeats.labels}
         generalAdmission={availability.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"}
         movie={availability.showtime.movie.title}
         auditorium={availability.showtime.auditorium.name}
