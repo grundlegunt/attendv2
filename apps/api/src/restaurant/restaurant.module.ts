@@ -13,6 +13,7 @@ import { RestaurantSettlementService } from "./restaurant-settlement.service";
 import { RestaurantSettlementSchedulerService } from "./restaurant-settlement-scheduler.service";
 import { PaymentsModule } from "../payments/payments.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { RequestRateLimitGuard } from "../common/request-rate-limit.guard";
 
 @Module({
   imports: [PaymentsModule, NotificationsModule],
@@ -29,6 +30,7 @@ import { NotificationsModule } from "../notifications/notifications.module";
     FulfillmentEventsService,
     RestaurantSettlementService,
     RestaurantSettlementSchedulerService,
+    RequestRateLimitGuard,
   ],
 })
 export class RestaurantModule {}

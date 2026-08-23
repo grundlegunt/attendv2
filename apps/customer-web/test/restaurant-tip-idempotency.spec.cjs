@@ -14,4 +14,13 @@ describe("restaurant tip request idempotency", () => {
     assert.match(source, /requestId: tipAttemptRef\.current\.requestId/);
     assert.match(source, /error instanceof ApiRequestError && error\.status < 500/);
   });
+
+  it("uses stable request identities and blocks duplicate customer order submissions", () => {
+    assert.match(source, /orderAttemptRef\.current\?\.fingerprint !== fingerprint/);
+    assert.match(source, /requestId: orderAttemptRef\.current\.createId/);
+    assert.match(source, /requestId: orderAttemptRef\.current\.itemId/);
+    assert.match(source, /requestId: orderAttemptRef\.current\.sendId/);
+    assert.match(source, /if \(!guestToken \|\| orderPendingRef\.current\) return/);
+    assert.match(source, /orderPendingRef\.current = true/);
+  });
 });

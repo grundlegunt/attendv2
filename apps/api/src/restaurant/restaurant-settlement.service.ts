@@ -63,7 +63,7 @@ export class RestaurantSettlementService {
       where: { id: grant.tabId, primaryCustomerId: grant.customerId },
       select: { id: true, locationId: true, primaryCustomerId: true, status: true },
     });
-    if (!tab || !["PREAUTHORIZED", "OPEN", "READY_TO_CLOSE"].includes(tab.status)) throw AppError.notFound("Open restaurant tab was not found.");
+    if (!tab || !["PREAUTHORIZED", "OPEN"].includes(tab.status)) throw AppError.notFound("Open restaurant tab was not found.");
     return { tabId: tab.id, locationId: tab.locationId, customerId: grant.customerId };
   }
 
