@@ -3252,6 +3252,40 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     };
   }
 
+  it("keeps public receipt details from overwriting an existing customer profile", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `profile-preservation-${crypto.randomUUID()}`;
+    const email = `${holderKey}@example.test`;
+    const customer = await prisma.customer.create({
+      data: { email, name: "Account Profile Name", isGuest: false },
+    });
+    const { hold } = await holdAvailableSeat(holderKey);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .expect(200);
+    const ticketType = config.body.ticketTypes.find(
+      (candidate: { priceAdjustmentMinor: number }) => candidate.priceAdjustmentMinor === 0,
+    );
+
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: ticketType.id,
+        email,
+        name: "Receipt Name Only",
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+
+    expect(await prisma.customer.findUniqueOrThrow({ where: { id: customer.id } }))
+      .toMatchObject({ name: "Account Profile Name", isGuest: false });
+    expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: checkout.body.orderId } }))
+      .toMatchObject({ customerId: customer.id, guestName: "Receipt Name Only", guestEmail: email });
+  });
+
   it("applies an active promotion code to online checkout", async () => {
     const { prisma } = await import("@cinema/database");
     const holderKey = `online-promotion-${crypto.randomUUID()}`;

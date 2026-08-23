@@ -337,7 +337,10 @@ export class TicketingService {
           name: input.name?.trim() || null,
           isGuest: true,
         },
-        update: input.name?.trim() ? { name: input.name.trim() } : {},
+        // Receipt details belong to this order. A public checkout must never
+        // double as an unauthenticated customer-profile update merely because
+        // the purchaser entered an email that already exists.
+        update: {},
       });
     } catch (error) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error;
