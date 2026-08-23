@@ -183,6 +183,14 @@ export class ManagementController {
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Query(new ZodValidationPipe(customerHistorySchema)) query: unknown) { return this.management.customer(this.location(actor), customerId, customerHistorySchema.parse(query)); }
 
+  @Get("customers/:customerId/history.csv") @RequirePermissions(Permission.PaymentViewDisplaySafe)
+  async customerHistoryCsv(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Res() response: Response) {
+    const csv = await this.management.customerHistoryCsv(this.location(actor), customerId);
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="customer-history.csv"');
+    response.send(csv);
+  }
+
   @Get("payment-methods/:paymentMethodId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   paymentMethod(@CurrentActor() actor: RequestActor, @Param("paymentMethodId") paymentMethodId: string) { return this.management.paymentMethod(this.location(actor), paymentMethodId); }
 

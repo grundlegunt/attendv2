@@ -39,6 +39,7 @@ h1 { font-size: clamp(2rem, 4vw, 3.5rem); }
 .history-window-note button { width: auto; margin-left: 10px; padding: 7px 10px; }
 .customer-history-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .customer-history-summary div { display: grid; gap: 4px; padding: 12px; border: 1px solid var(--color-border); background: var(--color-bg); }
+.customer-history-export { width: auto; margin-top: 14px; }
 .customer-history-summary small, .customer-history-order small { color: var(--color-text-secondary); }
 .customer-history-order { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(220px, 2fr) auto auto; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--color-border); }
 .customer-history-order > div { display: grid; gap: 3px; }

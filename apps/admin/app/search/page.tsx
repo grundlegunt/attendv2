@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
-import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 
 type SearchResults = {
   query: string;
@@ -207,6 +207,29 @@ export default function GlobalSearchPage() {
     }
   }
 
+  async function exportCustomerHistory() {
+    if (!customerHistory) return;
+    setError(null);
+    try {
+      const blob = await apiDownload(
+        `/management/customers/${customerHistory.id}/history.csv`,
+        { accessToken },
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "customer-history.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(
+        reason instanceof ApiRequestError
+          ? reason.body.message
+          : "Customer history could not be exported.",
+      );
+    }
+  }
+
   const count = results ? results.orders.length + results.customers.length + results.tickets.length + results.giftCards.length : 0;
   return (
     <main className="admin-route-page">
@@ -298,6 +321,13 @@ export default function GlobalSearchPage() {
                         <small>Customer type</small>
                       </div>
                     </div>
+                    <button
+                      className="secondary customer-history-export"
+                      type="button"
+                      onClick={() => void exportCustomerHistory()}
+                    >
+                      Export complete history CSV
+                    </button>
                     <h4>Ticket history</h4>
                     {customerHistory.historyWindow.ticketOrdersShown < customerHistory.historyWindow.ticketOrdersTotal && (
                       <p className="history-window-note">
