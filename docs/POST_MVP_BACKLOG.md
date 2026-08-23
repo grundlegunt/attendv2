@@ -8,7 +8,7 @@ These items have a clear operator or customer benefit and can be scoped without 
 
 - **Attend Master client-health signals.** Once multiple real clients are operating, add trend, refund-rate, and payment-failure indicators alongside revenue. Validate thresholds against real operating history rather than hardcoding speculative alerts.
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
-- **Analytics and consent.** Instrument the public funnel only after choosing an analytics policy and consent behavior. Keep essential ticketing storage independent from optional marketing consent.
+- **Analytics provider and funnel instrumentation.** The public site now defaults optional analytics off, records a versioned browser choice, provides a persistent way to change it, and keeps analytics separate from essential ticketing and marketing consent. Choose a privacy-reviewed provider and event policy before connecting funnel events to that consent signal.
 
 ## 2. Items needing a product decision or reproducible case
 
