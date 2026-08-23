@@ -152,3 +152,15 @@ export async function platformRequest<T>(apiBaseUrl: string, storageKey: string,
 export async function platformDownload(apiBaseUrl: string, storageKey: string, path: string, accessToken: string) {
   return (await platformResponse(apiBaseUrl, storageKey, path, undefined, accessToken, DOWNLOAD_TIMEOUT_MS)).blob();
 }
+
+export async function revokePlatformSession(apiBaseUrl: string, accessToken: string | undefined): Promise<void> {
+  if (!accessToken) return;
+  try {
+    await fetchPlatform(`${apiBaseUrl}/platform/auth/logout`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }, REQUEST_TIMEOUT_MS);
+  } catch {
+    // Local sign-out must still complete if the API is unavailable.
+  }
+}

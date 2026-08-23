@@ -112,6 +112,13 @@ export class PlatformController {
     return { ...tokens, expiresInSeconds: loadEnv().JWT_ACCESS_TTL_SECONDS, user };
   }
 
+  @Post("auth/logout")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(PlatformAuthGuard)
+  async logout(@CurrentActor() actor: RequestActor) {
+    await this.platform.logout(actor.sub);
+  }
+
   @Get("overview")
   @UseGuards(PlatformAuthGuard)
   overview() {

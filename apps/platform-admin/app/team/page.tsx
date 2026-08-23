@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
-import { platformRequest, readPlatformSession } from "../platform-session";
+import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
@@ -33,7 +33,7 @@ export default function PlatformTeam() {
   async function setAccess(user: TeamUser) { if (!session) return; setWorkingId(user.id); setError(null); try { await request(`/platform/team/${user.id}`, { method: "PATCH", body: JSON.stringify({ active: !user.active }) }, session.accessToken); await loadTeam(session); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update team access."); } finally { setWorkingId(null); } }
   async function setRole(user: TeamUser, role: PlatformRole) { if (!session) return; setWorkingId(user.id); setError(null); try { await request(`/platform/team/${user.id}`, { method: "PATCH", body: JSON.stringify({ role }) }, session.accessToken); await loadTeam(session); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not update the team role."); } finally { setWorkingId(null); } }
   async function resetPassword(user: TeamUser) { if (!session) return; const nextPassword = credentialDrafts[user.id] ?? ""; if (nextPassword.length < 12) { setError("Temporary passwords must contain at least 12 characters."); return; } setWorkingId(user.id); setError(null); try { await request(`/platform/team/${user.id}/credentials`, { method: "PATCH", body: JSON.stringify({ password: nextPassword }) }, session.accessToken); setCredentialDrafts((current) => ({ ...current, [user.id]: "" })); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not reset the password."); } finally { setWorkingId(null); } }
-  function signOut() { authRequestRef.current += 1; window.sessionStorage.removeItem(STORAGE_KEY); teamRequestRef.current += 1; setSession(null); setUsers([]); setError(null); }
+  function signOut() { authRequestRef.current += 1; void revokePlatformSession(API_BASE_URL, session?.accessToken); window.sessionStorage.removeItem(STORAGE_KEY); teamRequestRef.current += 1; setSession(null); setUsers([]); setError(null); }
 
   if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
   if (!session) return <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />;

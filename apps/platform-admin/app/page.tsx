@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { platformDownload, platformRequest, readPlatformSession } from "./platform-session";
+import { platformDownload, platformRequest, readPlatformSession, revokePlatformSession } from "./platform-session";
 import { CompanySignIn } from "./company-sign-in";
 
 const API_BASE_URL =
@@ -154,6 +154,7 @@ export default function PlatformDashboard() {
 
   function signOut() {
     authRequestRef.current += 1;
+    void revokePlatformSession(API_BASE_URL, session?.accessToken);
     window.sessionStorage.removeItem(STORAGE_KEY);
     revenueRequestRef.current += 1;
     setSession(null);
