@@ -59,7 +59,7 @@ describe("ManagementService global search", () => {
       }));
       expect(customers).toHaveBeenCalledWith(expect.objectContaining({
         where: expect.objectContaining({
-          ticketOrders: { some: { locationId: "location-1" } },
+          AND: expect.arrayContaining([{ OR: [{ ticketOrders: { some: { locationId: "location-1" } } }, { restaurantTabs: { some: { locationId: "location-1" } } }] }]),
         }),
       }));
       expect(giftCards).toHaveBeenCalledWith(expect.objectContaining({
@@ -92,7 +92,7 @@ describe("ManagementService customer history", () => {
     try {
       const customer = await new ManagementService().customer("location-1", "customer-1");
       expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
-        where: { id: "customer-1", ticketOrders: { some: { locationId: "location-1" } } },
+        where: { id: "customer-1", OR: [{ ticketOrders: { some: { locationId: "location-1" } } }, { restaurantTabs: { some: { locationId: "location-1" } } }] },
         select: expect.objectContaining({ ticketOrders: expect.objectContaining({ where: { locationId: "location-1" }, take: 50 }) }),
       }));
       expect(customer.summary).toEqual({ orderCount: 2, ticketCount: 3, lifetimeSpendCents: 2400, currency: "USD", diningVisitCount: 2, diningSpendCents: 3200, diningCurrency: "USD" });
