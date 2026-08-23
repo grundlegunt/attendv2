@@ -195,10 +195,13 @@ export function ManagementControls({
     useState("0.00");
   const priceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updatePriceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const bulkPriceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const ticketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateTicketTypeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const ticketPricingActionRef = useRef(false);
-  const [ticketPricingAction, setTicketPricingAction] = useState<{ kind: "create-price" | "create-type" | "save-price" | "toggle-price" | "update-type"; id?: string } | null>(null);
+  const [ticketPricingAction, setTicketPricingAction] = useState<{ kind: "create-price" | "create-type" | "save-price" | "toggle-price" | "bulk-price" | "update-type"; id?: string } | null>(null);
+  const [selectedPriceTierIds, setSelectedPriceTierIds] = useState<string[]>([]);
+  const [bulkPriceAdjustment, setBulkPriceAdjustment] = useState("");
   const [ticketTypeDrafts, setTicketTypeDrafts] = useState<
     Record<string, string>
   >({});
@@ -640,6 +643,33 @@ export function ManagementControls({
       showError(reason);
     } finally {
       setSavingPriceId(null);
+      ticketPricingActionRef.current = false;
+      setTicketPricingAction(null);
+    }
+  }
+  async function bulkAdjustPrices() {
+    const adjustmentMinor = Math.round(Number(bulkPriceAdjustment) * 100);
+    if (!selectedPriceTierIds.length) { setError("Select at least one ticket group."); return; }
+    if (!Number.isFinite(adjustmentMinor) || adjustmentMinor === 0) { setError("Enter a non-zero price adjustment."); return; }
+    const selected = settings?.priceTiers.filter((tier) => selectedPriceTierIds.includes(tier.id)) ?? [];
+    if (selected.some((tier) => tier.ticketPriceMinor + adjustmentMinor < 0)) { setError("The adjustment would make a selected ticket price negative."); return; }
+    if (!window.confirm(`Adjust ${selected.length} ticket ${selected.length === 1 ? "group" : "groups"} by ${money(adjustmentMinor)}?`)) return;
+    if (ticketPricingActionRef.current) return;
+    ticketPricingActionRef.current = true;
+    setTicketPricingAction({ kind: "bulk-price" });
+    setError(null);
+    const body = JSON.stringify({ priceTierIds: [...selectedPriceTierIds].sort(), adjustmentMinor });
+    if (bulkPriceAttemptRef.current?.fingerprint !== body) bulkPriceAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    try {
+      await apiFetch("/management/settings/price-tiers/bulk", { accessToken, method: "PATCH", headers: { "Idempotency-Key": bulkPriceAttemptRef.current.requestId }, body });
+      bulkPriceAttemptRef.current = null;
+      setSelectedPriceTierIds([]);
+      setBulkPriceAdjustment("");
+      await refresh();
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) bulkPriceAttemptRef.current = null;
+      showError(reason);
+    } finally {
       ticketPricingActionRef.current = false;
       setTicketPricingAction(null);
     }
@@ -1128,11 +1158,19 @@ export function ManagementControls({
                 per-ticket fee is controlled separately by Master. At least one
                 group must remain active.
               </p>
+              <fieldset className="bulk-price-editor">
+                <legend>Bulk price adjustment</legend>
+                <p className="muted">Select ticket groups below, then raise or lower each current price by the same amount.</p>
+                <label>Adjustment
+                  <input type="number" step="0.01" value={bulkPriceAdjustment} onChange={(event) => setBulkPriceAdjustment(event.target.value)} placeholder="1.00 or -1.00" />
+                </label>
+                <button type="button" className="secondary" disabled={ticketPricingAction !== null || !selectedPriceTierIds.length || !bulkPriceAdjustment} onClick={() => void bulkAdjustPrices()}>{ticketPricingAction?.kind === "bulk-price" ? "Adjusting…" : `Adjust ${selectedPriceTierIds.length || "selected"}`}</button>
+              </fieldset>
               <div className="rule-list">
                 {settings?.priceTiers.map((tier) => (
                   <article key={tier.id}>
                     <div>
-                      <strong>{tier.name}</strong>
+                      <label className="check"><input type="checkbox" checked={selectedPriceTierIds.includes(tier.id)} onChange={(event) => setSelectedPriceTierIds((current) => event.target.checked ? [...current, tier.id] : current.filter((id) => id !== tier.id))} /><strong>{tier.name}</strong></label>
                       <span aria-live="polite">
                         {savedPriceId === tier.id
                           ? "Changes saved"

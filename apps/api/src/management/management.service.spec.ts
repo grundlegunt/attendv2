@@ -97,3 +97,17 @@ describe("ManagementService attention inbox", () => {
     }
   });
 });
+
+describe("ManagementService bulk ticket pricing", () => {
+  it("rejects empty and zero-value bulk adjustments before opening a transaction", async () => {
+    const transaction = jest.spyOn(prisma, "$transaction");
+    const base = { locationId: "location-1", employeeId: "employee-1", requestId: "11111111-1111-4111-8111-111111111111" };
+    try {
+      await expect(new ManagementService().bulkUpdatePriceTiers({ ...base, priceTierIds: [], adjustmentMinor: 100 })).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+      await expect(new ManagementService().bulkUpdatePriceTiers({ ...base, priceTierIds: ["22222222-2222-4222-8222-222222222222"], adjustmentMinor: 0 })).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
+      expect(transaction).not.toHaveBeenCalled();
+    } finally {
+      transaction.mockRestore();
+    }
+  });
+});
