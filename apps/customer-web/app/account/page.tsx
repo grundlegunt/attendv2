@@ -94,6 +94,7 @@ export default function AccountPage() {
   const [emailChangeMessage, setEmailChangeMessage] = useState<string | null>(null);
   const [session, setSession] = useState<AuthenticatedCustomer | null>(null);
   const [account, setAccount] = useState<CustomerAccountResponse | null>(null);
+  const sessionRequestRef = useRef(0);
   const [liveTabId, setLiveTabId] = useState("");
   const [tabLookup, setTabLookup] = useState("");
   const [guestTabToken, setGuestTabToken] = useState("");
@@ -171,15 +172,18 @@ export default function AccountPage() {
   }
 
   useEffect(() => {
+    const requestId = ++sessionRequestRef.current;
     setRestoreError(null);
     setRestoring(true);
 
     void requestAccount(true)
       .then((response) => {
+        if (requestId !== sessionRequestRef.current) return;
         setAccount(response);
         setSession(response.customer);
       })
       .catch((err) => {
+        if (requestId !== sessionRequestRef.current) return;
         if (!(err instanceof ApiRequestError && err.status === 401)) {
           setRestoreError(
             err instanceof ApiRequestError
@@ -188,13 +192,15 @@ export default function AccountPage() {
           );
         }
       })
-      .finally(() => setRestoring(false));
+      .finally(() => { if (requestId === sessionRequestRef.current) setRestoring(false); });
+    return () => { sessionRequestRef.current += 1; };
   }, [restoreAttempt]);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (loadingRef.current) return;
     loadingRef.current = true;
+    const requestId = ++sessionRequestRef.current;
     setError(null);
     setLoading(true);
     try {
@@ -211,15 +217,17 @@ export default function AccountPage() {
         headers: mode === "register" ? { "Idempotency-Key": registrationAttemptRef.current!.requestId } : undefined,
         body: fingerprint,
       });
+      if (requestId !== sessionRequestRef.current) return;
       if (mode === "register") registrationAttemptRef.current = null;
       setSession(response.customer);
       setAccountLoading(true);
       const nextAccount = await requestAccount(false);
+      if (requestId !== sessionRequestRef.current) return;
       setAccount(nextAccount);
       setPassword("");
     } catch (err) {
       if (mode === "register" && err instanceof ApiRequestError && err.status < 500) registrationAttemptRef.current = null;
-      setError(
+      if (requestId === sessionRequestRef.current) setError(
         err instanceof ApiRequestError ? err.body.message : "Please try again.",
       );
     } finally {
@@ -299,6 +307,7 @@ export default function AccountPage() {
   async function signOut() {
     if (!session || signOutPendingRef.current) return;
     signOutPendingRef.current = true;
+    sessionRequestRef.current += 1;
     setSignOutPending(true);
     try {
       await apiFetch<void>("/auth/customers/logout", {
@@ -376,6 +385,7 @@ export default function AccountPage() {
     event.preventDefault();
     if (passwordPendingRef.current) return;
     passwordPendingRef.current = true;
+    const requestId = ++sessionRequestRef.current;
     const fingerprint = JSON.stringify({ currentPassword, newPassword });
     if (passwordChangeAttemptRef.current?.fingerprint !== fingerprint) passwordChangeAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setPasswordPending(true);
@@ -386,6 +396,7 @@ export default function AccountPage() {
         headers: { "Idempotency-Key": passwordChangeAttemptRef.current.requestId },
         body: fingerprint,
       });
+      if (requestId !== sessionRequestRef.current) return;
       passwordChangeAttemptRef.current = null;
       setSession(response.customer);
       setCurrentPassword("");
@@ -393,7 +404,7 @@ export default function AccountPage() {
       setPasswordMessage("Password updated. Your other sessions have been signed out.");
     } catch (err) {
       if (err instanceof ApiRequestError && err.status < 500) passwordChangeAttemptRef.current = null;
-      setPasswordMessage(
+      if (requestId === sessionRequestRef.current) setPasswordMessage(
         err instanceof ApiRequestError ? err.body.message : "Your password could not be updated.",
       );
     } finally {
@@ -406,6 +417,7 @@ export default function AccountPage() {
     event.preventDefault();
     if (profilePendingRef.current) return;
     profilePendingRef.current = true;
+    const requestId = sessionRequestRef.current;
     const fingerprint = JSON.stringify({ name: profileName.trim() });
     if (profileAttemptRef.current?.fingerprint !== fingerprint) profileAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     setProfilePending(true);
@@ -416,6 +428,7 @@ export default function AccountPage() {
         headers: { "Idempotency-Key": profileAttemptRef.current.requestId },
         body: fingerprint,
       });
+      if (requestId !== sessionRequestRef.current) return;
       profileAttemptRef.current = null;
       setSession(customer);
       setAccount((current) => current ? { ...current, customer } : current);
@@ -423,7 +436,7 @@ export default function AccountPage() {
       setProfileMessage("Profile updated.");
     } catch (err) {
       if (err instanceof ApiRequestError && err.status < 500) profileAttemptRef.current = null;
-      setProfileMessage(
+      if (requestId === sessionRequestRef.current) setProfileMessage(
         err instanceof ApiRequestError ? err.body.message : "Your profile could not be updated.",
       );
     } finally {
@@ -465,6 +478,7 @@ export default function AccountPage() {
     event.preventDefault();
     if (emailChangePendingRef.current) return;
     emailChangePendingRef.current = true;
+    const requestId = ++sessionRequestRef.current;
     if (emailConfirmationAttemptRef.current?.token !== emailChangeToken) emailConfirmationAttemptRef.current = { token: emailChangeToken, requestId: crypto.randomUUID() };
     setEmailChangePending(true);
     setEmailChangeMessage(null);
@@ -474,6 +488,7 @@ export default function AccountPage() {
         headers: { "Idempotency-Key": emailConfirmationAttemptRef.current.requestId },
         body: JSON.stringify({ token: emailChangeToken }),
       });
+      if (requestId !== sessionRequestRef.current) return;
       emailConfirmationAttemptRef.current = null;
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
       setEmailChangeToken("");
@@ -483,7 +498,7 @@ export default function AccountPage() {
       setRecoveryMessage("Email updated. Sign in with your new address.");
     } catch (err) {
       if (err instanceof ApiRequestError && err.status < 500) emailConfirmationAttemptRef.current = null;
-      setEmailChangeMessage(
+      if (requestId === sessionRequestRef.current) setEmailChangeMessage(
         err instanceof ApiRequestError ? err.body.message : "The email change could not be confirmed.",
       );
     } finally {
