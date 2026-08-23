@@ -544,6 +544,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .shift-adjustment > button { justify-self: start; }
 .management-table { display: grid; margin-top: 1rem; border-top: 1px solid var(--line); }
 .table-row { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr)); gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); align-items: center; }
+.film-allocation-row { grid-template-columns: minmax(180px, 2fr) repeat(5, minmax(90px, 1fr)); }
 .table-row strong { display: grid; gap: .2rem; }
 .table-row small { color: var(--muted); font-weight: 400; }
 .table-head { color: var(--muted); font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; }

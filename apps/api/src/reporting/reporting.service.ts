@@ -5,8 +5,26 @@ import { AppError } from "../common/app-error";
 
 export interface ReportRange { from: Date; to: Date }
 
+type DistributorTerm = { startWeek: number; endWeek: number | null; distributorShareBasisPoints: number };
+
 @Injectable()
 export class ReportingService {
+  allocateDistributorShare(ticketRevenueCents: number, startsAt: Date, openingStartsAt: Date | null, termsValue: Prisma.JsonValue | null) {
+    const terms = Array.isArray(termsValue)
+      ? termsValue.filter((term): term is DistributorTerm => {
+          if (!term || typeof term !== "object" || Array.isArray(term)) return false;
+          const value = term as Record<string, unknown>;
+          return Number.isInteger(value.startWeek) && (value.endWeek === null || Number.isInteger(value.endWeek)) && Number.isInteger(value.distributorShareBasisPoints);
+        })
+      : [];
+    if (!openingStartsAt || terms.length === 0) return { theatricalWeek: null, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
+    const theatricalWeek = Math.max(1, Math.floor((startsAt.getTime() - openingStartsAt.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1);
+    const term = terms.find((candidate) => theatricalWeek >= candidate.startWeek && (candidate.endWeek === null || theatricalWeek <= candidate.endWeek));
+    if (!term) return { theatricalWeek, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
+    const distributorRevenueCents = Math.round(ticketRevenueCents * term.distributorShareBasisPoints / 10_000);
+    return { theatricalWeek, distributorShareBasisPoints: term.distributorShareBasisPoints, distributorRevenueCents, cinemaRevenueCents: ticketRevenueCents - distributorRevenueCents, unallocatedRevenueCents: 0, allocationComplete: true };
+  }
+
   async audienceOrigins(locationId: string, range: ReportRange) {
     const orders = await prisma.ticketOrder.findMany({
       where: { locationId, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED"] } },
@@ -124,8 +142,12 @@ export class ReportingService {
       }),
     ]);
 
-    const movies = new Map<string, { movieId: string; title: string; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
-    const showtimes = new Map<string, { showtimeId: string; movieId: string; title: string; startsAt: Date; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number }>();
+    const soldMovieIds = [...new Set(ticketOrders.flatMap((order) => order.status === "REFUNDED" ? [] : order.tickets.map((ticket) => ticket.showtimeSeat.showtime.movieId)))];
+    const openingShowtimes = soldMovieIds.length ? await prisma.showtime.findMany({ where: { movieId: { in: soldMovieIds }, auditorium: { locationId } }, orderBy: [{ movieId: "asc" }, { startsAt: "asc" }], distinct: ["movieId"], select: { movieId: true, startsAt: true } }) : [];
+    const openingByMovie = new Map(openingShowtimes.map((showtime) => [showtime.movieId, showtime.startsAt]));
+    const movieMetadata = new Map<string, { distributorName: string | null; distributorTerms: Prisma.JsonValue | null }>();
+    const movies = new Map<string, { movieId: string; title: string; distributorName: string | null; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; allocationComplete: boolean }>();
+    const showtimes = new Map<string, { showtimeId: string; movieId: string; title: string; distributorName: string | null; startsAt: Date; ticketRevenueCents: number; ticketsSold: number; fnbRevenueCents: number; theatricalWeek: number | null; distributorShareBasisPoints: number | null; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; allocationComplete: boolean }>();
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number; ticketFeesCents: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
     const salesOperators = new Map<string, { employeeId: string; employeeName: string; ticketsSold: number; grossCollectedCents: number; refundedCents: number; netCollectedCents: number }>();
@@ -144,12 +166,12 @@ export class ReportingService {
     };
     const ensureMovie = (movieId: string, title: string) => {
       let row = movies.get(movieId);
-      if (!row) { row = { movieId, title, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; movies.set(movieId, row); }
+      if (!row) { row = { movieId, title, distributorName: movieMetadata.get(movieId)?.distributorName ?? null, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0, allocationComplete: true }; movies.set(movieId, row); }
       return row;
     };
     const ensureShowtime = (showtimeId: string, movieId: string, title: string, startsAt: Date) => {
       let row = showtimes.get(showtimeId);
-      if (!row) { row = { showtimeId, movieId, title, startsAt, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0 }; showtimes.set(showtimeId, row); }
+      if (!row) { row = { showtimeId, movieId, title, distributorName: movieMetadata.get(movieId)?.distributorName ?? null, startsAt, ticketRevenueCents: 0, ticketsSold: 0, fnbRevenueCents: 0, theatricalWeek: null, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0, allocationComplete: true }; showtimes.set(showtimeId, row); }
       return row;
     };
 
@@ -193,6 +215,7 @@ export class ReportingService {
       if (salesOperator) salesOperator.ticketsSold += order.tickets.length;
       order.tickets.forEach((ticket) => {
         const showtime = ticket.showtimeSeat.showtime;
+        movieMetadata.set(showtime.movieId, { distributorName: showtime.movie.distributorName, distributorTerms: showtime.movie.distributorTerms });
         const revenue = ticket.priceCentsPaid;
         ticketRevenueCents += revenue;
         const admissionType = admissionTypes.get(ticket.ticketTypeId) ?? { ticketTypeId: ticket.ticketTypeId, name: ticket.ticketType.name, ticketsSold: 0, ticketRevenueCents: 0 };
@@ -238,9 +261,22 @@ export class ReportingService {
     }
 
     const ticketsSold = ticketOrders.filter((order) => order.status !== "REFUNDED").reduce((sum, order) => sum + order.tickets.length, 0);
+    for (const showing of showtimes.values()) {
+      const allocation = this.allocateDistributorShare(showing.ticketRevenueCents, showing.startsAt, openingByMovie.get(showing.movieId) ?? null, movieMetadata.get(showing.movieId)?.distributorTerms ?? null);
+      Object.assign(showing, allocation);
+      const movie = movies.get(showing.movieId)!;
+      movie.distributorName = showing.distributorName;
+      movie.distributorRevenueCents += allocation.distributorRevenueCents;
+      movie.cinemaRevenueCents += allocation.cinemaRevenueCents;
+      movie.unallocatedRevenueCents += allocation.unallocatedRevenueCents;
+      movie.allocationComplete &&= allocation.allocationComplete;
+    }
+    const distributorRevenueCents = [...movies.values()].reduce((sum, movie) => sum + movie.distributorRevenueCents, 0);
+    const cinemaFilmRevenueCents = [...movies.values()].reduce((sum, movie) => sum + movie.cinemaRevenueCents, 0);
+    const unallocatedFilmRevenueCents = [...movies.values()].reduce((sum, movie) => sum + movie.unallocatedRevenueCents, 0);
     const combinedRevenueCents = ticketCollectedCents + fnbRevenueCents;
     return {
-      range, totals: { grossRevenueCents: ticketCollectedCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, ticketFeesCents, ticketTaxCents, ticketCollectedCents, fnbRevenueCents, combinedRevenueCents, ticketsSold, fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0, averageTotalSpendPerPatronCents: ticketsSold ? Math.round(combinedRevenueCents / ticketsSold) : 0, concessionAttachRatePercent: ticketsSold ? Math.min(100, Math.round((fnbSeatCount / ticketsSold) * 1000) / 10) : 0 },
+      range, totals: { grossRevenueCents: ticketCollectedCents + ticketRefundedCents + fnbRevenueCents + fnbRefundedCents, refundedCents: ticketRefundedCents + fnbRefundedCents, ticketRefundedCents, fnbRefundedCents, ticketRevenueCents, ticketFeesCents, ticketTaxCents, ticketCollectedCents, distributorRevenueCents, cinemaFilmRevenueCents, unallocatedFilmRevenueCents, fnbRevenueCents, combinedRevenueCents, ticketsSold, fnbOrders: fnbOrderCount, averageFnbSpendPerOrderCents: fnbOrderCount ? Math.round(fnbRevenueCents / fnbOrderCount) : 0, averageFnbSpendPerSeatCents: fnbSeatCount ? Math.round(fnbRevenueCents / fnbSeatCount) : 0, averageTotalSpendPerPatronCents: ticketsSold ? Math.round(combinedRevenueCents / ticketsSold) : 0, concessionAttachRatePercent: ticketsSold ? Math.min(100, Math.round((fnbSeatCount / ticketsSold) * 1000) / 10) : 0 },
       movies: [...movies.values()].sort((a, b) => a.title.localeCompare(b.title)),
       showtimes: [...showtimes.values()].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime()),
       admissionTypes: [...admissionTypes.values()].sort((a, b) => b.ticketsSold - a.ticketsSold || a.name.localeCompare(b.name)),
@@ -277,6 +313,8 @@ export class ReportingService {
       ["Net revenue (cents)", report.totals.combinedRevenueCents], ["Ticket face value (cents)", report.totals.ticketRevenueCents],
       ["Ticket fees (cents)", report.totals.ticketFeesCents], ["Ticket tax (cents)", report.totals.ticketTaxCents],
       ["Ticket total collected (cents)", report.totals.ticketCollectedCents],
+      ["Distributor film share (cents)", report.totals.distributorRevenueCents], ["Cinema film share (cents)", report.totals.cinemaFilmRevenueCents],
+      ["Unallocated film revenue (cents)", report.totals.unallocatedFilmRevenueCents],
       ["F&B revenue (cents)", report.totals.fnbRevenueCents], ["Tickets sold", report.totals.ticketsSold],
       ["F&B orders", report.totals.fnbOrders], ["Average F&B per order (cents)", report.totals.averageFnbSpendPerOrderCents],
       ["Average F&B per occupied seat (cents)", report.totals.averageFnbSpendPerSeatCents],
@@ -286,8 +324,8 @@ export class ReportingService {
     return [
       row(["Report from", report.range.from.toISOString()]), row(["Report to", report.range.to.toISOString()]),
       row(["Summary metric", "Value"]), ...totals.map(row), "",
-      row(["Movie", "Tickets sold", "Ticket face value (cents)", "F&B revenue (cents)"]),
-      ...report.movies.map((movie) => row([movie.title, movie.ticketsSold, movie.ticketRevenueCents, movie.fnbRevenueCents])), "",
+      row(["Movie", "Distributor", "Tickets sold", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "F&B revenue (cents)"]),
+      ...report.movies.map((movie) => row([movie.title, movie.distributorName, movie.ticketsSold, movie.ticketRevenueCents, movie.distributorRevenueCents, movie.cinemaRevenueCents, movie.unallocatedRevenueCents, movie.fnbRevenueCents])), "",
       row(["Showtime", "Starts at", "Tickets sold", "Ticket face value (cents)", "F&B revenue (cents)"]),
       ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents, showtime.fnbRevenueCents])), "",
       row(["Admission type", "Tickets sold", "Ticket face value (cents)"]),
@@ -312,12 +350,12 @@ export class ReportingService {
       row(["Report to", report.range.to.toISOString()]),
       "",
       row(["Film summary"]),
-      row(["Film", "Paid admissions", "Ticket face value (cents)"]),
-      ...report.movies.map((movie) => row([movie.title, movie.ticketsSold, movie.ticketRevenueCents])),
+      row(["Film", "Distributor", "Paid admissions", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "Allocation status"]),
+      ...report.movies.map((movie) => row([movie.title, movie.distributorName, movie.ticketsSold, movie.ticketRevenueCents, movie.distributorRevenueCents, movie.cinemaRevenueCents, movie.unallocatedRevenueCents, movie.allocationComplete ? "Allocated" : "Terms needed"])),
       "",
       row(["Showtime detail"]),
-      row(["Film", "Showtime", "Paid admissions", "Ticket face value (cents)"]),
-      ...report.showtimes.map((showtime) => row([showtime.title, showtime.startsAt.toISOString(), showtime.ticketsSold, showtime.ticketRevenueCents])),
+      row(["Film", "Distributor", "Showtime", "Theatrical week", "Distributor share rate (basis points)", "Paid admissions", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)"]),
+      ...report.showtimes.map((showtime) => row([showtime.title, showtime.distributorName, showtime.startsAt.toISOString(), showtime.theatricalWeek, showtime.distributorShareBasisPoints, showtime.ticketsSold, showtime.ticketRevenueCents, showtime.distributorRevenueCents, showtime.cinemaRevenueCents, showtime.unallocatedRevenueCents])),
     ].join("\n");
   }
 
