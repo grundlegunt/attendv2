@@ -658,7 +658,7 @@ export class AuthService {
           where: { status: { not: "CART" } },
           orderBy: { createdAt: "desc" },
           include: {
-            location: { select: { name: true } },
+            location: { select: { name: true, timezone: true } },
             tickets: {
               orderBy: { issuedAt: "asc" },
               include: {
@@ -688,6 +688,7 @@ export class AuthService {
         currency: order.currency,
         createdAt: order.createdAt.toISOString(),
         locationName: order.location.name,
+        locationTimezone: order.location.timezone,
         tickets: order.tickets.map((ticket) => ({
           id: ticket.id,
           status: ticket.status,
