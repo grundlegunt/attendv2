@@ -11,3 +11,11 @@ test("box-office customer lookup blocks duplicate and sale-overlapping searches"
   assert.match(source, /requestId === customerSearchRequestRef\.current\) \{ customerSearchPendingRef\.current = false/);
   assert.match(source, /customerSearchRequestRef\.current \+= 1;\s*customerSearchPendingRef\.current = false/);
 });
+
+test("box-office customer results disclose membership details and handle phone-only records", () => {
+  assert.match(source, /customer\.membership\.tier/);
+  assert.match(source, /customer\.membership\.status\.toLowerCase\(\)/);
+  assert.match(source, /customer\.membership\.membershipNumber/);
+  assert.match(source, /disabled=\{busy \|\| !customer\.email\}/);
+  assert.match(source, /customer\.name \|\| customer\.email \|\| customer\.phone/);
+});
