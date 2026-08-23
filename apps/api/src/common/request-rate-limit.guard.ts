@@ -6,7 +6,7 @@ import Redis from "ioredis";
 import { AppError } from "./app-error";
 
 interface RateLimitPolicy {
-  scope: "auth" | "checkout";
+  scope: "auth" | "checkout" | "observability";
   identity?: "email" | "actor";
 }
 
@@ -25,8 +25,8 @@ export class RequestRateLimitGuard implements CanActivate, OnModuleDestroy {
     const policy = this.reflector.get<RateLimitPolicy>(RATE_LIMIT_POLICY, context.getHandler());
     if (!policy) return true;
     const request = context.switchToHttp().getRequest<Request>();
-    const limit = policy.scope === "auth" ? this.env.AUTH_RATE_LIMIT_ATTEMPTS : this.env.CHECKOUT_RATE_LIMIT_ATTEMPTS;
-    const windowSeconds = policy.scope === "auth" ? this.env.AUTH_RATE_LIMIT_WINDOW_SECONDS : this.env.CHECKOUT_RATE_LIMIT_WINDOW_SECONDS;
+    const limit = policy.scope === "auth" ? this.env.AUTH_RATE_LIMIT_ATTEMPTS : policy.scope === "observability" ? 10 : this.env.CHECKOUT_RATE_LIMIT_ATTEMPTS;
+    const windowSeconds = policy.scope === "auth" ? this.env.AUTH_RATE_LIMIT_WINDOW_SECONDS : policy.scope === "observability" ? 60 : this.env.CHECKOUT_RATE_LIMIT_WINDOW_SECONDS;
     const route = `${request.baseUrl}${request.route?.path ?? request.path}`;
     const keys = [`rate:${policy.scope}:ip:${route}:${request.ip}`];
     const identity = this.identity(request, policy.identity);

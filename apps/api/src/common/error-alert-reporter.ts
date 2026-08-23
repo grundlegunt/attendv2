@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 export type RedactedErrorAlert = {
+  source?: string;
   environment: string;
   errorName: string;
   fingerprint: string;
