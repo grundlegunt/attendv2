@@ -82,9 +82,11 @@ export default function PlatformOnboarding() {
 
   useEffect(() => {
     if (!session) return;
+    let active = true;
     request<Overview>("/platform/overview", undefined, session.accessToken)
-      .then(setOverview)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not load onboarding progress."));
+      .then((nextOverview) => { if (active) setOverview(nextOverview); })
+      .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load onboarding progress."); });
+    return () => { active = false; };
   }, [session]);
 
   const pipeline = useMemo(() => (overview?.organizations ?? []).map((organization) => {
