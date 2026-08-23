@@ -19,6 +19,7 @@ export type ActorType = "EMPLOYEE" | "CUSTOMER" | "PLATFORM";
 export interface AccessTokenPayload {
   sub: string; // Employee.id, Customer.id, or PlatformUser.id
   actorType: ActorType;
+  tokenVersion?: number; // required for customers so access tokens can be revoked
   locationId?: string; // present for employee tokens
   permissions: string[]; // flattened Permission keys, empty for customers
   supportSession?: boolean;

@@ -12,7 +12,8 @@ const route = readFileSync(
 test("checkout trusts the signed-in customer identity instead of submitted email", () => {
   assert.match(helper, /verifyAccessToken\(token, secret\)/);
   assert.match(helper, /actor\.actorType !== "CUSTOMER"/);
-  assert.match(helper, /id: actor\.sub, authAccount: \{ isNot: null \}/);
+  assert.match(helper, /Number\.isInteger\(actor\.tokenVersion\)/);
+  assert.match(helper, /refreshTokenVersion: actor\.tokenVersion/);
   assert.match(route, /trustedCheckoutEmail\(request, body\.email\)/);
   assert.match(route, /\.\.\.body,\s+email,/);
 });

@@ -5305,10 +5305,16 @@ describe("Customer authentication", () => {
       .send({ currentPassword: "customer-password-1", newPassword: "customer-password-2" });
     expect(changed.status).toBe(200);
     expect(changed.body.customer.email).toBe(email);
+    const changedCookies = setCookieHeaders(changed);
+    const changedAccessCookie = cookiePair(changedCookies, "attend_customer_access");
+    await request(app.getHttpServer())
+      .get("/api/v1/auth/customers/me")
+      .set("Cookie", priorAccessCookie)
+      .expect(401);
     const replay = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/change-password")
       .set("Origin", CUSTOMER_WEB_ORIGIN)
-      .set("Cookie", priorAccessCookie)
+      .set("Cookie", changedAccessCookie)
       .set("Idempotency-Key", requestId)
       .send({ currentPassword: "customer-password-1", newPassword: "customer-password-2" })
       .expect(200);
