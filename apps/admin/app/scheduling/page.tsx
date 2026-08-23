@@ -2009,6 +2009,7 @@ export default function AdminPage() {
           <SchedulingCalendar
             labels={adminUi.labels}
             locationName={data.location.name}
+            timeZone={timeZone}
             auditoriums={data.location.auditoriums}
             movies={data.location.organization.movies}
             archivedMovies={data.archivedMovies}
