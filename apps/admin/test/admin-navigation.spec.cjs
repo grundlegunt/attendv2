@@ -95,6 +95,8 @@ describe("admin navigation", () => {
     assert.equal(links.some((item) => item.href === "/gift-cards"), false);
     const managerLinks = visibleAdminNavigation(["payment.refund"]).flatMap((group) => group.items);
     assert.deepEqual(managerLinks.map((item) => item.href), ["/", "/search", "/refunds", "/gift-cards"]);
+    const fullManagerLinks = visibleAdminNavigation(["payment.refund", "reports.view"]).flatMap((group) => group.items);
+    assert.equal(fullManagerLinks.some((item) => item.href === "/attention"), true);
   });
 });
 

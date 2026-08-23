@@ -75,3 +75,25 @@ describe("ManagementService global search", () => {
     }
   });
 });
+
+describe("ManagementService attention inbox", () => {
+  it("queries only durable action states within the active location", async () => {
+    const orders = jest.spyOn(prisma.ticketOrder, "findMany").mockResolvedValue([]);
+    const tabs = jest.spyOn(prisma.restaurantTab, "findMany").mockResolvedValue([]);
+    const refunds = jest.spyOn(prisma.refund, "findMany").mockResolvedValue([]);
+    const inquiries = jest.spyOn(prisma.privateEventInquiry, "findMany").mockResolvedValue([]);
+
+    try {
+      await new ManagementService().attentionInbox("location-1");
+      expect(orders).toHaveBeenCalledWith(expect.objectContaining({ where: { locationId: "location-1", channel: "BOX_OFFICE", status: "PAYMENT_FAILED" } }));
+      expect(tabs).toHaveBeenCalledWith(expect.objectContaining({ where: { locationId: "location-1", status: { in: ["PAYMENT_FAILED", "MANAGER_REVIEW"] } } }));
+      expect(refunds).toHaveBeenCalledWith(expect.objectContaining({ where: { status: "FAILED", payment: { OR: [{ ticketOrder: { locationId: "location-1" } }, { restaurantTab: { locationId: "location-1" } }] } } }));
+      expect(inquiries).toHaveBeenCalledWith(expect.objectContaining({ where: { locationId: "location-1", status: "NEW" } }));
+    } finally {
+      orders.mockRestore();
+      tabs.mockRestore();
+      refunds.mockRestore();
+      inquiries.mockRestore();
+    }
+  });
+});
