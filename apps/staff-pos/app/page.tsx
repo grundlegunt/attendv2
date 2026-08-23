@@ -10,6 +10,7 @@ import { TimeClockGate } from "./time-clock-gate";
 import { BoxOfficePos } from "./box-office-pos";
 import { ShiftControls } from "./shift-controls";
 import { TicketService } from "./ticket-service";
+import { formatCinemaTime } from "./cinema-date-time";
 
 type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type ActiveStaffSession = AuthTokenResponse & { employee: AuthenticatedEmployee };
@@ -395,7 +396,7 @@ export default function StaffLoginPage() {
             {program?.movies.flatMap((movie) =>
               movie.showtimes.map((showtime) => (
                 <option key={showtime.id} value={showtime.id}>
-                  {movie.title} · {new Date(showtime.startsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · {showtime.auditorium.name}
+                  {movie.title} · {formatCinemaTime(showtime.startsAt, employee.timezone)} · {showtime.auditorium.name}
                 </option>
               )),
             )}
@@ -417,6 +418,7 @@ export default function StaffLoginPage() {
             accessToken={accessToken}
             movies={program?.movies ?? []}
             canExchange={employee.permissions.includes("ticket.refund")}
+            timeZone={employee.timezone}
           />
         ) : view === "restaurant" ? (
           <RestaurantPos
