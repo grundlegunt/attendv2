@@ -37,3 +37,41 @@ describe("ManagementService private-event inquiry export", () => {
     expect(csv).toContain('"2026-09-12T00:00:00.000Z"');
   });
 });
+
+describe("ManagementService global search", () => {
+  it("scopes searchable records to the active location and organization", async () => {
+    const location = jest.spyOn(prisma.location, "findUniqueOrThrow")
+      .mockResolvedValue({ organizationId: "organization-1" } as never);
+    const orders = jest.spyOn(prisma.ticketOrder, "findMany").mockResolvedValue([]);
+    const customers = jest.spyOn(prisma.customer, "findMany").mockResolvedValue([]);
+    const tickets = jest.spyOn(prisma.ticket, "findMany").mockResolvedValue([]);
+    const giftCards = jest.spyOn(prisma.giftCard, "findMany").mockResolvedValue([]);
+
+    try {
+      await new ManagementService().globalSearch("location-1", "jane@example.com");
+
+      expect(location).toHaveBeenCalledWith({
+        where: { id: "location-1" },
+        select: { organizationId: true },
+      });
+      expect(orders).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ locationId: "location-1" }),
+      }));
+      expect(customers).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({
+          ticketOrders: { some: { locationId: "location-1" } },
+        }),
+      }));
+      expect(giftCards).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ organizationId: "organization-1" }),
+      }));
+      expect(tickets).not.toHaveBeenCalled();
+    } finally {
+      location.mockRestore();
+      orders.mockRestore();
+      customers.mockRestore();
+      tickets.mockRestore();
+      giftCards.mockRestore();
+    }
+  });
+});

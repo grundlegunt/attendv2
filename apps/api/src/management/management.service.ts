@@ -34,6 +34,41 @@ const applySiteCopy = (content: CinemaContent, copy: CustomerSiteCopy): CinemaCo
 
 @Injectable()
 export class ManagementService {
+  async globalSearch(locationId: string, query: string) {
+    const normalized = query.trim();
+    if (normalized.length < 2) throw AppError.validationFailed("Enter at least two characters.");
+    if (normalized.length > 100) throw AppError.validationFailed("Searches cannot exceed 100 characters.");
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
+    const exactTicketId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(normalized);
+    const exactTicketCredential = normalized.split(".").length === 3;
+    const [orders, customers, tickets, giftCards] = await Promise.all([
+      prisma.ticketOrder.findMany({
+        where: { locationId, OR: [{ orderNumber: { contains: normalized, mode: "insensitive" } }, { guestEmail: { contains: normalized, mode: "insensitive" } }, { guestName: { contains: normalized, mode: "insensitive" } }, { customer: { email: { contains: normalized, mode: "insensitive" } } }, { customer: { name: { contains: normalized, mode: "insensitive" } } }] },
+        select: { id: true, orderNumber: true, status: true, totalCents: true, currency: true, guestName: true, guestEmail: true, customer: { select: { name: true, email: true } }, createdAt: true, _count: { select: { tickets: true } } }, orderBy: { createdAt: "desc" }, take: 10,
+      }),
+      prisma.customer.findMany({
+        where: { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { phone: { contains: normalized } }, { name: { contains: normalized, mode: "insensitive" } }], ticketOrders: { some: { locationId } } },
+        select: { id: true, name: true, email: true, phone: true, updatedAt: true, _count: { select: { ticketOrders: { where: { locationId } } } } }, orderBy: { updatedAt: "desc" }, take: 10,
+      }),
+      exactTicketId || exactTicketCredential ? prisma.ticket.findMany({
+        where: { OR: [...(exactTicketId ? [{ id: normalized }] : []), ...(exactTicketCredential ? [{ qrToken: normalized }] : [])], showtimeSeat: { showtime: { auditorium: { locationId } } } },
+        select: {
+          id: true,
+          status: true,
+          ticketOrder: { select: { id: true, orderNumber: true } },
+          ticketType: { select: { name: true } },
+          showtimeSeat: { select: { seat: { select: { label: true } }, showtime: { select: { startsAt: true, movie: { select: { title: true } }, auditorium: { select: { name: true } } } } } },
+        },
+        take: 10,
+      }) : [],
+      prisma.giftCard.findMany({
+        where: { organizationId: location.organizationId, OR: [{ codeLast4: { contains: normalized, mode: "insensitive" } }, { recipientName: { contains: normalized, mode: "insensitive" } }, { recipientEmail: { contains: normalized, mode: "insensitive" } }] },
+        select: { id: true, codeLast4: true, recipientName: true, recipientEmail: true, balanceCents: true, currency: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 10,
+      }),
+    ]);
+    return { query: normalized, orders, customers, tickets, giftCards };
+  }
+
   async settings(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({
       where: { id: locationId },
