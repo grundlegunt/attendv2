@@ -41,7 +41,8 @@ describe("schedule-plan week windows", () => {
 
 describe("CinemaService seat-hold expiry", () => {
   it("does not overlap expiry sweeps", async () => {
-    const service = new CinemaService();
+    const service = new CinemaService({} as never);
+    jest.spyOn(service, "notifyAvailableWaitlists").mockResolvedValue(0);
     let finishSweep!: () => void;
     const sweep = new Promise<void>((resolve) => {
       finishSweep = resolve;
@@ -66,7 +67,8 @@ describe("CinemaService seat-hold expiry", () => {
   });
 
   it("recovers after a failed expiry sweep", async () => {
-    const service = new CinemaService();
+    const service = new CinemaService({} as never);
+    jest.spyOn(service, "notifyAvailableWaitlists").mockResolvedValue(0);
     const expireSeatHolds = jest
       .spyOn(service, "expireSeatHolds")
       .mockRejectedValueOnce(new Error("database unavailable"))

@@ -7,6 +7,7 @@ import {
   TicketReceipt,
   CustomerPasswordResetDelivery,
   CustomerEmailChangeDelivery,
+  ShowtimeWaitlistDelivery,
 } from "./email-provider";
 
 function escapeHtml(value: string) {
@@ -250,6 +251,14 @@ export class PostmarkEmailProvider implements EmailProvider {
     if (!response.ok || !body.MessageID) {
       throw new Error(`Postmark rejected the restaurant receipt: ${body.Message ?? response.statusText}`);
     }
+    return { messageId: body.MessageID };
+  }
+
+  async sendShowtimeWaitlistAvailability(delivery: ShowtimeWaitlistDelivery): Promise<{ messageId: string }> {
+    const startsAt = delivery.startsAt.toLocaleString("en-US", { timeZone: delivery.timeZone, dateStyle: "full", timeStyle: "short" });
+    const response = await fetch("https://api.postmarkapp.com/email", { method: "POST", signal: AbortSignal.timeout(8_000), headers: { Accept: "application/json", "Content-Type": "application/json", "X-Postmark-Server-Token": this.serverToken }, body: JSON.stringify({ From: this.from, To: delivery.to, Subject: `Tickets may be available for ${delivery.movieTitle}`, HtmlBody: `<p>Tickets may be available for <strong>${escapeHtml(delivery.movieTitle)}</strong> at ${escapeHtml(delivery.theaterName)} on ${escapeHtml(startsAt)}.</p><p><a href="${escapeHtml(delivery.purchaseUrl)}">Check ticket availability</a></p><p>Tickets are first come, first served and are not reserved by this email.</p>`, TextBody: `Tickets may be available for ${delivery.movieTitle} at ${delivery.theaterName} on ${startsAt}. Check availability: ${delivery.purchaseUrl}\n\nTickets are first come, first served and are not reserved by this email.`, MessageStream: "outbound" }) });
+    const body = await readPostmarkResponse(response);
+    if (!response.ok || !body.MessageID) throw new Error(`Postmark rejected the showtime waitlist email: ${body.Message ?? response.statusText}`);
     return { messageId: body.MessageID };
   }
 }

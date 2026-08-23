@@ -5,6 +5,7 @@ import {
   RestaurantReceiptDelivery,
   CustomerPasswordResetDelivery,
   CustomerEmailChangeDelivery,
+  ShowtimeWaitlistDelivery,
   TicketReceipt,
 } from "./email-provider";
 
@@ -16,6 +17,7 @@ export class TestEmailProvider implements EmailProvider {
   readonly sentRestaurantReceipts: RestaurantReceiptDelivery[] = [];
   readonly sentCustomerPasswordResets: CustomerPasswordResetDelivery[] = [];
   readonly sentCustomerEmailChanges: CustomerEmailChangeDelivery[] = [];
+  readonly sentShowtimeWaitlistAvailability: ShowtimeWaitlistDelivery[] = [];
 
   async sendTicketReceipt(receipt: TicketReceipt) {
     this.sent.push(receipt);
@@ -47,5 +49,10 @@ export class TestEmailProvider implements EmailProvider {
   async sendCustomerEmailChange(delivery: CustomerEmailChangeDelivery) {
     this.sentCustomerEmailChanges.push(delivery);
     return { messageId: `test-customer-email-change-${this.sentCustomerEmailChanges.length}` };
+  }
+
+  async sendShowtimeWaitlistAvailability(delivery: ShowtimeWaitlistDelivery) {
+    this.sentShowtimeWaitlistAvailability.push(delivery);
+    return { messageId: `test-showtime-waitlist-${this.sentShowtimeWaitlistAvailability.length}` };
   }
 }

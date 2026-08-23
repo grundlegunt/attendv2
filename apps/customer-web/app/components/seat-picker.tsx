@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { TicketCheckout } from "./ticket-checkout";
@@ -66,10 +66,37 @@ export function SeatPicker({
   const [serverClockOffsetMs, setServerClockOffsetMs] = useState(0);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [closing, setClosing] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [waitlistMessage, setWaitlistMessage] = useState("");
+  const [waitlistPending, setWaitlistPending] = useState(false);
   const refreshRequestRef = useRef(0);
   const refreshPendingRef = useRef(false);
   const pendingSeatIdsRef = useRef(new Set<string>());
   const closingRef = useRef(false);
+  const waitlistPendingRef = useRef(false);
+  const waitlistAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+
+  async function joinWaitlist(event: FormEvent) {
+    event.preventDefault();
+    if (waitlistPendingRef.current) return;
+    const email = waitlistEmail.trim().toLowerCase();
+    if (!email) return;
+    if (waitlistAttemptRef.current?.fingerprint !== email) waitlistAttemptRef.current = { fingerprint: email, requestId: crypto.randomUUID() };
+    waitlistPendingRef.current = true;
+    setWaitlistPending(true);
+    setWaitlistMessage("");
+    try {
+      await apiFetch(`/cinema/showtimes/${showtimeId}/waitlist`, { method: "POST", headers: { "Idempotency-Key": waitlistAttemptRef.current.requestId }, body: JSON.stringify({ email }) });
+      waitlistAttemptRef.current = null;
+      setWaitlistMessage("You're on the waitlist. We'll email you if tickets return before showtime.");
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) waitlistAttemptRef.current = null;
+      setWaitlistMessage(reason instanceof ApiRequestError ? reason.body.message : "The waitlist request could not be saved.");
+    } finally {
+      waitlistPendingRef.current = false;
+      setWaitlistPending(false);
+    }
+  }
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0 });
@@ -356,6 +383,7 @@ export function SeatPicker({
           }}
         />
       )}
+      {availability && availability.counts.available === 0 && mySeats.length === 0 && <form className="showtime-waitlist" onSubmit={(event) => void joinWaitlist(event)}><span className="eyebrow">SOLD OUT</span><h3>Join the waitlist</h3><p>If tickets return before showtime, we’ll email you. Availability is not guaranteed.</p><div><label>Email<input type="email" required maxLength={200} autoComplete="email" value={waitlistEmail} onChange={(event) => setWaitlistEmail(event.target.value)} /></label><button className="secondary" disabled={waitlistPending}>{waitlistPending ? "Joining…" : "Notify me"}</button></div>{waitlistMessage && <p role="status">{waitlistMessage}</p>}</form>}
       <footer className="seat-picker__summary">
         <div>
           <span className="eyebrow">
