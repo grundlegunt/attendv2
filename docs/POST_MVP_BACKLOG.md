@@ -8,7 +8,6 @@ These items have a clear operator or customer benefit and can be scoped without 
 
 - **Attend Master client-health signals.** Once multiple real clients are operating, add trend, refund-rate, and payment-failure indicators alongside revenue. Validate thresholds against real operating history rather than hardcoding speculative alerts.
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
-- **Production observability.** Add application error tracking and alerting across the public site, Admin, Attend Master, Staff POS, KDS, and API. Ensure sensitive authentication, payment, and customer data is redacted.
 - **Analytics and consent.** Instrument the public funnel only after choosing an analytics policy and consent behavior. Keep essential ticketing storage independent from optional marketing consent.
 
 ## 2. Items needing a product decision or reproducible case
@@ -46,6 +45,7 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 ## Resolved since this backlog was drafted
 
+- **Production observability** — unexpected API failures and root crashes across the customer site, Admin, Attend Master, Staff POS, and KDS produce vendor-neutral alerts with rate limiting, stable fingerprints, safe code frames, and recovery screens; exception messages, query strings, credentials, and customer/payment data are excluded.
 - **Distributor and cinema revenue split reporting** — Revenue Overview calculates theatrical-week distributor and cinema shares from validated film terms, identifies unallocated revenue, and exports distributor box-office detail without treating settlement as a register-time payment split.
 - **Ticket-fee drill-down** — Revenue Overview expands fee totals into order-level ticket counts, channel, average fee, and collected fee detail while preserving Attend's current fee treatment.
 - **Admin global search** — managers can search orders, customer names and email addresses, tickets, and gift cards from one location-scoped entry point.

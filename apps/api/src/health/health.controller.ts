@@ -1,12 +1,25 @@
-import { Controller, Get, Headers, OnModuleDestroy, ServiceUnavailableException } from "@nestjs/common";
+import { Body, Controller, Get, Headers, OnModuleDestroy, Post, ServiceUnavailableException, UseGuards } from "@nestjs/common";
 import { prisma } from "@cinema/database";
 import { loadEnv } from "@cinema/config/env";
 import Redis from "ioredis";
 import { AppError } from "../common/app-error";
+import { ErrorAlertReporter } from "../common/error-alert-reporter";
+import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
+import { z } from "zod";
+
+const clientErrorSchema = z.object({
+  app: z.enum(["customer-web", "admin", "platform-admin", "staff-pos", "kds"]),
+  errorName: z.string().trim().min(1).max(100),
+  fingerprint: z.string().regex(/^[a-f0-9]{16,64}$/),
+  frames: z.array(z.string().trim().max(500)).max(8),
+  path: z.string().trim().startsWith("/").max(500),
+  occurredAt: z.string().datetime(),
+});
 
 @Controller("health")
 export class HealthController implements OnModuleDestroy {
   private readonly env = loadEnv();
+  private readonly alerts = new ErrorAlertReporter(this.env.ERROR_ALERT_WEBHOOK_URL);
   private readonly redis = this.env.NODE_ENV === "test" ? null : new Redis(this.env.REDIS_URL, { lazyConnect: true, maxRetriesPerRequest: 1, enableOfflineQueue: false });
 
   /**
@@ -58,6 +71,25 @@ export class HealthController implements OnModuleDestroy {
       prisma.auditEvent.count({ where: { action: { contains: "attention_required" }, occurredAt: { gte: new Date(Date.now() - 15 * 60_000) } } }),
     ]);
     return { time: new Date().toISOString(), failedPayments15m, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog, attentionEvents15m };
+  }
+
+  @Post("client-errors")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "observability" })
+  clientError(@Body() body: unknown) {
+    const parsed = clientErrorSchema.safeParse(body);
+    if (!parsed.success) throw AppError.validationFailed("The client error report is invalid.");
+    this.alerts.report({
+      source: `client:${parsed.data.app}`,
+      environment: this.env.NODE_ENV,
+      errorName: parsed.data.errorName,
+      fingerprint: parsed.data.fingerprint,
+      frames: parsed.data.frames,
+      method: "CLIENT",
+      path: parsed.data.path,
+      occurredAt: parsed.data.occurredAt,
+    });
+    return { accepted: true };
   }
 
   private async databaseAvailable() {
