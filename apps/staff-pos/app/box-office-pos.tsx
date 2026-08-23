@@ -20,6 +20,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
   const [customerResults, setCustomerResults] = useState<CustomerResult[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerSearching, setCustomerSearching] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [holdTokens, setHoldTokens] = useState<string[]>([]);
@@ -65,7 +66,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     checkoutAttemptRef.current = null;
     setBusy(false);
     setSelected([]); setQuote(null); setHoldTokens([]); setTicketTypes([]); setTicketTypeId(""); setTicketTypeBySeatId({});
-    setPromotionCode(""); setCustomerQuery(""); setCustomerResults([]); setCustomerName(""); setCustomerEmail(""); setCustomerSearching(false); setCashCents("0"); setCardCents("0"); setCashReceived("0");
+    setPromotionCode(""); setCustomerQuery(""); setCustomerResults([]); setCustomerName(""); setCustomerEmail(""); setSelectedCustomerId(null); setCustomerSearching(false); setCashCents("0"); setCardCents("0"); setCashReceived("0");
     setGiftCardCode(""); setGiftCardCents("0"); setGiftCardBalance(null); setGiftCardCurrency(null); setGiftRemainderTender("CASH");
     setReaderId(DEFAULT_READER_ID);
     setMessage(null);
@@ -157,6 +158,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
     setCustomerResults([]);
     setCustomerName("");
     setCustomerEmail("");
+    setSelectedCustomerId(null);
     setCustomerSearching(false);
     setCashCents("0");
     setCardCents("0");
@@ -393,6 +395,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       giftCardCode: parsedGiftCardCents > 0 ? giftCardCode.trim() : undefined,
       readerId: parsedCardCents > 0 ? readerId.trim() : undefined,
       cashReceivedCents: parsedCashCents > 0 ? parsedCashReceived : undefined,
+      customerId: selectedCustomerId ?? undefined,
       customerEmail: normalizedCustomerEmail || undefined,
       customerName: normalizedCustomerName || undefined,
     };
@@ -494,7 +497,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
       <label className="field"><span>Promotion code</span><input value={promotionCode} maxLength={50} disabled={busy || Boolean(quote)} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} /></label>
       <button className="primary" disabled={!selected.length || !ticketTypeId || busy || Boolean(quote)}>Price {selected.length} {isGeneralAdmission ? "ticket(s)" : "seat(s)"}</button></form>
     {quote && <div className="sale-total"><p>Pricing locked for the held {isGeneralAdmission ? "tickets" : "seats"}.</p>{quote.tickets.map((ticket, index) => <p key={ticket.holdToken}>{isGeneralAdmission ? `Ticket ${index + 1}` : ticket.seatLabel} · {ticket.ticketTypeName} · ${(ticket.priceCents/100).toFixed(2)}</p>)}<p>Subtotal ${(quote.subtotalCents/100).toFixed(2)}</p>{quote.discountCents>0&&<p>Promotion{quote.promotion ? ` · ${quote.promotion.name} (${quote.promotion.code})` : ""} −${(quote.discountCents/100).toFixed(2)}</p>}<p>Fees ${(quote.feesCents/100).toFixed(2)} · Tax ${(quote.taxCents/100).toFixed(2)}</p><strong>Total ${(quote.totalCents/100).toFixed(2)}</strong>
-      <section className="customer-attach"><h4>Customer (optional)</h4><p>Attach this sale for lookup and service later, or leave blank for a walk-up customer.</p><div className="customer-attach__search"><label className="field"><span>Find by name, email, phone, or membership number</span><input value={customerQuery} maxLength={100} disabled={busy || customerSearching} onChange={(event) => setCustomerQuery(event.target.value)} /></label><button className="secondary" type="button" disabled={busy || customerSearching || customerQuery.trim().length < 2} onClick={() => void searchCustomers()}>{customerSearching ? "Searching…" : "Find customer"}</button></div>{customerResults.length > 0 && <div className="customer-attach__results">{customerResults.map((customer) => <button className="secondary" type="button" key={customer.id} disabled={busy || !customer.email} onClick={() => { if (!customer.email) return; setCustomerName(customer.name ?? ""); setCustomerEmail(customer.email); setCustomerQuery(customer.email); setCustomerResults([]); setMessage(null); }}><strong>{customer.name || customer.email || customer.phone}</strong><span>{customer.email || customer.phone}{customer.email && customer.phone ? ` · ${customer.phone}` : ""}</span>{customer.membership && <span>Member · {customer.membership.tier} · {customer.membership.status.toLowerCase()} · #{customer.membership.membershipNumber}</span>}</button>)}</div>}<label className="field"><span>Customer name</span><input value={customerName} maxLength={120} disabled={busy} onChange={(event) => setCustomerName(event.target.value)} /></label><label className="field"><span>Customer email</span><input type="email" value={customerEmail} maxLength={320} disabled={busy} onChange={(event) => setCustomerEmail(event.target.value)} /></label>{(customerName || customerEmail) && <button className="secondary" type="button" disabled={busy} onClick={() => { setCustomerName(""); setCustomerEmail(""); setCustomerQuery(""); setCustomerResults([]); }}>Clear customer</button>}</section>
+      <section className="customer-attach"><h4>Customer (optional)</h4><p>Attach this sale for lookup and service later, or leave blank for a walk-up customer.</p><div className="customer-attach__search"><label className="field"><span>Find by name, email, phone, or membership number</span><input value={customerQuery} maxLength={100} disabled={busy || customerSearching} onChange={(event) => setCustomerQuery(event.target.value)} /></label><button className="secondary" type="button" disabled={busy || customerSearching || customerQuery.trim().length < 2} onClick={() => void searchCustomers()}>{customerSearching ? "Searching…" : "Find customer"}</button></div>{customerResults.length > 0 && <div className="customer-attach__results">{customerResults.map((customer) => <button className="secondary" type="button" key={customer.id} disabled={busy} onClick={() => { setSelectedCustomerId(customer.id); setCustomerName(customer.name ?? ""); setCustomerEmail(customer.email ?? ""); setCustomerQuery(customer.email ?? customer.phone ?? customer.membership?.membershipNumber ?? ""); setCustomerResults([]); setMessage(null); }}><strong>{customer.name || customer.email || customer.phone}</strong><span>{customer.email || customer.phone}{customer.email && customer.phone ? ` · ${customer.phone}` : ""}</span>{customer.membership && <span>Member · {customer.membership.tier} · {customer.membership.status.toLowerCase()} · #{customer.membership.membershipNumber}</span>}</button>)}</div>}<label className="field"><span>Customer name</span><input value={customerName} maxLength={120} disabled={busy} onChange={(event) => { setSelectedCustomerId(null); setCustomerName(event.target.value); }} /></label><label className="field"><span>Customer email</span><input type="email" value={customerEmail} maxLength={320} disabled={busy} onChange={(event) => { setSelectedCustomerId(null); setCustomerEmail(event.target.value); }} /></label>{(selectedCustomerId || customerName || customerEmail) && <button className="secondary" type="button" disabled={busy} onClick={() => { setSelectedCustomerId(null); setCustomerName(""); setCustomerEmail(""); setCustomerQuery(""); setCustomerResults([]); }}>Clear customer</button>}</section>
       <label className="field"><span>Cash cents</span><input type="number" min="0" step="1" value={cashCents} disabled={busy} onChange={(event) => { setCashCents(event.target.value); setCashReceived("0"); }} /></label>
       <label className="field"><span>Cash received cents</span><input type="number" min="0" step="1" value={cashReceived} disabled={busy || Number(cashCents) <= 0} onChange={(event) => setCashReceived(event.target.value)} /></label>
       <label className="field"><span>Card cents</span><input type="number" min="0" step="1" value={cardCents} disabled={busy} onChange={(event) => setCardCents(event.target.value)} /></label>
