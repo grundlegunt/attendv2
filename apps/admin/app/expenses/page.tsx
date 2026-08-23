@@ -31,18 +31,26 @@ export default function ExpensesPage() {
   const [incurredAt, setIncurredAt] = useState(currentDateKey);
   const [notes, setNotes] = useState("");
   const mutationPendingRef = useRef(false);
+  const loadRequestRef = useRef(0);
   const expenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const deleteExpenseAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
 
   const query = useMemo(() => new URLSearchParams(inclusiveReportRange(from, through, timeZone)).toString(), [from, through, timeZone]);
   const load = useCallback(async () => {
+    const requestId = ++loadRequestRef.current;
     setLoading(true); setError(null);
-    try { setReport(await apiFetch<ExpenseReport>(`/reports/expenses?${query}`, { accessToken })); }
-    catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Expenses could not be loaded."); }
-    finally { setLoading(false); }
+    try {
+      const nextReport = await apiFetch<ExpenseReport>(`/reports/expenses?${query}`, { accessToken });
+      if (requestId === loadRequestRef.current) setReport(nextReport);
+    }
+    catch (reason) { if (requestId === loadRequestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : "Expenses could not be loaded."); }
+    finally { if (requestId === loadRequestRef.current) setLoading(false); }
   }, [accessToken, query]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+    return () => { loadRequestRef.current += 1; };
+  }, [load]);
 
   async function createExpense(event: FormEvent) {
     event.preventDefault(); setError(null);
