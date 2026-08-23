@@ -77,8 +77,13 @@ export class ManagementService {
         select: { id: true, orderNumber: true, status: true, totalCents: true, currency: true, guestName: true, guestEmail: true, customer: { select: { name: true, email: true } }, createdAt: true, _count: { select: { tickets: true } } }, orderBy: { createdAt: "desc" }, take: 10,
       }),
       prisma.customer.findMany({
-        where: { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { phone: { contains: normalized } }, { name: { contains: normalized, mode: "insensitive" } }], ticketOrders: { some: { locationId } } },
-        select: { id: true, name: true, email: true, phone: true, updatedAt: true, _count: { select: { ticketOrders: { where: { locationId } } } } }, orderBy: { updatedAt: "desc" }, take: 10,
+        where: {
+          AND: [
+            { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { phone: { contains: normalized } }, { name: { contains: normalized, mode: "insensitive" } }] },
+            { OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }] },
+          ],
+        },
+        select: { id: true, name: true, email: true, phone: true, updatedAt: true, _count: { select: { ticketOrders: { where: { locationId } }, restaurantTabs: { where: { locationId } } } } }, orderBy: { updatedAt: "desc" }, take: 10,
       }),
       exactTicketId || exactTicketCredential ? prisma.ticket.findMany({
         where: { OR: [...(exactTicketId ? [{ id: normalized }] : []), ...(exactTicketCredential ? [{ qrToken: normalized }] : [])], showtimeSeat: { showtime: { auditorium: { locationId } } } },
@@ -722,7 +727,7 @@ export class ManagementService {
 
   async customer(locationId: string, customerId: string) {
     const customer = await prisma.customer.findFirst({
-      where: { id: customerId, ticketOrders: { some: { locationId } } },
+      where: { id: customerId, OR: [{ ticketOrders: { some: { locationId } } }, { restaurantTabs: { some: { locationId } } }] },
       select: {
         id: true,
         name: true,
