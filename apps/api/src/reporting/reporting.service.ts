@@ -585,6 +585,23 @@ export class ReportingService {
     ].join("\n");
   }
 
+  moviePerformanceCsv(report: Awaited<ReturnType<ReportingService["moviePerformance"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const sliceRows = (title: string, slices: typeof report.auditoriumPerformance) => [
+      row([title]), row(["Segment", "Shows", "Tickets", "Capacity", "Attendance percent", "Average tickets per show", "Ticket revenue (cents)", "Average ticket revenue per show (cents)", "F&B revenue (cents)", "Average F&B per show (cents)"]),
+      ...slices.map((slice) => row([slice.label, slice.showtimes, slice.ticketsSold, slice.capacity, slice.attendancePercent, slice.averageTicketsPerShow, slice.ticketRevenueCents, slice.averageTicketRevenuePerShowCents, slice.fnbRevenueCents, slice.averageFnbPerShowCents])), "",
+    ];
+    return [
+      row(["Film performance", report.movie.title]), row(["Cinema", report.location.name]), row(["Report from", report.range?.from.toISOString() ?? "All time"]), row(["Report to", report.range?.to.toISOString() ?? "All time"]), "",
+      row(["Summary metric", "Value"]), row(["Performances", report.totals.showtimes]), row(["Tickets sold", report.totals.ticketsSold]), row(["Capacity", report.totals.totalCapacity]), row(["Attendance percent", report.totals.attendancePercent]), row(["Ticket revenue (cents)", report.totals.ticketRevenueCents]), row(["F&B revenue (cents)", report.totals.fnbRevenueCents]), row(["Distributor share (cents)", report.totals.distributorRevenueCents]), row(["Cinema share (cents)", report.totals.cinemaRevenueCents]), row(["Discounts (cents)", report.totals.discountCents]), row(["Complimentary tickets", report.totals.complimentaryTickets]), row(["Refunded tickets", report.totals.refundedTickets]), row(["Refunded ticket value (cents)", report.totals.refundedTicketValueCents]), "",
+      row(["Showtime detail"]), row(["Starts at", "Auditorium", "Series", "Theatrical week", "Tickets", "Capacity", "Ticket revenue (cents)", "F&B revenue (cents)", "Distributor share (cents)", "Cinema share (cents)"]), ...report.showtimes.map((showtime) => row([showtime.startsAt.toISOString(), showtime.auditorium.name, showtime.filmSeries?.name, showtime.theatricalWeek, showtime.ticketsSold, showtime.capacity, showtime.ticketRevenueCents, showtime.fnbRevenueCents, showtime.distributorRevenueCents, showtime.cinemaRevenueCents])), "",
+      row(["Weekly performance"]), row(["Theatrical week", "First showtime", "Last showtime", "Shows", "Tickets", "Capacity", "Attendance percent", "Ticket revenue (cents)", "F&B revenue (cents)", "Distributor share (cents)", "Cinema share (cents)"]), ...report.weeklyPerformance.map((week) => row([week.theatricalWeek, week.firstShowtime.toISOString(), week.lastShowtime.toISOString(), week.showtimes, week.ticketsSold, week.capacity, week.attendancePercent, week.ticketRevenueCents, week.fnbRevenueCents, week.distributorRevenueCents, week.cinemaRevenueCents])), "",
+      row(["Admission types"]), row(["Type", "Tickets", "Ticket revenue (cents)"]), ...report.admissionTypes.map((type) => row([type.name, type.ticketsSold, type.ticketRevenueCents])), "", row(["Sales channels"]), row(["Channel", "Tickets", "Ticket revenue (cents)"]), ...report.salesChannels.map((channel) => row([channel.channel, channel.ticketsSold, channel.ticketRevenueCents])), "", row(["Promotions"]), row(["Code", "Name", "Type", "Orders", "Tickets", "Discount (cents)"]), ...report.promotions.map((promotion) => row([promotion.code, promotion.name, promotion.type, promotion.orders, promotion.tickets, promotion.discountCents])), "",
+      ...sliceRows("Performance by auditorium", report.auditoriumPerformance), ...sliceRows("Performance by daypart", report.daypartPerformance), ...sliceRows("Performance by weekday", report.weekdayPerformance),
+    ].join("\n");
+  }
+
   distributorBoxOfficeCsv(report: Awaited<ReturnType<ReportingService["revenue"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");
