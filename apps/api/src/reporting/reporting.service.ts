@@ -80,6 +80,46 @@ export class ReportingService {
     };
   }
 
+  async distributorPerformance(locationId: string, distributorName?: string, range?: ReportRange) {
+    const location = await prisma.location.findUnique({ where: { id: locationId }, select: { name: true, timezone: true, currency: true, organizationId: true } });
+    if (!location) throw AppError.notFound("Cinema location not found.");
+    const movies = await prisma.movie.findMany({
+      where: { organizationId: location.organizationId, distributorName: distributorName ? { equals: distributorName, mode: "insensitive" } : { not: null } },
+      orderBy: { title: "asc" },
+      select: { id: true, title: true, posterUrl: true, distributorName: true, distributorTerms: true, active: true, showtimes: { where: { auditorium: { locationId }, ...(range ? { startsAt: { gte: range.from, lt: range.to } } : {}) }, orderBy: { startsAt: "asc" }, include: { auditorium: { select: { id: true, name: true, capacity: true } }, showtimeSeats: { select: { tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { priceCentsPaid: true } } } }, restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } } } } },
+    });
+    if (distributorName && !movies.length) throw AppError.notFound("Distributor not found.");
+    const openingShowtimes = movies.length ? await prisma.showtime.findMany({ where: { movieId: { in: movies.map((movie) => movie.id) }, auditorium: { locationId } }, orderBy: [{ movieId: "asc" }, { startsAt: "asc" }], distinct: ["movieId"], select: { movieId: true, startsAt: true } }) : [];
+    const openingByMovie = new Map(openingShowtimes.map((showtime) => [showtime.movieId, showtime.startsAt]));
+    const now = new Date();
+    const filmRows = movies.map((movie) => {
+      const showingRows = movie.showtimes.map((showtime) => {
+        const tickets = showtime.showtimeSeats.flatMap((seat) => seat.tickets);
+        const ticketRevenueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
+        const fnbRevenueCents = showtime.restaurantTabs.reduce((sum, tab) => {
+          const gross = tab.totalCents ?? 0;
+          const recordedRefunds = tab.payments.reduce((paymentSum, payment) => paymentSum + payment.refunds.reduce((refundSum, refund) => refundSum + refund.amountCents, 0), 0);
+          const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
+          return sum + gross - refunded;
+        }, 0);
+        return { showtimeId: showtime.id, startsAt: showtime.startsAt, auditorium: showtime.auditorium, ticketsSold: tickets.length, ticketRevenueCents, fnbRevenueCents, ...this.allocateDistributorShare(ticketRevenueCents, showtime.startsAt, openingByMovie.get(movie.id) ?? null, movie.distributorTerms) };
+      });
+      const upcomingShowtimes = showingRows.filter((row) => row.startsAt >= now).length;
+      const pastShowtimes = showingRows.length - upcomingShowtimes;
+      const dealStatus = upcomingShowtimes && pastShowtimes ? "CURRENT" : upcomingShowtimes ? "UPCOMING" : pastShowtimes ? "PAST" : "UNSCHEDULED";
+      return { movieId: movie.id, title: movie.title, posterUrl: movie.posterUrl, distributorName: movie.distributorName!, active: movie.active, dealStatus, terms: Array.isArray(movie.distributorTerms) ? movie.distributorTerms : [], showtimes: showingRows.length, upcomingShowtimes, pastShowtimes, ticketsSold: showingRows.reduce((sum, row) => sum + row.ticketsSold, 0), ticketRevenueCents: showingRows.reduce((sum, row) => sum + row.ticketRevenueCents, 0), fnbRevenueCents: showingRows.reduce((sum, row) => sum + row.fnbRevenueCents, 0), distributorRevenueCents: showingRows.reduce((sum, row) => sum + row.distributorRevenueCents, 0), cinemaRevenueCents: showingRows.reduce((sum, row) => sum + row.cinemaRevenueCents, 0), unallocatedRevenueCents: showingRows.reduce((sum, row) => sum + row.unallocatedRevenueCents, 0), firstShowtime: showingRows[0]?.startsAt ?? null, lastShowtime: showingRows.at(-1)?.startsAt ?? null };
+    });
+    const distributorRows = new Map<string, { name: string; films: typeof filmRows; showtimes: number; ticketsSold: number; ticketRevenueCents: number; fnbRevenueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number }>();
+    for (const film of filmRows) {
+      const key = film.distributorName.toLocaleLowerCase();
+      const row = distributorRows.get(key) ?? { name: film.distributorName, films: [], showtimes: 0, ticketsSold: 0, ticketRevenueCents: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 };
+      row.films.push(film); row.showtimes += film.showtimes; row.ticketsSold += film.ticketsSold; row.ticketRevenueCents += film.ticketRevenueCents; row.fnbRevenueCents += film.fnbRevenueCents; row.distributorRevenueCents += film.distributorRevenueCents; row.cinemaRevenueCents += film.cinemaRevenueCents; row.unallocatedRevenueCents += film.unallocatedRevenueCents;
+      distributorRows.set(key, row);
+    }
+    const distributors = [...distributorRows.values()].sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.name.localeCompare(right.name));
+    return { location: { name: location.name, timezone: location.timezone, currency: location.currency }, range: range ?? null, distributors, distributor: distributorName ? distributors[0] ?? null : null };
+  }
+
   async filmSeriesPerformance(locationId: string, seriesId: string, range?: ReportRange) {
     const [series, location] = await Promise.all([prisma.filmSeries.findFirst({
       where: { id: seriesId, organization: { locations: { some: { id: locationId } } } },

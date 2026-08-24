@@ -503,6 +503,21 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .report-movie-row a:hover { color: var(--color-accent); }
 .film-detail-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .film-detail-heading-actions a { display: inline-grid; place-items: center; padding: 8px 10px; border: 1px solid var(--color-accent); color: var(--color-accent); font-size: .7rem; font-weight: 900; text-decoration: none; }
+.distributor-table, .distributor-film-table { overflow-x: auto; }
+.distributor-table header, .distributor-table > a { display: grid; grid-template-columns: minmax(180px, 1.4fr) repeat(4, minmax(85px, .65fr)) minmax(170px, 1fr); gap: 16px; align-items: center; min-width: 820px; }
+.distributor-table header, .distributor-film-table header { padding: 10px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.distributor-table > a { padding: 16px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-primary); font-size: .78rem; text-decoration: none; }
+.distributor-table > a:hover { background: color-mix(in srgb, var(--color-accent) 7%, transparent); color: var(--color-accent); }
+.distributor-film-table header, .distributor-film-table article { display: grid; grid-template-columns: minmax(220px, 1.5fr) 100px minmax(140px, .8fr) repeat(3, minmax(125px, .8fr)); gap: 16px; align-items: center; min-width: 980px; }
+.distributor-film-table article { padding: 15px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
+.distributor-film-table article > span { display: grid; gap: 4px; }
+.distributor-film-table article a { color: var(--color-text-primary); font-weight: 900; text-decoration: none; }
+.distributor-film-table article a:hover { color: var(--color-accent); }
+.distributor-film-table small { color: var(--color-text-secondary); line-height: 1.35; }
+.deal-status { width: max-content; padding: 5px 7px; border: 1px solid var(--color-border); font-size: .62rem; letter-spacing: .06em; text-transform: uppercase; }
+.deal-status.current { border-color: var(--color-accent); color: var(--color-accent); }
+.deal-status.upcoming { border-color: #6e93dc; color: #a9c2f3; }
+.deal-status.past, .deal-status.unscheduled { color: var(--color-text-secondary); }
 .auditorium-picker { margin: -24px -24px 28px; padding: 24px; border-bottom: 1px solid var(--color-border); background: #181916; }
 .auditorium-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
 .builder-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
