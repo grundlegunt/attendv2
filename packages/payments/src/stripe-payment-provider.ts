@@ -189,6 +189,7 @@ export class StripePaymentProvider implements PaymentProvider {
         throw new Error(
           `Stripe reported charge_already_refunded for PaymentIntent ${args.providerPaymentId}, but no ` +
             "matching refund object could be found via refunds.list. This needs investigation, not automatic failure.",
+          { cause: error },
         );
       }
       throw toProviderError(error);

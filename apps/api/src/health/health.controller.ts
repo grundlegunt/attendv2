@@ -29,13 +29,9 @@ export class HealthController implements OnModuleDestroy {
    */
   @Get()
   async check() {
-    let databaseOk = false;
-    try {
-      await prisma.$queryRaw`SELECT 1`;
-      databaseOk = true;
-    } catch {
-      databaseOk = false;
-    }
+    const databaseOk = await prisma.$queryRaw`SELECT 1`
+      .then(() => true)
+      .catch(() => false);
 
     return {
       status: databaseOk ? "ok" : "degraded",
