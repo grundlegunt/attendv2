@@ -23,9 +23,12 @@ async function fetchPlatform(
     return await fetch(url, { ...init, signal });
   } catch (error) {
     if (init.signal?.aborted) throw error;
-    throw new Error(timeoutSignal.aborted
-      ? "The request timed out. Please try again."
-      : "The server could not be reached. Please try again.");
+    throw new Error(
+      timeoutSignal.aborted
+        ? "The request timed out. Please try again."
+        : "The server could not be reached. Please try again.",
+      { cause: error },
+    );
   }
 }
 
