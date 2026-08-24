@@ -33,6 +33,18 @@ export class ReportingController {
     return this.reporting.revenue(this.location(actor), this.range(from, to));
   }
 
+  @Get("film-series/:seriesId")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  filmSeriesPerformance(
+    @CurrentActor() actor: RequestActor,
+    @Param("seriesId") seriesId: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    const range = from || to ? this.range(from, to) : undefined;
+    return this.reporting.filmSeriesPerformance(this.location(actor), seriesId, range);
+  }
+
   @Get("audience-origins")
   @RequirePermissions(Permission.ReportsViewFinancial)
   audienceOrigins(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
