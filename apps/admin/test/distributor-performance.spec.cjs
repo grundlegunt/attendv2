@@ -66,6 +66,14 @@ test("distributor directory exports the selected period", () => {
   assert.match(directory, /distributor-directory\.csv/);
 });
 
+test("distributor directory supports search and operator sorting", () => {
+  assert.match(directory, /type Sort = "ticketRevenue" \| "attendance" \| "tickets" \| "name"/);
+  assert.match(directory, /distributor\.name\.toLocaleLowerCase\(\)\.includes\(normalizedSearch\)/);
+  assert.match(directory, /visibleDistributors\.map/);
+  assert.match(directory, /No distributors match this search/);
+  for (const option of ["Ticket revenue", "Attendance", "Tickets sold", "Name"]) assert.ok(directory.includes(option));
+});
+
 test("distributor performance can be exported for the selected period", () => {
   assert.match(detail, /apiDownload\(/);
   assert.match(detail, /\/reports\/distributors\/\$\{encodeURIComponent\(name\)\}\/performance\.csv/);
