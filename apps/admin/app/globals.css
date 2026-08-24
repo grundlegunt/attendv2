@@ -497,6 +497,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .series-showtime-table article { padding: 13px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
 .film-performance-hero img { object-position: center top; }
 .film-performance-meta { color: var(--color-text-primary) !important; font-size: .8rem; font-weight: 900; }
+.film-performance-meta a { color: var(--color-accent); text-underline-offset: 3px; }
 .film-performance-export { width: auto; margin-top: .75rem; }
 .film-performance-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .film-performance-metrics > div:nth-child(n + 7) { border-top: 1px solid var(--color-border); }
