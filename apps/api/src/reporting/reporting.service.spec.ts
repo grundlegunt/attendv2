@@ -37,6 +37,16 @@ describe("ReportingService film performance export", () => {
   });
 });
 
+describe("ReportingService distributor performance export", () => {
+  it("includes allocation totals, film history, and deal terms", () => {
+    const source = new ReportingService().distributorPerformanceCsv.toString();
+    expect(source).toContain("Film and deal history");
+    expect(source).toContain("Distributor share (cents)");
+    expect(source).toContain("film.dealStatus");
+    expect(source).toContain("JSON.stringify(film.terms)");
+  });
+});
+
 describe("ReportingService audience origins", () => {
   it("groups ZIP+4 orders by five-digit ZIP without exposing order details", () => {
     const service = new ReportingService();

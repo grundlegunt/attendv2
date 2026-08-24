@@ -642,6 +642,19 @@ export class ReportingService {
     ].join("\n");
   }
 
+  distributorPerformanceCsv(report: Awaited<ReturnType<ReportingService["distributorPerformance"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const distributor = report.distributor;
+    if (!distributor) return row(["Distributor performance", "No distributor found"]);
+    return [
+      row(["Distributor performance", distributor.name]), row(["Cinema", report.location.name]), row(["Report from", report.range?.from.toISOString() ?? "All time"]), row(["Report to", report.range?.to.toISOString() ?? "All time"]), "",
+      row(["Summary metric", "Value"]), row(["Films", distributor.films.length]), row(["Performances", distributor.showtimes]), row(["Tickets sold", distributor.ticketsSold]), row(["Ticket face value (cents)", distributor.ticketRevenueCents]), row(["F&B revenue (cents)", distributor.fnbRevenueCents]), row(["Distributor share (cents)", distributor.distributorRevenueCents]), row(["Cinema share (cents)", distributor.cinemaRevenueCents]), row(["Unallocated value (cents)", distributor.unallocatedRevenueCents]), "",
+      row(["Film and deal history"]), row(["Film", "Status", "First showtime", "Last showtime", "Performances", "Upcoming", "Past", "Tickets", "Ticket face value (cents)", "F&B revenue (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated value (cents)", "Deal terms"]),
+      ...distributor.films.map((film) => row([film.title, film.dealStatus, film.firstShowtime?.toISOString(), film.lastShowtime?.toISOString(), film.showtimes, film.upcomingShowtimes, film.pastShowtimes, film.ticketsSold, film.ticketRevenueCents, film.fnbRevenueCents, film.distributorRevenueCents, film.cinemaRevenueCents, film.unallocatedRevenueCents, JSON.stringify(film.terms)])),
+    ].join("\n");
+  }
+
   distributorBoxOfficeCsv(report: Awaited<ReturnType<ReportingService["revenue"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");

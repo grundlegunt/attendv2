@@ -18,7 +18,7 @@ test("distributor pages expose sales, allocation, films, and deal history", () =
   for (const label of ["Distributor share", "Cinema share", "Complete film history", "current", "upcoming", "past", "Deal terms not set"]) assert.ok(detail.includes(label));
   assert.match(detail, /distributorRevenueCents/);
   assert.match(detail, /unallocatedRevenueCents/);
-  assert.match(detail, /film\.terms\.map/);
+  assert.match(detail, /film\.terms\s*\.map/);
 });
 
 test("distributor pages show per-show averages and precise deal percentages", () => {
@@ -26,4 +26,10 @@ test("distributor pages show per-show averages and precise deal percentages", ()
   assert.match(detail, /average\(film\.ticketsSold, film\.showtimes\)/);
   assert.match(detail, /percentage\(term\.distributorShareBasisPoints/);
   assert.match(detail, /maximumFractionDigits: 2/);
+});
+
+test("distributor performance can be exported for the selected period", () => {
+  assert.match(detail, /apiDownload\(/);
+  assert.match(detail, /\/reports\/distributors\/\$\{encodeURIComponent\(name\)\}\/performance\.csv/);
+  assert.match(detail, /Export CSV/);
 });
