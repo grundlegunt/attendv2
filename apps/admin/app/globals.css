@@ -649,6 +649,14 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .rule-list span { color: var(--muted); font-size: .85rem; }
 .rule-actions { display: flex; gap: .5rem; }
 .rule-list button { width: auto; margin: 0; }
+.pricing-settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pricing-settings-grid .checkout-rules-panel { grid-column: 1 / -1; }
+.checkout-rules-panel .rule-list article { align-items: end; }
+.checkout-rule-editor { display: grid; grid-template-columns: minmax(200px, 1.5fr) minmax(180px, 1fr) minmax(110px, .6fr) repeat(3, auto); align-items: end; width: min(100%, 1080px); }
+.checkout-rule-editor label { min-width: 0; margin: 0; }
+.checkout-rule-editor input, .checkout-rule-editor select { min-width: 0; width: 100%; }
+@media (max-width: 1200px) { .checkout-rule-editor { grid-template-columns: repeat(3, minmax(0, 1fr)); } .checkout-rule-editor button { width: 100%; } }
+@media (max-width: 900px) { .pricing-settings-grid, .checkout-rule-editor { grid-template-columns: 1fr; } .pricing-settings-grid .checkout-rules-panel { grid-column: auto; } .checkout-rules-panel .rule-list article { align-items: stretch; } }
 .people-list article, .refund-list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 0; border-bottom: 1px solid var(--line); }
 .people-list article div, .refund-list article div { display: grid; gap: .2rem; }
 .people-list span, .refund-list span { color: var(--muted); font-size: .85rem; }

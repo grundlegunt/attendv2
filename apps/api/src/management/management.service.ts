@@ -460,6 +460,23 @@ export class ManagementService {
     });
   }
 
+  async deleteTaxRule(input: { locationId: string; employeeId: string; ruleId: string; requestId: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "tax_rule.deleted", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        if (replay.entityId !== input.ruleId) throw AppError.conflict("The tax-rule idempotency key was already used for a different rule.");
+        return { deleted: true, id: replay.entityId };
+      }
+      const rule = await tx.taxRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
+      if (!rule) throw AppError.notFound("Tax rule was not found.");
+      await tx.taxRule.delete({ where: { id: rule.id } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "tax_rule.deleted", entityType: "TaxRule", entityId: rule.id, beforeState: { name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, active: rule.active }, afterState: { requestId: input.requestId, deleted: true } } });
+      return { deleted: true, id: rule.id };
+    });
+  }
+
   async createServiceCharge(input: { locationId: string; employeeId: string; requestId: string; name: string; appliesTo: "ALL" | "FOOD" | "ALCOHOL" | "NA_BEVERAGE"; ratePermille?: number; flatCents?: number; autoApply: boolean; active: boolean }) {
     if ((input.ratePermille == null) === (input.flatCents == null)) throw AppError.validationFailed("Provide exactly one percentage rate or flat amount.");
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
@@ -502,6 +519,23 @@ export class ManagementService {
       const state = (rule: typeof updated) => ({ name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, flatCents: rule.flatCents, autoApply: rule.autoApply, active: rule.active });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "service_charge_rule.updated", entityType: "ServiceChargeRule", entityId: updated.id, beforeState: state(before), afterState: { ...state(updated), requestId: input.requestId, requestFingerprint } } });
       return updated;
+    });
+  }
+
+  async deleteServiceCharge(input: { locationId: string; employeeId: string; ruleId: string; requestId: string }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "service_charge_rule.deleted", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        if (replay.entityId !== input.ruleId) throw AppError.conflict("The service-charge idempotency key was already used for a different rule.");
+        return { deleted: true, id: replay.entityId };
+      }
+      const rule = await tx.serviceChargeRule.findFirst({ where: { id: input.ruleId, locationId: input.locationId } });
+      if (!rule) throw AppError.notFound("Service-charge rule was not found.");
+      await tx.serviceChargeRule.delete({ where: { id: rule.id } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "service_charge_rule.deleted", entityType: "ServiceChargeRule", entityId: rule.id, beforeState: { name: rule.name, appliesTo: rule.appliesTo, ratePermille: rule.ratePermille, flatCents: rule.flatCents, autoApply: rule.autoApply, active: rule.active }, afterState: { requestId: input.requestId, deleted: true } } });
+      return { deleted: true, id: rule.id };
     });
   }
 
