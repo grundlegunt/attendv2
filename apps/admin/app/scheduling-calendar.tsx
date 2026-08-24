@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { AdminUiConfig, AuditoriumSeatingMode } from "@cinema/shared";
 
 import { downloadScheduleWorkbook } from "./schedule-export";
@@ -731,7 +732,7 @@ export function SchedulingCalendar({
                 <p className="kicker">SELECTED FILM</p>
                 <h3>{selectedLibraryMovie.title}</h3>
               </div>
-              <button type="button" className="film-detail-edit" onClick={() => onEditMovie(selectedLibraryMovie)}>Edit film details</button>
+              <div className="film-detail-heading-actions"><Link href={`/films/${encodeURIComponent(selectedLibraryMovie.id)}`}>View performance</Link><button type="button" className="film-detail-edit" onClick={() => onEditMovie(selectedLibraryMovie)}>Edit film details</button></div>
             </div>
             <p className="film-detail-meta">{selectedLibraryMovie.rating || "Not rated"} · {selectedLibraryMovie.runtimeMinutes} min</p>
             <p className="film-detail-synopsis">{selectedLibraryMovie.synopsis || "No synopsis has been added yet."}</p>
