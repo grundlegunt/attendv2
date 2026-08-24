@@ -206,7 +206,7 @@ function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken, timeZon
     <span className="top-film-rank">{rank}</span><strong>{film.title}</strong><div className="top-film-track"><span style={{ width: `${Math.max(5, (film.ticketsSold / topTicketCount) * 100)}%` }} /></div><b>{film.ticketsSold} {film.ticketsSold === 1 ? "ticket" : "tickets"}</b><small>{money(film.ticketRevenueCents)}</small>
     <aside className="dashboard-seat-preview top-film-seat-preview">
       <header><span><strong>{film.title}</strong><small>{showtime ? `${showtime.auditorium.name} · ${new Date(showtime.startsAt).toLocaleString([], { timeZone })}` : "No scheduled showtime available"}</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
-      {inventory ? <><SeatMap seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))} label={`${film.title} seat inventory preview`} /><footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer></> : inventoryError ? <p>Seat map unavailable.</p> : <p>{inventoryLoading ? "Loading live seat map…" : showtime ? "Hover to load the closest showing’s live seat map." : "Schedule a showing to preview its seat map."}</p>}
+      {inventory ? <><SeatMap seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))} label={`${film.title} seat inventory preview`} /><footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer></> : inventoryError ? <p>Seat map unavailable.</p> : <p>{inventoryLoading ? "Loading live seat map…" : showtime ? "Hover to load this period’s best-selling showing." : "Schedule a showing to preview its seat map."}</p>}
     </aside>
   </Link>;
 }
@@ -362,10 +362,14 @@ export function AdminDashboard() {
   const quickActions = navigation.flatMap((group) => group.items).filter((item) => item.href !== "/").slice(0, 5);
   const topFilms = [...(filmRevenue?.movies ?? [])].sort((a, b) => b.ticketsSold - a.ticketsSold || b.ticketRevenueCents - a.ticketRevenueCents).slice(0, 5);
   const topTicketCount = Math.max(1, ...topFilms.map((film) => film.ticketsSold));
-  const closestShowtimeByMovie = new Map<string, Bootstrap["showtimes"][number]>();
+  const ticketsByShowtime = new Map((filmRevenue?.showtimes ?? []).map((showtime) => [showtime.showtimeId, showtime.ticketsSold]));
+  const bestSellingShowtimeByMovie = new Map<string, Bootstrap["showtimes"][number]>();
   for (const showtime of bootstrap?.showtimes ?? []) {
-    const current = closestShowtimeByMovie.get(showtime.movie.id);
-    if (!current || Math.abs(new Date(showtime.startsAt).getTime() - now.getTime()) < Math.abs(new Date(current.startsAt).getTime() - now.getTime())) closestShowtimeByMovie.set(showtime.movie.id, showtime);
+    const current = bestSellingShowtimeByMovie.get(showtime.movie.id);
+    const ticketsSold = ticketsByShowtime.get(showtime.id) ?? 0;
+    const currentTicketsSold = current ? ticketsByShowtime.get(current.id) ?? 0 : -1;
+    const isCloser = current && Math.abs(new Date(showtime.startsAt).getTime() - now.getTime()) < Math.abs(new Date(current.startsAt).getTime() - now.getTime());
+    if (!current || ticketsSold > currentTicketsSold || (ticketsSold === currentTicketsSold && isCloser)) bestSellingShowtimeByMovie.set(showtime.movie.id, showtime);
   }
   const filmRangeLabel = filmRange === "today" ? "Today" : filmRange === "7d" ? "Last 7 days" : "Last 30 days";
   const visible = (id: DashboardWidgetId) => !preferences.hidden.includes(id);
@@ -386,7 +390,7 @@ export function AdminDashboard() {
     </section>}
     {canFinancial && visible("topFilms") && <section className="panel dashboard-top-films" aria-labelledby="top-films-heading" style={{ order: preferences.topOrder.indexOf("topFilms") }}>
       <div className="dashboard-section-heading"><div><p className="kicker">TICKET SALES · {filmRangeLabel.toUpperCase()}</p><h2 id="top-films-heading">Top performing films</h2></div><div className="top-film-heading-actions"><div className="top-film-range" role="group" aria-label="Top performing films reporting period"><button type="button" className={filmRange === "today" ? "active" : ""} onClick={() => setFilmRange("today")}>Today</button><button type="button" className={filmRange === "7d" ? "active" : ""} onClick={() => setFilmRange("7d")}>7 days</button><button type="button" className={filmRange === "30d" ? "active" : ""} onClick={() => setFilmRange("30d")}>30 days</button></div><Link href="/reports">View report</Link></div></div>
-      {filmRevenueLoading && !filmRevenue ? <p className="dashboard-empty">Loading film performance…</p> : topFilms.length ? <div className={`top-film-list ${filmRevenueLoading ? "loading" : ""}`}>{topFilms.map((film, index) => <TopFilmRow film={film} rank={index + 1} topTicketCount={topTicketCount} showtime={closestShowtimeByMovie.get(film.movieId)} accessToken={accessToken} timeZone={locationTimeZone} key={film.movieId} />)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
+      {filmRevenueLoading && !filmRevenue ? <p className="dashboard-empty">Loading film performance…</p> : topFilms.length ? <div className={`top-film-list ${filmRevenueLoading ? "loading" : ""}`}>{topFilms.map((film, index) => <TopFilmRow film={film} rank={index + 1} topTicketCount={topTicketCount} showtime={bestSellingShowtimeByMovie.get(film.movieId)} accessToken={accessToken} timeZone={locationTimeZone} key={film.movieId} />)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
     </section>}
     </div>
     <section className="dashboard-grid">
