@@ -62,6 +62,9 @@ describe("ReportingService film-series performance export", () => {
     expect(source).toContain("Showtime performance");
     expect(source).toContain("report.movies.map");
     expect(source).toContain("report.showtimes.map");
+    expect(source).toContain("Attendance percent");
+    expect(source).toContain("report.totals.totalCapacity");
+    expect(source).toContain("report.totals.averageTicketCents");
   });
 });
 
