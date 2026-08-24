@@ -143,8 +143,10 @@ function template(name: string): { seats: SeatInput[]; layout: SeatMapLayout } {
   const seats = basicSeats(rows, count).map((seat) => {
     let x = seat.x;
     if (name === "center-aisle" && seat.x >= count / 2) x += 2;
-    if (name === "two-aisle")
-      ((x += seat.x >= 4 ? 2 : 0), (x += seat.x >= 12 ? 2 : 0));
+    if (name === "two-aisle") {
+      x += seat.x >= 4 ? 2 : 0;
+      x += seat.x >= 12 ? 2 : 0;
+    }
     if (name === "accessible" && seat.y === rows - 1 && seat.x < 4) {
       return {
         ...seat,

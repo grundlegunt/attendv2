@@ -8,6 +8,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, encryptMfaSecret, hashPassword, hashPin } from "@cinema/auth";
+import dotenv from "dotenv";
 
 export const SEED_PASSWORD = "DevPassword123!";
 
@@ -769,8 +770,7 @@ export async function seedDatabase(
 // CLI entry point — only runs when this file is executed directly
 // (`pnpm db:seed`), not when imported by the test suite.
 if (require.main === module) {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  require("dotenv").config({ quiet: true });
+  dotenv.config({ quiet: true });
   const prisma = new PrismaClient();
 
   if (process.env.NODE_ENV === "production") {
