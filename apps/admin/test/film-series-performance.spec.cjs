@@ -54,3 +54,9 @@ test("film-series performance shows attendance and run metrics", () => {
   assert.match(detail, /Average ticket/);
   assert.match(detail, /Series run/);
 });
+
+test("film-series film rows compare attendance", () => {
+  assert.match(detail, /Tickets \/ attendance/);
+  assert.match(detail, /movie\.attendancePercent/);
+  assert.match(detail, /movie\.totalCapacity/);
+});
