@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 import { ZodValidationPipe } from "./zod-validation.pipe";
 import { AppError } from "./app-error";
 

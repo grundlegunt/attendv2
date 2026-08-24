@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 const text = (max = 500) => z.string().trim().min(1).max(max);
 const paragraph = text(2000);

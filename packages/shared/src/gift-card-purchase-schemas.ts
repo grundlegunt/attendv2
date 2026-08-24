@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 export const createGiftCardPurchaseSchema = z.object({
   locationId: z.string().uuid(), amountCents: z.number().int().min(500).max(100_000),

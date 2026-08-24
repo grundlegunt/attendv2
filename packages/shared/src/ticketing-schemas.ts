@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 export const createTicketCheckoutRequestSchema = z.object({
   holdTokens: z.array(z.string().uuid()).min(1).max(10),

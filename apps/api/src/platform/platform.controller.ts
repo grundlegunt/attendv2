@@ -1,7 +1,7 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { loadEnv } from "@cinema/config/env";
 import { adminBrandingSchema, adminUiConfigSchema, cinemaContentSchema, createAuditoriumRequestSchema, customerBrandingSchema, platformLoginRequestSchema, updateAuditoriumLayoutRequestSchema } from "@cinema/shared";
-import { z } from "zod";
+import { z } from "zod/v3";
 import type { Response } from "express";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequestActor } from "../auth/types";
