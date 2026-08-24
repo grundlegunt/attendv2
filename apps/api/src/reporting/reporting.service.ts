@@ -75,19 +75,35 @@ export class ReportingService {
       include: {
         auditorium: { select: { id: true, name: true, capacity: true } },
         filmSeries: { select: { id: true, name: true } },
-        showtimeSeats: { select: { tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { priceCentsPaid: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { channel: true } } } } } },
+        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, channel: true, discountCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
         restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
     });
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
+    const promotions = new Map<string, { promotionId: string; code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
+    const countedOrders = new Set<string>();
+    let discountCents = 0; let complimentaryTickets = 0; let refundedTickets = 0; let refundedTicketValueCents = 0;
     const rows = showtimes.map((showtime) => {
-      const tickets = showtime.showtimeSeats.flatMap((seat) => seat.tickets);
+      const allTickets = showtime.showtimeSeats.flatMap((seat) => seat.tickets);
+      const tickets = allTickets.filter((ticket) => !["REFUNDED", "CANCELED"].includes(ticket.status));
+      const refunded = allTickets.filter((ticket) => ticket.status === "REFUNDED");
+      refundedTickets += refunded.length; refundedTicketValueCents += refunded.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       for (const ticket of tickets) {
         const admission = admissionTypes.get(ticket.ticketType.id) ?? { ticketTypeId: ticket.ticketType.id, name: ticket.ticketType.name, ticketsSold: 0, ticketRevenueCents: 0 };
         admission.ticketsSold += 1; admission.ticketRevenueCents += ticket.priceCentsPaid; admissionTypes.set(ticket.ticketType.id, admission);
         const channel = salesChannels.get(ticket.ticketOrder.channel) ?? { channel: ticket.ticketOrder.channel, ticketsSold: 0, ticketRevenueCents: 0 };
         channel.ticketsSold += 1; channel.ticketRevenueCents += ticket.priceCentsPaid; salesChannels.set(ticket.ticketOrder.channel, channel);
+        if (!countedOrders.has(ticket.ticketOrder.id)) {
+          countedOrders.add(ticket.ticketOrder.id); discountCents += ticket.ticketOrder.discountCents;
+          const promotion = ticket.ticketOrder.promotion;
+          if (promotion) {
+            const promotionRow = promotions.get(promotion.id) ?? { promotionId: promotion.id, code: promotion.code, name: promotion.name, type: promotion.type, orders: 0, tickets: 0, discountCents: 0 };
+            promotionRow.orders += 1; promotionRow.discountCents += ticket.ticketOrder.discountCents; promotions.set(promotion.id, promotionRow);
+          }
+        }
+        const promotion = ticket.ticketOrder.promotion;
+        if (promotion) { const promotionRow = promotions.get(promotion.id)!; promotionRow.tickets += 1; if (promotion.type === "COMP") complimentaryTickets += 1; }
       }
       const ticketRevenueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       const fnbRevenueCents = showtime.restaurantTabs.reduce((sum, tab) => {
@@ -122,11 +138,13 @@ export class ReportingService {
         averageTicketsPerShow: rows.length ? Math.round((ticketsSold / rows.length) * 10) / 10 : 0, averageTicketCents: ticketsSold ? Math.round(ticketRevenueCents / ticketsSold) : 0,
         ticketRevenueCents, fnbRevenueCents, averageFnbPerShowCents: rows.length ? Math.round(fnbRevenueCents / rows.length) : 0, averageFnbPerTicketCents: ticketsSold ? Math.round(fnbRevenueCents / ticketsSold) : 0,
         distributorRevenueCents: rows.reduce((sum, row) => sum + row.distributorRevenueCents, 0), cinemaRevenueCents: rows.reduce((sum, row) => sum + row.cinemaRevenueCents, 0), unallocatedRevenueCents: rows.reduce((sum, row) => sum + row.unallocatedRevenueCents, 0),
+        discountCents, complimentaryTickets, refundedTickets, refundedTicketValueCents,
         firstShowtime: first, lastShowtime: last, calendarWeeks, averageShowtimesPerWeek: calendarWeeks ? Math.round((rows.length / calendarWeeks) * 10) / 10 : 0,
       },
       series: [...new Map(rows.flatMap((row) => row.filmSeries ? [[row.filmSeries.id, row.filmSeries] as const] : [])).values()],
       admissionTypes: [...admissionTypes.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.name.localeCompare(right.name)),
       salesChannels: [...salesChannels.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.channel.localeCompare(right.channel)),
+      promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || left.code.localeCompare(right.code)),
       weeklyPerformance: [...weeklyPerformance.values()].sort((left, right) => left.theatricalWeek - right.theatricalWeek).map((week) => ({ ...week, attendancePercent: week.capacity ? Math.round((week.ticketsSold / week.capacity) * 1000) / 10 : 0, averageTicketsPerShow: week.showtimes ? Math.round((week.ticketsSold / week.showtimes) * 10) / 10 : 0, averageFnbPerShowCents: week.showtimes ? Math.round(week.fnbRevenueCents / week.showtimes) : 0 })),
       showtimes: rows,
     };

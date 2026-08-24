@@ -509,6 +509,11 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-mix-list { display: grid; }
 .film-mix-list > div { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 18px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
 .film-mix-list span { color: var(--color-text-secondary); }
+.film-adjustments { margin-top: 1.5rem; }
+.film-adjustment-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0 0 1.25rem; background: var(--color-border); border: 1px solid var(--color-border); }
+.film-adjustment-summary > div { display: grid; gap: .3rem; padding: 1rem; background: var(--color-bg-elevated); }
+.film-adjustment-summary span, .film-adjustment-summary small { color: var(--color-text-secondary); }
+.film-adjustment-summary strong { font: 700 1.45rem/1 var(--font-sans); }
 .film-showtime-table article > span:last-child { display: grid; gap: 8px; }
 .showtime-ticket-map-toggle { width: max-content; padding: 5px 7px; border: 1px solid var(--color-accent); background: transparent; color: var(--color-accent); font-size: .65rem; font-weight: 900; cursor: pointer; }
 .showtime-ticket-map { display: grid; gap: 16px; padding: 22px; border-bottom: 1px solid var(--color-border); background: #0d0e0d; }
@@ -1060,6 +1065,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .top-film-track { grid-column: 2 / -1; }
   .top-film-row > small { display: none; }
   .film-sales-mix { grid-template-columns: 1fr; }
+  .film-adjustment-summary { grid-template-columns: 1fr; }
   .audit-filters, .audit-change-grid { grid-template-columns: 1fr; }
   .audit-event summary { align-items: flex-start; flex-direction: column; }
   .audit-event summary > span:last-child { justify-items: start; text-align: left; }
