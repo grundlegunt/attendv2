@@ -21,6 +21,8 @@ type Film = {
   upcomingShowtimes: number;
   pastShowtimes: number;
   ticketsSold: number;
+  totalCapacity: number;
+  attendancePercent: number;
   ticketRevenueCents: number;
   fnbRevenueCents: number;
   distributorRevenueCents: number;
@@ -34,6 +36,8 @@ type Distributor = {
   films: Film[];
   showtimes: number;
   ticketsSold: number;
+  totalCapacity: number;
+  attendancePercent: number;
   ticketRevenueCents: number;
   fnbRevenueCents: number;
   distributorRevenueCents: number;
@@ -170,6 +174,11 @@ export default function DistributorPage() {
               <span>Tickets sold</span>
               <strong>{distributor.ticketsSold}</strong>
               <small>{money(distributor.ticketsSold ? Math.round(distributor.ticketRevenueCents / distributor.ticketsSold) : 0, currency)} average ticket</small>
+            </div>
+            <div>
+              <span>Attendance</span>
+              <strong>{distributor.attendancePercent}%</strong>
+              <small>{distributor.ticketsSold} / {distributor.totalCapacity} seats</small>
             </div>
             <div>
               <span>Ticket face value</span>
