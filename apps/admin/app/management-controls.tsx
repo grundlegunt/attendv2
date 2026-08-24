@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
-import { percentageToPermille } from "./lib/tax-rate";
+import { formatPermillePercentage, percentageToPermille } from "./lib/tax-rate";
 import { inclusiveReportRange, localDateInputValue } from "./report-range";
 
 type Settings = {
@@ -310,7 +310,7 @@ export function ManagementControls({
         );
         setTaxRateDrafts(
           Object.fromEntries(
-            nextSettings.taxRules.map((rule) => [rule.id, (rule.ratePermille / 10).toFixed(1)]),
+            nextSettings.taxRules.map((rule) => [rule.id, formatPermillePercentage(rule.ratePermille)]),
           ),
         );
         setPriceNameDrafts(
@@ -1331,10 +1331,10 @@ export function ManagementControls({
                   type="number"
                   min="0"
                   max="100"
-                  step="0.1"
+                  step="0.01"
                   required
                   inputMode="decimal"
-                  placeholder="9.8"
+                  placeholder="9.75"
                   value={tax.ratePercent}
                   onChange={(event) =>
                     setTax({ ...tax, ratePercent: event.target.value })
@@ -1348,7 +1348,7 @@ export function ManagementControls({
                     <div>
                       <strong>{rule.name}</strong>
                       <span>
-                        {(rule.ratePermille / 10).toFixed(1)}% ·{" "}
+                        {formatPermillePercentage(rule.ratePermille)}% ·{" "}
                         {rule.appliesTo}
                       </span>
                     </div>
@@ -1390,7 +1390,7 @@ export function ManagementControls({
                           type="number"
                           min="0"
                           max="100"
-                          step="0.1"
+                          step="0.01"
                           required
                           inputMode="decimal"
                           value={taxRateDrafts[rule.id] ?? ""}

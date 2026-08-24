@@ -52,7 +52,8 @@ const menuPresentationSchema = z.object({
   "Provide both a menu asset URL and type, or clear both.",
 );
 const appliesTo = z.enum(["ALL", "FOOD", "ALCOHOL", "NA_BEVERAGE"]);
-const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000), active: z.boolean().default(true) }).strict();
+const preciseTaxRate = z.number().min(0).max(1000).refine((value) => Number.isInteger(value * 10), "Tax rates support up to two decimal places.");
+const taxSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: preciseTaxRate, active: z.boolean().default(true) }).strict();
 const taxUpdateSchema = taxSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one tax-rule change.");
 const serviceSchema = z.object({ name: z.string().trim().min(1).max(100), appliesTo, ratePermille: z.number().int().min(0).max(1000).optional(), flatCents: z.number().int().min(0).optional(), autoApply: z.boolean().default(true), active: z.boolean().default(true) }).strict();
 const serviceUpdateSchema = z.object({ name: z.string().trim().min(1).max(100).optional(), appliesTo: appliesTo.optional(), ratePermille: z.number().int().min(0).max(1000).nullable().optional(), flatCents: z.number().int().min(0).nullable().optional(), autoApply: z.boolean().optional(), active: z.boolean().optional() }).strict().refine((value) => Object.keys(value).length > 0, "Provide at least one service-charge change.");

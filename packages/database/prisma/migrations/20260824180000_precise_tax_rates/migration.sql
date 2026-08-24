@@ -1,0 +1,3 @@
+ALTER TABLE "tax_rules"
+  ALTER COLUMN "ratePermille" TYPE DOUBLE PRECISION
+  USING "ratePermille"::DOUBLE PRECISION;
