@@ -30,8 +30,8 @@ customer/staff seat maps) per `/docs/IMPLEMENTATION_PLAN.md`.
 
 ## Prerequisites
 
-- Node.js 20+
-- pnpm 9 (`corepack enable && corepack prepare pnpm@9 --activate`)
+- Node.js 22+
+- pnpm 10.28.1 (`corepack enable && corepack prepare pnpm@10.28.1 --activate`)
 - Docker (for local Postgres/Redis via `infra/docker-compose.yml`)
 
 ## First-time setup
