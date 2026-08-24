@@ -1,74 +1,50 @@
-# Zip Code Heat Map — Where Ticket Buyers Are Coming From
+# Ticket-buyer ZIP Reporting — Current Status
 
-## What's being asked
+The original brief proposed capturing ZIP codes on ticket orders, aggregating them
+for reporting, and displaying a ZCTA choropleth. The data and reporting foundation
+shipped, but a later checkout decision changed the collection path and the map was
+not implemented.
 
-An operator wants to see where ticket buyers are geographically coming from — a
-map showing purchase density by zip code — to understand audience reach (e.g., for
-marketing spend, or evaluating a second location).
+## Shipped foundation
 
-## Current state
+- `TicketOrder.zipCode` is nullable and backed by an additive migration.
+- Ticket checkout request validation accepts an optional five-digit ZIP or ZIP+4.
+- The ticketing service normalizes and persists the value on the order rather than
+  the customer.
+- `GET /reports/audience-origins` aggregates completed orders by five-digit ZIP for
+  the authenticated location and selected reporting range.
+- The response contains only aggregate order/ticket counts, share, and coverage;
+  it does not expose customer or order identities.
+- Admin's Reports & Finance view displays audience-origin totals and a ZIP table.
+- The reporting endpoint uses the same reporting permission boundary as the other
+  management reports.
 
-Confirmed directly against the schema and checkout code: **nothing here exists
-today.** `Customer` (`packages/database/prisma/schema.prisma`) has no
-address/zip field at all — just `email`, `phone`, `name`, `isGuest`. The Stripe
-integration (`packages/payments/src/stripe-payment-provider.ts`) doesn't request a
-billing address either (`automatic_payment_methods: { enabled: true }` alone
-doesn't collect one). There's no zip data anywhere to aggregate yet — this is a
-real feature with three real pieces, not a report to add on top of existing data.
+## Deliberate checkout change
 
-## 1. Capture — ask directly at checkout, don't rely on Stripe
+The optional ZIP control was subsequently removed from customer checkout together
+with other ticket controls. A customer-web regression test explicitly requires the
+ZIP field and `zipCode` request property to remain absent from that checkout UI.
 
-Don't try to piggyback on whatever billing zip Stripe's card element might collect
-for AVS/fraud purposes — that behavior isn't something this checkout flow currently
-configures or relies on, and building a feature on top of undocumented,
-payment-processor-internal behavior is fragile. Add a simple, optional zip code
-field to the ticket checkout flow itself, framed honestly to the customer (e.g.,
-"helps us understand where our audience is coming from") rather than presented as
-required or billing-related.
+Consequently, the report is structurally complete but will only contain data from
+sales channels or future integrations that supply `zipCode`. Reintroducing direct
+customer collection is a product/privacy decision, not an unfinished mechanical
+step from this brief.
 
-## 2. Store — on the order, not the customer
+## Map status
 
-Add `zipCode` (nullable) to `TicketOrder`, not `Customer`. The question being asked
-is "where are people buying tickets *from*," which is a per-purchase fact, not a
-permanent attribute of a customer profile — someone could be traveling, buying as a
-gift, etc. A migration adding one nullable column, following the existing pattern
-of small additive migrations already used throughout this schema.
+No choropleth or mapping dependency is present. The current visualization is an
+aggregate table. Adding a map still requires decisions about:
 
-## 3. Aggregate — a new reporting method, same pattern as what's already there
+- whether ZIP collection should return to customer checkout or be limited to other
+  sales channels;
+- the ZCTA boundary dataset and update process;
+- the mapping library/provider and any associated hosting or token costs; and
+- privacy language and retention expectations for this per-purchase data.
 
-Add a method to `apps/api/src/reporting/reporting.service.ts` (already has
-`revenue()`, `labor()`, `customerRecency()` — this fits directly alongside them):
-group `TicketOrder` rows by `zipCode` for a given location and date range, same
-range-filtering approach already used by `revenue()`. Return counts (and optionally
-ticket revenue) per zip so the frontend doesn't need to do its own aggregation.
+If approved later, use ZCTA polygons joined to the existing aggregate endpoint.
+Do not infer ZIP codes from IP addresses or render a smoothed point-density heatmap.
 
-## 4. Visualize — choropleth over ZCTA boundaries, not a smoothed heatmap
+## Status
 
-Zip codes are already areal units, not points — join the aggregated counts to real
-ZCTA boundary polygons (free GeoJSON/TopoJSON from the US Census) and color each
-zip by density. Don't convert to lat/lng points and run a density/KDE heatmap over
-them — that visually smooths across zip boundaries and misrepresents sparse zips as
-continuous gradients, which isn't what the data actually says. A mapping library
-(Mapbox GL JS or Leaflet, either fits this stack) with a choropleth layer fed the
-aggregated counts is the standard, correct approach for this kind of data.
-
-**Where it lives**: Admin's reporting section (`apps/admin/app/reports`, "Revenue
-Overview" under the navigation restructure in
-`docs/ADMIN_NAVIGATION_RESTRUCTURE.md`) is the natural home — this is per-cinema
-audience insight, the same category as the existing revenue/labor reports. Master
-could aggregate this across clients later if wanted, but that's a natural
-extension, not part of the initial scope here.
-
-## Guardrails
-
-- This is real per-purchase customer data, even if a zip code alone isn't highly
-  identifying. Be deliberate about who can see it (same reporting permission tier
-  as existing financial reports makes sense) and whether it needs a mention in
-  whatever privacy policy/consent language already exists
-  (`CustomerConsent`/`docs/SECURITY.md`) — don't treat it as anonymous analytics
-  by default.
-- Keep the field optional and clearly framed at checkout — don't make it required
-  or present it as if it's needed for payment to go through.
-- Don't build this by inferring zip from IP address or any other passive collection
-  method instead of asking — that's a materially different (and more invasive)
-  data-collection decision than what's being asked for here.
+The reporting foundation is shipped. Customer collection and the geographic map
+are deferred pending the decisions above.
