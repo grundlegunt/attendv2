@@ -54,6 +54,17 @@ describe("ReportingService distributor performance export", () => {
   });
 });
 
+describe("ReportingService film-series performance export", () => {
+  it("includes summary, film, and showtime performance", () => {
+    const source = new ReportingService().filmSeriesPerformanceCsv.toString();
+    expect(source).toContain("Film series performance");
+    expect(source).toContain("Film performance");
+    expect(source).toContain("Showtime performance");
+    expect(source).toContain("report.movies.map");
+    expect(source).toContain("report.showtimes.map");
+  });
+});
+
 describe("ReportingService audience origins", () => {
   it("groups ZIP+4 orders by five-digit ZIP without exposing order details", () => {
     const service = new ReportingService();

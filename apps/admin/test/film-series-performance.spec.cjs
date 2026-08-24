@@ -40,3 +40,9 @@ test("film-series films link to their individual performance reports", () => {
   assert.match(detail, /href=\{`\/films\/\$\{encodeURIComponent\(movie\.movieId\)\}`\}/);
   assert.match(detail, /View performance for \$\{movie\.title\}/);
 });
+
+test("film-series performance can be exported for the selected period", () => {
+  assert.match(detail, /apiDownload/);
+  assert.match(detail, /\/reports\/film-series\/\$\{id\}\/performance\.csv/);
+  assert.match(detail, /Export CSV/);
+});
