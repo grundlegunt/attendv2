@@ -9,7 +9,7 @@ const detail = readFileSync(resolve(__dirname, "../app/distributors/[name]/page.
 
 test("financial operators can open the distributor directory", () => {
   assert.match(navigation, /href: "\/distributors", label: "Distributors", permissions: \["reports\.view\.financial"\]/);
-  assert.match(directory, /apiFetch<Report>\("\/reports\/distributors"/);
+  assert.match(directory, /apiFetch<Report>\(path/);
   assert.match(directory, /encodeURIComponent\(distributor\.name\)/);
 });
 
@@ -51,6 +51,13 @@ test("distributor directory compares ticket and F&B revenue", () => {
   assert.match(directory, /Ticket \/ F&amp;B/);
   assert.match(directory, /distributor\.ticketRevenueCents/);
   assert.match(directory, /distributor\.fnbRevenueCents/);
+});
+
+test("distributor directory supports period comparisons", () => {
+  assert.match(directory, /type Period = "all" \| "30" \| "90" \| "365"/);
+  assert.match(directory, /`\/reports\/distributors\?from=\$\{encodeURIComponent\(from\.toISOString\(\)\)\}&to=\$\{encodeURIComponent\(to\.toISOString\(\)\)\}`/);
+  assert.match(directory, /series-period-switch/);
+  assert.match(directory, /setReport\(null\)/);
 });
 
 test("distributor performance can be exported for the selected period", () => {
