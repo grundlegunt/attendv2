@@ -654,6 +654,17 @@ export class ReportingService {
     ].join("\n");
   }
 
+  filmSeriesPerformanceCsv(report: Awaited<ReturnType<ReportingService["filmSeriesPerformance"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    return [
+      row(["Film series performance", report.series.name]), row(["Cinema", report.location.name]), row(["Report from", report.range?.from.toISOString() ?? "All time"]), row(["Report to", report.range?.to.toISOString() ?? "All time"]), "",
+      row(["Summary metric", "Value"]), row(["Films", report.totals.uniqueFilms]), row(["Performances", report.totals.showtimes]), row(["Upcoming performances", report.totals.upcomingShowtimes]), row(["Past performances", report.totals.pastShowtimes]), row(["Tickets sold", report.totals.ticketsSold]), row(["Average tickets per show", report.totals.averageTicketsPerShow]), row(["Ticket revenue (cents)", report.totals.ticketRevenueCents]), row(["F&B revenue (cents)", report.totals.fnbRevenueCents]), row(["Average F&B per show (cents)", report.totals.averageFnbPerShowCents]), row(["Distributor share (cents)", report.totals.distributorRevenueCents]), row(["Cinema share (cents)", report.totals.cinemaRevenueCents]), row(["Unallocated value (cents)", report.totals.unallocatedRevenueCents]), "",
+      row(["Film performance"]), row(["Film", "Distributor", "Performances", "Tickets", "Ticket revenue (cents)", "F&B revenue (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated value (cents)"]), ...report.movies.map((movie) => row([movie.title, movie.distributorName, movie.showtimes, movie.ticketsSold, movie.ticketRevenueCents, movie.fnbRevenueCents, movie.distributorRevenueCents, movie.cinemaRevenueCents, movie.unallocatedRevenueCents])), "",
+      row(["Showtime performance"]), row(["Starts at", "Film", "Auditorium", "Tickets", "Capacity", "Ticket revenue (cents)", "F&B revenue (cents)", "Distributor share rate (basis points)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated value (cents)"]), ...report.showtimes.map((showtime) => row([showtime.startsAt.toISOString(), showtime.movie.title, showtime.auditorium.name, showtime.ticketsSold, showtime.capacity, showtime.ticketRevenueCents, showtime.fnbRevenueCents, showtime.distributorShareBasisPoints, showtime.distributorRevenueCents, showtime.cinemaRevenueCents, showtime.unallocatedRevenueCents])),
+    ].join("\n");
+  }
+
   distributorPerformanceCsv(report: Awaited<ReturnType<ReportingService["distributorPerformance"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");

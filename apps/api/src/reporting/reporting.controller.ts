@@ -97,6 +97,16 @@ export class ReportingController {
     return this.reporting.filmSeriesPerformance(this.location(actor), seriesId, range);
   }
 
+  @Get("film-series/:seriesId/performance.csv")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  async filmSeriesPerformanceCsv(@CurrentActor() actor: RequestActor, @Param("seriesId") seriesId: string, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
+    const range = from || to ? this.range(from, to) : undefined;
+    const report = await this.reporting.filmSeriesPerformance(this.location(actor), seriesId, range);
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="attend-film-series-performance.csv"');
+    response.send(this.reporting.filmSeriesPerformanceCsv(report));
+  }
+
   @Get("audience-origins")
   @RequirePermissions(Permission.ReportsViewFinancial)
   audienceOrigins(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {

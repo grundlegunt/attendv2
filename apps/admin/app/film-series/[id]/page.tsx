@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useAdminSession } from "../../admin-session";
-import { apiFetch, ApiRequestError } from "../../lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "../../lib/api-client";
 import { ShowtimeTicketMap } from "../../components/showtime-ticket-map";
 
 type Performance = {
@@ -25,6 +25,7 @@ export default function FilmSeriesDetailPage() {
   const [performance, setPerformance] = useState<Performance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const path = useMemo(() => {
     if (period === "all") return `/reports/film-series/${id}`;
     const to = new Date(); const from = new Date(to.getTime() - Number(period) * 24 * 60 * 60 * 1000);
@@ -44,11 +45,23 @@ export default function FilmSeriesDetailPage() {
   const upcomingMovies = new Set(performance?.showtimes.filter((showtime) => new Date(showtime.startsAt).getTime() >= now).map((showtime) => showtime.movie.id));
   const pastMovies = new Set(performance?.showtimes.filter((showtime) => new Date(showtime.startsAt).getTime() < now).map((showtime) => showtime.movie.id));
 
+  async function exportCsv() {
+    if (!performance || exporting) return;
+    setExporting(true); setError(null);
+    try {
+      const query = path.includes("?") ? path.slice(path.indexOf("?")) : "";
+      const blob = await apiDownload(`/reports/film-series/${id}/performance.csv${query}`, { accessToken });
+      const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `${performance.series.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "film-series"}-performance.csv`; anchor.click(); URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The film-series performance export could not be downloaded."); }
+    finally { setExporting(false); }
+  }
+
   if (!employee.permissions.includes("reports.view.financial")) return <main className="admin-route-page"><div className="error-banner" role="alert">You do not have permission to view financial performance.</div></main>;
 
   return <main className="admin-route-page series-performance-page">
     <Link href="/film-series" className="back-link">← All film series</Link>
-    <section className="series-performance-hero">{performance?.series.artworkUrl && <img src={performance.series.artworkUrl} alt="" />}<div><p className="kicker">FILM SERIES PERFORMANCE</p><h1>{performance?.series.name ?? "Film series"}</h1><p>{performance?.series.description ?? "Programming and financial performance across this series."}</p></div></section>
+    <section className="series-performance-hero">{performance?.series.artworkUrl && <img src={performance.series.artworkUrl} alt="" />}<div><p className="kicker">FILM SERIES PERFORMANCE</p><h1>{performance?.series.name ?? "Film series"}</h1><p>{performance?.series.description ?? "Programming and financial performance across this series."}</p>{performance && <button type="button" className="secondary film-performance-export" disabled={exporting} onClick={() => void exportCsv()}>{exporting ? "Exporting…" : "Export CSV"}</button>}</div></section>
     <div className="series-period-switch" role="group" aria-label="Reporting period">{(["all", "30", "90", "365"] as Period[]).map((value) => <button type="button" className={period === value ? "active" : ""} onClick={() => setPeriod(value)} key={value}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>
     {error && <div className="error-banner" role="alert">{error}</div>}{loading && <p className="dashboard-empty">Loading series performance…</p>}
     {performance && <>
