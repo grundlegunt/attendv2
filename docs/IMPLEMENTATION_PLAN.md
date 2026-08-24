@@ -1,6 +1,9 @@
 # Implementation Plan
 
-Status: Draft v1
+Status: Historical delivery roadmap. The repository has advanced beyond this
+milestone sequence; retain it as architecture and acceptance-criteria context.
+Current deferred work belongs in `POST_MVP_BACKLOG.md` or a focused implementation
+brief.
 Related: all other docs in this set.
 
 Each milestone must produce something testable and end with a demo-able state. No milestone begins until the previous one's completion criteria are met. Within a milestone, build vertically (one workflow working end to end) rather than horizontally (all screens, no working flow).
