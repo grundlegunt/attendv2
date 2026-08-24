@@ -1,46 +1,42 @@
 # Attend — Movie Metadata in the Admin UI
 
-## Problem
+Status: Implemented and reconciled August 24, 2026.
 
-The customer-facing movie detail page (`apps/customer-web`) displays a poster, rating, and synopsis. The `Movie` model in `packages/database/prisma/schema.prisma` already has the columns for all of it:
+## Current workflow
 
-```
-title          String
-synopsis       String?
-runtimeMinutes Int
-rating         String?
-posterUrl      String?
-```
+Cinema operators manage the film library from Admin's Scheduling route. The same editor supports new films and updates to existing films.
 
-But the admin "Add a film" form (`apps/admin/app/page.tsx`) only collects `title` and `runtimeMinutes`. There is no way for an operator to set a poster, rating, or synopsis today — the only place those values currently come from is `packages/database/prisma/seed.ts`, where they're hardcoded for the demo movies (`F1`, `Eddington`, `Materialists`, `Ghostbusters`, `The Wedding Singer`), pointing at static files checked into `apps/customer-web/public/posters/`.
+The editor covers:
 
-## What's already wired up, and what isn't
+- title and runtime;
+- rating and customer-facing synopsis;
+- landscape showtime-card artwork and its focal position;
+- vertical movie-detail artwork and its focal position;
+- director, cast, trailer URL, and release year;
+- an optional dining-special image and promotional name;
+- distributor identity and dated distributor-share terms;
+- film-to-menu pairings used by customer-facing dining specials.
 
-**Already supports it, no changes needed:**
+Artwork previews distinguish the landscape showtime card from the vertical detail poster so an operator can verify both uses before saving.
 
-- `createMovieRequestSchema` in `packages/shared/src/cinema-schemas.ts` already validates `synopsis`, `rating`, and `posterUrl` as optional fields.
-- `CinemaService.createMovie` (`apps/api/src/cinema/cinema.service.ts`) already persists all three if they're present on the request body.
+## API and lifecycle
 
-So creating a movie with this metadata already works end to end from the API's perspective — the admin form just never sends it.
+- Movie creation and updates use the shared cinema request schemas.
+- `PATCH /cinema/movies/:id` persists edits through `CinemaService.updateMovie`.
+- Film mutations retain stable idempotency keys while an ambiguous request is retried, and the Admin editor serializes conflicting actions.
+- Films can be archived and restored. Permanent deletion is a separate guarded operation because scheduled and historical activity may reference a film.
+- Public movie and showtime views consume the saved metadata rather than demo-only title matching.
 
-**Missing entirely — there is no edit path for movies:**
+## Artwork decision
 
-- `updateMovieRequestSchema` already exists in `packages/shared/src/cinema-schemas.ts` but is dead code — nothing imports or uses it.
-- There is no `PATCH /cinema/movies/:id` route in `apps/api/src/cinema/cinema.controller.ts` (compare to `PATCH /cinema/showtimes/:id`, which does exist) and no corresponding `CinemaService` method.
-- The admin UI has no way to edit a movie once created (unlike showtimes, which have a full edit drawer already).
-
-## What to implement
-
-1. **Add the missing fields to the "Add a film" editor** in `apps/admin/app/page.tsx` (both the drawer form and the collapsed "Cinema setup" panel use the same `createMovie` handler): `Synopsis` (textarea), `Rating` (text input, e.g. `PG-13`), `Poster URL` (text input). Wire them into the existing `POST /cinema/movies` call — no API changes needed for creation.
-2. **Add movie editing**, mirroring the existing showtime edit pattern:
-   - Wire up `PATCH /cinema/movies/:id` in `cinema.controller.ts` using the already-defined `updateMovieRequestSchema`.
-   - Add the corresponding `CinemaService.updateMovie` method.
-   - Add an edit affordance in the admin film library (the film cards in `scheduling-calendar.tsx` currently only support drag-to-schedule; add a way to open the existing film for editing, e.g. a click/edit icon).
-3. **Poster field is a URL input, not a file upload.** There is no file-storage/blob infrastructure anywhere in this codebase today (checked: no S3, Vercel Blob, Cloudinary, multer, or `FileInterceptor` usage anywhere). Building real image upload means picking a storage provider first — that's a separate decision, not something to improvise inside this task. Keep `posterUrl` as a plain URL text field for now (operators can host a poster anywhere and paste the link, same as the seeded data does with local `/posters/*.png` paths). Do not add file upload as part of this task.
+Movie artwork remains URL-based. The product supports local public assets and externally hosted image URLs, but it does not currently provide an image-upload or asset-storage pipeline. Selecting a storage provider, upload authorization model, image processing policy, and retention rules is a separate infrastructure decision.
 
 ## Guardrails
 
-- Do not change the `Movie` schema — `synopsis`, `rating`, and `posterUrl` already exist as columns.
-- Do not build any file-storage/upload pipeline as part of this task; a plain URL field is the correct scope for now.
-- Preserve the existing "Add a film" flow for operators who don't care about metadata — title and runtime should remain the only required fields; synopsis/rating/posterUrl stay optional, matching the schema.
-- Before changing code, confirm there really is no existing movie-edit path anywhere (e.g., double-check `apps/staff-pos` and `apps/kds` don't already have one) rather than assuming from this doc alone.
+- Keep title and runtime required; optional editorial metadata must not block a basic film record.
+- Validate artwork and trailer URLs through the shared request schema rather than trusting raw client input.
+- Keep showtime-card and movie-detail artwork separate; they have different aspect ratios and presentation needs.
+- Use the configured focal positions instead of baking one crop into uploaded source artwork.
+- Do not rewrite historical distributor calculations when current film terms are edited; terms are date-bounded.
+- Archive referenced films instead of deleting them as a routine library action.
+- Do not introduce file upload as a side effect of changing the metadata form.
