@@ -12,6 +12,20 @@ describe("ReportingService ticket-checkout F&B", () => {
   });
 });
 
+describe("ReportingService film advance sales", () => {
+  it("groups purchases into stable booking-window buckets", () => {
+    const service = new ReportingService() as unknown as {
+      advanceSalesBucket(purchasedAt: Date, startsAt: Date): { key: string; label: string; order: number; hours: number };
+    };
+    const startsAt = new Date("2026-08-24T20:00:00.000Z");
+    expect(service.advanceSalesBucket(new Date("2026-08-24T08:00:00.000Z"), startsAt).key).toBe("SAME_DAY");
+    expect(service.advanceSalesBucket(new Date("2026-08-22T20:00:00.000Z"), startsAt).key).toBe("ONE_TO_THREE_DAYS");
+    expect(service.advanceSalesBucket(new Date("2026-08-18T20:00:00.000Z"), startsAt).key).toBe("FOUR_TO_SEVEN_DAYS");
+    expect(service.advanceSalesBucket(new Date("2026-08-12T20:00:00.000Z"), startsAt).key).toBe("EIGHT_TO_FOURTEEN_DAYS");
+    expect(service.advanceSalesBucket(new Date("2026-08-01T20:00:00.000Z"), startsAt).key).toBe("FIFTEEN_PLUS_DAYS");
+  });
+});
+
 describe("ReportingService audience origins", () => {
   it("groups ZIP+4 orders by five-digit ZIP without exposing order details", () => {
     const service = new ReportingService();

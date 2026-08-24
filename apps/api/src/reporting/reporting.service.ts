@@ -21,6 +21,15 @@ export class ReportingService {
     return { revenueCents: gross - refunded, refundedCents: refunded };
   }
 
+  private advanceSalesBucket(purchasedAt: Date, startsAt: Date) {
+    const hours = Math.max(0, (startsAt.getTime() - purchasedAt.getTime()) / 3_600_000);
+    if (hours < 24) return { key: "SAME_DAY", label: "Same day", order: 0, hours };
+    if (hours < 96) return { key: "ONE_TO_THREE_DAYS", label: "1–3 days ahead", order: 1, hours };
+    if (hours < 192) return { key: "FOUR_TO_SEVEN_DAYS", label: "4–7 days ahead", order: 2, hours };
+    if (hours < 360) return { key: "EIGHT_TO_FOURTEEN_DAYS", label: "8–14 days ahead", order: 3, hours };
+    return { key: "FIFTEEN_PLUS_DAYS", label: "15+ days ahead", order: 4, hours };
+  }
+
   allocateDistributorShare(ticketRevenueCents: number, startsAt: Date, openingStartsAt: Date | null, termsValue: Prisma.JsonValue | null) {
     const terms = Array.isArray(termsValue)
       ? termsValue.filter((term): term is DistributorTerm => {
@@ -86,13 +95,14 @@ export class ReportingService {
       include: {
         auditorium: { select: { id: true, name: true, capacity: true } },
         filmSeries: { select: { id: true, name: true } },
-        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, channel: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
+        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, createdAt: true, channel: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
         restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
     });
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const promotions = new Map<string, { promotionId: string; code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
+    const advanceSales = new Map<string, { key: string; label: string; order: number; ticketsSold: number; ticketRevenueCents: number; leadHours: number }>();
     const countedOrders = new Set<string>();
     let discountCents = 0; let complimentaryTickets = 0; let refundedTickets = 0; let refundedTicketValueCents = 0;
     const rows = showtimes.map((showtime) => {
@@ -101,6 +111,9 @@ export class ReportingService {
       const refunded = allTickets.filter((ticket) => ticket.status === "REFUNDED");
       refundedTickets += refunded.length; refundedTicketValueCents += refunded.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       for (const ticket of tickets) {
+        const bucket = this.advanceSalesBucket(ticket.ticketOrder.createdAt, showtime.startsAt);
+        const pace = advanceSales.get(bucket.key) ?? { key: bucket.key, label: bucket.label, order: bucket.order, ticketsSold: 0, ticketRevenueCents: 0, leadHours: 0 };
+        pace.ticketsSold += 1; pace.ticketRevenueCents += ticket.priceCentsPaid; pace.leadHours += bucket.hours; advanceSales.set(bucket.key, pace);
         const admission = admissionTypes.get(ticket.ticketType.id) ?? { ticketTypeId: ticket.ticketType.id, name: ticket.ticketType.name, ticketsSold: 0, ticketRevenueCents: 0 };
         admission.ticketsSold += 1; admission.ticketRevenueCents += ticket.priceCentsPaid; admissionTypes.set(ticket.ticketType.id, admission);
         const channel = salesChannels.get(ticket.ticketOrder.channel) ?? { channel: ticket.ticketOrder.channel, ticketsSold: 0, ticketRevenueCents: 0 };
@@ -170,6 +183,7 @@ export class ReportingService {
       admissionTypes: [...admissionTypes.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.name.localeCompare(right.name)),
       salesChannels: [...salesChannels.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.channel.localeCompare(right.channel)),
       promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || left.code.localeCompare(right.code)),
+      advanceSales: [...advanceSales.values()].sort((left, right) => left.order - right.order).map(({ order: _order, leadHours, ...bucket }) => ({ ...bucket, percentOfTickets: ticketsSold ? Math.round((bucket.ticketsSold / ticketsSold) * 1000) / 10 : 0, averageLeadHours: bucket.ticketsSold ? Math.round(leadHours / bucket.ticketsSold) : 0 })),
       auditoriumPerformance: [...auditoriumPerformance.values()].map(finishSlice).sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       daypartPerformance: [...daypartPerformance.values()].map(finishSlice).sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),
       weekdayPerformance: [...weekdayPerformance.values()].map(finishSlice).sort((left, right) => ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(left.key) - ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(right.key)),
