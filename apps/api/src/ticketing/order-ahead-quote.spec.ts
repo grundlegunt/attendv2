@@ -37,6 +37,14 @@ const catalog = [
     chargeCategory: "NA_BEVERAGE" as const,
     modifierGroups: [],
   },
+  {
+    id: "beer",
+    kitchenStationId: "bar",
+    name: "Beer",
+    priceCents: 1250,
+    chargeCategory: "ALCOHOL" as const,
+    modifierGroups: [],
+  },
 ];
 
 describe("quoteOrderAheadSelections", () => {
@@ -81,6 +89,18 @@ describe("quoteOrderAheadSelections", () => {
         serviceChargeRules: [{ appliesTo: "ALL", flatCents: 200 }],
       }),
     ).toEqual({ lines: [], subtotalCents: 0, taxCents: 0, serviceChargeCents: 0, totalCents: 0 });
+  });
+
+  it("stacks a precise general sales tax with an alcohol-specific tax", () => {
+    expect(quoteOrderAheadSelections({
+      selections: [{ menuItemId: "beer", quantity: 1, modifierIds: [] }],
+      catalog,
+      taxRules: [
+        { appliesTo: "ALL", ratePermille: 97.5 },
+        { appliesTo: "ALCOHOL", ratePermille: 150 },
+      ],
+      serviceChargeRules: [],
+    })).toMatchObject({ subtotalCents: 1250, taxCents: 310, totalCents: 1560 });
   });
 
   it.each([

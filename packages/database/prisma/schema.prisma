@@ -25,7 +25,7 @@ model Organization {
   name                     String
   legalName                String?
   businessTypeLabel        String?
-  defaultSeatingMode       AuditoriumSeatingMode @default(RESERVED)
+  defaultSeatingMode       AuditoriumSeatingMode   @default(RESERVED)
   timezone                 String                  @default("America/New_York")
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
@@ -42,7 +42,7 @@ model Organization {
   paymentCustomers  PaymentCustomer[]
   giftCards         GiftCard[]
   giftCardPurchases GiftCardPurchase[]
-  memberships      Membership[]
+  memberships       Membership[]
 
   @@map("organizations")
 }
@@ -247,28 +247,28 @@ enum GiftCardPurchaseStatus {
 }
 
 model GiftCard {
-  id                  String                @id @default(uuid())
-  organizationId      String
-  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  issuedAtLocationId  String
-  issuedAtLocation    Location              @relation(fields: [issuedAtLocationId], references: [id], onDelete: Restrict)
-  codeHash            String                @unique
-  codeLast4           String
-  initialBalanceCents Int
-  balanceCents        Int
-  currency            String                @default("USD")
-  recipientName       String?
-  recipientEmail      String?
-  status              GiftCardStatus        @default(ACTIVE)
-  issuedByEmployeeId  String?
-  issuedByEmployee    Employee?             @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
-  issuanceRequestId   String?                @unique
+  id                    String                @id @default(uuid())
+  organizationId        String
+  organization          Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  issuedAtLocationId    String
+  issuedAtLocation      Location              @relation(fields: [issuedAtLocationId], references: [id], onDelete: Restrict)
+  codeHash              String                @unique
+  codeLast4             String
+  initialBalanceCents   Int
+  balanceCents          Int
+  currency              String                @default("USD")
+  recipientName         String?
+  recipientEmail        String?
+  status                GiftCardStatus        @default(ACTIVE)
+  issuedByEmployeeId    String?
+  issuedByEmployee      Employee?             @relation(fields: [issuedByEmployeeId], references: [id], onDelete: Restrict)
+  issuanceRequestId     String?               @unique
   issuanceCodeEncrypted String?
-  transactions        GiftCardTransaction[]
-  ticketOrders        TicketOrder[]
-  purchase            GiftCardPurchase?
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  transactions          GiftCardTransaction[]
+  ticketOrders          TicketOrder[]
+  purchase              GiftCardPurchase?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
   @@index([organizationId, createdAt])
   @@index([organizationId, codeLast4])
@@ -469,9 +469,9 @@ model Movie {
   releaseYear             Int?
   distributorName         String?
   distributorTerms        Json?
-  active                  Boolean  @default(true)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  active                  Boolean              @default(true)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
 
   showtimes Showtime[]
   pairings  MoviePairing[]
@@ -518,13 +518,13 @@ model Showtime {
   featureStartsAt DateTime
   endsAt          DateTime
   roomReadyAt     DateTime
-  onSale          Boolean         @default(false)
+  onSale          Boolean                 @default(false)
   filmSeriesId    String?
-  filmSeries      FilmSeries?     @relation(fields: [filmSeriesId], references: [id], onDelete: Restrict)
-  presentation    String          @default("STANDARD")
+  filmSeries      FilmSeries?             @relation(fields: [filmSeriesId], references: [id], onDelete: Restrict)
+  presentation    String                  @default("STANDARD")
   format          String?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
   showtimeSeats   ShowtimeSeat[]
   restaurantTabs  RestaurantTab[]
   waitlistEntries ShowtimeWaitlistEntry[]
@@ -781,14 +781,14 @@ enum FulfillmentTicketStatus {
 }
 
 model TicketType {
-  id         String   @id @default(uuid())
-  locationId String
-  location   Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  name       String
-  priceAdjustmentMinor Int @default(0)
-  active     Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  locationId           String
+  location             Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  name                 String
+  priceAdjustmentMinor Int      @default(0)
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   orders  TicketOrder[]
   tickets Ticket[]
@@ -1359,32 +1359,32 @@ model CustomerConsent {
 }
 
 model RestaurantTab {
-  id                       String                    @id @default(uuid())
-  idempotencyKey           String?
-  requestFingerprint       String?
-  locationId               String
-  location                 Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  primaryCustomerId        String?
-  primaryCustomer          Customer?                 @relation(fields: [primaryCustomerId], references: [id], onDelete: Restrict)
-  tabType                  RestaurantTabType
-  fulfillmentMode          RestaurantFulfillmentMode @default(SEAT_DELIVERY)
-  showtimeId               String?
-  showtime                 Showtime?                 @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
-  label                    String?
-  status                   RestaurantTabStatus
-  autoSettleAuthorized     Boolean                   @default(false)
-  activePaymentMethodId    String?
-  activePaymentMethod      PaymentMethodReference?   @relation(fields: [activePaymentMethodId], references: [id], onDelete: Restrict)
-  activePaymentMethodSetAt DateTime?
-  autoSettleAt             DateTime?
-  checkDroppedAt           DateTime?
-  checkDroppedByEmployeeId String?
-  checkDroppedByEmployee   Employee?                 @relation("DroppedRestaurantChecks", fields: [checkDroppedByEmployeeId], references: [id], onDelete: Restrict)
-  selectedTipCents         Int?
-  subtotalCents            Int?
-  taxCents                 Int?
-  serviceChargeCents       Int?
-  totalCents               Int?
+  id                           String                    @id @default(uuid())
+  idempotencyKey               String?
+  requestFingerprint           String?
+  locationId                   String
+  location                     Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  primaryCustomerId            String?
+  primaryCustomer              Customer?                 @relation(fields: [primaryCustomerId], references: [id], onDelete: Restrict)
+  tabType                      RestaurantTabType
+  fulfillmentMode              RestaurantFulfillmentMode @default(SEAT_DELIVERY)
+  showtimeId                   String?
+  showtime                     Showtime?                 @relation(fields: [showtimeId], references: [id], onDelete: Restrict)
+  label                        String?
+  status                       RestaurantTabStatus
+  autoSettleAuthorized         Boolean                   @default(false)
+  activePaymentMethodId        String?
+  activePaymentMethod          PaymentMethodReference?   @relation(fields: [activePaymentMethodId], references: [id], onDelete: Restrict)
+  activePaymentMethodSetAt     DateTime?
+  autoSettleAt                 DateTime?
+  checkDroppedAt               DateTime?
+  checkDroppedByEmployeeId     String?
+  checkDroppedByEmployee       Employee?                 @relation("DroppedRestaurantChecks", fields: [checkDroppedByEmployeeId], references: [id], onDelete: Restrict)
+  selectedTipCents             Int?
+  subtotalCents                Int?
+  taxCents                     Int?
+  serviceChargeCents           Int?
+  totalCents                   Int?
   paymentFailureEmailClaimedAt DateTime?
   paymentFailureEmailSentAt    DateTime?
   paymentFailureEmailMessageId String?
@@ -1392,11 +1392,11 @@ model RestaurantTab {
   // Amount already collected through a combined ticket + dining payment.
   // This remains separate from staff-entered tab payments so settlement can
   // subtract it without representing a second processor charge.
-  prepaidCents             Int                       @default(0)
-  openedAt                 DateTime                  @default(now())
-  closedAt                 DateTime?
-  createdAt                DateTime                  @default(now())
-  updatedAt                DateTime                  @updatedAt
+  prepaidCents                 Int                       @default(0)
+  openedAt                     DateTime                  @default(now())
+  closedAt                     DateTime?
+  createdAt                    DateTime                  @default(now())
+  updatedAt                    DateTime                  @updatedAt
 
   seats           RestaurantTabSeat[]
   payments        Payment[]
@@ -1406,11 +1406,11 @@ model RestaurantTab {
   mergedIntoTabId String?
   mergedIntoTab   RestaurantTab?      @relation("MergedRestaurantTabs", fields: [mergedIntoTabId], references: [id], onDelete: Restrict)
 
+  @@unique([locationId, idempotencyKey])
   @@index([locationId, status, openedAt])
   @@index([showtimeId, status])
   @@index([status, paymentFailureEmailSentAt, paymentFailureEmailClaimedAt, updatedAt], map: "restaurant_tabs_payment_failure_email_claim_idx")
   @@index([status, paymentFailureEmailSentAt, paymentFailureEmailError, updatedAt], map: "restaurant_tabs_payment_failure_email_retry_idx")
-  @@unique([locationId, idempotencyKey])
   @@map("restaurant_tabs")
 }
 
@@ -1516,7 +1516,7 @@ model TaxRule {
   location     Location                  @relation(fields: [locationId], references: [id], onDelete: Restrict)
   name         String
   appliesTo    RestaurantChargeAppliesTo
-  ratePermille Int
+  ratePermille Float
   active       Boolean                   @default(true)
   createdAt    DateTime                  @default(now())
   updatedAt    DateTime                  @updatedAt
@@ -1582,31 +1582,31 @@ model Modifier {
 }
 
 model RestaurantOrder {
-  id               String                @id @default(uuid())
-  idempotencyKey   String?
+  id                 String                @id @default(uuid())
+  idempotencyKey     String?
   requestFingerprint String?
-  restaurantTabId  String
-  restaurantTab    RestaurantTab         @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
-  showtimeSeatId   String?
-  showtimeSeat     ShowtimeSeat?         @relation(fields: [showtimeSeatId], references: [id], onDelete: Restrict)
-  serverEmployeeId String?
-  serverEmployee   Employee?             @relation(fields: [serverEmployeeId], references: [id], onDelete: Restrict)
-  source           RestaurantOrderSource @default(STAFF)
-  ticketOrderId    String?
-  ticketOrder      TicketOrder?          @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
-  status           RestaurantOrderStatus @default(DRAFT)
-  placedAt         DateTime?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  restaurantTabId    String
+  restaurantTab      RestaurantTab         @relation(fields: [restaurantTabId], references: [id], onDelete: Restrict)
+  showtimeSeatId     String?
+  showtimeSeat       ShowtimeSeat?         @relation(fields: [showtimeSeatId], references: [id], onDelete: Restrict)
+  serverEmployeeId   String?
+  serverEmployee     Employee?             @relation(fields: [serverEmployeeId], references: [id], onDelete: Restrict)
+  source             RestaurantOrderSource @default(STAFF)
+  ticketOrderId      String?
+  ticketOrder        TicketOrder?          @relation(fields: [ticketOrderId], references: [id], onDelete: Restrict)
+  status             RestaurantOrderStatus @default(DRAFT)
+  placedAt           DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
 
   items              RestaurantOrderItem[]
   fulfillmentTickets FulfillmentTicket[]
 
+  @@unique([restaurantTabId, idempotencyKey])
   @@index([restaurantTabId, status])
   @@index([showtimeSeatId, status])
   @@index([serverEmployeeId, createdAt])
   @@index([ticketOrderId, createdAt])
-  @@unique([restaurantTabId, idempotencyKey])
   @@map("restaurant_orders")
 }
 
@@ -1631,9 +1631,9 @@ model RestaurantOrderItem {
   updatedAt              DateTime                  @updatedAt
   fulfillmentTickets     FulfillmentTicket[]
 
+  @@unique([restaurantOrderId, idempotencyKey])
   @@index([restaurantOrderId, status])
   @@index([kitchenStationId, status])
-  @@unique([restaurantOrderId, idempotencyKey])
   @@map("restaurant_order_items")
 }
 
@@ -1642,33 +1642,33 @@ model FulfillmentTicket {
   idempotencyKey     String?
   requestFingerprint String?
   restaurantOrderId  String
-  restaurantOrder   RestaurantOrder         @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
-  kitchenStationId  String
-  kitchenStation    KitchenStation          @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
-  tabLabel          String?
-  auditoriumName    String?
-  seatLabels        String[]
-  showtimeId        String?
-  showtimeStartsAt  DateTime?
-  serverName        String
-  status            FulfillmentTicketStatus @default(NEW)
-  firedAt           DateTime                @default(now())
-  acceptedAt        DateTime?
-  startedAt         DateTime?
-  readyAt           DateTime?
-  deliveredAt       DateTime?
-  refireCount       Int                     @default(0)
-  refiredFromId     String?
-  refiredFrom       FulfillmentTicket?      @relation("FulfillmentRefires", fields: [refiredFromId], references: [id], onDelete: Restrict)
-  refires           FulfillmentTicket[]     @relation("FulfillmentRefires")
-  items             RestaurantOrderItem[]
-  createdAt         DateTime                @default(now())
-  updatedAt         DateTime                @updatedAt
+  restaurantOrder    RestaurantOrder         @relation(fields: [restaurantOrderId], references: [id], onDelete: Restrict)
+  kitchenStationId   String
+  kitchenStation     KitchenStation          @relation(fields: [kitchenStationId], references: [id], onDelete: Restrict)
+  tabLabel           String?
+  auditoriumName     String?
+  seatLabels         String[]
+  showtimeId         String?
+  showtimeStartsAt   DateTime?
+  serverName         String
+  status             FulfillmentTicketStatus @default(NEW)
+  firedAt            DateTime                @default(now())
+  acceptedAt         DateTime?
+  startedAt          DateTime?
+  readyAt            DateTime?
+  deliveredAt        DateTime?
+  refireCount        Int                     @default(0)
+  refiredFromId      String?
+  refiredFrom        FulfillmentTicket?      @relation("FulfillmentRefires", fields: [refiredFromId], references: [id], onDelete: Restrict)
+  refires            FulfillmentTicket[]     @relation("FulfillmentRefires")
+  items              RestaurantOrderItem[]
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
+  @@unique([refiredFromId, idempotencyKey])
   @@index([kitchenStationId, status, firedAt])
   @@index([restaurantOrderId, status])
   @@index([refiredFromId])
-  @@unique([refiredFromId, idempotencyKey])
   @@map("fulfillment_tickets")
 }
 
@@ -1712,20 +1712,20 @@ model CustomerAuthAccount {
 
   refreshTokenVersion Int @default(0)
 
-  passwordResetRequestId       String?
-  passwordResetTokenVersion    Int?
-  passwordResetEmailClaimedAt  DateTime?
-  passwordResetEmailSentAt     DateTime?
-  passwordResetEmailMessageId  String?
-  passwordResetEmailError      String?
+  passwordResetRequestId      String?
+  passwordResetTokenVersion   Int?
+  passwordResetEmailClaimedAt DateTime?
+  passwordResetEmailSentAt    DateTime?
+  passwordResetEmailMessageId String?
+  passwordResetEmailError     String?
 
-  emailChangeRequestId        String?
-  emailChangeNewEmail         String?
-  emailChangeTokenVersion     Int?
-  emailChangeEmailClaimedAt   DateTime?
-  emailChangeEmailSentAt      DateTime?
-  emailChangeEmailMessageId   String?
-  emailChangeEmailError       String?
+  emailChangeRequestId      String?
+  emailChangeNewEmail       String?
+  emailChangeTokenVersion   Int?
+  emailChangeEmailClaimedAt DateTime?
+  emailChangeEmailSentAt    DateTime?
+  emailChangeEmailMessageId String?
+  emailChangeEmailError     String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
