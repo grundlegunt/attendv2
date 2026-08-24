@@ -156,9 +156,9 @@ export class ReportingService {
       fnbItems.set(item.menuItemId, row);
     }
     const ticketsSold = rows.reduce((sum, row) => sum + row.ticketsSold, 0);
+    const totalCapacity = rows.reduce((sum, row) => sum + row.capacity, 0);
     const ticketRevenueCents = rows.reduce((sum, row) => sum + row.ticketRevenueCents, 0);
     const fnbRevenueCents = rows.reduce((sum, row) => sum + row.fnbRevenueCents, 0);
-    const totalCapacity = rows.reduce((sum, row) => sum + row.capacity, 0);
     const first = showtimes[0]?.startsAt ?? null;
     const last = showtimes.at(-1)?.startsAt ?? null;
     const calendarWeeks = first && last ? Math.max(1, Math.ceil((last.getTime() - first.getTime() + 1) / (7 * 24 * 60 * 60 * 1000))) : 0;
@@ -297,6 +297,7 @@ export class ReportingService {
       return { showtimeId: showtime.id, startsAt: showtime.startsAt, auditorium: showtime.auditorium, movie: { id: showtime.movie.id, title: showtime.movie.title }, ticketsSold: tickets.length, capacity: showtime.auditorium.capacity, ticketRevenueCents, fnbRevenueCents, ...allocation };
     });
     const ticketsSold = rows.reduce((sum, row) => sum + row.ticketsSold, 0);
+    const totalCapacity = rows.reduce((sum, row) => sum + row.capacity, 0);
     const ticketRevenueCents = rows.reduce((sum, row) => sum + row.ticketRevenueCents, 0);
     const fnbRevenueCents = rows.reduce((sum, row) => sum + row.fnbRevenueCents, 0);
     const first = showtimes[0]?.startsAt ?? null;
@@ -305,7 +306,7 @@ export class ReportingService {
     const now = new Date();
     return {
       series, location, range: range ?? null,
-      totals: { showtimes: rows.length, upcomingShowtimes: rows.filter((row) => row.startsAt >= now).length, pastShowtimes: rows.filter((row) => row.startsAt < now).length, uniqueFilms: movieRows.size, ticketsSold, averageTicketsPerShow: rows.length ? Math.round((ticketsSold / rows.length) * 10) / 10 : 0, ticketRevenueCents, fnbRevenueCents, averageFnbPerShowCents: rows.length ? Math.round(fnbRevenueCents / rows.length) : 0, distributorRevenueCents: rows.reduce((sum, row) => sum + row.distributorRevenueCents, 0), cinemaRevenueCents: rows.reduce((sum, row) => sum + row.cinemaRevenueCents, 0), unallocatedRevenueCents: rows.reduce((sum, row) => sum + row.unallocatedRevenueCents, 0), firstShowtime: first, lastShowtime: last, calendarWeeks, averageShowtimesPerWeek: calendarWeeks ? Math.round((rows.length / calendarWeeks) * 10) / 10 : 0 },
+      totals: { showtimes: rows.length, upcomingShowtimes: rows.filter((row) => row.startsAt >= now).length, pastShowtimes: rows.filter((row) => row.startsAt < now).length, uniqueFilms: movieRows.size, ticketsSold, totalCapacity, attendancePercent: totalCapacity ? Math.round((ticketsSold / totalCapacity) * 1000) / 10 : 0, averageTicketsPerShow: rows.length ? Math.round((ticketsSold / rows.length) * 10) / 10 : 0, averageTicketCents: ticketsSold ? Math.round(ticketRevenueCents / ticketsSold) : 0, ticketRevenueCents, fnbRevenueCents, averageFnbPerShowCents: rows.length ? Math.round(fnbRevenueCents / rows.length) : 0, distributorRevenueCents: rows.reduce((sum, row) => sum + row.distributorRevenueCents, 0), cinemaRevenueCents: rows.reduce((sum, row) => sum + row.cinemaRevenueCents, 0), unallocatedRevenueCents: rows.reduce((sum, row) => sum + row.unallocatedRevenueCents, 0), firstShowtime: first, lastShowtime: last, calendarWeeks, averageShowtimesPerWeek: calendarWeeks ? Math.round((rows.length / calendarWeeks) * 10) / 10 : 0 },
       movies: [...movieRows.values()].sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.title.localeCompare(right.title)),
       showtimes: rows,
     };
@@ -659,7 +660,7 @@ export class ReportingService {
     const row = (values: unknown[]) => values.map(quote).join(",");
     return [
       row(["Film series performance", report.series.name]), row(["Cinema", report.location.name]), row(["Report from", report.range?.from.toISOString() ?? "All time"]), row(["Report to", report.range?.to.toISOString() ?? "All time"]), "",
-      row(["Summary metric", "Value"]), row(["Films", report.totals.uniqueFilms]), row(["Performances", report.totals.showtimes]), row(["Upcoming performances", report.totals.upcomingShowtimes]), row(["Past performances", report.totals.pastShowtimes]), row(["Tickets sold", report.totals.ticketsSold]), row(["Average tickets per show", report.totals.averageTicketsPerShow]), row(["Ticket revenue (cents)", report.totals.ticketRevenueCents]), row(["F&B revenue (cents)", report.totals.fnbRevenueCents]), row(["Average F&B per show (cents)", report.totals.averageFnbPerShowCents]), row(["Distributor share (cents)", report.totals.distributorRevenueCents]), row(["Cinema share (cents)", report.totals.cinemaRevenueCents]), row(["Unallocated value (cents)", report.totals.unallocatedRevenueCents]), "",
+      row(["Summary metric", "Value"]), row(["Films", report.totals.uniqueFilms]), row(["Performances", report.totals.showtimes]), row(["Upcoming performances", report.totals.upcomingShowtimes]), row(["Past performances", report.totals.pastShowtimes]), row(["Tickets sold", report.totals.ticketsSold]), row(["Capacity", report.totals.totalCapacity]), row(["Attendance percent", report.totals.attendancePercent]), row(["Average tickets per show", report.totals.averageTicketsPerShow]), row(["Average ticket (cents)", report.totals.averageTicketCents]), row(["Ticket revenue (cents)", report.totals.ticketRevenueCents]), row(["F&B revenue (cents)", report.totals.fnbRevenueCents]), row(["Average F&B per show (cents)", report.totals.averageFnbPerShowCents]), row(["Distributor share (cents)", report.totals.distributorRevenueCents]), row(["Cinema share (cents)", report.totals.cinemaRevenueCents]), row(["Unallocated value (cents)", report.totals.unallocatedRevenueCents]), "",
       row(["Film performance"]), row(["Film", "Distributor", "Performances", "Tickets", "Ticket revenue (cents)", "F&B revenue (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated value (cents)"]), ...report.movies.map((movie) => row([movie.title, movie.distributorName, movie.showtimes, movie.ticketsSold, movie.ticketRevenueCents, movie.fnbRevenueCents, movie.distributorRevenueCents, movie.cinemaRevenueCents, movie.unallocatedRevenueCents])), "",
       row(["Showtime performance"]), row(["Starts at", "Film", "Auditorium", "Tickets", "Capacity", "Ticket revenue (cents)", "F&B revenue (cents)", "Distributor share rate (basis points)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated value (cents)"]), ...report.showtimes.map((showtime) => row([showtime.startsAt.toISOString(), showtime.movie.title, showtime.auditorium.name, showtime.ticketsSold, showtime.capacity, showtime.ticketRevenueCents, showtime.fnbRevenueCents, showtime.distributorShareBasisPoints, showtime.distributorRevenueCents, showtime.cinemaRevenueCents, showtime.unallocatedRevenueCents])),
     ].join("\n");

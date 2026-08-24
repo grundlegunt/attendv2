@@ -46,3 +46,11 @@ test("film-series performance can be exported for the selected period", () => {
   assert.match(detail, /\/reports\/film-series\/\$\{id\}\/performance\.csv/);
   assert.match(detail, /Export CSV/);
 });
+
+test("film-series performance shows attendance and run metrics", () => {
+  assert.match(detail, /Attendance/);
+  assert.match(detail, /attendancePercent/);
+  assert.match(detail, /totalCapacity/);
+  assert.match(detail, /Average ticket/);
+  assert.match(detail, /Series run/);
+});
