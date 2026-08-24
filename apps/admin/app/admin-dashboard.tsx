@@ -194,7 +194,7 @@ function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken, timeZon
     inventoryRequestRef.current = null;
   }, []);
 
-  return <Link className="top-film-row" href={`/reports#movie-${encodeURIComponent(film.movieId)}`} onMouseEnter={loadInventory} onFocus={loadInventory} aria-label={`Open ${film.title} revenue report`}>
+  return <Link className="top-film-row" href={`/films/${encodeURIComponent(film.movieId)}`} onMouseEnter={loadInventory} onFocus={loadInventory} aria-label={`Open ${film.title} performance`}>
     <span className="top-film-rank">{rank}</span><strong>{film.title}</strong><div className="top-film-track"><span style={{ width: `${Math.max(5, (film.ticketsSold / topTicketCount) * 100)}%` }} /></div><b>{film.ticketsSold} {film.ticketsSold === 1 ? "ticket" : "tickets"}</b><small>{money(film.ticketRevenueCents)}</small>
     <aside className="dashboard-seat-preview top-film-seat-preview">
       <header><span><strong>{film.title}</strong><small>{showtime ? `${showtime.auditorium.name} · ${new Date(showtime.startsAt).toLocaleString([], { timeZone })}` : "No scheduled showtime available"}</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
