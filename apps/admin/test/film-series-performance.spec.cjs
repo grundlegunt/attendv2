@@ -35,3 +35,8 @@ test("film-series showtimes expose sold-seat maps", () => {
   assert.match(detail, /showtimeId=\{showtime\.showtimeId\}/);
   assert.match(detail, /accessToken=\{accessToken\}/);
 });
+
+test("film-series films link to their individual performance reports", () => {
+  assert.match(detail, /href=\{`\/films\/\$\{encodeURIComponent\(movie\.movieId\)\}`\}/);
+  assert.match(detail, /View performance for \$\{movie\.title\}/);
+});
