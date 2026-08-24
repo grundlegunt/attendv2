@@ -6,20 +6,15 @@ Filmbot (a named competitor — see `docs/PRODUCT_SPEC.md` §1.1) ran a document
 
 This is good evidence that targeted win-back promotions are a real, high-leverage lever for a dine-in independent cinema. Attend now has the promotion foundation needed for offers like this; segmentation, consent, campaign delivery, and attribution remain separate capabilities.
 
-## Phase 1 — Promotions foundation (mostly implemented)
+## Phase 1 — Promotions foundation (implemented)
 
 Implemented:
 
 - `FIXED_AMOUNT`, `PERCENTAGE`, and `COMP` promotion creation in Admin.
 - Optional start/end windows, minimum ticket subtotal, and maximum-redemption controls.
-- API support for updating every promotion field, plus Admin activation/deactivation controls.
-- Per-promotion redemption count, discounted-ticket count, and total discount reporting in Admin.
+- Full promotion editing in Admin, backed by API support for updating every promotion field, plus activation/deactivation controls.
+- Per-promotion redemption count, discounted-ticket count, ticket face value, collected revenue, and total discount reporting in Admin.
 - Enforcement across customer checkout and box-office quoting, with audited promotion changes.
-
-Remaining:
-
-- Expose full promotion editing in Admin; the API supports it, but the current UI only toggles active status after creation.
-- Add gross/face-value revenue attributed to each promotion to the reports view. Current promotion metrics show usage and discount cost, not the revenue attached to redeemed orders.
 
 ## Phase 2 — Customer segmentation
 
@@ -42,5 +37,5 @@ Lowest priority, treat as optional: a way to hold out a control group when runni
 ## Guardrails
 
 - No changes to ticketing, checkout, or payment architecture.
-- The remaining Phase 1 work is UI + reporting on top of existing promotion and order data; it does not require a parallel discount system.
+- Phase 1 is complete and uses the existing promotion and order data rather than a parallel discount system.
 - Phases 2–4 should not begin until the Phase 3 provider/consent questions are actually answered — don't infer an email provider or a consent model on your own.
