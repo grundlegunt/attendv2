@@ -6,11 +6,12 @@ import * as argon2 from "argon2";
  * alongside identifying information.
  */
 
-const ARGON2_OPTIONS: argon2.Options = {
+const ARGON2_OPTIONS: argon2.HashOptions & { raw: false } = {
   type: argon2.argon2id,
   memoryCost: 19456, // ~19 MB, OWASP-recommended minimum for argon2id
   timeCost: 2,
   parallelism: 1,
+  raw: false,
 };
 
 export async function hashPassword(plainTextPassword: string): Promise<string> {
