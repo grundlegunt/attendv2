@@ -66,3 +66,11 @@ test("film performance shows item-level F&B performance", () => {
   assert.match(detail, /item\.serviceUnits/);
   assert.match(detail, /item\.salesCents/);
 });
+
+test("film performance shows cinema-local daily performance", () => {
+  assert.match(detail, /Performance by cinema date/);
+  assert.match(detail, /performance\.dailyPerformance\.map/);
+  assert.match(detail, /day\.averageTicketsPerShow/);
+  assert.match(detail, /day\.attendancePercent/);
+  assert.match(detail, /performance\.location\.timezone/);
+});

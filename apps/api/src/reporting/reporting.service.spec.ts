@@ -35,6 +35,13 @@ describe("ReportingService film performance export", () => {
     expect(source).toContain("item.serviceUnits");
     expect(source).toContain("item.salesCents");
   });
+
+  it("includes cinema-date performance", () => {
+    const source = new ReportingService().moviePerformanceCsv.toString();
+    expect(source).toContain("Daily performance");
+    expect(source).toContain("Cinema date");
+    expect(source).toContain("report.dailyPerformance.map");
+  });
 });
 
 describe("ReportingService distributor performance export", () => {
