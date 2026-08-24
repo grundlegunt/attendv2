@@ -67,6 +67,8 @@ describe("ReportingService film-series performance export", () => {
     expect(source).toContain("Attendance percent");
     expect(source).toContain("report.totals.totalCapacity");
     expect(source).toContain("report.totals.averageTicketCents");
+    expect(source).toContain("movie.attendancePercent");
+    expect(source).toContain("movie.totalCapacity");
   });
 });
 
