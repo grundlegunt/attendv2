@@ -20,3 +20,10 @@ test("distributor pages expose sales, allocation, films, and deal history", () =
   assert.match(detail, /unallocatedRevenueCents/);
   assert.match(detail, /film\.terms\.map/);
 });
+
+test("distributor pages show per-show averages and precise deal percentages", () => {
+  for (const label of ["Tickets sold", "average tickets", "average ticket", "F&amp;B revenue", "per show"]) assert.ok(detail.includes(label));
+  assert.match(detail, /average\(film\.ticketsSold, film\.showtimes\)/);
+  assert.match(detail, /percentage\(term\.distributorShareBasisPoints/);
+  assert.match(detail, /maximumFractionDigits: 2/);
+});
