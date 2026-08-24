@@ -770,7 +770,7 @@ export async function seedDatabase(
 // (`pnpm db:seed`), not when imported by the test suite.
 if (require.main === module) {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  require("dotenv").config();
+  require("dotenv").config({ quiet: true });
   const prisma = new PrismaClient();
 
   if (process.env.NODE_ENV === "production") {
