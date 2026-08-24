@@ -19,6 +19,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
   { label: "Films", items: [
     { href: "/scheduling", label: "Schedule", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
     { href: "/film-series", label: "Film Series", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
+    { href: "/distributors", label: "Distributors", permissions: ["reports.view.financial"] },
   ] },
   { label: "Setup", items: [
     { href: "/cinema-setup", label: "Auditoriums & Seats", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
