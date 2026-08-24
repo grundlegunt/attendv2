@@ -46,4 +46,7 @@ test("film performance exposes attendance, revenue, allocation, and showtime det
   assert.match(detail, /daypartPerformance/);
   assert.match(detail, /Performance by weekday/);
   assert.match(detail, /weekdayPerformance/);
+  assert.match(detail, /apiDownload/);
+  assert.match(detail, /performance\.csv/);
+  assert.match(detail, /Export CSV/);
 });

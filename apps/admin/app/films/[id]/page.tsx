@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { SeatMap, type SeatMapSeat, type SeatMapSeatingStyle } from "@cinema/ui";
 import { useAdminSession } from "../../admin-session";
-import { apiFetch, ApiRequestError } from "../../lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "../../lib/api-client";
 
 type Performance = {
   movie: { id: string; title: string; synopsis: string | null; runtimeMinutes: number; rating: string | null; posterUrl: string | null; director: string | null; starring: string | null; releaseYear: number | null; distributorName: string | null; active: boolean };
@@ -54,6 +54,7 @@ export default function FilmPerformancePage() {
   const [performance, setPerformance] = useState<Performance | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const path = useMemo(() => {
     if (period === "all") return `/reports/movies/${id}`;
     const to = new Date();
@@ -74,10 +75,21 @@ export default function FilmPerformancePage() {
   if (!employee.permissions.includes("reports.view.financial")) return <main className="admin-route-page"><div className="error-banner" role="alert">You do not have permission to view financial performance.</div></main>;
   const currency = performance?.location.currency ?? "USD";
   const dateTime = (value: string) => new Date(value).toLocaleString([], { timeZone: performance?.location.timezone, month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  async function exportCsv() {
+    if (!performance || exporting) return;
+    setExporting(true); setError(null);
+    try {
+      const query = path.includes("?") ? path.slice(path.indexOf("?")) : "";
+      const blob = await apiDownload(`/reports/movies/${id}/performance.csv${query}`, { accessToken });
+      const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `${performance.movie.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "film"}-performance.csv`; anchor.click(); URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The film performance export could not be downloaded."); }
+    finally { setExporting(false); }
+  }
 
   return <main className="admin-route-page series-performance-page film-performance-page">
     <Link href="/scheduling" className="back-link">← Film library</Link>
-    <section className="series-performance-hero film-performance-hero">{performance?.movie.posterUrl && <img src={performance.movie.posterUrl} alt="" />}<div><p className="kicker">FILM PERFORMANCE</p><h1>{performance?.movie.title ?? "Film"}</h1>{performance && <><p className="film-performance-meta">{performance.movie.releaseYear ?? "Year unknown"} · {performance.movie.rating ?? "Not rated"} · {performance.movie.runtimeMinutes} min · {performance.movie.distributorName ?? "Distributor not set"}</p><p>{performance.movie.synopsis ?? "Programming and financial performance for this film."}</p></>}</div></section>
+    <section className="series-performance-hero film-performance-hero">{performance?.movie.posterUrl && <img src={performance.movie.posterUrl} alt="" />}<div><p className="kicker">FILM PERFORMANCE</p><h1>{performance?.movie.title ?? "Film"}</h1>{performance && <><p className="film-performance-meta">{performance.movie.releaseYear ?? "Year unknown"} · {performance.movie.rating ?? "Not rated"} · {performance.movie.runtimeMinutes} min · {performance.movie.distributorName ?? "Distributor not set"}</p><p>{performance.movie.synopsis ?? "Programming and financial performance for this film."}</p><button type="button" className="secondary film-performance-export" disabled={exporting} onClick={() => void exportCsv()}>{exporting ? "Exporting…" : "Export CSV"}</button></>}</div></section>
     <div className="series-period-switch" role="group" aria-label="Reporting period">{(["all", "30", "90", "365"] as Period[]).map((value) => <button type="button" className={period === value ? "active" : ""} onClick={() => setPeriod(value)} key={value}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>
     {error && <div className="error-banner" role="alert">{error}</div>}{loading && <p className="dashboard-empty">Loading film performance…</p>}
     {performance && <>
