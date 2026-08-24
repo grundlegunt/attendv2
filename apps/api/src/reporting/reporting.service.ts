@@ -18,8 +18,9 @@ export class ReportingService {
           return Number.isInteger(value.startWeek) && (value.endWeek === null || Number.isInteger(value.endWeek)) && Number.isInteger(value.distributorShareBasisPoints);
         })
       : [];
-    if (!openingStartsAt || terms.length === 0) return { theatricalWeek: null, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
+    if (!openingStartsAt) return { theatricalWeek: null, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
     const theatricalWeek = Math.max(1, Math.floor((startsAt.getTime() - openingStartsAt.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1);
+    if (terms.length === 0) return { theatricalWeek, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
     const term = terms.find((candidate) => theatricalWeek >= candidate.startWeek && (candidate.endWeek === null || theatricalWeek <= candidate.endWeek));
     if (!term) return { theatricalWeek, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
     const distributorRevenueCents = Math.round(ticketRevenueCents * term.distributorShareBasisPoints / 10_000);
@@ -96,6 +97,14 @@ export class ReportingService {
     const first = showtimes[0]?.startsAt ?? null;
     const last = showtimes.at(-1)?.startsAt ?? null;
     const calendarWeeks = first && last ? Math.max(1, Math.ceil((last.getTime() - first.getTime() + 1) / (7 * 24 * 60 * 60 * 1000))) : 0;
+    const weeklyPerformance = new Map<number, { theatricalWeek: number; firstShowtime: Date; lastShowtime: Date; showtimes: number; ticketsSold: number; capacity: number; ticketRevenueCents: number; fnbRevenueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number }>();
+    for (const row of rows) {
+      const theatricalWeek = row.theatricalWeek ?? 1;
+      const week = weeklyPerformance.get(theatricalWeek) ?? { theatricalWeek, firstShowtime: row.startsAt, lastShowtime: row.startsAt, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 };
+      week.firstShowtime = row.startsAt < week.firstShowtime ? row.startsAt : week.firstShowtime; week.lastShowtime = row.startsAt > week.lastShowtime ? row.startsAt : week.lastShowtime;
+      week.showtimes += 1; week.ticketsSold += row.ticketsSold; week.capacity += row.capacity; week.ticketRevenueCents += row.ticketRevenueCents; week.fnbRevenueCents += row.fnbRevenueCents; week.distributorRevenueCents += row.distributorRevenueCents; week.cinemaRevenueCents += row.cinemaRevenueCents; week.unallocatedRevenueCents += row.unallocatedRevenueCents;
+      weeklyPerformance.set(theatricalWeek, week);
+    }
     const now = new Date();
     return {
       movie: { ...movie, distributorTerms: undefined }, location, range: range ?? null,
@@ -108,6 +117,7 @@ export class ReportingService {
         firstShowtime: first, lastShowtime: last, calendarWeeks, averageShowtimesPerWeek: calendarWeeks ? Math.round((rows.length / calendarWeeks) * 10) / 10 : 0,
       },
       series: [...new Map(rows.flatMap((row) => row.filmSeries ? [[row.filmSeries.id, row.filmSeries] as const] : [])).values()],
+      weeklyPerformance: [...weeklyPerformance.values()].sort((left, right) => left.theatricalWeek - right.theatricalWeek).map((week) => ({ ...week, attendancePercent: week.capacity ? Math.round((week.ticketsSold / week.capacity) * 1000) / 10 : 0, averageTicketsPerShow: week.showtimes ? Math.round((week.ticketsSold / week.showtimes) * 10) / 10 : 0, averageFnbPerShowCents: week.showtimes ? Math.round(week.fnbRevenueCents / week.showtimes) : 0 })),
       showtimes: rows,
     };
   }
