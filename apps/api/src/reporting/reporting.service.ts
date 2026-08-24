@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { createHash, randomUUID } from "node:crypto";
 import { Prisma, prisma } from "@cinema/database";
+import { seatMapLayoutSchema } from "@cinema/shared";
 import { AppError } from "../common/app-error";
 
 export interface ReportRange { from: Date; to: Date }
@@ -23,6 +24,37 @@ export class ReportingService {
     if (!term) return { theatricalWeek, distributorShareBasisPoints: null, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: ticketRevenueCents, allocationComplete: false };
     const distributorRevenueCents = Math.round(ticketRevenueCents * term.distributorShareBasisPoints / 10_000);
     return { theatricalWeek, distributorShareBasisPoints: term.distributorShareBasisPoints, distributorRevenueCents, cinemaRevenueCents: ticketRevenueCents - distributorRevenueCents, unallocatedRevenueCents: 0, allocationComplete: true };
+  }
+
+  async showtimeTicketMap(locationId: string, showtimeId: string) {
+    const now = new Date();
+    const showtime = await prisma.showtime.findFirst({
+      where: { id: showtimeId, auditorium: { locationId } },
+      select: {
+        id: true, startsAt: true,
+        movie: { select: { id: true, title: true } },
+        auditorium: { select: { id: true, name: true, seatMap: { select: { layoutJson: true } }, location: { select: { currency: true, timezone: true } } } },
+        showtimeSeats: { orderBy: [{ seat: { y: "asc" } }, { seat: { x: "asc" } }], select: {
+          id: true, blockedAt: true,
+          seat: { select: { id: true, label: true, x: true, y: true, type: true, tableGroupId: true, tablePosition: true } },
+          holds: { where: { releasedAt: null, expiresAt: { gt: now } }, select: { id: true }, take: 1 },
+          tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { id: true, status: true, priceCentsPaid: true, ticketType: { select: { name: true } }, ticketOrder: { select: { orderNumber: true, channel: true } } }, take: 1 },
+        } },
+      },
+    });
+    if (!showtime) throw AppError.notFound("Showtime not found.");
+    const layout = seatMapLayoutSchema.safeParse(showtime.auditorium.seatMap?.layoutJson);
+    const seats = showtime.showtimeSeats.map((inventory) => ({
+      id: inventory.seat.id, inventoryId: inventory.id, label: inventory.seat.label, x: inventory.seat.x, y: inventory.seat.y, type: inventory.seat.type,
+      tableGroupId: inventory.seat.tableGroupId, tablePosition: inventory.seat.tablePosition,
+      state: inventory.blockedAt ? "BLOCKED" : inventory.tickets.length ? "SOLD" : inventory.holds.length ? "HELD" : "AVAILABLE",
+      ticket: inventory.tickets[0] ?? null,
+    }));
+    return {
+      showtime: { id: showtime.id, startsAt: showtime.startsAt, movie: showtime.movie, auditorium: { id: showtime.auditorium.id, name: showtime.auditorium.name }, timezone: showtime.auditorium.location.timezone, currency: showtime.auditorium.location.currency, seatingStyle: layout.success ? layout.data.seatingStyle : "SINGLE" },
+      seats,
+      counts: { available: seats.filter((seat) => seat.state === "AVAILABLE").length, held: seats.filter((seat) => seat.state === "HELD").length, sold: seats.filter((seat) => seat.state === "SOLD").length, blocked: seats.filter((seat) => seat.state === "BLOCKED").length },
+    };
   }
 
   async moviePerformance(locationId: string, movieId: string, range?: ReportRange) {

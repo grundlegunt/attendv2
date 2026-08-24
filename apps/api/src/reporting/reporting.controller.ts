@@ -45,6 +45,12 @@ export class ReportingController {
     return this.reporting.moviePerformance(this.location(actor), movieId, range);
   }
 
+  @Get("showtimes/:showtimeId/ticket-map")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  showtimeTicketMap(@CurrentActor() actor: RequestActor, @Param("showtimeId") showtimeId: string) {
+    return this.reporting.showtimeTicketMap(this.location(actor), showtimeId);
+  }
+
   @Get("distributors")
   @RequirePermissions(Permission.ReportsViewFinancial)
   distributors(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
