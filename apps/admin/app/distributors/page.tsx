@@ -8,6 +8,7 @@ import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 type Distributor = { name: string; films: unknown[]; showtimes: number; ticketsSold: number; totalCapacity: number; attendancePercent: number; ticketRevenueCents: number; fnbRevenueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number };
 type Report = { location: { name: string; currency: string }; distributors: Distributor[] };
 type Period = "all" | "30" | "90" | "365";
+type Sort = "ticketRevenue" | "attendance" | "tickets" | "name";
 const money = (cents: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 
 export default function DistributorsPage() {
@@ -16,6 +17,8 @@ export default function DistributorsPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState<Sort>("ticketRevenue");
   const path = useMemo(() => {
     if (period === "all") return "/reports/distributors";
     const to = new Date();
@@ -33,6 +36,16 @@ export default function DistributorsPage() {
   }, [accessToken, path]);
   if (!employee.permissions.includes("reports.view.financial")) return <main className="admin-route-page"><div className="error-banner">You do not have permission to view distributor performance.</div></main>;
   const currency = report?.location.currency ?? "USD";
+  const visibleDistributors = useMemo(() => {
+    const normalizedSearch = search.trim().toLocaleLowerCase();
+    const rows = (report?.distributors ?? []).filter((distributor) => !normalizedSearch || distributor.name.toLocaleLowerCase().includes(normalizedSearch));
+    return [...rows].sort((left, right) => {
+      if (sort === "name") return left.name.localeCompare(right.name);
+      if (sort === "attendance") return right.attendancePercent - left.attendancePercent || right.ticketsSold - left.ticketsSold;
+      if (sort === "tickets") return right.ticketsSold - left.ticketsSold || right.ticketRevenueCents - left.ticketRevenueCents;
+      return right.ticketRevenueCents - left.ticketRevenueCents || left.name.localeCompare(right.name);
+    });
+  }, [report, search, sort]);
   async function exportCsv() {
     if (!report || exporting) return;
     setExporting(true);
@@ -59,6 +72,6 @@ export default function DistributorsPage() {
     </div>
     {error && <div className="error-banner">{error}</div>}
     {!report && !error && <p className="dashboard-empty">Loading distributors…</p>}
-    {report && <section className="panel distributor-directory"><div className="dashboard-section-heading"><div><p className="kicker">{report.location.name}</p><h2>Distributor directory</h2></div><span>{report.distributors.length} distributors</span></div><div className="distributor-table"><header><span>Distributor</span><span>Films</span><span>Shows</span><span>Tickets / attendance</span><span>Ticket / F&amp;B</span><span>Distributor / cinema</span></header>{report.distributors.map((distributor) => <Link href={`/distributors/${encodeURIComponent(distributor.name)}`} key={distributor.name}><strong>{distributor.name}</strong><span>{distributor.films.length}</span><span>{distributor.showtimes}</span><span>{distributor.ticketsSold}<small>{distributor.attendancePercent}% of {distributor.totalCapacity}</small></span><span>{money(distributor.ticketRevenueCents, currency)}<small>{money(distributor.fnbRevenueCents, currency)} F&amp;B</small></span><span>{money(distributor.distributorRevenueCents, currency)} / {money(distributor.cinemaRevenueCents, currency)}</span></Link>)}</div>{report.distributors.length === 0 && <p className="dashboard-empty">No distributor performance was recorded in this period.</p>}</section>}
+    {report && <section className="panel distributor-directory"><div className="dashboard-section-heading"><div><p className="kicker">{report.location.name}</p><h2>Distributor directory</h2></div><span>{visibleDistributors.length} of {report.distributors.length} distributors</span></div><div className="distributor-directory-controls"><label>Search<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Distributor name" /></label><label>Sort by<select value={sort} onChange={(event) => setSort(event.target.value as Sort)}><option value="ticketRevenue">Ticket revenue</option><option value="attendance">Attendance</option><option value="tickets">Tickets sold</option><option value="name">Name</option></select></label></div><div className="distributor-table"><header><span>Distributor</span><span>Films</span><span>Shows</span><span>Tickets / attendance</span><span>Ticket / F&amp;B</span><span>Distributor / cinema</span></header>{visibleDistributors.map((distributor) => <Link href={`/distributors/${encodeURIComponent(distributor.name)}`} key={distributor.name}><strong>{distributor.name}</strong><span>{distributor.films.length}</span><span>{distributor.showtimes}</span><span>{distributor.ticketsSold}<small>{distributor.attendancePercent}% of {distributor.totalCapacity}</small></span><span>{money(distributor.ticketRevenueCents, currency)}<small>{money(distributor.fnbRevenueCents, currency)} F&amp;B</small></span><span>{money(distributor.distributorRevenueCents, currency)} / {money(distributor.cinemaRevenueCents, currency)}</span></Link>)}</div>{report.distributors.length === 0 ? <p className="dashboard-empty">No distributor performance was recorded in this period.</p> : visibleDistributors.length === 0 && <p className="dashboard-empty">No distributors match this search.</p>}</section>}
   </main>;
 }
