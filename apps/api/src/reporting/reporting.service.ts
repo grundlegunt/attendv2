@@ -88,8 +88,9 @@ export class ReportingService {
     ]);
     if (!movie) throw AppError.notFound("Film not found.");
     if (!location) throw AppError.notFound("Cinema location not found.");
-    const opening = await prisma.showtime.findFirst({ where: { movieId, auditorium: { locationId } }, orderBy: { startsAt: "asc" }, select: { startsAt: true } });
-    const showtimes = await prisma.showtime.findMany({
+    const [opening, showtimes, fnbOrderItems] = await Promise.all([
+      prisma.showtime.findFirst({ where: { movieId, auditorium: { locationId } }, orderBy: { startsAt: "asc" }, select: { startsAt: true } }),
+      prisma.showtime.findMany({
       where: { movieId, auditorium: { locationId }, ...(range ? { startsAt: { gte: range.from, lt: range.to } } : {}) },
       orderBy: { startsAt: "asc" },
       include: {
@@ -98,11 +99,23 @@ export class ReportingService {
         showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, createdAt: true, channel: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
         restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
-    });
+      }),
+      prisma.restaurantOrderItem.findMany({
+        where: {
+          status: "SENT",
+          restaurantOrder: {
+            status: { in: ["SENT", "IN_PROGRESS", "PARTIALLY_DELIVERED", "DELIVERED"] },
+            restaurantTab: { locationId, showtime: { movieId, ...(range ? { startsAt: { gte: range.from, lt: range.to } } : {}) } },
+          },
+        },
+        select: { menuItemId: true, quantity: true, unitPriceCentsSnapshot: true, modifierTotalCents: true, menuItem: { select: { name: true, chargeCategory: true } }, restaurantOrder: { select: { source: true } } },
+      }),
+    ]);
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const promotions = new Map<string, { promotionId: string; code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
     const advanceSales = new Map<string, { key: string; label: string; order: number; ticketsSold: number; ticketRevenueCents: number; leadHours: number }>();
+    const fnbItems = new Map<string, { menuItemId: string; name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>();
     const countedOrders = new Set<string>();
     let discountCents = 0; let complimentaryTickets = 0; let refundedTickets = 0; let refundedTicketValueCents = 0;
     const rows = showtimes.map((showtime) => {
@@ -134,6 +147,14 @@ export class ReportingService {
       const fnbRevenueCents = orderAheadRevenueCents + showtime.restaurantTabs.reduce((sum, tab) => sum + this.tabRevenue(tab).revenueCents, 0);
       return { showtimeId: showtime.id, startsAt: showtime.startsAt, auditorium: showtime.auditorium, filmSeries: showtime.filmSeries, ticketsSold: tickets.length, capacity: showtime.auditorium.capacity, ticketRevenueCents, fnbRevenueCents, ...this.allocateDistributorShare(ticketRevenueCents, showtime.startsAt, opening?.startsAt ?? null, movie.distributorTerms) };
     });
+    for (const item of fnbOrderItems) {
+      const row = fnbItems.get(item.menuItemId) ?? { menuItemId: item.menuItemId, name: item.menuItem.name, chargeCategory: item.menuItem.chargeCategory, unitsSold: 0, salesCents: 0, orderAheadUnits: 0, serviceUnits: 0 };
+      row.unitsSold += item.quantity;
+      row.salesCents += (item.unitPriceCentsSnapshot + item.modifierTotalCents) * item.quantity;
+      if (item.restaurantOrder.source === "ONLINE_ORDER_AHEAD") row.orderAheadUnits += item.quantity;
+      else row.serviceUnits += item.quantity;
+      fnbItems.set(item.menuItemId, row);
+    }
     const ticketsSold = rows.reduce((sum, row) => sum + row.ticketsSold, 0);
     const ticketRevenueCents = rows.reduce((sum, row) => sum + row.ticketRevenueCents, 0);
     const fnbRevenueCents = rows.reduce((sum, row) => sum + row.fnbRevenueCents, 0);
@@ -184,6 +205,7 @@ export class ReportingService {
       salesChannels: [...salesChannels.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.channel.localeCompare(right.channel)),
       promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || left.code.localeCompare(right.code)),
       advanceSales: [...advanceSales.values()].sort((left, right) => left.order - right.order).map(({ order: _order, leadHours, ...bucket }) => ({ ...bucket, percentOfTickets: ticketsSold ? Math.round((bucket.ticketsSold / ticketsSold) * 1000) / 10 : 0, averageLeadHours: bucket.ticketsSold ? Math.round(leadHours / bucket.ticketsSold) : 0 })),
+      fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
       auditoriumPerformance: [...auditoriumPerformance.values()].map(finishSlice).sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       daypartPerformance: [...daypartPerformance.values()].map(finishSlice).sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),
       weekdayPerformance: [...weekdayPerformance.values()].map(finishSlice).sort((left, right) => ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(left.key) - ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(right.key)),

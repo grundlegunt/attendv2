@@ -518,6 +518,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-advance-sales-bar i { height: 8px; background: color-mix(in srgb, var(--color-text-primary) 8%, transparent); }
 .film-advance-sales-bar i span { display: block; height: 100%; background: var(--color-accent); }
 .film-advance-sales-bar b { color: var(--color-text-secondary); text-align: right; }
+.film-fnb-item-table { overflow-x: auto; }
+.film-fnb-item-table header, .film-fnb-item-table article { display: grid; grid-template-columns: minmax(200px, 1.4fr) repeat(4, minmax(100px, .7fr)); gap: 16px; align-items: center; min-width: 720px; }
+.film-fnb-item-table header { padding: 10px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.film-fnb-item-table article { padding: 14px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
+.film-fnb-item-table article > span:first-child { display: grid; gap: 4px; }
+.film-fnb-item-table small { color: var(--color-text-secondary); }
 .film-adjustments { margin-top: 1.5rem; }
 .film-adjustment-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0 0 1.25rem; background: var(--color-border); border: 1px solid var(--color-border); }
 .film-adjustment-summary > div { display: grid; gap: .3rem; padding: 1rem; background: var(--color-bg-elevated); }
