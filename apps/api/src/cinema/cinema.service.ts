@@ -24,6 +24,7 @@ import {
   validateSeatLayout,
   cinemaContentDefaults,
   cinemaContentSchema,
+  seatMapLayoutSchema,
   dedupePublicShowtimes,
   startOfCalendarDay,
 } from "@cinema/shared";
@@ -4704,7 +4705,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       where: showtimeWhere,
       include: {
         movie: true,
-        auditorium: { include: { location: { select: { timezone: true } } } },
+        auditorium: { include: { location: { select: { timezone: true } }, seatMap: { select: { layoutJson: true } } } },
         priceTier: true,
         showtimeSeats: {
           where: generalAdmissionSeatIds
@@ -4727,6 +4728,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!showtime) throw AppError.notFound("Showtime not found.");
+    const seatMapLayout = seatMapLayoutSchema.safeParse(showtime.auditorium.seatMap?.layoutJson);
     const seats = showtime.showtimeSeats
       .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
       .map((inventory) => {
@@ -4771,6 +4773,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           name: showtime.auditorium.name,
           capacity: showtime.auditorium.capacity,
           seatingMode: showtime.auditorium.seatingMode,
+          seatingStyle: seatMapLayout.success ? seatMapLayout.data.seatingStyle : "SINGLE",
         },
         priceTier: {
           ticketPriceMinor: showtime.priceTier.ticketPriceMinor,

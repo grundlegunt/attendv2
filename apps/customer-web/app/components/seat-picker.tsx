@@ -24,6 +24,7 @@ interface Availability {
       name: string;
       capacity: number;
       seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+      seatingStyle: "SINGLE" | "PAIR" | "LOVESEAT" | "TABLE_2" | "TABLE_4" | "BENCH";
     };
     priceTier: {
       ticketPriceMinor: number;
@@ -376,6 +377,7 @@ export function SeatPicker({
       {mapSeats && availability?.showtime.auditorium.seatingMode !== "GENERAL_ADMISSION" && (
         <SeatMap
           seats={mapSeats}
+          seatingStyle={availability?.showtime.auditorium.seatingStyle ?? "SINGLE"}
           label={`${availability?.showtime.movie.title ?? "Showtime"} seating chart`}
           onSeatClick={(seat) => {
             const original = availability?.seats.find((candidate) => candidate.id === seat.id);
