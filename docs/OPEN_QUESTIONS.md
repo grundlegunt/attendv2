@@ -1,6 +1,8 @@
 # Open Questions and Assumptions
 
-Status: Draft v1 — please review before Milestone 0 begins. Items here are either explicit assumptions made to keep the architecture moving, or decisions that genuinely belong to the business/product owner, not engineering.
+Status: Decision log and launch-input register. Resolved entries are retained for
+context; unresolved business, provider, legal, tax, and operating choices remain
+owner decisions rather than engineering defaults.
 
 ## 1. Decisions received from product owner (2026-07-22) — resolved
 
