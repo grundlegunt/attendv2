@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { SeatMap, type SeatMapSeat, type SeatMapSeatingStyle } from "@cinema/ui";
 import { useAdminSession } from "../../admin-session";
 import { apiFetch, ApiRequestError } from "../../lib/api-client";
 
@@ -14,8 +15,29 @@ type Performance = {
   showtimes: Array<{ showtimeId: string; startsAt: string; auditorium: { id: string; name: string; capacity: number }; filmSeries: { id: string; name: string } | null; ticketsSold: number; capacity: number; ticketRevenueCents: number; fnbRevenueCents: number; theatricalWeek: number | null; distributorShareBasisPoints: number | null; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number }>;
 };
 type Period = "all" | "30" | "90" | "365";
+type TicketMap = {
+  showtime: { id: string; currency: string; seatingStyle: SeatMapSeatingStyle };
+  seats: Array<Omit<SeatMapSeat, "state"> & { state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED"; ticket: { id: string; status: string; priceCentsPaid: number; ticketType: { name: string }; ticketOrder: { orderNumber: string; channel: string } } | null }>;
+  counts: { available: number; held: number; sold: number; blocked: number };
+};
 
 function money(cents: number, currency: string) { return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100); }
+
+function ShowtimeTicketMap({ showtimeId, accessToken }: { showtimeId: string; accessToken: string }) {
+  const [open, setOpen] = useState(false); const [ticketMap, setTicketMap] = useState<TicketMap | null>(null); const [error, setError] = useState<string | null>(null); const [loading, setLoading] = useState(false);
+  function toggle() {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (ticketMap || loading) return;
+    setLoading(true); setError(null);
+    apiFetch<TicketMap>(`/reports/showtimes/${showtimeId}/ticket-map`, { accessToken })
+      .then(setTicketMap)
+      .catch((reason) => setError(reason instanceof ApiRequestError ? reason.body.message : "Ticket map could not be loaded."))
+      .finally(() => setLoading(false));
+  }
+  const soldSeats = ticketMap?.seats.filter((seat) => seat.ticket) ?? [];
+  return <><button type="button" className="showtime-ticket-map-toggle" aria-expanded={open} onClick={toggle}>{open ? "Hide ticket map" : "View ticket map"}</button>{open && <section className="showtime-ticket-map" aria-label="Showtime ticket map">{loading && <p>Loading ticket map…</p>}{error && <div className="error-banner" role="alert">{error}</div>}{ticketMap && <><SeatMap seats={ticketMap.seats.map((seat) => ({ ...seat, state: seat.state === "SOLD" ? "selected" : seat.state === "AVAILABLE" ? "available" : "unavailable" }))} seatingStyle={ticketMap.showtime.seatingStyle} label="Sold-seat map" /><div className="ticket-map-counts"><span>{ticketMap.counts.sold} sold</span><span>{ticketMap.counts.held} held</span><span>{ticketMap.counts.available} available</span><span>{ticketMap.counts.blocked} blocked</span></div>{soldSeats.length > 0 && <div className="sold-seat-ledger">{soldSeats.map((seat) => <div key={seat.id}><strong>{seat.label}</strong><span>{seat.ticket!.ticketType.name} · {money(seat.ticket!.priceCentsPaid, ticketMap.showtime.currency)}</span><small>{seat.ticket!.ticketOrder.orderNumber} · {seat.ticket!.ticketOrder.channel.toLowerCase()}</small></div>)}</div>}</>}</section>}</>;
+}
 
 export default function FilmPerformancePage() {
   const { id } = useParams<{ id: string }>();
@@ -52,7 +74,7 @@ export default function FilmPerformancePage() {
     {error && <div className="error-banner" role="alert">{error}</div>}{loading && <p className="dashboard-empty">Loading film performance…</p>}
     {performance && <>
       <section className="series-performance-metrics film-performance-metrics"><div><span>Performances</span><strong>{performance.totals.showtimes}</strong><small>{performance.totals.averageShowtimesPerWeek} per week</small></div><div><span>Tickets sold</span><strong>{performance.totals.ticketsSold}</strong><small>{performance.totals.averageTicketsPerShow} average per show</small></div><div><span>Attendance</span><strong>{performance.totals.attendancePercent}%</strong><small>{performance.totals.ticketsSold} / {performance.totals.totalCapacity} seats</small></div><div><span>Ticket face value</span><strong>{money(performance.totals.ticketRevenueCents, currency)}</strong><small>{money(performance.totals.averageTicketCents, currency)} average ticket</small></div><div><span>F&amp;B revenue</span><strong>{money(performance.totals.fnbRevenueCents, currency)}</strong><small>{money(performance.totals.averageFnbPerTicketCents, currency)} per ticket</small></div><div><span>Cinema film share</span><strong>{money(performance.totals.cinemaRevenueCents, currency)}</strong><small>{money(performance.totals.distributorRevenueCents, currency)} distributor</small></div><div><span>Programming</span><strong>{performance.totals.upcomingShowtimes} upcoming</strong><small>{performance.totals.pastShowtimes} past</small></div><div><span>First showing</span><strong>{performance.totals.firstShowtime ? dateTime(performance.totals.firstShowtime) : "—"}</strong><small>{performance.totals.lastShowtime ? `Last: ${dateTime(performance.totals.lastShowtime)}` : "No showtimes"}</small></div><div><span>Film series</span><strong>{performance.series.length}</strong><small>{performance.series.map((series) => series.name).join(", ") || "Regular engagement"}</small></div></section>
-      <section className="panel series-showtime-performance"><div className="dashboard-section-heading"><div><p className="kicker">PERFORMANCE LOG</p><h2>Every showtime</h2></div></div><div className="series-showtime-table film-showtime-table"><header><span>Date</span><span>Room / series</span><span>Sold / capacity</span><span>Tickets</span><span>F&amp;B</span><span>Cinema / distributor</span></header>{performance.showtimes.map((showtime) => <article key={showtime.showtimeId}><span><strong>{dateTime(showtime.startsAt)}</strong><small>{showtime.theatricalWeek ? `Theatrical week ${showtime.theatricalWeek}` : "Terms needed"}</small></span><span>{showtime.auditorium.name}<small>{showtime.filmSeries?.name ?? "Regular engagement"}</small></span><span>{showtime.ticketsSold} / {showtime.capacity}</span><span>{money(showtime.ticketRevenueCents, currency)}</span><span>{money(showtime.fnbRevenueCents, currency)}</span><span>{showtime.distributorShareBasisPoints === null ? "Terms needed" : `${money(showtime.cinemaRevenueCents, currency)} / ${money(showtime.distributorRevenueCents, currency)}`}</span></article>)}</div></section>
+      <section className="panel series-showtime-performance"><div className="dashboard-section-heading"><div><p className="kicker">PERFORMANCE LOG</p><h2>Every showtime</h2></div></div><div className="series-showtime-table film-showtime-table"><header><span>Date</span><span>Room / series</span><span>Sold / capacity</span><span>Tickets</span><span>F&amp;B</span><span>Cinema / distributor</span></header>{performance.showtimes.map((showtime) => <div className="film-showtime-entry" key={showtime.showtimeId}><article><span><strong>{dateTime(showtime.startsAt)}</strong><small>{showtime.theatricalWeek ? `Theatrical week ${showtime.theatricalWeek}` : "Terms needed"}</small></span><span>{showtime.auditorium.name}<small>{showtime.filmSeries?.name ?? "Regular engagement"}</small></span><span>{showtime.ticketsSold} / {showtime.capacity}</span><span>{money(showtime.ticketRevenueCents, currency)}</span><span>{money(showtime.fnbRevenueCents, currency)}</span><span>{showtime.distributorShareBasisPoints === null ? "Terms needed" : `${money(showtime.cinemaRevenueCents, currency)} / ${money(showtime.distributorRevenueCents, currency)}`}<ShowtimeTicketMap showtimeId={showtime.showtimeId} accessToken={accessToken} /></span></article></div>)}</div></section>
     </>}
   </main>;
 }

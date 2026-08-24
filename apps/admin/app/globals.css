@@ -499,6 +499,14 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-performance-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .film-performance-metrics > div:nth-child(n + 7) { border-top: 1px solid var(--color-border); }
 .film-showtime-table article > span:nth-child(2) { display: grid; gap: 4px; }
+.film-showtime-table article > span:last-child { display: grid; gap: 8px; }
+.showtime-ticket-map-toggle { width: max-content; padding: 5px 7px; border: 1px solid var(--color-accent); background: transparent; color: var(--color-accent); font-size: .65rem; font-weight: 900; cursor: pointer; }
+.showtime-ticket-map { display: grid; gap: 16px; padding: 22px; border-bottom: 1px solid var(--color-border); background: #0d0e0d; }
+.showtime-ticket-map .seat-map { max-width: 900px; margin: 0 auto; }
+.ticket-map-counts { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; color: var(--color-text-secondary); font-size: .72rem; }
+.sold-seat-ledger { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.sold-seat-ledger > div { display: grid; gap: 3px; padding: 10px; border: 1px solid var(--color-border); }
+.sold-seat-ledger span, .sold-seat-ledger small { color: var(--color-text-secondary); }
 .report-movie-row a { color: inherit; text-decoration: none; }
 .report-movie-row a:hover { color: var(--color-accent); }
 .film-detail-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
