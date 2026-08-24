@@ -34,6 +34,13 @@ test("distributor pages show attendance and capacity", () => {
   assert.match(detail, /totalCapacity/);
 });
 
+test("distributor pages separate upcoming and completed shows and F&B spend per attendee", () => {
+  for (const label of ["Upcoming performances", "Past performances", "F&amp;B per attendee"]) assert.ok(detail.includes(label));
+  assert.match(detail, /distributor\.upcomingShowtimes/);
+  assert.match(detail, /distributor\.pastShowtimes/);
+  assert.match(detail, /distributor\.fnbRevenueCents \/ distributor\.ticketsSold/);
+});
+
 test("distributor directory compares portfolio attendance", () => {
   assert.match(directory, /Tickets \/ attendance/);
   assert.match(directory, /distributor\.attendancePercent/);
