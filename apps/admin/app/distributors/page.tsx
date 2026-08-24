@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useAdminSession } from "../admin-session";
-import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 
 type Distributor = { name: string; films: unknown[]; showtimes: number; ticketsSold: number; totalCapacity: number; attendancePercent: number; ticketRevenueCents: number; fnbRevenueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number };
 type Report = { location: { name: string; currency: string }; distributors: Distributor[] };
@@ -15,6 +15,7 @@ export default function DistributorsPage() {
   const [period, setPeriod] = useState<Period>("all");
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const path = useMemo(() => {
     if (period === "all") return "/reports/distributors";
     const to = new Date();
@@ -32,8 +33,27 @@ export default function DistributorsPage() {
   }, [accessToken, path]);
   if (!employee.permissions.includes("reports.view.financial")) return <main className="admin-route-page"><div className="error-banner">You do not have permission to view distributor performance.</div></main>;
   const currency = report?.location.currency ?? "USD";
+  async function exportCsv() {
+    if (!report || exporting) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const query = path.includes("?") ? path.slice(path.indexOf("?")) : "";
+      const blob = await apiDownload(`/reports/distributors/performance.csv${query}`, { accessToken });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "distributor-directory.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof ApiRequestError ? reason.body.message : "The distributor directory export could not be downloaded.");
+    } finally {
+      setExporting(false);
+    }
+  }
   return <main className="admin-route-page distributor-page">
-    <section className="admin-heading"><div><p className="kicker">FILM RENTAL</p><h1>Distributors</h1><p>Review each distributor’s films, ticket sales, cinema and distributor shares, F&amp;B performance, and deal history.</p></div></section>
+    <section className="admin-heading"><div><p className="kicker">FILM RENTAL</p><h1>Distributors</h1><p>Review each distributor’s films, ticket sales, cinema and distributor shares, F&amp;B performance, and deal history.</p></div>{report && <button type="button" className="secondary" disabled={exporting} onClick={() => void exportCsv()}>{exporting ? "Exporting…" : "Export CSV"}</button>}</section>
     <div className="series-period-switch">
       {(["all", "30", "90", "365"] as Period[]).map((value) => <button type="button" className={period === value ? "active" : ""} onClick={() => setPeriod(value)} key={value}>{value === "all" ? "All time" : `${value} days`}</button>)}
     </div>

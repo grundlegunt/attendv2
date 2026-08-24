@@ -56,6 +56,16 @@ describe("ReportingService distributor performance export", () => {
   });
 });
 
+describe("ReportingService distributor directory export", () => {
+  it("includes portfolio attendance, F&B, and allocation totals", () => {
+    const source = new ReportingService().distributorDirectoryCsv.toString();
+    expect(source).toContain("Distributor directory");
+    expect(source).toContain("Attendance percent");
+    expect(source).toContain("F&B revenue (cents)");
+    expect(source).toContain("distributor.unallocatedRevenueCents");
+  });
+});
+
 describe("ReportingService film-series performance export", () => {
   it("includes summary, film, and showtime performance", () => {
     const source = new ReportingService().filmSeriesPerformanceCsv.toString();
