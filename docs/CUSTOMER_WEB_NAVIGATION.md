@@ -1,48 +1,39 @@
 # Attend — Customer Website Navigation
 
-## Implemented foundation
+Status: Implemented and reconciled August 24, 2026.
 
-The customer website now has a persistent top navigation with five deliberately scoped destinations:
+## Current navigation
 
-- `/showtimes` — the existing now-playing, seat-selection, and checkout journey.
-- `/account` — customer sign-in/registration and live restaurant-tab access, moved out of the showtimes page.
-- `/directions` — the active cinema's saved name and address, with a link to open turn-by-turn directions.
-- `/private-events` — an informational overview that directs guests to contact the cinema; it does not imply an online reservation workflow.
-- `/film-series` — active, managed film series with their artwork, descriptions, films, explicitly assigned future showtimes, presentation labels, and the existing seat-selection flow.
+The customer website uses a persistent top navigation across its public routes:
 
-The root route redirects to `/showtimes`. The public now-playing response includes the saved location address so Directions does not depend on hard-coded cinema information.
+- **Showtimes** — now-playing films, date selection, open-caption filtering, seat selection, and checkout.
+- **Coming Soon** — films whose first scheduled showtime is after the cinema's current local date.
+- **Just Announced** — the six newest upcoming films, ordered by their movie record creation time.
+- **Film Series** — active managed series, artwork, descriptions, assigned films, and future showtimes.
+- **Open Captions** — the showtimes program filtered to screenings whose presentation is `OPEN_CAPTIONS`.
+- **Dining & Bar** — the published menu presentation plus its accessible structured menu.
+- **Account** — customer registration, sign-in, order history, profile controls, and live restaurant-tab access.
+- **About** — operator-managed public copy.
+- **Merch** — an optional external shop link, shown only when an operator publishes a valid merchandise URL.
 
-Coming Soon, named festival/event pages, and Open Captions filtering remain deferred until their data-model decisions are made.
+Directions and Private Events are also public routes. Private Events includes a persisted customer inquiry flow; it is not a retail reservation or contract workflow. The root route redirects to Showtimes.
 
-## Reference
+## Implementation decisions
 
-Nitehawk Cinema's site navigation is the reference point for what a real independent-cinema customer site offers beyond a bare showtime list: Buy Tickets, Coming Soon, Film Series, Dining & Bar, Just Announced, a named festival/event, Merch, Private Events, Directions, Open Captions. Nitehawk presents this as a side menu; for Attend, use a **persistent top nav** instead (matches the existing dark/gold cinematic direction better than a slide-out side panel, and keeps the page's vertical space for the showtime list).
+Nitehawk Cinema's public navigation was the original reference, but Attend keeps its own persistent top-header treatment and data model.
 
-## Current state
-
-`apps/customer-web` has routed Showtimes, Account, Directions, Private Events, and Film Series pages under one persistent header. The root route redirects to Showtimes.
-
-## What Attend can support today vs. what needs new groundwork
-
-Don't build nav items that point at features the backend has no concept of. Split the reference list into what's realistic now and what needs a real decision first:
-
-**Buildable now, maps to existing data:**
-
-- **Showtimes** (existing default view) — already there, just needs to become a proper nav destination instead of the only thing on the page.
-- **Account** — already exists as a toggle panel; promote it to its own route so it can be linked from the nav like everything else, rather than being a special case.
-- **Directions** — static content page (location address/hours), no new backend needed. `Location` already has `address` (per `docs/ADMIN_APP_STRUCTURE.md`'s findings, currently not admin-editable — that's a separate, already-tracked gap, not blocking this page).
-- **Private Events** — static informational page for now (a contact/inquiry page), no booking system implied.
-
-**Needs a real decision before building, don't improvise it:**
-
-- **Coming Soon.** `Movie` has no release-date or "coming soon" concept at all today — only `title`/`synopsis`/`runtimeMinutes`/`rating`/`posterUrl`/`active`. There's no way to distinguish "this movie has no showtimes yet because it hasn't opened" from any other reason a movie might have zero showtimes. Building this page means first deciding how "coming soon" is represented (a release date field? an explicit status enum?) — that's a schema decision, flag it rather than inferring one on your own.
-- **Dining & Bar.** Check whether a customer-facing, standalone menu browse page already makes sense given the restaurant ordering flow (`apps/customer-web/app/components/live-restaurant-tab.tsx` is for an active tab, not a browsable menu) — if not, this is "read the existing menu API and render it read-only," which is low-risk, but confirm there isn't already a page for it before adding one.
-- **Film Series.** This decision is now resolved through managed `FilmSeries` records and explicit showtime assignments. The public page must continue to use those records rather than hardcoded movie IDs or title matching.
-- **Just Announced / a named festival.** These still need a product decision about whether they reuse film series, introduce a broader collection/event concept, or use another explicit model. Do not infer that decision from names or dates.
-- **Merch, Open Captions.** Merch is presumably an external link or a simple static page (confirm with the operator before building anything transactional). "Open Captions" on Nitehawk's site is a screening attribute filter — Attend's `Showtime` model has no accessibility/format attribute today, so this would need the same kind of schema work as Coming Soon before it's a real filter rather than a label with nothing behind it.
+- Coming Soon is derived from explicitly scheduled future showtimes rather than a separate release-date field. A movie without a future showtime is not presented as coming soon.
+- Just Announced reuses that upcoming program and sorts it by movie creation time. It does not infer announcements from titles or hardcoded movie IDs.
+- Open Captions is a real screening filter backed by the showtime presentation value; the compact `OC` label uses the same value.
+- Film Series uses managed `FilmSeries` records and explicit showtime assignments.
+- Merch remains an external link. Attend does not claim to provide general merchandise checkout.
+- Dining & Bar publishes both operator-provided presentation artwork and structured text so the menu remains accessible.
 
 ## Guardrails
 
-- Don't add schema fields or invent data-model concepts (release dates, series groupings, screening attributes) as a side effect of building the nav — those are called out above specifically so they get a real decision, not a drive-by migration.
-- The nav itself (persistent top bar, links to whatever pages exist) can and should ship even if only Showtimes/Account/Directions/Private Events are real to start — a nav with fewer links that all work is better than one that links to unbuilt pages.
-- Keep the existing dark background / gold accent / serif-headline visual language already established in `apps/customer-web` and described in `docs/PRODUCT_SPEC.md` §8 — this is a navigation and information-architecture change, not a redesign.
+- Keep the editorial links tied to canonical routes and query parameters so the active-navigation state matches the page being displayed.
+- Perform date comparisons in the cinema's timezone, not the visitor's device timezone.
+- Do not replace explicit film-series or screening-presentation data with title matching.
+- Do not show Merch when no validated external URL has been published.
+- Preserve the three-column desktop showtime grid and the established cinematic visual language unless a separate product decision changes them.
+- Named festivals beyond Film Series, transactional merchandise, and custom private-event contracts remain separate product decisions rather than implied navigation work.
