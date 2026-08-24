@@ -50,3 +50,11 @@ test("film performance exposes attendance, revenue, allocation, and showtime det
   assert.match(detail, /performance\.csv/);
   assert.match(detail, /Export CSV/);
 });
+
+test("film performance shows the advance-sales booking curve", () => {
+  assert.match(detail, /How far ahead audiences buy/);
+  assert.match(detail, /performance\.advanceSales\.map/);
+  assert.match(detail, /average hours ahead/);
+  assert.match(detail, /average days ahead/);
+  assert.match(detail, /bucket\.percentOfTickets/);
+});

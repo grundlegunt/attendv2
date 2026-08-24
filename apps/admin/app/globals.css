@@ -510,6 +510,14 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-mix-list { display: grid; }
 .film-mix-list > div { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 18px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
 .film-mix-list span { color: var(--color-text-secondary); }
+.film-advance-sales-list { display: grid; }
+.film-advance-sales-list article { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(180px, 1.5fr) 90px 100px; gap: 18px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
+.film-advance-sales-list article > div:first-child { display: grid; gap: 4px; }
+.film-advance-sales-list small { color: var(--color-text-secondary); }
+.film-advance-sales-bar { display: grid; grid-template-columns: 1fr 42px; gap: 10px; align-items: center; }
+.film-advance-sales-bar i { height: 8px; background: color-mix(in srgb, var(--color-text-primary) 8%, transparent); }
+.film-advance-sales-bar i span { display: block; height: 100%; background: var(--color-accent); }
+.film-advance-sales-bar b { color: var(--color-text-secondary); text-align: right; }
 .film-adjustments { margin-top: 1.5rem; }
 .film-adjustment-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 0 0 1.25rem; background: var(--color-border); border: 1px solid var(--color-border); }
 .film-adjustment-summary > div { display: grid; gap: .3rem; padding: 1rem; background: var(--color-bg-elevated); }
@@ -1074,6 +1082,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
   .film-adjustment-summary { grid-template-columns: 1fr; }
   .film-performance-slices { grid-template-columns: 1fr; }
   .film-slice-list article { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .film-advance-sales-list article { grid-template-columns: minmax(150px, 1fr) 1fr; }
   .audit-filters, .audit-change-grid { grid-template-columns: 1fr; }
   .audit-event summary { align-items: flex-start; flex-direction: column; }
   .audit-event summary > span:last-child { justify-items: start; text-align: left; }
