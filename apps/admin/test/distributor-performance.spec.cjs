@@ -60,6 +60,12 @@ test("distributor directory supports period comparisons", () => {
   assert.match(directory, /setReport\(null\)/);
 });
 
+test("distributor directory exports the selected period", () => {
+  assert.match(directory, /apiDownload\(`\/reports\/distributors\/performance\.csv\$\{query\}`/);
+  assert.match(directory, /path\.slice\(path\.indexOf\("\?"\)\)/);
+  assert.match(directory, /distributor-directory\.csv/);
+});
+
 test("distributor performance can be exported for the selected period", () => {
   assert.match(detail, /apiDownload\(/);
   assert.match(detail, /\/reports\/distributors\/\$\{encodeURIComponent\(name\)\}\/performance\.csv/);

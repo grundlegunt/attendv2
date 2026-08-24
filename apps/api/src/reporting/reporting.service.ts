@@ -681,6 +681,16 @@ export class ReportingService {
     ].join("\n");
   }
 
+  distributorDirectoryCsv(report: Awaited<ReturnType<ReportingService["distributorPerformance"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    return [
+      row(["Distributor directory", report.location.name]), row(["Report from", report.range?.from.toISOString() ?? "All time"]), row(["Report to", report.range?.to.toISOString() ?? "All time"]), "",
+      row(["Distributor", "Films", "Performances", "Tickets", "Capacity", "Attendance percent", "Ticket face value (cents)", "F&B revenue (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated value (cents)"]),
+      ...report.distributors.map((distributor) => row([distributor.name, distributor.films.length, distributor.showtimes, distributor.ticketsSold, distributor.totalCapacity, distributor.attendancePercent, distributor.ticketRevenueCents, distributor.fnbRevenueCents, distributor.distributorRevenueCents, distributor.cinemaRevenueCents, distributor.unallocatedRevenueCents])),
+    ].join("\n");
+  }
+
   distributorBoxOfficeCsv(report: Awaited<ReturnType<ReportingService["revenue"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");
