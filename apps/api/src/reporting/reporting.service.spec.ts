@@ -26,6 +26,17 @@ describe("ReportingService film advance sales", () => {
   });
 });
 
+describe("ReportingService film performance export", () => {
+  it("includes item-level F&B sales and service channels", () => {
+    const source = new ReportingService().moviePerformanceCsv.toString();
+    expect(source).toContain("Food and drink items");
+    expect(source).toContain("Ticket checkout units");
+    expect(source).toContain("item.orderAheadUnits");
+    expect(source).toContain("item.serviceUnits");
+    expect(source).toContain("item.salesCents");
+  });
+});
+
 describe("ReportingService audience origins", () => {
   it("groups ZIP+4 orders by five-digit ZIP without exposing order details", () => {
     const service = new ReportingService();
