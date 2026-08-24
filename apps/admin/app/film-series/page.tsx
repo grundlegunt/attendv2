@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useAdminSession } from "../admin-session";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 
@@ -22,7 +23,7 @@ interface Bootstrap {
 }
 
 export default function FilmSeriesPage() {
-  const { accessToken, signOut } = useAdminSession();
+  const { accessToken, signOut, employee } = useAdminSession();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -241,6 +242,7 @@ export default function FilmSeriesPage() {
 
   const activeSeries = (data?.location.organization.filmSeries ?? []).filter((series) => series.active);
   const archivedSeries = (data?.location.organization.filmSeries ?? []).filter((series) => !series.active);
+  const canViewFinancialPerformance = employee.permissions.includes("reports.view.financial");
 
   return <main>
     <section className="admin-heading">
@@ -277,8 +279,8 @@ export default function FilmSeriesPage() {
           onDragEnd={() => { setDraggedSeriesId(null); setDragOverSeriesId(null); }}
         >
           {series.artworkUrl ? <img src={series.artworkUrl} alt="" /> : <div className="series-artwork-placeholder">Series</div>}
-          <div><h3>{series.name}</h3><p>{series.description || "No description added."}</p></div>
-          <div className="film-series-row-actions"><span className="film-series-drag-handle" aria-label={`Drag ${series.name} to reorder`} title="Drag to reorder">⠿</span><button type="button" disabled={seriesSaving} onClick={() => editSeries(series)}>Edit</button><button type="button" className="destructive-outline" disabled={seriesSaving} onClick={() => void archiveSeries(series)}>Archive</button></div>
+          <div><h3>{canViewFinancialPerformance ? <Link href={`/film-series/${series.id}`}>{series.name}</Link> : series.name}</h3><p>{series.description || "No description added."}</p></div>
+          <div className="film-series-row-actions">{canViewFinancialPerformance && <Link className="series-view-link" href={`/film-series/${series.id}`}>View performance</Link>}<span className="film-series-drag-handle" aria-label={`Drag ${series.name} to reorder`} title="Drag to reorder">⠿</span><button type="button" disabled={seriesSaving} onClick={() => editSeries(series)}>Edit</button><button type="button" className="destructive-outline" disabled={seriesSaving} onClick={() => void archiveSeries(series)}>Archive</button></div>
         </article>)}
         {data && activeSeries.length === 0 && <p className="builder-help">No film series yet. Add one here, then assign it to showtimes from Scheduling.</p>}
       </div>
