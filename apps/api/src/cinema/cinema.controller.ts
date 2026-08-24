@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { Permission } from "@cinema/auth";
 import {
   createAuditoriumRequestSchema,

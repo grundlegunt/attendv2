@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 /**
  * Request/response contracts for the auth endpoints, shared between

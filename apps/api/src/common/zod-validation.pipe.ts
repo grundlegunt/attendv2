@@ -1,5 +1,5 @@
 import { PipeTransform } from "@nestjs/common";
-import { ZodSchema } from "zod";
+import { ZodSchema } from "zod/v3";
 import { AppError } from "./app-error";
 
 /**

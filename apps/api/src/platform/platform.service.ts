@@ -33,7 +33,7 @@ import {
   validateAdvancedSeatLayout,
   validateSeatLayout,
 } from "@cinema/shared";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
 import type {

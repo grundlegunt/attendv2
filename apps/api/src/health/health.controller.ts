@@ -5,7 +5,7 @@ import Redis from "ioredis";
 import { AppError } from "../common/app-error";
 import { ErrorAlertReporter } from "../common/error-alert-reporter";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
-import { z } from "zod";
+import { z } from "zod/v3";
 
 const clientErrorSchema = z.object({
   app: z.enum(["customer-web", "admin", "platform-admin", "staff-pos", "kds"]),

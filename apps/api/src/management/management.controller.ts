@@ -3,7 +3,7 @@ import { Permission } from "@cinema/auth";
 import { adminBrandingSchema, customerBrandingSchema } from "@cinema/shared";
 import type { Response } from "express";
 import { randomUUID } from "node:crypto";
-import { z } from "zod";
+import { z } from "zod/v3";
 import { CurrentActor } from "../auth/decorators/current-actor.decorator";
 import { RequirePermissions } from "../auth/decorators/require-permissions.decorator";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";

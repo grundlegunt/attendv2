@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 export const shiftPinRequestSchema = z.object({
   locationId: z.string().uuid(),
