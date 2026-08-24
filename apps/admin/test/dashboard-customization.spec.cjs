@@ -10,6 +10,7 @@ test("dashboard preferences are loaded and saved for the signed-in employee", ()
   assert.match(source, /apiFetch<DashboardPreferences>\("\/management\/dashboard-preferences"/);
   assert.match(source, /method: "PATCH"/);
   assert.match(source, /"Idempotency-Key": preferenceAttemptRef\.current\.requestId/);
+  assert.match(source, /if \(preferenceSaveInFlightRef\.current\) return;/);
   assert.match(source, /These settings apply only to your account\./);
 });
 

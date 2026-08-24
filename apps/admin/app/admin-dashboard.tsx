@@ -229,6 +229,7 @@ export function AdminDashboard() {
   const [preferenceDraft, setPreferenceDraft] = useState<DashboardPreferences>(defaultDashboardPreferences);
   const [customizing, setCustomizing] = useState(false);
   const [savingPreferences, setSavingPreferences] = useState(false);
+  const preferenceSaveInFlightRef = useRef(false);
   const preferenceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [now, setNow] = useState(() => new Date());
   const permissions = useMemo(() => new Set(employee.permissions), [employee.permissions]);
@@ -280,7 +281,8 @@ export function AdminDashboard() {
   }, [accessToken]);
 
   async function savePreferences() {
-    if (savingPreferences) return;
+    if (preferenceSaveInFlightRef.current) return;
+    preferenceSaveInFlightRef.current = true;
     const body = JSON.stringify(preferenceDraft);
     if (preferenceAttemptRef.current?.fingerprint !== body) preferenceAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
     setSavingPreferences(true);
@@ -291,7 +293,10 @@ export function AdminDashboard() {
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) preferenceAttemptRef.current = null;
       setErrors((current) => [...new Set([...current, messageFor(reason)])]);
-    } finally { setSavingPreferences(false); }
+    } finally {
+      preferenceSaveInFlightRef.current = false;
+      setSavingPreferences(false);
+    }
   }
 
   function toggleWidget(id: DashboardWidgetId) {
