@@ -35,6 +35,8 @@ type Distributor = {
   name: string;
   films: Film[];
   showtimes: number;
+  upcomingShowtimes: number;
+  pastShowtimes: number;
   ticketsSold: number;
   totalCapacity: number;
   attendancePercent: number;
@@ -204,6 +206,21 @@ export default function DistributorPage() {
               <span>Needs terms</span>
               <strong>{money(distributor.unallocatedRevenueCents, currency)}</strong>
               <small>{dealCounts.UNSCHEDULED} unscheduled films</small>
+            </div>
+            <div>
+              <span>Upcoming performances</span>
+              <strong>{distributor.upcomingShowtimes}</strong>
+              <small>Still on the calendar</small>
+            </div>
+            <div>
+              <span>Past performances</span>
+              <strong>{distributor.pastShowtimes}</strong>
+              <small>Completed screenings</small>
+            </div>
+            <div>
+              <span>F&amp;B per attendee</span>
+              <strong>{money(distributor.ticketsSold ? Math.round(distributor.fnbRevenueCents / distributor.ticketsSold) : 0, currency)}</strong>
+              <small>Average across sold tickets</small>
             </div>
           </section>
           <section className="panel distributor-deals">
