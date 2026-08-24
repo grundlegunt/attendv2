@@ -1,6 +1,8 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "@cinema/auth";
+
+dotenv.config({ quiet: true });
 
 const email = process.env.PLATFORM_USER_EMAIL?.trim().toLowerCase();
 const name = process.env.PLATFORM_USER_NAME?.trim();

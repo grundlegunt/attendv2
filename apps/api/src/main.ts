@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import "dotenv/config";
+import "./load-env";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { loadEnv } from "@cinema/config/env";
