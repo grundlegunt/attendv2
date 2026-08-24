@@ -34,6 +34,12 @@ test("distributor pages show attendance and capacity", () => {
   assert.match(detail, /totalCapacity/);
 });
 
+test("distributor directory compares portfolio attendance", () => {
+  assert.match(directory, /Tickets \/ attendance/);
+  assert.match(directory, /distributor\.attendancePercent/);
+  assert.match(directory, /distributor\.totalCapacity/);
+});
+
 test("distributor performance can be exported for the selected period", () => {
   assert.match(detail, /apiDownload\(/);
   assert.match(detail, /\/reports\/distributors\/\$\{encodeURIComponent\(name\)\}\/performance\.csv/);
