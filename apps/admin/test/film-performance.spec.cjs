@@ -32,4 +32,8 @@ test("film performance exposes attendance, revenue, allocation, and showtime det
   assert.match(detail, /Performance by theatrical week/);
   assert.match(detail, /weeklyPerformance/);
   assert.match(detail, /averageFnbPerShowCents/);
+  assert.match(detail, /Admission types/);
+  assert.match(detail, /Sales channels/);
+  assert.match(detail, /admissionTypes/);
+  assert.match(detail, /salesChannels/);
 });
