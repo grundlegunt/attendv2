@@ -79,3 +79,12 @@ test("distributor performance can be exported for the selected period", () => {
   assert.match(detail, /\/reports\/distributors\/\$\{encodeURIComponent\(name\)\}\/performance\.csv/);
   assert.match(detail, /Export CSV/);
 });
+
+test("distributor film history supports search, deal filtering, and operator sorting", () => {
+  assert.match(detail, /type FilmSort = "ticketRevenue" \| "attendance" \| "tickets" \| "upcoming" \| "name"/);
+  assert.match(detail, /type DealFilter = "ALL" \| Film\["dealStatus"\]/);
+  assert.match(detail, /film\.title\.toLocaleLowerCase\(\)\.includes\(normalizedSearch\)/);
+  assert.match(detail, /visibleFilms\.map/);
+  assert.match(detail, /No films match these filters/);
+  for (const option of ["All deals", "Current", "Upcoming", "Past", "Unscheduled", "Ticket revenue", "Attendance", "Tickets sold", "Upcoming shows", "Film title"]) assert.ok(detail.includes(option));
+});

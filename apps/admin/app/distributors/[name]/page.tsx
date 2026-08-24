@@ -51,6 +51,8 @@ type Report = {
   distributor: Distributor;
 };
 type Period = "all" | "30" | "90" | "365";
+type FilmSort = "ticketRevenue" | "attendance" | "tickets" | "upcoming" | "name";
+type DealFilter = "ALL" | Film["dealStatus"];
 const money = (cents: number, currency: string) => new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100);
 const average = (total: number, count: number) => (count ? Math.round((total / count) * 10) / 10 : 0);
 const percentage = (basisPoints: number) => new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(basisPoints / 100);
@@ -62,6 +64,9 @@ export default function DistributorPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [filmSearch, setFilmSearch] = useState("");
+  const [filmSort, setFilmSort] = useState<FilmSort>("ticketRevenue");
+  const [dealFilter, setDealFilter] = useState<DealFilter>("ALL");
   const path = useMemo(() => {
     const base = `/reports/distributors/${encodeURIComponent(name)}`;
     if (period === "all") return base;
@@ -98,6 +103,21 @@ export default function DistributorPage() {
     }),
     { CURRENT: 0, UPCOMING: 0, PAST: 0, UNSCHEDULED: 0 },
   ) ?? { CURRENT: 0, UPCOMING: 0, PAST: 0, UNSCHEDULED: 0 };
+  const visibleFilms = useMemo(() => {
+    const normalizedSearch = filmSearch.trim().toLocaleLowerCase();
+    const films = (distributor?.films ?? []).filter(
+      (film) =>
+        (dealFilter === "ALL" || film.dealStatus === dealFilter) &&
+        (!normalizedSearch || film.title.toLocaleLowerCase().includes(normalizedSearch)),
+    );
+    return [...films].sort((left, right) => {
+      if (filmSort === "name") return left.title.localeCompare(right.title);
+      if (filmSort === "attendance") return right.attendancePercent - left.attendancePercent || right.ticketsSold - left.ticketsSold;
+      if (filmSort === "tickets") return right.ticketsSold - left.ticketsSold || left.title.localeCompare(right.title);
+      if (filmSort === "upcoming") return right.upcomingShowtimes - left.upcomingShowtimes || left.title.localeCompare(right.title);
+      return right.ticketRevenueCents - left.ticketRevenueCents || left.title.localeCompare(right.title);
+    });
+  }, [dealFilter, distributor?.films, filmSearch, filmSort]);
   const date = (value: string | null) =>
     value
       ? new Date(value).toLocaleDateString([], {
@@ -230,8 +250,13 @@ export default function DistributorPage() {
                 <h2>Complete film history</h2>
               </div>
               <span>
-                {dealCounts.CURRENT} current · {dealCounts.UPCOMING} upcoming · {dealCounts.PAST} past
+                {visibleFilms.length} of {distributor.films.length} films
               </span>
+            </div>
+            <div className="distributor-film-controls">
+              <label>Search films<input type="search" value={filmSearch} onChange={(event) => setFilmSearch(event.target.value)} placeholder="Film title" /></label>
+              <label>Deal status<select value={dealFilter} onChange={(event) => setDealFilter(event.target.value as DealFilter)}><option value="ALL">All deals</option><option value="CURRENT">Current</option><option value="UPCOMING">Upcoming</option><option value="PAST">Past</option><option value="UNSCHEDULED">Unscheduled</option></select></label>
+              <label>Sort by<select value={filmSort} onChange={(event) => setFilmSort(event.target.value as FilmSort)}><option value="ticketRevenue">Ticket revenue</option><option value="attendance">Attendance</option><option value="tickets">Tickets sold</option><option value="upcoming">Upcoming shows</option><option value="name">Film title</option></select></label>
             </div>
             <div className="distributor-film-table">
               <header>
@@ -242,7 +267,7 @@ export default function DistributorPage() {
                 <span>Ticket / F&amp;B</span>
                 <span>Distributor / cinema</span>
               </header>
-              {distributor.films.map((film) => (
+              {visibleFilms.map((film) => (
                 <article key={film.movieId}>
                   <span>
                     <Link href={`/films/${encodeURIComponent(film.movieId)}`}>{film.title}</Link>
@@ -272,6 +297,7 @@ export default function DistributorPage() {
                 </article>
               ))}
             </div>
+            {visibleFilms.length === 0 && <p className="dashboard-empty">No films match these filters.</p>}
           </section>
         </>
       )}
