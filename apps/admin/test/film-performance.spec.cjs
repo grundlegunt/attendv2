@@ -58,3 +58,11 @@ test("film performance shows the advance-sales booking curve", () => {
   assert.match(detail, /average days ahead/);
   assert.match(detail, /bucket\.percentOfTickets/);
 });
+
+test("film performance shows item-level F&B performance", () => {
+  assert.match(detail, /Food &amp; drink items sold/);
+  assert.match(detail, /performance\.fnbItems\.map/);
+  assert.match(detail, /item\.orderAheadUnits/);
+  assert.match(detail, /item\.serviceUnits/);
+  assert.match(detail, /item\.salesCents/);
+});
