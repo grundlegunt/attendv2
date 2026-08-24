@@ -40,4 +40,8 @@ test("film performance exposes attendance, revenue, allocation, and showtime det
   assert.match(detail, /complimentaryTickets/);
   assert.match(detail, /refundedTicketValueCents/);
   assert.match(detail, /performance\.promotions/);
+  assert.match(detail, /Performance by auditorium/);
+  assert.match(detail, /Performance by daypart/);
+  assert.match(detail, /auditoriumPerformance/);
+  assert.match(detail, /daypartPerformance/);
 });

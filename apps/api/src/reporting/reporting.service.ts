@@ -129,6 +129,19 @@ export class ReportingService {
       week.showtimes += 1; week.ticketsSold += row.ticketsSold; week.capacity += row.capacity; week.ticketRevenueCents += row.ticketRevenueCents; week.fnbRevenueCents += row.fnbRevenueCents; week.distributorRevenueCents += row.distributorRevenueCents; week.cinemaRevenueCents += row.cinemaRevenueCents; week.unallocatedRevenueCents += row.unallocatedRevenueCents;
       weeklyPerformance.set(theatricalWeek, week);
     }
+    type PerformanceSlice = { key: string; label: string; showtimes: number; ticketsSold: number; capacity: number; ticketRevenueCents: number; fnbRevenueCents: number };
+    const auditoriumPerformance = new Map<string, PerformanceSlice>();
+    const daypartPerformance = new Map<string, PerformanceSlice>();
+    const hourFormatter = new Intl.DateTimeFormat("en-US", { timeZone: location.timezone, hour: "numeric", hourCycle: "h23" });
+    for (const row of rows) {
+      const room = auditoriumPerformance.get(row.auditorium.id) ?? { key: row.auditorium.id, label: row.auditorium.name, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
+      room.showtimes += 1; room.ticketsSold += row.ticketsSold; room.capacity += row.capacity; room.ticketRevenueCents += row.ticketRevenueCents; room.fnbRevenueCents += row.fnbRevenueCents; auditoriumPerformance.set(room.key, room);
+      const hour = Number(hourFormatter.format(row.startsAt));
+      const daypart = hour < 12 ? { key: "MORNING", label: "Morning" } : hour < 17 ? { key: "AFTERNOON", label: "Afternoon" } : { key: "EVENING", label: "Evening" };
+      const period = daypartPerformance.get(daypart.key) ?? { ...daypart, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
+      period.showtimes += 1; period.ticketsSold += row.ticketsSold; period.capacity += row.capacity; period.ticketRevenueCents += row.ticketRevenueCents; period.fnbRevenueCents += row.fnbRevenueCents; daypartPerformance.set(period.key, period);
+    }
+    const finishSlice = (slice: PerformanceSlice) => ({ ...slice, attendancePercent: slice.capacity ? Math.round((slice.ticketsSold / slice.capacity) * 1000) / 10 : 0, averageTicketsPerShow: slice.showtimes ? Math.round((slice.ticketsSold / slice.showtimes) * 10) / 10 : 0, averageTicketRevenuePerShowCents: slice.showtimes ? Math.round(slice.ticketRevenueCents / slice.showtimes) : 0, averageFnbPerShowCents: slice.showtimes ? Math.round(slice.fnbRevenueCents / slice.showtimes) : 0 });
     const now = new Date();
     return {
       movie: { ...movie, distributorTerms: undefined }, location, range: range ?? null,
@@ -145,6 +158,8 @@ export class ReportingService {
       admissionTypes: [...admissionTypes.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.name.localeCompare(right.name)),
       salesChannels: [...salesChannels.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.channel.localeCompare(right.channel)),
       promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || left.code.localeCompare(right.code)),
+      auditoriumPerformance: [...auditoriumPerformance.values()].map(finishSlice).sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
+      daypartPerformance: [...daypartPerformance.values()].map(finishSlice).sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),
       weeklyPerformance: [...weeklyPerformance.values()].sort((left, right) => left.theatricalWeek - right.theatricalWeek).map((week) => ({ ...week, attendancePercent: week.capacity ? Math.round((week.ticketsSold / week.capacity) * 1000) / 10 : 0, averageTicketsPerShow: week.showtimes ? Math.round((week.ticketsSold / week.showtimes) * 10) / 10 : 0, averageFnbPerShowCents: week.showtimes ? Math.round(week.fnbRevenueCents / week.showtimes) : 0 })),
       showtimes: rows,
     };
