@@ -506,6 +506,12 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .film-week-table article { padding: 14px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
 .film-week-table article > span { display: grid; gap: 4px; }
 .film-week-table small { color: var(--color-text-secondary); }
+.film-daily-table { overflow-x: auto; }
+.film-daily-table header, .film-daily-table article { display: grid; grid-template-columns: minmax(180px, 1.2fr) repeat(5, minmax(120px, .8fr)); gap: 16px; align-items: center; min-width: 880px; }
+.film-daily-table header { padding: 10px 0; border-bottom: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.film-daily-table article { padding: 14px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
+.film-daily-table article > span { display: grid; gap: 4px; }
+.film-daily-table small { color: var(--color-text-secondary); }
 .film-sales-mix { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .film-mix-list { display: grid; }
 .film-mix-list > div { display: grid; grid-template-columns: minmax(120px, 1fr) auto auto; gap: 18px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--color-border); font-size: .78rem; }
