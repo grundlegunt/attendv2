@@ -36,6 +36,14 @@ type AuditEvent = { id: string; action: string; entityType: string; occurredAt: 
 type Settings = { timeClockEnabled: boolean; ticketTaxRateBasisPoints: number };
 type FilmPerformanceRange = "today" | "7d" | "30d";
 type ScheduleDay = "today" | "tomorrow";
+type DashboardWidgetId = "metrics" | "topFilms" | "schedule" | "setup" | "activity" | "quickActions";
+type DashboardPreferences = { hidden: DashboardWidgetId[]; topOrder: Array<"metrics" | "topFilms">; mainOrder: Array<"schedule" | "activity">; sideOrder: Array<"setup" | "quickActions"> };
+const defaultDashboardPreferences: DashboardPreferences = { hidden: [], topOrder: ["metrics", "topFilms"], mainOrder: ["schedule", "activity"], sideOrder: ["setup", "quickActions"] };
+const dashboardZones = [
+  { label: "Overview", key: "topOrder" as const, widgets: [["metrics", "Today at a glance"], ["topFilms", "Top performing films"]] as const },
+  { label: "Main column", key: "mainOrder" as const, widgets: [["schedule", "Schedule"], ["activity", "Recent activity"]] as const },
+  { label: "Side column", key: "sideOrder" as const, widgets: [["setup", "Cinema setup"], ["quickActions", "Quick actions"]] as const },
+];
 type ShowtimeSeatInventory = {
   seats: Array<Omit<SeatMapSeat, "state"> & { state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" }>;
   counts: { available: number; held: number; sold: number; blocked: number };
@@ -217,6 +225,11 @@ export function AdminDashboard() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
   const [errors, setErrors] = useState<string[]>([]);
+  const [preferences, setPreferences] = useState<DashboardPreferences>(defaultDashboardPreferences);
+  const [preferenceDraft, setPreferenceDraft] = useState<DashboardPreferences>(defaultDashboardPreferences);
+  const [customizing, setCustomizing] = useState(false);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const preferenceAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const [now, setNow] = useState(() => new Date());
   const permissions = useMemo(() => new Set(employee.permissions), [employee.permissions]);
   const canCinema = ["auditorium.manage", "movie.manage", "showtime.manage"].every((permission) => permissions.has(permission));
@@ -257,6 +270,43 @@ export function AdminDashboard() {
     void load();
     return () => { cancelled = true; };
   }, [accessToken, canAudit, canCinema, canSettings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch<DashboardPreferences>("/management/dashboard-preferences", { accessToken })
+      .then((result) => { if (!cancelled) { setPreferences(result); setPreferenceDraft(result); } })
+      .catch((reason) => { if (!cancelled) setErrors((current) => [...new Set([...current, messageFor(reason)])]); });
+    return () => { cancelled = true; };
+  }, [accessToken]);
+
+  async function savePreferences() {
+    if (savingPreferences) return;
+    const body = JSON.stringify(preferenceDraft);
+    if (preferenceAttemptRef.current?.fingerprint !== body) preferenceAttemptRef.current = { fingerprint: body, requestId: crypto.randomUUID() };
+    setSavingPreferences(true);
+    try {
+      const saved = await apiFetch<DashboardPreferences>("/management/dashboard-preferences", { accessToken, method: "PATCH", headers: { "Idempotency-Key": preferenceAttemptRef.current.requestId }, body });
+      preferenceAttemptRef.current = null;
+      setPreferences(saved); setPreferenceDraft(saved); setCustomizing(false);
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) preferenceAttemptRef.current = null;
+      setErrors((current) => [...new Set([...current, messageFor(reason)])]);
+    } finally { setSavingPreferences(false); }
+  }
+
+  function toggleWidget(id: DashboardWidgetId) {
+    setPreferenceDraft((current) => ({ ...current, hidden: current.hidden.includes(id) ? current.hidden.filter((item) => item !== id) : [...current.hidden, id] }));
+  }
+
+  function moveWidget(zone: "topOrder" | "mainOrder" | "sideOrder", id: DashboardWidgetId, direction: -1 | 1) {
+    setPreferenceDraft((current) => {
+      const order = [...current[zone]] as DashboardWidgetId[];
+      const index = order.indexOf(id); const target = index + direction;
+      if (index < 0 || target < 0 || target >= order.length) return current;
+      [order[index], order[target]] = [order[target]!, order[index]!];
+      return { ...current, [zone]: order } as DashboardPreferences;
+    });
+  }
 
   useEffect(() => {
     if (!canFinancial || (canCinema && !bootstrap)) return;
@@ -313,39 +363,47 @@ export function AdminDashboard() {
     if (!current || Math.abs(new Date(showtime.startsAt).getTime() - now.getTime()) < Math.abs(new Date(current.startsAt).getTime() - now.getTime())) closestShowtimeByMovie.set(showtime.movie.id, showtime);
   }
   const filmRangeLabel = filmRange === "today" ? "Today" : filmRange === "7d" ? "Last 7 days" : "Last 30 days";
+  const visible = (id: DashboardWidgetId) => !preferences.hidden.includes(id);
 
   return <main className="admin-route-page dashboard-page">
     <section className="dashboard-heading">
       <div><p className="kicker">OPERATIONS OVERVIEW</p><h1>Dashboard</h1><p>{bootstrap?.location.name ?? "Your cinema"} · {now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", timeZone: locationTimeZone })}</p></div>
-      <Link className="dashboard-primary-action" href={canCinema ? "/scheduling" : quickActions[0]?.href ?? "/"}>{canCinema ? "Open today’s schedule" : "Open management tools"}</Link>
+      <div className="dashboard-heading-actions"><button type="button" className="secondary-button" onClick={() => { setPreferenceDraft(preferences); setCustomizing((current) => !current); }}>{customizing ? "Close customization" : "Customize dashboard"}</button><Link className="dashboard-primary-action" href={canCinema ? "/scheduling" : quickActions[0]?.href ?? "/"}>{canCinema ? "Open today’s schedule" : "Open management tools"}</Link></div>
     </section>
     {errors.map((error) => <div className="error-banner" role="alert" key={error}>{error}</div>)}
-    <section className="dashboard-metrics" aria-label="Today at a glance">
+    {customizing && <section className="panel dashboard-customizer" aria-labelledby="dashboard-customizer-heading"><div className="dashboard-section-heading"><div><p className="kicker">YOUR WORKSPACE</p><h2 id="dashboard-customizer-heading">Customize dashboard</h2><p>Choose what appears and arrange widgets within each area. These settings apply only to your account.</p></div></div><div className="dashboard-customizer-zones">{dashboardZones.map((zone) => <fieldset key={zone.key}><legend>{zone.label}</legend>{preferenceDraft[zone.key].map((id, index) => { const label = zone.widgets.find(([widgetId]) => widgetId === id)?.[1] ?? id; return <div className="dashboard-widget-option" key={id}><label><input type="checkbox" checked={!preferenceDraft.hidden.includes(id)} onChange={() => toggleWidget(id)} />{label}</label><span><button type="button" aria-label={`Move ${label} up`} disabled={index === 0} onClick={() => moveWidget(zone.key, id, -1)}>↑</button><button type="button" aria-label={`Move ${label} down`} disabled={index === preferenceDraft[zone.key].length - 1} onClick={() => moveWidget(zone.key, id, 1)}>↓</button></span></div>; })}</fieldset>)}</div><div className="dashboard-customizer-actions"><button type="button" className="secondary-button" onClick={() => setPreferenceDraft(defaultDashboardPreferences)}>Reset</button><button type="button" className="secondary-button" onClick={() => { setPreferenceDraft(preferences); setCustomizing(false); }}>Cancel</button><button type="button" className="primary-button" disabled={savingPreferences} onClick={() => void savePreferences()}>{savingPreferences ? "Saving…" : "Save dashboard"}</button></div></section>}
+    <div className="dashboard-top-widgets">
+    {visible("metrics") && <section className="dashboard-metrics" aria-label="Today at a glance" style={{ order: preferences.topOrder.indexOf("metrics") }}>
       {canCinema && <Link href="/scheduling" className="dashboard-metric"><span>Today’s schedule</span><strong>{loading && !bootstrap ? "—" : todaysShowtimes.length}</strong><small>{todaysShowtimes.filter((showtime) => showtime.onSale).length} on sale</small></Link>}
       {canFinancial && <Link href="/reports" className="dashboard-metric"><span>Ticket face value</span><strong>{revenue ? money(revenue.totals.ticketRevenueCents) : "—"}</strong><small>{revenue ? `${money(revenue.totals.ticketCollectedCents)} collected · ${revenue.totals.ticketsSold} tickets` : "0 tickets sold today"}</small></Link>}
       {canFinancial && <Link href="/reports" className="dashboard-metric"><span>F&amp;B revenue</span><strong>{revenue ? money(revenue.totals.fnbRevenueCents) : "—"}</strong><small>{revenue ? `${revenue.totals.fnbOrders} orders · ${money(revenue.totals.averageFnbSpendPerOrderCents)} average` : "Average spend unavailable"}</small></Link>}
       {canCinema && <Link href="/film-series" className="dashboard-metric"><span>Film series</span><strong>{bootstrap?.location.organization.filmSeries.filter((series) => series.active).length ?? "—"}</strong><small>{bootstrap?.location.organization.movies.length ?? 0} movies in library</small></Link>}
-    </section>
-    {canFinancial && <section className="panel dashboard-top-films" aria-labelledby="top-films-heading">
+    </section>}
+    {canFinancial && visible("topFilms") && <section className="panel dashboard-top-films" aria-labelledby="top-films-heading" style={{ order: preferences.topOrder.indexOf("topFilms") }}>
       <div className="dashboard-section-heading"><div><p className="kicker">TICKET SALES · {filmRangeLabel.toUpperCase()}</p><h2 id="top-films-heading">Top performing films</h2></div><div className="top-film-heading-actions"><div className="top-film-range" role="group" aria-label="Top performing films reporting period"><button type="button" className={filmRange === "today" ? "active" : ""} onClick={() => setFilmRange("today")}>Today</button><button type="button" className={filmRange === "7d" ? "active" : ""} onClick={() => setFilmRange("7d")}>7 days</button><button type="button" className={filmRange === "30d" ? "active" : ""} onClick={() => setFilmRange("30d")}>30 days</button></div><Link href="/reports">View report</Link></div></div>
       {filmRevenueLoading && !filmRevenue ? <p className="dashboard-empty">Loading film performance…</p> : topFilms.length ? <div className={`top-film-list ${filmRevenueLoading ? "loading" : ""}`}>{topFilms.map((film, index) => <TopFilmRow film={film} rank={index + 1} topTicketCount={topTicketCount} showtime={closestShowtimeByMovie.get(film.movieId)} accessToken={accessToken} timeZone={locationTimeZone} key={film.movieId} />)}</div> : <p className="dashboard-empty">No ticket sales were recorded for {filmRangeLabel.toLowerCase()}.</p>}
     </section>}
+    </div>
     <section className="dashboard-grid">
-      {canCinema && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading"><div className="dashboard-section-heading"><div><p className="kicker">PROGRAMMING</p><h2 id="today-schedule-heading">Schedule</h2></div><div className="schedule-heading-actions"><div className="dashboard-day-switch" role="group" aria-label="Schedule day"><button type="button" className={scheduleDay === "today" ? "active" : ""} onClick={() => setScheduleDay("today")}>Today</button><button type="button" className={scheduleDay === "tomorrow" ? "active" : ""} onClick={() => setScheduleDay("tomorrow")}>Tomorrow</button></div><Link href="/scheduling">View calendar</Link></div></div>
+      <div className="dashboard-column">
+      {canCinema && visible("schedule") && <section className="panel dashboard-schedule" aria-labelledby="today-schedule-heading" style={{ order: preferences.mainOrder.indexOf("schedule") }}><div className="dashboard-section-heading"><div><p className="kicker">PROGRAMMING</p><h2 id="today-schedule-heading">Schedule</h2></div><div className="schedule-heading-actions"><div className="dashboard-day-switch" role="group" aria-label="Schedule day"><button type="button" className={scheduleDay === "today" ? "active" : ""} onClick={() => setScheduleDay("today")}>Today</button><button type="button" className={scheduleDay === "tomorrow" ? "active" : ""} onClick={() => setScheduleDay("tomorrow")}>Tomorrow</button></div><Link href="/scheduling">View calendar</Link></div></div>
         <div className={`dashboard-list schedule-dashboard-list ${scheduleRevenueLoading ? "loading" : ""}`}>{scheduleShowtimes.map((showtime) => {
           const ticketsSold = scheduleSales.get(showtime.id) ?? 0;
           const salesVisible = canFinancial && scheduleRevenue !== null;
           return <DashboardShowtimeRow key={showtime.id} showtime={showtime} ticketsSold={ticketsSold} salesVisible={salesVisible} accessToken={accessToken} now={now.getTime()} timeZone={locationTimeZone} />;
         })}{!loading && scheduleShowtimes.length === 0 && <p className="dashboard-empty">No showtimes are scheduled {scheduleDay}.</p>}</div>
       </section>}
-      {canCinema && <section className="panel" aria-labelledby="setup-status-heading"><div className="dashboard-section-heading"><div><p className="kicker">READINESS</p><h2 id="setup-status-heading">Cinema setup</h2></div><Link href="/cinema-setup">Manage</Link></div>
+      {canAudit && visible("activity") && <section className="panel dashboard-activity" aria-labelledby="activity-heading" style={{ order: preferences.mainOrder.indexOf("activity") }}><div className="dashboard-section-heading"><div><p className="kicker">AUDIT TRAIL</p><h2 id="activity-heading">Recent activity</h2></div><Link href="/audit-log">View all</Link></div>
+        <div className="dashboard-list">{activity.map((event) => <Link href="/audit-log" key={event.id}><time>{new Date(event.occurredAt).toLocaleDateString([], { month: "short", day: "numeric", timeZone: locationTimeZone })}</time><span><strong>{event.action.replaceAll(".", " ")}</strong><small>{event.entityType}</small></span></Link>)}{!loading && activity.length === 0 && <p className="dashboard-empty">No recent activity is available.</p>}</div>
+      </section>}
+      </div>
+      <div className="dashboard-column">
+      {canCinema && visible("setup") && <section className="panel" aria-labelledby="setup-status-heading" style={{ order: preferences.sideOrder.indexOf("setup") }}><div className="dashboard-section-heading"><div><p className="kicker">READINESS</p><h2 id="setup-status-heading">Cinema setup</h2></div><Link href="/cinema-setup">Manage</Link></div>
         <div className="setup-status"><strong>{bootstrap?.location.auditoriums.length ?? "—"}</strong><span>auditoriums</span><strong>{bootstrap?.location.auditoriums.reduce((total, room) => total + room.capacity, 0) ?? "—"}</strong><span>total seats</span><strong>{bootstrap?.location.auditoriums.filter((room) => room.seatMap).length ?? "—"}</strong><span>seat maps ready</span></div>
         {settings && <p className="dashboard-note">Time clock {settings.timeClockEnabled ? "enabled" : "disabled"} · Ticket tax {(settings.ticketTaxRateBasisPoints / 100).toFixed(2)}%</p>}
       </section>}
-      {canAudit && <section className="panel dashboard-activity" aria-labelledby="activity-heading"><div className="dashboard-section-heading"><div><p className="kicker">AUDIT TRAIL</p><h2 id="activity-heading">Recent activity</h2></div><Link href="/audit-log">View all</Link></div>
-        <div className="dashboard-list">{activity.map((event) => <Link href="/audit-log" key={event.id}><time>{new Date(event.occurredAt).toLocaleDateString([], { month: "short", day: "numeric", timeZone: locationTimeZone })}</time><span><strong>{event.action.replaceAll(".", " ")}</strong><small>{event.entityType}</small></span></Link>)}{!loading && activity.length === 0 && <p className="dashboard-empty">No recent activity is available.</p>}</div>
-      </section>}
-      <section className="panel dashboard-quick-actions" aria-labelledby="quick-actions-heading"><p className="kicker">SHORTCUTS</p><h2 id="quick-actions-heading">Quick actions</h2><div>{quickActions.map((item) => <Link href={item.href} key={`${item.href}-${item.label}`}>{item.label}<span aria-hidden="true">→</span></Link>)}</div></section>
+      {visible("quickActions") && <section className="panel dashboard-quick-actions" aria-labelledby="quick-actions-heading" style={{ order: preferences.sideOrder.indexOf("quickActions") }}><p className="kicker">SHORTCUTS</p><h2 id="quick-actions-heading">Quick actions</h2><div>{quickActions.map((item) => <Link href={item.href} key={`${item.href}-${item.label}`}>{item.label}<span aria-hidden="true">→</span></Link>)}</div></section>}
+      </div>
     </section>
   </main>;
 }
