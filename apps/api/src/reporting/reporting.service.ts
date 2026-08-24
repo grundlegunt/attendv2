@@ -10,6 +10,17 @@ type DistributorTerm = { startWeek: number; endWeek: number | null; distributorS
 
 @Injectable()
 export class ReportingService {
+  private orderAheadRevenue(order: { orderAheadSubtotalCents: number; orderAheadTaxCents: number; orderAheadServiceChargeCents: number }) {
+    return order.orderAheadSubtotalCents + order.orderAheadTaxCents + order.orderAheadServiceChargeCents;
+  }
+
+  private tabRevenue(tab: { totalCents: number | null; prepaidCents: number; status: string; payments: Array<{ refunds: Array<{ amountCents: number }> }> }) {
+    const gross = Math.max(0, (tab.totalCents ?? 0) - tab.prepaidCents);
+    const recordedRefunds = tab.payments.reduce((sum, payment) => sum + payment.refunds.reduce((refundSum, refund) => refundSum + refund.amountCents, 0), 0);
+    const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
+    return { revenueCents: gross - refunded, refundedCents: refunded };
+  }
+
   allocateDistributorShare(ticketRevenueCents: number, startsAt: Date, openingStartsAt: Date | null, termsValue: Prisma.JsonValue | null) {
     const terms = Array.isArray(termsValue)
       ? termsValue.filter((term): term is DistributorTerm => {
@@ -75,8 +86,8 @@ export class ReportingService {
       include: {
         auditorium: { select: { id: true, name: true, capacity: true } },
         filmSeries: { select: { id: true, name: true } },
-        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, channel: true, discountCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
-        restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
+        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, channel: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
+        restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
     });
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
@@ -106,12 +117,8 @@ export class ReportingService {
         if (promotion) { const promotionRow = promotions.get(promotion.id)!; promotionRow.tickets += 1; if (promotion.type === "COMP") complimentaryTickets += 1; }
       }
       const ticketRevenueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
-      const fnbRevenueCents = showtime.restaurantTabs.reduce((sum, tab) => {
-        const gross = tab.totalCents ?? 0;
-        const recordedRefunds = tab.payments.reduce((paymentSum, payment) => paymentSum + payment.refunds.reduce((refundSum, refund) => refundSum + refund.amountCents, 0), 0);
-        const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
-        return sum + gross - refunded;
-      }, 0);
+      const orderAheadRevenueCents = [...new Map(tickets.map((ticket) => [ticket.ticketOrder.id, ticket.ticketOrder] as const)).values()].reduce((sum, order) => sum + this.orderAheadRevenue(order), 0);
+      const fnbRevenueCents = orderAheadRevenueCents + showtime.restaurantTabs.reduce((sum, tab) => sum + this.tabRevenue(tab).revenueCents, 0);
       return { showtimeId: showtime.id, startsAt: showtime.startsAt, auditorium: showtime.auditorium, filmSeries: showtime.filmSeries, ticketsSold: tickets.length, capacity: showtime.auditorium.capacity, ticketRevenueCents, fnbRevenueCents, ...this.allocateDistributorShare(ticketRevenueCents, showtime.startsAt, opening?.startsAt ?? null, movie.distributorTerms) };
     });
     const ticketsSold = rows.reduce((sum, row) => sum + row.ticketsSold, 0);
@@ -177,7 +184,7 @@ export class ReportingService {
     const movies = await prisma.movie.findMany({
       where: { organizationId: location.organizationId, distributorName: distributorName ? { equals: distributorName, mode: "insensitive" } : { not: null } },
       orderBy: { title: "asc" },
-      select: { id: true, title: true, posterUrl: true, distributorName: true, distributorTerms: true, active: true, showtimes: { where: { auditorium: { locationId }, ...(range ? { startsAt: { gte: range.from, lt: range.to } } : {}) }, orderBy: { startsAt: "asc" }, include: { auditorium: { select: { id: true, name: true, capacity: true } }, showtimeSeats: { select: { tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { priceCentsPaid: true } } } }, restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } } } } },
+      select: { id: true, title: true, posterUrl: true, distributorName: true, distributorTerms: true, active: true, showtimes: { where: { auditorium: { locationId }, ...(range ? { startsAt: { gte: range.from, lt: range.to } } : {}) }, orderBy: { startsAt: "asc" }, include: { auditorium: { select: { id: true, name: true, capacity: true } }, showtimeSeats: { select: { tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { priceCentsPaid: true, ticketOrder: { select: { id: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true } } } } } }, restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } } } } },
     });
     if (distributorName && !movies.length) throw AppError.notFound("Distributor not found.");
     const openingShowtimes = movies.length ? await prisma.showtime.findMany({ where: { movieId: { in: movies.map((movie) => movie.id) }, auditorium: { locationId } }, orderBy: [{ movieId: "asc" }, { startsAt: "asc" }], distinct: ["movieId"], select: { movieId: true, startsAt: true } }) : [];
@@ -187,12 +194,8 @@ export class ReportingService {
       const showingRows = movie.showtimes.map((showtime) => {
         const tickets = showtime.showtimeSeats.flatMap((seat) => seat.tickets);
         const ticketRevenueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
-        const fnbRevenueCents = showtime.restaurantTabs.reduce((sum, tab) => {
-          const gross = tab.totalCents ?? 0;
-          const recordedRefunds = tab.payments.reduce((paymentSum, payment) => paymentSum + payment.refunds.reduce((refundSum, refund) => refundSum + refund.amountCents, 0), 0);
-          const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
-          return sum + gross - refunded;
-        }, 0);
+        const orderAheadRevenueCents = [...new Map(tickets.map((ticket) => [ticket.ticketOrder.id, ticket.ticketOrder] as const)).values()].reduce((sum, order) => sum + this.orderAheadRevenue(order), 0);
+        const fnbRevenueCents = orderAheadRevenueCents + showtime.restaurantTabs.reduce((sum, tab) => sum + this.tabRevenue(tab).revenueCents, 0);
         return { showtimeId: showtime.id, startsAt: showtime.startsAt, auditorium: showtime.auditorium, ticketsSold: tickets.length, ticketRevenueCents, fnbRevenueCents, ...this.allocateDistributorShare(ticketRevenueCents, showtime.startsAt, openingByMovie.get(movie.id) ?? null, movie.distributorTerms) };
       });
       const upcomingShowtimes = showingRows.filter((row) => row.startsAt >= now).length;
@@ -224,8 +227,8 @@ export class ReportingService {
       include: {
         movie: { select: { id: true, title: true, posterUrl: true, distributorName: true, distributorTerms: true } },
         auditorium: { select: { id: true, name: true, capacity: true } },
-        showtimeSeats: { select: { tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { priceCentsPaid: true } } } },
-        restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
+        showtimeSeats: { select: { tickets: { where: { status: { notIn: ["REFUNDED", "CANCELED"] } }, select: { priceCentsPaid: true, ticketOrder: { select: { id: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true } } } } } },
+        restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
     });
     const movieIds = [...new Set(showtimes.map((showtime) => showtime.movieId))];
@@ -238,12 +241,8 @@ export class ReportingService {
     const rows = showtimes.map((showtime) => {
       const tickets = showtime.showtimeSeats.flatMap((seat) => seat.tickets);
       const ticketRevenueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
-      const fnbRevenueCents = showtime.restaurantTabs.reduce((sum, tab) => {
-        const gross = tab.totalCents ?? 0;
-        const recordedRefunds = tab.payments.reduce((paymentSum, payment) => paymentSum + payment.refunds.reduce((refundSum, refund) => refundSum + refund.amountCents, 0), 0);
-        const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
-        return sum + gross - refunded;
-      }, 0);
+      const orderAheadRevenueCents = [...new Map(tickets.map((ticket) => [ticket.ticketOrder.id, ticket.ticketOrder] as const)).values()].reduce((sum, order) => sum + this.orderAheadRevenue(order), 0);
+      const fnbRevenueCents = orderAheadRevenueCents + showtime.restaurantTabs.reduce((sum, tab) => sum + this.tabRevenue(tab).revenueCents, 0);
       const allocation = this.allocateDistributorShare(ticketRevenueCents, showtime.startsAt, openingByMovie.get(showtime.movieId) ?? null, showtime.movie.distributorTerms);
       const movie = movieRows.get(showtime.movieId) ?? { movieId: showtime.movieId, title: showtime.movie.title, posterUrl: showtime.movie.posterUrl, distributorName: showtime.movie.distributorName, showtimes: 0, ticketsSold: 0, ticketRevenueCents: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 };
       movie.showtimes += 1; movie.ticketsSold += tickets.length; movie.ticketRevenueCents += ticketRevenueCents; movie.fnbRevenueCents += fnbRevenueCents; movie.distributorRevenueCents += allocation.distributorRevenueCents; movie.cinemaRevenueCents += allocation.cinemaRevenueCents; movie.unallocatedRevenueCents += allocation.unallocatedRevenueCents;
@@ -420,7 +419,13 @@ export class ReportingService {
     let ticketTaxCents = 0;
     let ticketCollectedCents = 0;
     let ticketRefundedCents = 0;
+    let fnbRevenueCents = 0;
+    let fnbRefundedCents = 0;
+    let fnbSeatCount = 0;
+    let fnbOrderCount = 0;
     for (const order of ticketOrders) {
+      const orderAheadRevenueCents = this.orderAheadRevenue(order);
+      const ticketOrderCollectedCents = Math.max(0, order.totalCents - orderAheadRevenueCents);
       const salesChannel = salesChannels.get(order.channel) ?? { channel: order.channel, ticketsSold: 0, ticketRevenueCents: 0, ticketFeesCents: 0, grossCollectedCents: 0, refundedCents: 0, netCollectedCents: 0 };
       salesChannel.grossCollectedCents += order.totalCents;
       const salesOperator = order.placedByEmployee
@@ -428,7 +433,8 @@ export class ReportingService {
         : null;
       if (salesOperator) salesOperator.grossCollectedCents += order.totalCents;
       if (order.status === "REFUNDED") {
-        ticketRefundedCents += order.totalCents;
+        ticketRefundedCents += ticketOrderCollectedCents;
+        fnbRefundedCents += orderAheadRevenueCents;
         salesChannel.refundedCents += order.totalCents;
         if (salesOperator) {
           salesOperator.refundedCents += order.totalCents;
@@ -447,13 +453,16 @@ export class ReportingService {
       ticketFeesCents += order.feesCents;
       salesChannel.ticketFeesCents += order.feesCents;
       ticketTaxCents += order.taxCents;
-      ticketCollectedCents += order.totalCents;
+      ticketCollectedCents += ticketOrderCollectedCents;
       const orderDay = ensureDay(order.createdAt);
       orderDay.ticketsSold += order.tickets.length;
-      orderDay.ticketCollectedCents += order.totalCents;
+      orderDay.ticketCollectedCents += ticketOrderCollectedCents;
+      if (orderAheadRevenueCents > 0) {
+        fnbRevenueCents += orderAheadRevenueCents; fnbOrderCount += 1; fnbSeatCount += order.tickets.length; orderDay.fnbRevenueCents += orderAheadRevenueCents;
+      }
       salesChannel.ticketsSold += order.tickets.length;
       if (salesOperator) salesOperator.ticketsSold += order.tickets.length;
-      order.tickets.forEach((ticket) => {
+      order.tickets.forEach((ticket, ticketIndex) => {
         const showtime = ticket.showtimeSeat.showtime;
         movieMetadata.set(showtime.movieId, { distributorName: showtime.movie.distributorName, distributorTerms: showtime.movie.distributorTerms });
         const revenue = ticket.priceCentsPaid;
@@ -467,20 +476,14 @@ export class ReportingService {
         movie.ticketRevenueCents += revenue; movie.ticketsSold += 1;
         const showing = ensureShowtime(showtime.id, showtime.movieId, showtime.movie.title, showtime.startsAt);
         showing.ticketRevenueCents += revenue; showing.ticketsSold += 1;
+        if (ticketIndex === 0 && orderAheadRevenueCents > 0) { movie.fnbRevenueCents += orderAheadRevenueCents; showing.fnbRevenueCents += orderAheadRevenueCents; }
       });
       salesChannels.set(order.channel, salesChannel);
       if (salesOperator) salesOperators.set(salesOperator.employeeId, salesOperator);
     }
 
-    let fnbRevenueCents = 0;
-    let fnbRefundedCents = 0;
-    let fnbSeatCount = 0;
-    let fnbOrderCount = 0;
     for (const tab of tabs) {
-      const gross = tab.totalCents ?? 0;
-      const recordedRefunds = tab.payments.reduce((sum, payment) => sum + payment.refunds.reduce((paymentSum, refund) => paymentSum + refund.amountCents, 0), 0);
-      const refunded = tab.status === "REFUNDED" && recordedRefunds === 0 ? gross : Math.min(gross, recordedRefunds);
-      const revenue = gross - refunded;
+      const { revenueCents: revenue, refundedCents: refunded } = this.tabRevenue(tab);
       fnbRefundedCents += refunded;
       if (!revenue) continue;
       fnbRevenueCents += revenue;
