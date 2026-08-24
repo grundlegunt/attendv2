@@ -32,7 +32,7 @@ describe("ReportingService distributor box-office export", () => {
       cinemaRevenueCents: 680, unallocatedRevenueCents: 0, allocationComplete: true,
     });
     expect(service.allocateDistributorShare(1700, new Date("2026-08-05T18:00:00.000Z"), new Date("2026-08-01T18:00:00.000Z"), null)).toEqual({
-      theatricalWeek: null, distributorShareBasisPoints: null, distributorRevenueCents: 0,
+      theatricalWeek: 1, distributorShareBasisPoints: null, distributorRevenueCents: 0,
       cinemaRevenueCents: 0, unallocatedRevenueCents: 1700, allocationComplete: false,
     });
   });

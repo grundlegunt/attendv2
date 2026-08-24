@@ -29,4 +29,7 @@ test("film performance exposes attendance, revenue, allocation, and showtime det
   assert.match(detail, /\/reports\/showtimes\/\$\{showtimeId\}\/ticket-map/);
   assert.match(detail, /View ticket map/);
   assert.match(detail, /sold-seat-ledger/);
+  assert.match(detail, /Performance by theatrical week/);
+  assert.match(detail, /weeklyPerformance/);
+  assert.match(detail, /averageFnbPerShowCents/);
 });
