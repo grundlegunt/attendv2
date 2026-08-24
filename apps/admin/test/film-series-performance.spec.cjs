@@ -29,3 +29,9 @@ test("film-series detail exposes programming and financial drilldowns", () => {
   assert.match(detail, /cinemaRevenueCents/);
   assert.match(detail, /distributorRevenueCents/);
 });
+
+test("film-series showtimes expose sold-seat maps", () => {
+  assert.match(detail, /ShowtimeTicketMap/);
+  assert.match(detail, /showtimeId=\{showtime\.showtimeId\}/);
+  assert.match(detail, /accessToken=\{accessToken\}/);
+});
