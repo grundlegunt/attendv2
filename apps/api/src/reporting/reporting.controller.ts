@@ -75,6 +75,16 @@ export class ReportingController {
     return this.reporting.distributorPerformance(this.location(actor), name, range);
   }
 
+  @Get("distributors/:name/performance.csv")
+  @RequirePermissions(Permission.ReportsViewFinancial)
+  async distributorCsv(@CurrentActor() actor: RequestActor, @Param("name") name: string, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
+    const range = from || to ? this.range(from, to) : undefined;
+    const report = await this.reporting.distributorPerformance(this.location(actor), name, range);
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="attend-distributor-performance.csv"');
+    response.send(this.reporting.distributorPerformanceCsv(report));
+  }
+
   @Get("film-series/:seriesId")
   @RequirePermissions(Permission.ReportsViewFinancial)
   filmSeriesPerformance(
