@@ -28,6 +28,12 @@ test("distributor pages show per-show averages and precise deal percentages", ()
   assert.match(detail, /maximumFractionDigits: 2/);
 });
 
+test("distributor pages show attendance and capacity", () => {
+  assert.match(detail, /Attendance/);
+  assert.match(detail, /attendancePercent/);
+  assert.match(detail, /totalCapacity/);
+});
+
 test("distributor performance can be exported for the selected period", () => {
   assert.match(detail, /apiDownload\(/);
   assert.match(detail, /\/reports\/distributors\/\$\{encodeURIComponent\(name\)\}\/performance\.csv/);

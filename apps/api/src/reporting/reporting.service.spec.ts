@@ -51,6 +51,8 @@ describe("ReportingService distributor performance export", () => {
     expect(source).toContain("Distributor share (cents)");
     expect(source).toContain("film.dealStatus");
     expect(source).toContain("JSON.stringify(film.terms)");
+    expect(source).toContain("distributor.attendancePercent");
+    expect(source).toContain("film.totalCapacity");
   });
 });
 
