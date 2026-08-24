@@ -94,6 +94,13 @@ const membershipSchema = z.object({
   status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]),
   expiresAt: z.coerce.date().nullable(),
 }).strict();
+const dashboardWidget = z.enum(["metrics", "topFilms", "schedule", "setup", "activity", "quickActions"]);
+const dashboardPreferencesSchema = z.object({
+  hidden: z.array(dashboardWidget).max(6),
+  topOrder: z.array(z.enum(["metrics", "topFilms"])).length(2).refine((value) => new Set(value).size === 2, "Include each overview widget once."),
+  mainOrder: z.array(z.enum(["schedule", "activity"])).length(2).refine((value) => new Set(value).size === 2, "Include each main-column widget once."),
+  sideOrder: z.array(z.enum(["setup", "quickActions"])).length(2).refine((value) => new Set(value).size === 2, "Include each side-column widget once."),
+}).strict();
 
 @Controller("management")
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -108,6 +115,12 @@ export class ManagementController {
 
   @Get("settings") @RequirePermissions(Permission.TicketPriceEdit)
   settings(@CurrentActor() actor: RequestActor) { return this.management.settings(this.location(actor)); }
+
+  @Get("dashboard-preferences")
+  dashboardPreferences(@CurrentActor() actor: RequestActor) { return this.management.dashboardPreferences(actor.sub, this.location(actor)); }
+
+  @Patch("dashboard-preferences")
+  updateDashboardPreferences(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(dashboardPreferencesSchema)) body: unknown) { return this.management.updateDashboardPreferences({ preferences: dashboardPreferencesSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Patch("settings/location") @RequirePermissions(Permission.TicketPriceEdit)
   updateLocation(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(locationSchema)) body: unknown) { return this.management.updateLocation({ ...locationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }

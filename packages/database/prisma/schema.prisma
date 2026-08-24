@@ -1072,6 +1072,8 @@ model Employee {
   email  String  @unique
   active Boolean @default(true)
 
+  dashboardPreferences Json?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?

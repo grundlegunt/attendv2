@@ -8,6 +8,15 @@ import { AppError } from "../common/app-error";
 
 type SiteHeadingCopy = { eyebrow: string; title: string; intro: string };
 export const canonicalMembershipNumber = (value: string) => value.trim().toUpperCase();
+type DashboardPreferences = {
+  hidden: Array<"metrics" | "topFilms" | "schedule" | "setup" | "activity" | "quickActions">;
+  topOrder: Array<"metrics" | "topFilms">;
+  mainOrder: Array<"schedule" | "activity">;
+  sideOrder: Array<"setup" | "quickActions">;
+};
+const defaultDashboardPreferences: DashboardPreferences = {
+  hidden: [], topOrder: ["metrics", "topFilms"], mainOrder: ["schedule", "activity"], sideOrder: ["setup", "quickActions"],
+};
 type CustomerSiteCopy = {
   showtimes: SiteHeadingCopy;
   comingSoon: SiteHeadingCopy;
@@ -35,6 +44,31 @@ const applySiteCopy = (content: CinemaContent, copy: CustomerSiteCopy): CinemaCo
 
 @Injectable()
 export class ManagementService {
+  async dashboardPreferences(employeeId: string, locationId: string): Promise<DashboardPreferences> {
+    const employee = await prisma.employee.findFirst({ where: { id: employeeId, locationId }, select: { dashboardPreferences: true } });
+    if (!employee) throw AppError.notFound("Employee was not found.");
+    return (employee.dashboardPreferences as DashboardPreferences | null) ?? defaultDashboardPreferences;
+  }
+
+  async updateDashboardPreferences(input: { employeeId: string; locationId: string; requestId: string; preferences: DashboardPreferences }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify(input.preferences)).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, actorId: input.employeeId, action: "employee.dashboard_preferences_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const saved = replay.afterState as { requestFingerprint?: string } | null;
+        if (saved?.requestFingerprint !== requestFingerprint) throw AppError.conflict("The dashboard-preference idempotency key was already used with different details.");
+        return input.preferences;
+      }
+      const employee = await tx.employee.findFirst({ where: { id: input.employeeId, locationId: input.locationId }, select: { dashboardPreferences: true } });
+      if (!employee) throw AppError.notFound("Employee was not found.");
+      await tx.employee.update({ where: { id: input.employeeId }, data: { dashboardPreferences: input.preferences } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "employee.dashboard_preferences_updated", entityType: "Employee", entityId: input.employeeId, beforeState: (employee.dashboardPreferences as Prisma.InputJsonValue | null) ?? Prisma.JsonNull, afterState: { ...input.preferences, requestId: input.requestId, requestFingerprint } } });
+      return input.preferences;
+    });
+  }
+
   async attentionInbox(locationId: string) {
     const [boxOfficeOrders, restaurantTabs, failedRefunds, privateEventInquiries] = await Promise.all([
       prisma.ticketOrder.findMany({
