@@ -20,6 +20,11 @@ test("film performance loads authenticated period reports", () => {
   assert.match(detail, /reports\.view\.financial/);
 });
 
+test("film performance links to the distributor portfolio", () => {
+  assert.match(detail, /href=\{`\/distributors\/\$\{encodeURIComponent\(performance\.movie\.distributorName\)\}`\}/);
+  assert.match(detail, /Distributor not set/);
+});
+
 test("film performance exposes attendance, revenue, allocation, and showtime detail", () => {
   for (const metric of ["Performances", "Tickets sold", "Attendance", "Ticket face value", "Cinema film share", "First showing", "Every showtime"]) assert.ok(detail.includes(metric));
   assert.match(detail, /F&amp;B revenue/);
