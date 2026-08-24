@@ -1,5 +1,17 @@
 import { ReportingService } from "./reporting.service";
 
+describe("ReportingService ticket-checkout F&B", () => {
+  it("classifies prepaid order-ahead totals as F&B and excludes them from later tab revenue", () => {
+    const service = new ReportingService() as unknown as {
+      orderAheadRevenue(order: { orderAheadSubtotalCents: number; orderAheadTaxCents: number; orderAheadServiceChargeCents: number }): number;
+      tabRevenue(tab: { totalCents: number; prepaidCents: number; status: string; payments: Array<{ refunds: Array<{ amountCents: number }> }> }): { revenueCents: number; refundedCents: number };
+    };
+    expect(service.orderAheadRevenue({ orderAheadSubtotalCents: 1800, orderAheadTaxCents: 175, orderAheadServiceChargeCents: 225 })).toBe(2200);
+    expect(service.tabRevenue({ totalCents: 2200, prepaidCents: 2200, status: "CLOSED", payments: [] })).toEqual({ revenueCents: 0, refundedCents: 0 });
+    expect(service.tabRevenue({ totalCents: 3100, prepaidCents: 2200, status: "CLOSED", payments: [{ refunds: [{ amountCents: 300 }] }] })).toEqual({ revenueCents: 600, refundedCents: 300 });
+  });
+});
+
 describe("ReportingService audience origins", () => {
   it("groups ZIP+4 orders by five-digit ZIP without exposing order details", () => {
     const service = new ReportingService();
