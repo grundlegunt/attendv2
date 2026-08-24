@@ -182,10 +182,12 @@ export function ManagementControls({
     requestIds: Record<TaxCategory, string>;
   } | null>(null);
   const updateTaxAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const deleteTaxAttemptRef = useRef<{ ruleId: string; requestId: string } | null>(null);
   const chargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const updateChargeAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
+  const deleteChargeAttemptRef = useRef<{ ruleId: string; requestId: string } | null>(null);
   const checkoutRuleActionRef = useRef(false);
-  const [checkoutRuleAction, setCheckoutRuleAction] = useState<{ kind: "create-tax" | "create-service" | "update"; id?: string; field?: string } | null>(null);
+  const [checkoutRuleAction, setCheckoutRuleAction] = useState<{ kind: "create-tax" | "create-service" | "update" | "delete"; id?: string; field?: string } | null>(null);
   const [newPriceTier, setNewPriceTier] = useState({
     name: "Standard",
     price: "",
@@ -757,6 +759,31 @@ export function ManagementControls({
       ratePermille,
     });
   }
+  async function deleteRule(kind: "tax" | "service", id: string, name: string) {
+    if (!window.confirm(`Permanently delete ${name}? This removes the rule from future orders and cannot be undone.`)) return;
+    setError(null);
+    if (checkoutRuleActionRef.current) return;
+    checkoutRuleActionRef.current = true;
+    setCheckoutRuleAction({ kind: "delete", id });
+    const attemptRef = kind === "tax" ? deleteTaxAttemptRef : deleteChargeAttemptRef;
+    if (attemptRef.current?.ruleId !== id) attemptRef.current = { ruleId: id, requestId: crypto.randomUUID() };
+    try {
+      await apiFetch(
+        kind === "tax"
+          ? `/management/settings/tax-rules/${id}`
+          : `/management/settings/service-charge-rules/${id}`,
+        { accessToken, method: "DELETE", headers: { "Idempotency-Key": attemptRef.current.requestId } },
+      );
+      attemptRef.current = null;
+      await refresh();
+    } catch (reason) {
+      if (reason instanceof ApiRequestError && reason.status < 500) attemptRef.current = null;
+      showError(reason);
+    } finally {
+      checkoutRuleActionRef.current = false;
+      setCheckoutRuleAction(null);
+    }
+  }
   async function createEmployee(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -1056,7 +1083,7 @@ export function ManagementControls({
     <section className="management-stack">
       {error && <div className="error-banner">{error}</div>}
       {section === "taxes" && (canConfig || canMenuConfig) && (
-        <section className="admin-grid">
+        <section className="admin-grid pricing-settings-grid">
           {canConfig && (
             <form
               className="panel"
@@ -1270,7 +1297,7 @@ export function ManagementControls({
             </form>
           )}
           {canMenuConfig && (
-            <form className="panel" onSubmit={(event) => void createTax(event)}>
+            <form className="panel checkout-rules-panel" onSubmit={(event) => void createTax(event)}>
               <p className="kicker">TAX RULES</p>
               <h2>Add restaurant tax</h2>
               <label>
@@ -1325,7 +1352,7 @@ export function ManagementControls({
                         {rule.appliesTo}
                       </span>
                     </div>
-                    <div className="rule-actions">
+                    <div className="rule-actions checkout-rule-editor">
                       <label>
                         Name
                         <input
@@ -1395,6 +1422,14 @@ export function ManagementControls({
                       >
                         {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id ? "Updating…" : rule.active ? "Deactivate" : "Activate"}
                       </button>
+                      <button
+                        type="button"
+                        className="secondary destructive-outline"
+                        disabled={checkoutRuleAction !== null}
+                        onClick={() => void deleteRule("tax", rule.id, rule.name)}
+                      >
+                        {checkoutRuleAction?.kind === "delete" && checkoutRuleAction.id === rule.id ? "Deleting…" : "Delete permanently"}
+                      </button>
                     </div>
                   </article>
                 ))}
@@ -1403,7 +1438,7 @@ export function ManagementControls({
           )}
           {canMenuConfig && (
             <form
-              className="panel"
+              className="panel checkout-rules-panel"
               onSubmit={(event) => void createCharge(event)}
             >
               <p className="kicker">SERVICE CHARGES</p>
@@ -1485,6 +1520,14 @@ export function ManagementControls({
                         }
                       >
                         {checkoutRuleAction?.kind === "update" && checkoutRuleAction.id === rule.id && checkoutRuleAction.field === "active" ? "Updating…" : rule.active ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary destructive-outline"
+                        disabled={checkoutRuleAction !== null}
+                        onClick={() => void deleteRule("service", rule.id, rule.name)}
+                      >
+                        {checkoutRuleAction?.kind === "delete" && checkoutRuleAction.id === rule.id ? "Deleting…" : "Delete permanently"}
                       </button>
                     </div>
                   </article>
