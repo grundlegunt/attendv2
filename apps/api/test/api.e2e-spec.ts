@@ -16,6 +16,8 @@
  * Those imports are deliberately dynamic below.
  */
 import type { INestApplication } from "@nestjs/common";
+import type { TestEmailProvider } from "@cinema/notifications";
+import type { TestPaymentProvider } from "@cinema/payments";
 import { authenticator } from "otplib";
 import request from "supertest";
 import { startTestDatabase, TestDatabase } from "./test-db";
@@ -2593,8 +2595,7 @@ describe("Milestone 1 cinema configuration", () => {
     await request(app.getHttpServer()).post("/api/v1/gift-card-purchases/resume")
       .set("Idempotency-Key", `wrong-${crypto.randomUUID()}`).send({}).expect(404);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
 
     const paidResume = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases/resume")
@@ -2610,8 +2611,7 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
     expect(finalized.body).toMatchObject({ status: "PAID", amountCents: 3500, code: expect.stringMatching(/^ATGC-/), codeLast4: expect.any(String), delivery: { status: "DELIVERED" } });
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const email = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     expect(email.sentGiftCards).toEqual(expect.arrayContaining([expect.objectContaining({ to: "recipient@example.test", buyerEmail: "buyer@example.test", amountCents: 3500, code: finalized.body.code, message: "Enjoy the show!" })]));
     const replay = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`)
       .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
@@ -2636,8 +2636,7 @@ describe("Milestone 1 cinema configuration", () => {
         recipientName: "Webhook Recipient", recipientEmail: "webhook-recipient@example.test",
       }).expect(201);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
     const payment = await prisma.payment.findFirstOrThrow({ where: { providerPaymentId: purchase.body.payment.providerPaymentId } });
     await prisma.paymentAttempt.deleteMany({ where: { paymentId: payment.id } });
@@ -2660,8 +2659,7 @@ describe("Milestone 1 cinema configuration", () => {
     expect(await prisma.giftCard.count({ where: { purchase: { id: purchase.body.purchaseId } } })).toBe(1);
     expect(await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.body.purchaseId } })).toMatchObject({ status: "DELIVERED", deliveredAt: expect.any(Date) });
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const email = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     expect(email.sentGiftCards.filter((message) => message.to === "webhook-recipient@example.test")).toHaveLength(1);
   });
 
@@ -2675,12 +2673,10 @@ describe("Milestone 1 cinema configuration", () => {
         recipientName: "Retry Recipient", recipientEmail: "retry-recipient@example.test",
       }).expect(201);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const email = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const firstDelivery = jest.spyOn(email, "sendGiftCardDelivery").mockRejectedValueOnce(new Error("Temporary email outage"));
     const finalized = await request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`)
       .set("Idempotency-Key", idempotencyKey).send({}).expect(201);
@@ -2706,8 +2702,7 @@ describe("Milestone 1 cinema configuration", () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const originalCreate = provider.createPaymentIntent.bind(provider);
     const createIntent = jest.spyOn(provider, "createPaymentIntent").mockImplementation(async (input) => {
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -3400,8 +3395,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     }));
 
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const paidResume = await request(app.getHttpServer())
       .post("/api/v1/ticketing/checkouts/resume")
@@ -3444,8 +3438,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(checkout.body.giftCardCents).toBe(500);
     expect(checkout.body.payment.amountCents).toBe(checkout.body.totalCents - 500);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     await request(app.getHttpServer()).post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`).send({ holderKey }).expect(201);
     expect((await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id } })).balanceCents).toBe(0);
@@ -3481,7 +3474,6 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   it("finalizes tickets and order-ahead food as one prepaid seat-linked purchase", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const holderKey = `online-order-ahead-${crypto.randomUUID()}`;
     const { hold } = await holdAvailableSeat(holderKey);
     const config = await request(app.getHttpServer())
@@ -3524,9 +3516,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       })
       .expect(201);
 
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const finalized = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
@@ -3619,10 +3609,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   it("recovers the same payment intent when checkout persistence fails after provider creation", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const holderKey = `checkout-intent-recovery-${crypto.randomUUID()}`;
     const idempotencyKey = `checkout-${holderKey}`;
     const { hold } = await holdAvailableSeat(holderKey);
@@ -3678,10 +3665,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   it("creates one order and payment attempt when identical checkout requests race", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const holderKey = `concurrent-checkout-${crypto.randomUUID()}`;
     const idempotencyKey = `checkout-${holderKey}`;
     const { hold } = await holdAvailableSeat(holderKey);
@@ -3751,10 +3735,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { seat, hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
 
     const first = await request(app.getHttpServer())
@@ -3784,7 +3765,6 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
   it("preserves a different admission type for each held seat", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const holderKey = `mixed-ticket-types-${crypto.randomUUID()}`;
     const availability = await request(app.getHttpServer())
       .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`)
@@ -3831,7 +3811,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       Math.max(0, showtime.priceTier.ticketPriceMinor + adult.priceAdjustmentMinor) +
       Math.max(0, showtime.priceTier.ticketPriceMinor + child.priceAdjustmentMinor),
     );
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const confirmation = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
@@ -3861,15 +3841,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const { TestEmailProvider } = await import("@cinema/notifications");
     const { prisma } = await import("@cinema/database");
-    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     paymentProvider.setIntentStatus(
       checkout.payment.providerPaymentId,
       "SUCCEEDED",
@@ -3923,15 +3897,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const { TestEmailProvider } = await import("@cinema/notifications");
     const { prisma } = await import("@cinema/database");
-    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     paymentProvider.setIntentStatus(
       checkout.payment.providerPaymentId,
       "SUCCEEDED",
@@ -3990,15 +3958,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const { TestEmailProvider } = await import("@cinema/notifications");
     const { prisma } = await import("@cinema/database");
-    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     paymentProvider.setIntentStatus(
       checkout.payment.providerPaymentId,
       "SUCCEEDED",
@@ -4042,15 +4004,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const { TestEmailProvider } = await import("@cinema/notifications");
     const { prisma } = await import("@cinema/database");
-    const paymentProvider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const paymentProvider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     paymentProvider.setIntentStatus(
       checkout.payment.providerPaymentId,
       "SUCCEEDED",
@@ -4096,10 +4052,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const raw = Buffer.from(
       JSON.stringify({
@@ -4136,10 +4089,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.payment.providerPaymentId, "FAILED");
     const declined = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.orderId}/finalize`)
@@ -4159,11 +4109,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setRefundFailure(null);
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     await prisma.seatHold.update({
@@ -4192,11 +4139,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setRefundFailure("simulated processor outage");
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     await prisma.seatHold.update({
@@ -4224,12 +4168,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
     const { TicketingService } = await import("../src/ticketing/ticketing.service");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const ticketingService = app.get(TicketingService);
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
@@ -4286,11 +4227,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
 
     // Simulate the process dying after Stripe created/charged the
@@ -4341,11 +4279,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     provider.setIntentMetadata(checkout.payment.providerPaymentId, {
@@ -4394,11 +4329,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     await prisma.seatHold.update({
@@ -4441,12 +4373,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
     const { TicketingService } = await import("../src/ticketing/ticketing.service");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const ticketingService = app.get(TicketingService);
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
@@ -4510,11 +4439,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, TicketOrderStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const finalize = await request(app.getHttpServer())
@@ -4558,11 +4484,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, RefundStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     provider.makeRefundsReturnStatus("FAILED");
@@ -4599,11 +4522,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, RefundStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     // Provider reports the refund still PENDING at creation time -- it
@@ -4669,11 +4589,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     // Provider reports PENDING at creation -- settles via webhook, giving
@@ -4754,11 +4671,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     provider.makeRefundsFail();
@@ -4825,11 +4739,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, TicketOrderStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
 
@@ -4885,12 +4796,9 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, RefundStatus } = await import("@cinema/database");
     const { TicketingService } = await import("../src/ticketing/ticketing.service");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const ticketingService = app.get(TicketingService);
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
@@ -4961,11 +4869,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, TicketOrderStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const finalize = await request(app.getHttpServer())
@@ -5005,11 +4910,8 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { hold } = await holdAvailableSeat(holderKey);
     const checkout = await createCheckout(holderKey, hold.holdToken);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const { prisma, PaymentStatus, TicketOrderStatus } = await import("@cinema/database");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
 
     provider.setIntentStatus(checkout.payment.providerPaymentId, "SUCCEEDED");
     const finalize = await request(app.getHttpServer())
@@ -5102,8 +5004,7 @@ describe("Customer authentication", () => {
     const guestEmail = "ticket-guest-upgrade@m0test.local";
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const deliveriesBefore = emailProvider.sentCustomerPasswordResets.length;
     const guest = await prisma.customer.create({
       data: { email: guestEmail, name: "Ticket Guest", isGuest: true },
@@ -5213,8 +5114,7 @@ describe("Customer authentication", () => {
   it("lets a customer resend only their own paid ticket order to their account email", async () => {
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const inventory = await prisma.showtimeSeat.findFirstOrThrow({
       where: { tickets: { none: {} } },
       include: {
@@ -5382,8 +5282,7 @@ describe("Customer authentication", () => {
   it("recovers a customer password without revealing whether an email is registered", async () => {
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const deliveriesBefore = emailProvider.sentCustomerPasswordResets.length;
 
     await request(app.getHttpServer())
@@ -5487,8 +5386,7 @@ describe("Customer authentication", () => {
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
     const { AuthService } = await import("../src/auth/auth.service");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const auth = app.get(AuthService);
     const newEmail = "updated-customer@m0test.local";
     const requestId = crypto.randomUUID();
@@ -5767,8 +5665,7 @@ describe("Milestone 5 seat-linked dining tabs", () => {
       });
     expect(checkout.status).toBe(201);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
     const confirmation = await request(app.getHttpServer())
       .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
@@ -7483,10 +7380,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { EMAIL_PROVIDER } = await import(
       "../src/notifications/notifications.module"
     );
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const receiptsBefore = emailProvider.sentRestaurantReceipts.length;
     const request = {
       tabId: tab.id,
@@ -7532,7 +7426,6 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       "../src/restaurant/restaurant-settlement.service"
     );
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
       select: {
@@ -7575,9 +7468,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       },
     });
     const settlement = app.get(RestaurantSettlementService);
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const chargesBefore = provider.chargeSavedPaymentMethodCalls.length;
     const pay = (requestId: string) =>
       settlement.payCustomer({
@@ -7862,10 +7753,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     });
     const settlement = app.get(RestaurantSettlementService);
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
-    const { TestPaymentProvider } = await import("@cinema/payments");
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const cardPresentCallsBefore =
       provider.collectCardPresentPaymentCalls.length;
     await settlement.dropCheck({
@@ -7921,7 +7809,6 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { EMAIL_PROVIDER } = await import(
       "../src/notifications/notifications.module"
     );
-    const { TestEmailProvider } = await import("@cinema/notifications");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
       select: {
@@ -7964,9 +7851,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       },
     });
     const settlement = app.get(RestaurantSettlementService);
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const sendReceipt = jest
       .spyOn(emailProvider, "sendRestaurantReceipt")
       .mockRejectedValueOnce(new Error("Email provider unavailable"));
@@ -8089,11 +7974,8 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { EMAIL_PROVIDER } = await import(
       "../src/notifications/notifications.module"
     );
-    const { TestEmailProvider } = await import("@cinema/notifications");
     const settlement = app.get(RestaurantSettlementService);
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<
-      typeof TestEmailProvider
-    >;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const noticesBefore = emailProvider.sentRestaurantPaymentFailures.length;
     await settlement.runFallback();
     await settlement.runFallback();
@@ -8183,7 +8065,6 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { RestaurantSettlementService } = await import(
       "../src/restaurant/restaurant-settlement.service"
     );
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
       include: {
@@ -8249,9 +8130,7 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
       data: { endsAt: new Date(Date.now() - 10 * 60_000) },
     });
     const settlement = app.get(RestaurantSettlementService);
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const chargesBefore = provider.chargeSavedPaymentMethodCalls.length;
 
     const results = await Promise.allSettled([
@@ -8487,14 +8366,11 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { RestaurantSettlementService } = await import(
       "../src/restaurant/restaurant-settlement.service"
     );
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
       include: { location: { include: { organization: true } } },
     });
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const intent = await provider.createPaymentIntent({
       connectedAccountId:
         source.location.organization.stripeConnectedAccountId ?? undefined,
@@ -8556,14 +8432,11 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { RestaurantSettlementService } = await import(
       "../src/restaurant/restaurant-settlement.service"
     );
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
       include: { location: { include: { organization: true } } },
     });
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const intent = await provider.createPaymentIntent({
       connectedAccountId:
         source.location.organization.stripeConnectedAccountId ?? undefined,
@@ -8625,14 +8498,11 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     const { RestaurantSettlementService } = await import(
       "../src/restaurant/restaurant-settlement.service"
     );
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
       where: { id: milestone8TabId },
       include: { location: { include: { organization: true } } },
     });
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<
-      typeof TestPaymentProvider
-    >;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const intent = await provider.createPaymentIntent({
       connectedAccountId:
         source.location.organization.stripeConnectedAccountId ?? undefined,
@@ -8858,8 +8728,7 @@ describe("Milestone 9 box office and workforce", () => {
     const ownerLocation = await prisma.location.findUniqueOrThrow({ where: { id: owner.locationId }, select: { organizationId: true } });
     const boxOfficeCustomer = await prisma.customer.create({ data: { name: "Box Office Customer", email: customerEmail, isGuest: true, memberships: { create: { organizationId: ownerLocation.organizationId, membershipNumber: `E2E-${crypto.randomUUID()}`, tier: "Member" } } } });
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
-    const { TestEmailProvider } = await import("@cinema/notifications");
-    const emailProvider = app.get(EMAIL_PROVIDER) as InstanceType<typeof TestEmailProvider>;
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     const receiptsBefore = emailProvider.sent.length;
     const saleRequestId = crypto.randomUUID();
     const salePayload = {
@@ -9399,13 +9268,12 @@ describe("Milestone 10 management reporting", () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const { ManagementRefundService } = await import("../src/management/management-refund.service");
-    const { TestPaymentProvider } = await import("@cinema/payments");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const tab = await prisma.restaurantTab.create({ data: { locationId: owner.locationId, tabType: "WALK_IN", label: "Split-tender reporting fixture", status: "CLOSED", subtotalCents: 1000, taxCents: 0, serviceChargeCents: 0, totalCents: 1000, closedAt: new Date("2022-06-01T12:00:00.000Z"), payments: { create: [
       { purpose: "RESTAURANT_TAB", amountCents: 400, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_ambiguous_${crypto.randomUUID()}` },
       { purpose: "RESTAURANT_TAB", amountCents: 600, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_success_${crypto.randomUUID()}` },
     ] } }, include: { payments: true } });
-    const provider = app.get(PAYMENT_PROVIDER) as InstanceType<typeof TestPaymentProvider>;
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
     const originalRefund = provider.refund.bind(provider);
     const refunds = app.get(ManagementRefundService);
     try {
