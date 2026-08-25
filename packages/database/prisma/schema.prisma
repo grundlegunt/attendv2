@@ -819,6 +819,10 @@ model TicketOrder {
   guestName                    String?
   guestPhone                   String?
   smsTicketsRequested          Boolean             @default(false)
+  smsDeliveryClaimedAt         DateTime?
+  smsDeliverySentAt            DateTime?
+  smsDeliveryMessageId         String?
+  smsDeliveryError             String?
   zipCode                      String?
   receiptEmailClaimedAt        DateTime?
   receiptEmailSentAt           DateTime?
@@ -877,6 +881,8 @@ model TicketOrder {
   @@index([receiptEmailSentAt, receiptEmailClaimedAt, updatedAt])
   @@index([receiptEmailSentAt, receiptEmailError, updatedAt])
   @@index([mobileAccessExpiresAt, mobileAccessRevokedAt])
+  @@index([smsDeliverySentAt, smsDeliveryClaimedAt, updatedAt])
+  @@index([smsDeliverySentAt, smsDeliveryError, updatedAt])
   @@map("ticket_orders")
 }
 

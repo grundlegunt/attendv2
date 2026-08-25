@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
-import { EmailProvider } from "@cinema/notifications";
+import { EmailProvider, SmsProvider } from "@cinema/notifications";
 import {
   CreateTicketCheckoutInput,
   TicketingError,
@@ -10,7 +10,7 @@ import {
 } from "@cinema/ticketing";
 import { AppError } from "../common/app-error";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
-import { EMAIL_PROVIDER } from "../notifications/notifications.module";
+import { EMAIL_PROVIDER, SMS_PROVIDER } from "../notifications/notifications.module";
 import { loadEnv } from "@cinema/config/env";
 import { createHash } from "node:crypto";
 import { GiftCardPurchaseService } from "../gift-card-purchases/gift-card-purchase.service";
@@ -22,6 +22,7 @@ export class TicketingService {
   constructor(
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
     @Inject(EMAIL_PROVIDER) emailProvider: EmailProvider,
+    @Inject(SMS_PROVIDER) smsProvider: SmsProvider,
     private readonly giftCardPurchases: GiftCardPurchaseService,
   ) {
     this.domain = new TicketingDomainService(
@@ -29,6 +30,8 @@ export class TicketingService {
       provider,
       loadEnv().QR_CREDENTIAL_SECRET,
       emailProvider,
+      smsProvider,
+      loadEnv().CUSTOMER_WEB_URL,
     );
   }
 
@@ -163,6 +166,10 @@ export class TicketingService {
 
   reconcileFailedReceipts(limit?: number) {
     return this.domain.reconcileFailedReceipts(limit);
+  }
+
+  reconcileFailedSmsDeliveries(limit?: number) {
+    return this.domain.reconcileFailedSmsDeliveries(limit);
   }
 
   async scanTicket(input: {
