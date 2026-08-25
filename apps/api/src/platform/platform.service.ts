@@ -112,6 +112,176 @@ export class PlatformService {
     };
   }
 
+  async filmCatalog(input: {
+    query?: string;
+    limit?: string;
+    offset?: string;
+    includeInactive?: boolean;
+  }) {
+    const query = input.query?.trim().slice(0, 240);
+    const take = Math.max(1, Math.min(Number(input.limit) || 50, 100));
+    const skip = Math.max(0, Math.min(Number(input.offset) || 0, 10_000));
+    const where: Prisma.FilmCatalogEntryWhereInput = {
+      ...(input.includeInactive ? {} : { active: true }),
+      ...(query ? {
+        OR: [
+          { title: { contains: query, mode: "insensitive" } },
+          { director: { contains: query, mode: "insensitive" } },
+          { starring: { contains: query, mode: "insensitive" } },
+          { primaryDistributorName: { contains: query, mode: "insensitive" } },
+          { imdbId: { equals: query, mode: "insensitive" } },
+          { eidrId: { equals: query, mode: "insensitive" } },
+        ],
+      } : {}),
+    };
+    const [entries, total] = await prisma.$transaction([
+      prisma.filmCatalogEntry.findMany({
+        where,
+        orderBy: [{ title: "asc" }, { releaseYear: "desc" }],
+        skip,
+        take,
+        include: { _count: { select: { operatorMovies: true } } },
+      }),
+      prisma.filmCatalogEntry.count({ where }),
+    ]);
+    return {
+      entries: entries.map(({ _count, ...entry }) => ({
+        ...entry,
+        operatorMovieCount: _count.operatorMovies,
+        createdAt: entry.createdAt.toISOString(),
+        updatedAt: entry.updatedAt.toISOString(),
+      })),
+      total,
+      limit: take,
+      offset: skip,
+    };
+  }
+
+  async createFilmCatalogEntry(input: {
+    actorId: string;
+    title: string;
+    synopsis?: string | null;
+    runtimeMinutes: number;
+    rating?: string | null;
+    releaseYear?: number | null;
+    director?: string | null;
+    starring?: string | null;
+    posterUrl?: string | null;
+    detailPosterUrl?: string | null;
+    trailerUrl?: string | null;
+    primaryDistributorName?: string | null;
+    imdbId?: string | null;
+    tmdbId?: number | null;
+    eidrId?: string | null;
+    verified?: boolean;
+    active?: boolean;
+  }) {
+    const { actorId, ...data } = input;
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const entry = await tx.filmCatalogEntry.create({ data });
+        await this.audit.record({
+          actorType: "PLATFORM",
+          actorId,
+          action: "platform.film_catalog_entry_created",
+          entityType: "FilmCatalogEntry",
+          entityId: entry.id,
+          afterState: this.filmCatalogAuditState(entry),
+        }, tx);
+        return { ...entry, operatorMovieCount: 0, createdAt: entry.createdAt.toISOString(), updatedAt: entry.updatedAt.toISOString() };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw AppError.conflict("A catalog film with that external identifier already exists.");
+      }
+      throw error;
+    }
+  }
+
+  async updateFilmCatalogEntry(input: {
+    actorId: string;
+    entryId: string;
+    title?: string;
+    synopsis?: string | null;
+    runtimeMinutes?: number;
+    rating?: string | null;
+    releaseYear?: number | null;
+    director?: string | null;
+    starring?: string | null;
+    posterUrl?: string | null;
+    detailPosterUrl?: string | null;
+    trailerUrl?: string | null;
+    primaryDistributorName?: string | null;
+    imdbId?: string | null;
+    tmdbId?: number | null;
+    eidrId?: string | null;
+    verified?: boolean;
+    active?: boolean;
+  }) {
+    const { actorId, entryId, ...data } = input;
+    try {
+      return await prisma.$transaction(async (tx) => {
+        const before = await tx.filmCatalogEntry.findUnique({ where: { id: entryId } });
+        if (!before) throw AppError.notFound("Catalog film not found.");
+        const entry = await tx.filmCatalogEntry.update({ where: { id: entryId }, data });
+        await this.audit.record({
+          actorType: "PLATFORM",
+          actorId,
+          action: "platform.film_catalog_entry_updated",
+          entityType: "FilmCatalogEntry",
+          entityId: entry.id,
+          beforeState: this.filmCatalogAuditState(before),
+          afterState: this.filmCatalogAuditState(entry),
+        }, tx);
+        const operatorMovieCount = await tx.movie.count({ where: { catalogEntryId: entry.id } });
+        return { ...entry, operatorMovieCount, createdAt: entry.createdAt.toISOString(), updatedAt: entry.updatedAt.toISOString() };
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw AppError.conflict("A catalog film with that external identifier already exists.");
+      }
+      throw error;
+    }
+  }
+
+  private filmCatalogAuditState(entry: {
+    title: string;
+    synopsis: string | null;
+    runtimeMinutes: number;
+    rating: string | null;
+    releaseYear: number | null;
+    director: string | null;
+    starring: string | null;
+    posterUrl: string | null;
+    detailPosterUrl: string | null;
+    trailerUrl: string | null;
+    primaryDistributorName: string | null;
+    imdbId: string | null;
+    tmdbId: number | null;
+    eidrId: string | null;
+    verified: boolean;
+    active: boolean;
+  }) {
+    return {
+      title: entry.title,
+      synopsis: entry.synopsis,
+      runtimeMinutes: entry.runtimeMinutes,
+      rating: entry.rating,
+      releaseYear: entry.releaseYear,
+      director: entry.director,
+      starring: entry.starring,
+      posterUrl: entry.posterUrl,
+      detailPosterUrl: entry.detailPosterUrl,
+      trailerUrl: entry.trailerUrl,
+      primaryDistributorName: entry.primaryDistributorName,
+      imdbId: entry.imdbId,
+      tmdbId: entry.tmdbId,
+      eidrId: entry.eidrId,
+      verified: entry.verified,
+      active: entry.active,
+    };
+  }
+
   async refreshSession(refreshToken: string) {
     let payload;
     try {

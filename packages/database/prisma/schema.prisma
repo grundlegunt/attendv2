@@ -449,10 +449,43 @@ enum MovieArtworkPosition {
   BOTTOM_RIGHT
 }
 
+// Platform-owned film facts that can be reused by every cinema. Operator
+// booking terms, local artwork choices, pricing, and programming remain on
+// the organization-scoped Movie record.
+model FilmCatalogEntry {
+  id                     String   @id @default(uuid())
+  title                  String
+  synopsis               String?
+  runtimeMinutes         Int
+  rating                 String?
+  releaseYear            Int?
+  director               String?
+  starring               String?
+  posterUrl              String?
+  detailPosterUrl        String?
+  trailerUrl             String?
+  primaryDistributorName String?
+  imdbId                 String?  @unique
+  tmdbId                 Int?     @unique
+  eidrId                 String?  @unique
+  verified               Boolean  @default(false)
+  active                 Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  operatorMovies Movie[]
+
+  @@index([title, releaseYear])
+  @@index([active, verified, title])
+  @@map("film_catalog_entries")
+}
+
 model Movie {
   id             String       @id @default(uuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  catalogEntryId String?
+  catalogEntry   FilmCatalogEntry? @relation(fields: [catalogEntryId], references: [id], onDelete: SetNull)
 
   title                   String
   synopsis                String?
@@ -478,6 +511,7 @@ model Movie {
   pairings  MoviePairing[]
 
   @@index([organizationId, active])
+  @@index([catalogEntryId])
   @@map("movies")
 }
 

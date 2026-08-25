@@ -91,6 +91,28 @@ const platformUserCredentialsSchema = z.object({
 
 const platformRefreshSchema = z.object({ refreshToken: z.string().min(1) }).strict();
 
+const filmCatalogFields = {
+  title: z.string().trim().min(1).max(240),
+  synopsis: z.string().trim().max(5_000).nullable().optional(),
+  runtimeMinutes: z.number().int().min(1).max(1_000),
+  rating: z.string().trim().max(30).nullable().optional(),
+  releaseYear: z.number().int().min(1878).max(2200).nullable().optional(),
+  director: z.string().trim().max(500).nullable().optional(),
+  starring: z.string().trim().max(1_000).nullable().optional(),
+  posterUrl: z.string().url().max(2_000).nullable().optional(),
+  detailPosterUrl: z.string().url().max(2_000).nullable().optional(),
+  trailerUrl: z.string().url().max(2_000).nullable().optional(),
+  primaryDistributorName: z.string().trim().max(240).nullable().optional(),
+  imdbId: z.string().trim().regex(/^tt\d{5,12}$/).nullable().optional(),
+  tmdbId: z.number().int().positive().nullable().optional(),
+  eidrId: z.string().trim().max(80).nullable().optional(),
+  verified: z.boolean().optional(),
+  active: z.boolean().optional(),
+};
+const filmCatalogCreateSchema = z.object(filmCatalogFields).strict();
+const filmCatalogUpdateSchema = filmCatalogCreateSchema.partial()
+  .refine((value) => Object.keys(value).length > 0, "At least one film field is required.");
+
 @Controller("platform")
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
@@ -124,6 +146,26 @@ export class PlatformController {
   @UseGuards(PlatformAuthGuard)
   overview(@Query("refresh") refresh?: string) {
     return this.platform.overview(refresh === "true");
+  }
+
+  @Get("film-catalog")
+  @UseGuards(PlatformAuthGuard)
+  filmCatalog(@Query("q") query?: string, @Query("limit") limit?: string, @Query("offset") offset?: string, @Query("includeInactive") includeInactive?: string) {
+    return this.platform.filmCatalog({ query, limit, offset, includeInactive: includeInactive === "true" });
+  }
+
+  @Post("film-catalog")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  createFilmCatalogEntry(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(filmCatalogCreateSchema)) body: unknown) {
+    return this.platform.createFilmCatalogEntry({ actorId: actor.sub, ...filmCatalogCreateSchema.parse(body) });
+  }
+
+  @Patch("film-catalog/:entryId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  updateFilmCatalogEntry(@CurrentActor() actor: RequestActor, @Param("entryId") entryId: string, @Body(new ZodValidationPipe(filmCatalogUpdateSchema)) body: unknown) {
+    return this.platform.updateFilmCatalogEntry({ actorId: actor.sub, entryId, ...filmCatalogUpdateSchema.parse(body) });
   }
 
   @Get("revenue")
