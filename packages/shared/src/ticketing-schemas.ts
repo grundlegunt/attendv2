@@ -118,6 +118,14 @@ export type ResendGuestTicketReceiptRequest = z.infer<
   typeof resendGuestTicketReceiptRequestSchema
 >;
 
+export const resendGuestTicketSmsRequestSchema = z.object({
+  holderKey: z.string().min(16).max(200),
+  requestId: z.string().uuid(),
+}).strict();
+export type ResendGuestTicketSmsRequest = z.infer<
+  typeof resendGuestTicketSmsRequestSchema
+>;
+
 export const redeemMobileTicketAccessRequestSchema = z.object({
   token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, "A valid mobile ticket token is required."),
 }).strict();

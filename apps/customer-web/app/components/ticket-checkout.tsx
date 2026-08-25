@@ -155,6 +155,10 @@ export function TicketCheckout({
   const [receiptRetryMessage, setReceiptRetryMessage] = useState<string | null>(null);
   const receiptRetryRequestIdRef = useRef<string | null>(null);
   const receiptRetryPendingRef = useRef(false);
+  const [smsRetryPending, setSmsRetryPending] = useState(false);
+  const [smsRetryMessage, setSmsRetryMessage] = useState<string | null>(null);
+  const smsRetryRequestIdRef = useRef<string | null>(null);
+  const smsRetryPendingRef = useRef(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -700,6 +704,39 @@ export function TicketCheckout({
     }
   }
 
+  async function retrySmsTickets() {
+    if (!confirmation || smsRetryPendingRef.current) return;
+    smsRetryPendingRef.current = true;
+    setSmsRetryPending(true);
+    setSmsRetryMessage(null);
+    const requestId = smsRetryRequestIdRef.current ?? crypto.randomUUID();
+    smsRetryRequestIdRef.current = requestId;
+    try {
+      const result = await apiFetch<{
+        smsDelivery: "SENT" | "FAILED" | "NOT_REQUESTED";
+      }>(`/ticketing/orders/${confirmation.orderId}/sms`, {
+        method: "POST",
+        body: JSON.stringify({ holderKey, requestId }),
+      });
+      if (result.smsDelivery === "SENT") smsRetryRequestIdRef.current = null;
+      setConfirmation((current) => current ? { ...current, smsDelivery: result.smsDelivery } : current);
+      setSmsRetryMessage(
+        result.smsDelivery === "SENT"
+          ? "Your mobile tickets were sent by text."
+          : "The text still could not be sent. Keep these QR tickets for admission and try again.",
+      );
+    } catch (requestError) {
+      setSmsRetryMessage(
+        requestError instanceof ApiRequestError
+          ? requestError.body.message
+          : "The ticket text could not be retried.",
+      );
+    } finally {
+      smsRetryPendingRef.current = false;
+      setSmsRetryPending(false);
+    }
+  }
+
   function printConfirmation() {
     document.body.classList.add("ticket-confirmation-printing");
     const cleanup = () => document.body.classList.remove("ticket-confirmation-printing");
@@ -734,10 +771,19 @@ export function TicketCheckout({
           <p>Your mobile tickets were also sent by text.</p>
         )}
         {confirmation.smsDelivery === "FAILED" && (
-          <p role="status">
-            We couldn&apos;t send the text message. Your tickets are available below, and your email receipt remains available.
+          <p>
+            We couldn&apos;t send the text message. Your tickets are available below, and your email receipt remains available.{" "}
+            <button
+              className="account-secondary-button"
+              type="button"
+              disabled={smsRetryPending}
+              onClick={() => void retrySmsTickets()}
+            >
+              {smsRetryPending ? "Sending…" : "Retry ticket text"}
+            </button>
           </p>
         )}
+        {smsRetryMessage && <p role="status">{smsRetryMessage}</p>}
         {receiptRetryMessage && <p role="status">{receiptRetryMessage}</p>}
         {confirmation.diningAuthorization === "AUTHORIZED" && (
           <p>Your saved card is authorized for food and drinks during this visit.</p>
