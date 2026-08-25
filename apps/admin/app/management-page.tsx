@@ -4,7 +4,7 @@ import { useAdminSession } from "./admin-session";
 import { ManagementControls } from "./management-controls";
 import { ManagementDashboard } from "./management-dashboard";
 
-type DashboardSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
+type DashboardSection = "reports" | "labor" | "branding" | "location" | "promotions" | "merch" | "audit";
 type ControlSection = "taxes" | "users" | "refunds";
 
 export function ManagementPage({ section }: { section: DashboardSection | ControlSection }) {

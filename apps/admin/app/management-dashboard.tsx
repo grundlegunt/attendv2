@@ -45,7 +45,7 @@ const emptyPromotion = (): PromotionDraft => ({ code: "", name: "", type: "FIXED
 const promotionDraft = (item: Promotion, timeZone: string): PromotionDraft => ({ code: item.code, name: item.name, type: item.type, value: item.type === "FIXED_AMOUNT" ? (item.amountCents ?? 0) / 100 : item.type === "PERCENTAGE" ? (item.percentageBasisPoints ?? 0) / 100 : 0, minimumSubtotal: (item.minimumSubtotalCents ?? 0) / 100, maximumRedemptions: item.maximumRedemptions ?? 0, startsAt: cinemaDateTimeInputValue(item.startsAt, timeZone), endsAt: cinemaDateTimeInputValue(item.endsAt, timeZone) });
 const promotionBody = (draft: PromotionDraft, timeZone: string, clearEmpty = false): PromotionPayload => ({ code: draft.code, name: draft.name, type: draft.type, ...(draft.type === "FIXED_AMOUNT" ? { amountCents: Math.round(draft.value * 100), ...(clearEmpty ? { percentageBasisPoints: null } : {}) } : {}), ...(draft.type === "PERCENTAGE" ? { percentageBasisPoints: Math.round(draft.value * 100), ...(clearEmpty ? { amountCents: null } : {}) } : {}), ...(draft.type === "COMP" && clearEmpty ? { amountCents: null, percentageBasisPoints: null } : {}), ...(draft.minimumSubtotal > 0 ? { minimumSubtotalCents: Math.round(draft.minimumSubtotal * 100) } : clearEmpty ? { minimumSubtotalCents: null } : {}), ...(draft.maximumRedemptions > 0 ? { maximumRedemptions: draft.maximumRedemptions } : clearEmpty ? { maximumRedemptions: null } : {}), ...(draft.startsAt ? { startsAt: cinemaDateTimeInputInstant(draft.startsAt, timeZone) } : clearEmpty ? { startsAt: null } : {}), ...(draft.endsAt ? { endsAt: cinemaDateTimeInputInstant(draft.endsAt, timeZone) } : clearEmpty ? { endsAt: null } : {}) });
 
-type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "audit";
+type ManagementSection = "reports" | "labor" | "branding" | "location" | "promotions" | "merch" | "audit";
 
 export function ManagementDashboard({ accessToken, permissions, section, timeZone }: { accessToken: string; permissions: string[]; section: ManagementSection; timeZone: string }) {
   const [from, setFrom] = useState(localDateInputValue(new Date(Date.now() - 30 * 86_400_000), timeZone));
@@ -104,11 +104,11 @@ export function ManagementDashboard({ accessToken, permissions, section, timeZon
         section === "reports" && canFinancial ? apiFetch<AudienceOriginsReport>(`/reports/audience-origins?${range}`, { accessToken }) : null,
         section === "labor" && canReports ? apiFetch<LaborReport>(`/reports/labor?${range}`, { accessToken }) : null,
         section === "audit" && canAudit ? apiFetch<AuditEvent[]>(`/audit-events?${auditQuery.toString()}`, { accessToken }) : [],
-        (section === "branding" || section === "location" || section === "promotions") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
+        (section === "branding" || section === "location" || section === "promotions" || section === "merch") && canSettings ? apiFetch<Settings>("/management/settings", { accessToken }) : null,
       ]);
       if (requestId !== refreshRequestRef.current) return;
       setRevenue(nextRevenue); setAudienceOrigins(nextAudienceOrigins); setLabor(nextLabor); setAudit(appendAudit ? [...audit, ...nextAudit] : nextAudit); setAuditHasMore(section === "audit" && nextAudit.length === 50); setSettings(nextSettings);
-      if (section === "branding" && nextSettings) setMerchUrl(nextSettings.merchUrl ?? "");
+      if (section === "merch" && nextSettings) setMerchUrl(nextSettings.merchUrl ?? "");
       if (section === "location" && nextSettings) setLocationDraft({ name: nextSettings.name, address: nextSettings.address, timezone: nextSettings.timezone, currency: nextSettings.currency, timeClockEnabled: nextSettings.timeClockEnabled, ticketTaxRateBasisPoints: nextSettings.ticketTaxRateBasisPoints, preShowBufferMinutes: nextSettings.preShowBufferMinutes, cleaningBufferMinutes: nextSettings.cleaningBufferMinutes, checkDropMinutesBeforeEnd: nextSettings.checkDropMinutesBeforeEnd, autoSettleGraceMinutes: nextSettings.autoSettleGraceMinutes, autoSettleTipBasisPoints: nextSettings.autoSettleTipBasisPoints });
     } catch (reason) { if (requestId === refreshRequestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : "Management data could not be loaded."); }
   }
@@ -361,6 +361,8 @@ export function ManagementDashboard({ accessToken, permissions, section, timeZon
     {settings && section === "branding" && <>
       <BrandingSummary settings={settings} onSave={saveBranding} disabled={publicSiteAction !== null} />
       <CustomerSiteCopyEditor copy={settings.siteCopy} onSave={saveSiteCopy} disabled={publicSiteAction !== null} />
+    </>}
+    {settings && section === "merch" &&
       <form className="panel location-settings" onSubmit={(event) => void saveMerch(event)}>
         <p className="kicker">MERCHANDISE</p><h2>External shop</h2>
         <p>Publish a link to the cinema’s existing merchandise store. Customers will see a Merch link that opens the shop in a new tab.</p>
@@ -368,7 +370,7 @@ export function ManagementDashboard({ accessToken, permissions, section, timeZon
         <small>Leave this blank to remove Merch from the customer-site navigation.</small>
         <button className="primary" disabled={publicSiteAction !== null}>{publicSiteAction === "merch" ? "Publishing shop link…" : "Save and publish shop link"}</button>
       </form>
-    </>}
+    }
     {locationDraft && section === "location" && <form className="panel location-settings" onSubmit={(event) => void saveLocation(event)}><p className="kicker">LOCATION</p><h2>Operating settings</h2><p>These values control the public venue identity, scheduling turnover, dining settlement, and staff time clock.</p>
       <div className="location-settings-grid">
         <label>Cinema name<input required maxLength={120} value={locationDraft.name} onChange={(event) => setLocationDraft({ ...locationDraft, name: event.target.value })} /></label>
