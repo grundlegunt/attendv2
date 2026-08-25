@@ -71,6 +71,11 @@ const envSchema = z.object({
   EMAIL_FROM: z.string().email().default("receipts@example.com"),
   CUSTOMER_WEB_URL: z.string().url().default("http://localhost:3000"),
 
+  SMS_PROVIDER: z.enum(["disabled", "twilio", "test"]).default("disabled"),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM: z.string().regex(/^\+[1-9]\d{7,14}$/, "TWILIO_FROM must be an E.164 phone number").optional(),
+
   PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
   // Live mode is an explicit production-only opt-in. Test mode remains valid
   // in production previews and staging environments.
@@ -151,6 +156,14 @@ const envSchema = z.object({
       path: ["POSTMARK_SERVER_TOKEN"],
       message: "A Postmark server token is required when EMAIL_PROVIDER=postmark.",
     });
+  }
+  if (env.SMS_PROVIDER === "test" && env.NODE_ENV !== "test") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["SMS_PROVIDER"], message: "The test SMS provider is only allowed when NODE_ENV=test." });
+  }
+  if (env.SMS_PROVIDER === "twilio") {
+    for (const key of ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"] as const) {
+      if (!env[key]) context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required when SMS_PROVIDER=twilio.` });
+    }
   }
   if (env.PAYMENT_PROVIDER === "stripe") {
     addStripeIssues(env, context);
