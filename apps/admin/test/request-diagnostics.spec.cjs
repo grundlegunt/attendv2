@@ -6,6 +6,8 @@ const test = require("node:test");
 const client = readFileSync(join(__dirname, "../app/lib/api-client.ts"), "utf8");
 const recorder = readFileSync(join(__dirname, "../app/lib/request-diagnostics.ts"), "utf8");
 const page = readFileSync(join(__dirname, "../app/diagnostics/page.tsx"), "utf8");
+const probe = readFileSync(join(__dirname, "../app/admin-render-probe.tsx"), "utf8");
+const navigation = readFileSync(join(__dirname, "../app/admin-nav.tsx"), "utf8");
 
 test("Admin records completed and failed requests without exposing request data", () => {
   assert.match(client, /finally \{\s*recordAdminRequestTiming/);
@@ -33,4 +35,13 @@ test("Admin diagnostics remain session-only and bounded", () => {
   assert.match(recorder, /window\.sessionStorage/);
   assert.match(recorder, /MAX_TIMINGS = 100/);
   assert.doesNotMatch(recorder, /localStorage/);
+});
+
+test("Admin measures sidebar navigation and committed route paint timing", () => {
+  assert.match(navigation, /markAdminNavigationStart\(item\.href\)/);
+  assert.match(probe, /requestAnimationFrame/);
+  assert.match(probe, /recordAdminRenderTiming\(pathname, renderStartedAt\)/);
+  assert.match(recorder, /source: hasNavigationStart \? "navigation" : "render"/);
+  assert.match(page, /Navigation to paint/);
+  assert.match(page, /Commit to paint/);
 });
