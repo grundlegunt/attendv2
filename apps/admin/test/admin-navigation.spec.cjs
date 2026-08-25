@@ -103,6 +103,11 @@ describe("admin navigation", () => {
     assert.match(dashboardSource, /item\.href !== "\/" && !item\.external/);
   });
 
+  it("offers Labor from both financial reporting and team management", () => {
+    const groups = visibleAdminNavigation(["reports.view"]);
+    assert.deepEqual(groups.filter((group) => group.items.some((item) => item.href === "/labor")).map((group) => group.label), ["Financial Reports", "Team"]);
+  });
+
   it("shows distributor and financial reporting tools only with financial reporting permission", () => {
     const links = visibleAdminNavigation(["reports.view.financial"]).flatMap((group) => group.items);
     assert.deepEqual(links.map((item) => item.href), ["/", "/distributors", "/reports", "/expenses"]);
