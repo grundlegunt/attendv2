@@ -261,6 +261,50 @@ describe("Saved schedule plan publishing", () => {
     ).toBe(1);
   });
 
+  it("returns a lean dashboard bootstrap without full seat-map payloads", async () => {
+    const login = await loginOwner();
+    const response = await request(app.getHttpServer())
+      .get("/api/v1/cinema/admin/dashboard-bootstrap")
+      .set("Authorization", `Bearer ${login.body.accessToken}`)
+      .expect(200);
+
+    expect(response.body.location).toEqual(expect.objectContaining({
+      name: expect.any(String),
+      timezone: expect.any(String),
+      auditoriums: expect.arrayContaining([expect.objectContaining({
+        id: expect.any(String),
+        capacity: expect.any(Number),
+        seatMap: expect.objectContaining({ id: expect.any(String) }),
+      })]),
+      organization: expect.objectContaining({ movies: expect.any(Array), filmSeries: expect.any(Array) }),
+    }));
+    expect(response.body.location.auditoriums[0].seatMap).not.toHaveProperty("seats");
+    expect(response.body.showtimes[0]).toEqual(expect.objectContaining({
+      id: expect.any(String),
+      movie: expect.objectContaining({ id: expect.any(String), title: expect.any(String) }),
+      auditorium: expect.objectContaining({ id: expect.any(String), capacity: expect.any(Number) }),
+    }));
+  });
+
+  it("renders legacy Theater 1 inventory as persisted seat pairs", async () => {
+    const { prisma } = await import("@cinema/database");
+    const showtime = await prisma.showtime.findFirst({
+      where: { auditorium: { name: "Theater 1" } },
+      select: { id: true },
+    });
+    expect(showtime).toBeDefined();
+
+    const response = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtime!.id}/seats`)
+      .expect(200);
+
+    expect(response.body.showtime.auditorium.seatingStyle).toBe("PAIR");
+    expect(response.body.seats).toEqual(expect.arrayContaining([
+      expect.objectContaining({ tablePosition: "LEFT", tableGroupId: expect.any(String) }),
+      expect.objectContaining({ tablePosition: "RIGHT", tableGroupId: expect.any(String) }),
+    ]));
+  });
+
   it("replays a saved-showing removal without deleting the next item", async () => {
     const login = await loginOwner();
     expect(login.status).toBe(200);

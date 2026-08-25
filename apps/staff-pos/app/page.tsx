@@ -45,6 +45,7 @@ interface SeatAvailabilityResponse {
       name: string;
       capacity: number;
       seatingMode: "RESERVED" | "GENERAL_ADMISSION";
+      seatingStyle: "SINGLE" | "PAIR" | "LOVESEAT" | "TABLE_2" | "TABLE_4" | "BENCH";
     };
   };
   seats: AvailabilitySeat[];
@@ -416,7 +417,7 @@ export default function StaffLoginPage() {
         </section>}
 
         {view === "box-office" && availability ? (
-          <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} seatingMode={availability.showtime.auditorium.seatingMode} refresh={loadAvailability} />
+          <BoxOfficePos accessToken={accessToken} showtimeId={selectedShowtimeId} seats={availability.seats} seatingMode={availability.showtime.auditorium.seatingMode} seatingStyle={availability.showtime.auditorium.seatingStyle} refresh={loadAvailability} />
         ) : view === "ticket-service" ? (
           <TicketService
             accessToken={accessToken}
@@ -482,6 +483,7 @@ export default function StaffLoginPage() {
             ) : availability && (
               <SeatMap
                 seats={seatMapSeats}
+                seatingStyle={availability.showtime.auditorium.seatingStyle}
                 label="Live auditorium seat map"
                 onSeatClick={openSeat}
                 allowUnavailableSelection

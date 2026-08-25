@@ -45,6 +45,7 @@ const dashboardZones = [
   { label: "Side column", key: "sideOrder" as const, widgets: [["setup", "Cinema setup"], ["quickActions", "Quick actions"]] as const },
 ];
 type ShowtimeSeatInventory = {
+  showtime: { auditorium: { seatingStyle: "SINGLE" | "PAIR" | "LOVESEAT" | "TABLE_2" | "TABLE_4" | "BENCH" } };
   seats: Array<Omit<SeatMapSeat, "state"> & { state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" }>;
   counts: { available: number; held: number; sold: number; blocked: number };
 };
@@ -159,6 +160,7 @@ function DashboardShowtimeRow({
         {inventory ? <>
           <SeatMap
             seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))}
+            seatingStyle={inventory.showtime.auditorium.seatingStyle}
             label={`${showtime.movie.title} seat inventory preview`}
           />
           <footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer>
@@ -206,7 +208,7 @@ function TopFilmRow({ film, rank, topTicketCount, showtime, accessToken, timeZon
     <span className="top-film-rank">{rank}</span><strong>{film.title}</strong><div className="top-film-track"><span style={{ width: `${Math.max(5, (film.ticketsSold / topTicketCount) * 100)}%` }} /></div><b>{film.ticketsSold} {film.ticketsSold === 1 ? "ticket" : "tickets"}</b><small>{money(film.ticketRevenueCents)}</small>
     <aside className="dashboard-seat-preview top-film-seat-preview">
       <header><span><strong>{film.title}</strong><small>{showtime ? `${showtime.auditorium.name} · ${new Date(showtime.startsAt).toLocaleString([], { timeZone })}` : "No scheduled showtime available"}</small></span>{inventory && <b>{inventory.counts.sold}/{inventory.seats.length} sold</b>}</header>
-      {inventory ? <><SeatMap seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))} label={`${film.title} seat inventory preview`} /><footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer></> : inventoryError ? <p>Seat map unavailable.</p> : <p>{inventoryLoading ? "Loading live seat map…" : showtime ? "Hover to load this period’s best-selling showing." : "Schedule a showing to preview its seat map."}</p>}
+      {inventory ? <><SeatMap seats={inventory.seats.map((seat) => ({ ...seat, state: seat.state === "AVAILABLE" ? "available" : "unavailable" }))} seatingStyle={inventory.showtime.auditorium.seatingStyle} label={`${film.title} seat inventory preview`} /><footer><span>{inventory.counts.available} available</span><span>{inventory.counts.held} held</span><span>{inventory.counts.sold} sold</span><span>{inventory.counts.blocked} blocked</span></footer></> : inventoryError ? <p>Seat map unavailable.</p> : <p>{inventoryLoading ? "Loading live seat map…" : showtime ? "Hover to load this period’s best-selling showing." : "Schedule a showing to preview its seat map."}</p>}
     </aside>
   </Link>;
 }
@@ -251,7 +253,7 @@ export function AdminDashboard() {
       setLoading(true);
       setErrors([]);
       const requests: Array<{ key: "bootstrap" | "activity" | "settings"; request: Promise<unknown> }> = [];
-      if (canCinema) requests.push({ key: "bootstrap", request: apiFetch<Bootstrap>("/cinema/admin/bootstrap", { accessToken }) });
+      if (canCinema) requests.push({ key: "bootstrap", request: apiFetch<Bootstrap>("/cinema/admin/dashboard-bootstrap", { accessToken }) });
       if (canAudit) requests.push({ key: "activity", request: apiFetch<AuditEvent[]>("/audit-events?limit=6", { accessToken }) });
       if (canSettings) requests.push({ key: "settings", request: apiFetch<Settings>("/management/settings", { accessToken }) });
       const results = await Promise.allSettled(requests.map((entry) => entry.request));

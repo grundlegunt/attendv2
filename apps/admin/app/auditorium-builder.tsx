@@ -919,7 +919,7 @@ export function AuditoriumBuilder({
                   />
                 </label>
               </div>
-              <SeatMap seats={preview} label={`${name} preview`} />
+              <SeatMap seats={preview} seatingStyle={layout.seatingStyle} label={`${name} preview`} />
             </>
           ) : (
             <>

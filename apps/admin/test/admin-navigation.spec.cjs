@@ -140,6 +140,13 @@ describe("admin navigation", () => {
   });
 });
 
+describe("dashboard loading", () => {
+  it("uses the lean dashboard bootstrap instead of the full scheduling payload", () => {
+    assert.match(dashboardSource, /\/cinema\/admin\/dashboard-bootstrap/);
+    assert.doesNotMatch(dashboardSource, /apiFetch<Bootstrap>\("\/cinema\/admin\/bootstrap"/);
+  });
+});
+
 describe("operational app links", () => {
   it("uses the deployed apps as safe defaults", () => {
     assert.deepEqual(operationalSites.map((site) => site.href), [
@@ -215,6 +222,21 @@ describe("auditorium layout editing", () => {
     ];
 
     assert.equal(normalizeSeatTableMetadata(seats, "TABLE_2"), seats);
+  });
+
+  it("persists adjacent pair seating without pairing across an aisle", () => {
+    const seats = [
+      { label: "A1", rowLabel: "A", number: 1, x: 0, y: 0, type: "STANDARD", levelKey: "main" },
+      { label: "A2", rowLabel: "A", number: 2, x: 1, y: 0, type: "STANDARD", levelKey: "main" },
+      { label: "A3", rowLabel: "A", number: 3, x: 3, y: 0, type: "STANDARD", levelKey: "main" },
+    ];
+
+    const normalized = normalizeSeatTableMetadata(seats, "PAIR");
+
+    assert.equal(normalized[0].tableGroupId, normalized[1].tableGroupId);
+    assert.equal(normalized[0].tablePosition, "LEFT");
+    assert.equal(normalized[1].tablePosition, "RIGHT");
+    assert.equal(normalized[2].tableGroupId, undefined);
   });
 });
 

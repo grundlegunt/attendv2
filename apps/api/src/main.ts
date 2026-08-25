@@ -8,6 +8,7 @@ import { GlobalExceptionFilter } from "./common/http-exception.filter";
 import { StructuredLogger } from "./common/logger.service";
 import { isCorsOriginAllowed } from "./common/cors-origin";
 import { ErrorAlertReporter } from "./common/error-alert-reporter";
+import { RequestTimingInterceptor } from "./common/request-timing.interceptor";
 
 async function bootstrap() {
   // Validate configuration before anything else boots. Fails fast and loud
@@ -31,8 +32,10 @@ async function bootstrap() {
       callback(new Error("Origin is not allowed by CORS"));
     },
     credentials: true,
+    exposedHeaders: ["Server-Timing", "X-Request-Id"],
   });
   app.useGlobalFilters(new GlobalExceptionFilter(new ErrorAlertReporter(env.ERROR_ALERT_WEBHOOK_URL)));
+  app.useGlobalInterceptors(new RequestTimingInterceptor());
   app.setGlobalPrefix("api/v1");
 
   await app.listen(env.PORT);

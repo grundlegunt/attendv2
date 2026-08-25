@@ -129,6 +129,13 @@ export class CinemaController {
     return this.cinemaService.adminBootstrap(actor);
   }
 
+  @Get("admin/dashboard-bootstrap")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.AuditoriumManage, Permission.MovieManage, Permission.ShowtimeManage)
+  adminDashboardBootstrap(@CurrentActor() actor: RequestActor) {
+    return this.cinemaService.adminDashboardBootstrap(actor);
+  }
+
   @Get("admin/showtimes/:id/seats")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.ShowtimeManage)

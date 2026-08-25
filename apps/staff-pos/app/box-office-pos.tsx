@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { SeatMap, type SeatMapSeat } from "@cinema/ui";
+import { SeatMap, type SeatMapSeat, type SeatMapSeatingStyle } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 
 type LiveSeat = Omit<SeatMapSeat, "state"> & { id: string; state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED" };
@@ -9,7 +9,7 @@ type Quote = { subtotalCents: number; discountCents: number; feesCents: number; 
 type CustomerResult = { id: string; name: string | null; email: string | null; phone: string | null; membership: { membershipNumber: string; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: string | null } | null };
 const DEFAULT_READER_ID = "tmr_box_1";
 
-export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; seatingMode: "RESERVED" | "GENERAL_ADMISSION"; refresh: () => Promise<void> }) {
+export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, seatingStyle, refresh }: { accessToken: string; showtimeId: string; seats: LiveSeat[]; seatingMode: "RESERVED" | "GENERAL_ADMISSION"; seatingStyle: SeatMapSeatingStyle; refresh: () => Promise<void> }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [holderKey] = useState(() => `box-office-${crypto.randomUUID()}`);
   const [ticketTypes, setTicketTypes] = useState<Array<{id:string;name:string;priceAdjustmentMinor:number}>>([]);
@@ -485,7 +485,7 @@ export function BoxOfficePos({ accessToken, showtimeId, seats, seatingMode, refr
         <button type="button" className="secondary" aria-label="Add one ticket" disabled={busy || Boolean(quote) || selected.length >= Math.min(10, availableSeats.length)} onClick={() => changeGeneralAdmissionQuantity(selected.length + 1)}>+</button>
       </div>
       <span>Maximum 10 tickets per sale</span>
-    </div> : <SeatMap seats={mapSeats} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />}
+    </div> : <SeatMap seats={mapSeats} seatingStyle={seatingStyle} label="Box office seat map" onSeatClick={toggleSeat} allowUnavailableSelection />}
   </div><aside className="checkout-card">
     {message && <div className={message.startsWith("Sale complete") || message.startsWith("Sale canceled and") ? "scan-result valid" : "error-banner"}>{message}</div>}
     <h3>Register</h3><label className="field"><span>Register ID</span><input value={registerId} maxLength={100} disabled={busy || Boolean(quote)} onChange={(event) => changeRegister(event.target.value)} /></label>

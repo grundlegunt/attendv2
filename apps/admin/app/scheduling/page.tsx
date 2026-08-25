@@ -103,6 +103,11 @@ interface Showtime {
   priceTier: PriceTier;
 }
 interface ShowtimeSeatInventory {
+  showtime: {
+    auditorium: {
+      seatingStyle: "SINGLE" | "PAIR" | "LOVESEAT" | "TABLE_2" | "TABLE_4" | "BENCH";
+    };
+  };
   seats: Array<
     Omit<SeatMapSeat, "state"> & {
       state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED";
@@ -2187,6 +2192,7 @@ export default function AdminPage() {
                                   ? "available"
                                   : "unavailable",
                             }))}
+                            seatingStyle={seatInventory.showtime.auditorium.seatingStyle}
                             label="Read-only showtime seat inventory"
                           />
                           <p className="sold-seat-labels">

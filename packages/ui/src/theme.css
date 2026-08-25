@@ -121,7 +121,7 @@ body {
   align-items: center;
   justify-content: center;
   border: 2px solid var(--seat-available-border);
-  border-radius: 12px 3px 3px 12px;
+  border-radius: 12px;
   color: var(--color-text-primary);
   font-size: 0.65rem;
   font-style: normal;
@@ -131,8 +131,8 @@ body {
 }
 
 .seat:disabled { cursor: not-allowed; opacity: 1; }
-.seat--paired-left { border-radius: 12px 3px 3px 12px; transform: translateX(3.5px); }
-.seat--paired-right { border-radius: 3px 12px 12px 3px; transform: translateX(-3.5px); }
+.seat--paired-left { border-radius: 12px 0 0 12px; transform: translateX(3.5px); border-right-width: 1px; }
+.seat--paired-right { border-radius: 0 12px 12px 0; transform: translateX(-3.5px); border-left-width: 1px; }
 .seat--selected { background: var(--seat-selected); border-color: var(--seat-selected-border); color: #000; }
 .seat--unavailable { background: var(--seat-unavailable); border-color: var(--seat-unavailable-border); }
 
