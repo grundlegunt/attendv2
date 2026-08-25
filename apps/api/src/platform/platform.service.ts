@@ -198,6 +198,68 @@ export class PlatformService {
       orderBy: { name: "asc" },
       include: { locations: { orderBy: { name: "asc" } } },
     });
+    const locationIds = organizations.flatMap((organization) =>
+      organization.locations.map((location) => location.id),
+    );
+    const [activeAuditoriums, employeeCounts, menuCategories] = await Promise.all([
+      prisma.auditorium.findMany({
+        where: { locationId: { in: locationIds }, active: true },
+        select: {
+          locationId: true,
+          _count: {
+            select: {
+              showtimes: {
+                where: { onSale: true, startsAt: { gte: now } },
+              },
+            },
+          },
+        },
+      }),
+      prisma.employee.groupBy({
+        by: ["locationId"],
+        where: {
+          locationId: { in: locationIds },
+          active: true,
+          deletedAt: null,
+        },
+        _count: { _all: true },
+      }),
+      prisma.menuCategory.findMany({
+        where: { locationId: { in: locationIds }, active: true },
+        select: {
+          locationId: true,
+          _count: {
+            select: {
+              items: { where: { active: true, is86d: false } },
+            },
+          },
+        },
+      }),
+    ]);
+    const auditoriumCounts = new Map<string, number>();
+    const upcomingShowtimeCounts = new Map<string, number>();
+    for (const auditorium of activeAuditoriums) {
+      auditoriumCounts.set(
+        auditorium.locationId,
+        (auditoriumCounts.get(auditorium.locationId) ?? 0) + 1,
+      );
+      upcomingShowtimeCounts.set(
+        auditorium.locationId,
+        (upcomingShowtimeCounts.get(auditorium.locationId) ?? 0) +
+          auditorium._count.showtimes,
+      );
+    }
+    const employeesByLocation = new Map(
+      employeeCounts.map((row) => [row.locationId, row._count._all]),
+    );
+    const menuItemsByLocation = new Map<string, number>();
+    for (const category of menuCategories) {
+      menuItemsByLocation.set(
+        category.locationId,
+        (menuItemsByLocation.get(category.locationId) ?? 0) +
+          category._count.items,
+      );
+    }
 
     return {
       generatedAt: new Date().toISOString(),
@@ -205,47 +267,24 @@ export class PlatformService {
         organizations.map(async (organization) => {
           const health = await this.organizationHealth(organization.id, now);
           return {
-          id: organization.id,
-          name: organization.name,
-          legalName: organization.legalName,
-          businessTypeLabel: organization.businessTypeLabel,
-          defaultSeatingMode: organization.defaultSeatingMode,
-          timezone: organization.timezone,
-          active: organization.active,
-          payments: {
-            connected: Boolean(organization.stripeConnectedAccountId),
-            onboardingStatus: organization.connectOnboardingStatus,
-          },
-          health,
-          locations: await Promise.all(
-            organization.locations.map(async (location) => {
-              const [auditoriums, employees, menuItems, upcomingShowtimes] =
-                await Promise.all([
-                  prisma.auditorium.count({
-                    where: { locationId: location.id, active: true },
-                  }),
-                  prisma.employee.count({
-                    where: {
-                      locationId: location.id,
-                      active: true,
-                      deletedAt: null,
-                    },
-                  }),
-                  prisma.menuItem.count({
-                    where: {
-                      active: true,
-                      is86d: false,
-                      menuCategory: { locationId: location.id, active: true },
-                    },
-                  }),
-                  prisma.showtime.count({
-                    where: {
-                      auditorium: { locationId: location.id },
-                      onSale: true,
-                      startsAt: { gte: new Date() },
-                    },
-                  }),
-                ]);
+            id: organization.id,
+            name: organization.name,
+            legalName: organization.legalName,
+            businessTypeLabel: organization.businessTypeLabel,
+            defaultSeatingMode: organization.defaultSeatingMode,
+            timezone: organization.timezone,
+            active: organization.active,
+            payments: {
+              connected: Boolean(organization.stripeConnectedAccountId),
+              onboardingStatus: organization.connectOnboardingStatus,
+            },
+            health,
+            locations: organization.locations.map((location) => {
+              const auditoriums = auditoriumCounts.get(location.id) ?? 0;
+              const employees = employeesByLocation.get(location.id) ?? 0;
+              const menuItems = menuItemsByLocation.get(location.id) ?? 0;
+              const upcomingShowtimes =
+                upcomingShowtimeCounts.get(location.id) ?? 0;
               const brandingFields = [
                 location.customerAccentColor,
                 location.customerBackgroundColor,
@@ -269,7 +308,6 @@ export class PlatformService {
                 },
               };
             }),
-          ),
           };
         }),
       ),
