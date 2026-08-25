@@ -8,6 +8,7 @@ const search = readFileSync(resolve(__dirname, "../app/search/page.tsx"), "utf8"
 const managementControls = readFileSync(resolve(__dirname, "../app/management-controls.tsx"), "utf8");
 const refundService = readFileSync(resolve(__dirname, "../../api/src/management/management-refund.service.ts"), "utf8");
 const managementService = readFileSync(resolve(__dirname, "../../api/src/management/management.service.ts"), "utf8");
+const attention = readFileSync(resolve(__dirname, "../app/attention/page.tsx"), "utf8");
 
 test("customer search links to durable customer profiles", () => {
   assert.match(search, /href=\{`\/customers\/\$\{encodeURIComponent\(customer\.id\)\}`\}/);
@@ -23,6 +24,12 @@ test("registered order search results link to their customer profile", () => {
 test("exact registered ticket results link to their customer profile", () => {
   assert.match(managementService, /ticketOrder: \{[\s\S]*customer: \{ select: \{ id: true \} \}/);
   assert.match(search, /ticket\.ticketOrder\.customer\.id/);
+});
+
+test("customer-linked attention items open durable customer profiles", () => {
+  assert.match(attention, /order\.customer\.id/);
+  assert.match(attention, /tab\.primaryCustomer\.id/);
+  assert.ok(attention.match(/Open customer/g).length >= 2);
 });
 
 test("customer profiles reuse authenticated history, pagination, and export endpoints", () => {
