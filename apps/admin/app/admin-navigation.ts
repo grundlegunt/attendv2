@@ -18,6 +18,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
     { href: "/", label: "Dashboard", permissions: [] },
     { href: "/attention", label: "Attention", permissions: ["payment.refund", "reports.view"] },
     { href: "/search", label: "Search", permissions: ["payment.refund"] },
+    { href: "/diagnostics", label: "Diagnostics", permissions: ["reports.view"] },
   ] },
   { label: "Films", items: [
     { href: "/scheduling", label: "Schedule", permissions: ["auditorium.manage", "movie.manage", "showtime.manage"] },
