@@ -35,7 +35,7 @@ interface OrganizationOverview {
   name: string;
   legalName: string | null;
   payments: { connected: boolean; onboardingStatus: string };
-  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; lastSuccessfulPaymentAt: string | null };
+  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null };
   locations: LocationOverview[];
 }
 
@@ -133,7 +133,7 @@ export default function PlatformDashboard() {
       activeLocations: locations.filter((location) => location.active).length,
       connectedClients: organizations.filter((organization) => organization.payments.onboardingStatus === "COMPLETE").length,
       attentionClients: organizations.filter((organization) => organization.payments.onboardingStatus !== "COMPLETE"),
-      operationalExceptions: organizations.reduce((total, organization) => total + organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds, 0),
+      operationalExceptions: organizations.reduce((total, organization) => total + organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + organization.health.stalePayments + organization.health.staleRefunds + organization.health.managerReviewTabs + organization.health.expiredHoldBacklog, 0),
     };
   }, [overview]);
 
@@ -209,11 +209,12 @@ export default function PlatformDashboard() {
         <div className="panel-heading"><div><p className="eyebrow">OPERATIONS</p><h2>Operator health</h2><p className="muted">Live payment and refund facts without speculative alert thresholds.</p></div><Link href="/clients">Open client controls</Link></div>
         {!overview && <p className="muted">Loading operator health…</p>}
         {overview && <div className="operator-health-list">
-          <div><strong>Client</strong><span>Last completed payment</span><span>Failed · 24h</span><span>Processing</span><span>Payment review</span><span>Failed refunds</span><span>Upcoming shows</span></div>
+          <div><strong>Client</strong><span>Last completed payment</span><span>Failed · 24h</span><span>Processing</span><span>Payment review</span><span>Failed refunds</span><span>Operational backlogs</span><span>Upcoming shows</span></div>
           {overview.organizations.map((organization) => {
             const upcomingShowtimes = organization.locations.reduce((total, location) => total + location.configuration.upcomingShowtimes, 0);
-            const hasException = organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds > 0;
-            return <Link className={hasException ? "has-exception" : ""} key={organization.id} href={`/clients?organizationId=${encodeURIComponent(organization.id)}`}><strong>{organization.name}</strong><span>{lastActivity(organization.health.lastSuccessfulPaymentAt)}</span><span>{organization.health.failedPayments24h}</span><span>{organization.health.processingPayments}</span><span>{organization.health.verificationReviews}</span><span>{organization.health.failedRefunds}</span><span>{upcomingShowtimes}</span></Link>;
+            const backlogTotal = organization.health.stalePayments + organization.health.staleRefunds + organization.health.managerReviewTabs + organization.health.expiredHoldBacklog;
+            const hasException = organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + backlogTotal > 0;
+            return <Link className={hasException ? "has-exception" : ""} key={organization.id} href={`/clients?organizationId=${encodeURIComponent(organization.id)}`}><strong>{organization.name}</strong><span>{lastActivity(organization.health.lastSuccessfulPaymentAt)}</span><span>{organization.health.failedPayments24h}</span><span>{organization.health.processingPayments}</span><span>{organization.health.verificationReviews}</span><span>{organization.health.failedRefunds}</span><span className="backlog-summary"><strong>{backlogTotal}</strong><small>{organization.health.stalePayments} payments · {organization.health.staleRefunds} refunds · {organization.health.managerReviewTabs} tabs · {organization.health.expiredHoldBacklog} holds</small></span><span>{upcomingShowtimes}</span></Link>;
           })}
         </div>}
         {overview && <p className="dashboard-updated">{metrics.operationalExceptions} unresolved or recent payment/refund exceptions across all clients.</p>}
