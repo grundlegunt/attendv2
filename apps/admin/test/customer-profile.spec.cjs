@@ -44,6 +44,8 @@ test("customer profiles reuse authenticated history, pagination, and export endp
   assert.match(profile, /diningOffset/);
   assert.match(profile, /apiDownload\(`\/management\/customers\/\$\{id\}\/history\.csv`/);
   for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Ticket order history", "Food &amp; drink history"]) assert.ok(profile.includes(label));
+  assert.match(profile, /Expires \$\{date\(customer\.membership\.expiresAt\)\}/);
+  assert.match(profile, /No expiration/);
 });
 
 test("refund workflows preserve authoritative customer IDs and link to profiles", () => {
