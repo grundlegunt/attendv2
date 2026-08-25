@@ -7,6 +7,9 @@ const source = readFileSync(resolve(__dirname, "../app/payments/page.tsx"), "utf
 
 test("Attend Master payment operations exposes factual client health", () => {
   assert.match(source, /Failed payments · 24h/);
+  assert.match(source, /Payment failure · 7d/);
+  assert.match(source, /Refund rate · 7d/);
+  assert.match(source, /prior 7d/);
   assert.match(source, /Processing now/);
   assert.match(source, /Payment reviews/);
   assert.match(source, /Failed refunds/);
