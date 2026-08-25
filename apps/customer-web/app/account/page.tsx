@@ -68,6 +68,7 @@ export default function AccountPage() {
   const [accountLoading, setAccountLoading] = useState(false);
   const [receiptOrderId, setReceiptOrderId] = useState<string | null>(null);
   const [receiptMessage, setReceiptMessage] = useState<string | null>(null);
+  const [walletTicketId, setWalletTicketId] = useState<string | null>(null);
   const receiptAttemptRef = useRef<Record<string, string>>({});
   const receiptPendingRef = useRef<string | null>(null);
   const [signOutPending, setSignOutPending] = useState(false);
@@ -381,6 +382,21 @@ export default function AccountPage() {
     );
   }
 
+  async function addToGoogleWallet(ticketId: string) {
+    if (walletTicketId) return;
+    setWalletTicketId(ticketId);
+    setReceiptMessage(null);
+    try {
+      const artifact = await apiFetch<{ platform: "google"; kind: "url"; saveUrl: string }>(
+        `/auth/customers/tickets/${ticketId}/wallet/google`,
+      );
+      window.location.assign(artifact.saveUrl);
+    } catch (err) {
+      setReceiptMessage(err instanceof ApiRequestError ? err.body.message : "The Google Wallet pass could not be created.");
+      setWalletTicketId(null);
+    }
+  }
+
   async function changePassword(event: FormEvent) {
     event.preventDefault();
     if (passwordPendingRef.current) return;
@@ -585,6 +601,28 @@ export default function AccountPage() {
                         </p>
                         <p>{ticket.ticketTypeName}</p>
                         <p>{money(ticket.priceCentsPaid, order.currency)}</p>
+                        {!['CANCELED', 'REFUNDED'].includes(ticket.status) && (account?.walletAvailability.apple || account?.walletAvailability.google) && (
+                          <div className="account-ticket__wallet-actions">
+                            {account?.walletAvailability.apple && (
+                              <a
+                                className="account-secondary-button"
+                                href={`/api/v1/auth/customers/tickets/${ticket.id}/wallet/apple`}
+                              >
+                                Add to Apple Wallet
+                              </a>
+                            )}
+                            {account?.walletAvailability.google && (
+                              <button
+                                className="account-secondary-button"
+                                type="button"
+                                disabled={walletTicketId === ticket.id}
+                                onClick={() => void addToGoogleWallet(ticket.id)}
+                              >
+                                {walletTicketId === ticket.id ? "Opening…" : "Add to Google Wallet"}
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div

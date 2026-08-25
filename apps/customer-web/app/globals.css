@@ -343,6 +343,16 @@ html[data-branding-status="loading"] body {
   margin: 5px 0;
   color: var(--color-text-secondary);
 }
+.account-ticket__wallet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.account-ticket__wallet-actions a {
+  display: inline-block;
+  text-decoration: none;
+}
 .dining-tab-panel {
   display: grid;
   grid-template-columns: 1fr minmax(260px, 380px);

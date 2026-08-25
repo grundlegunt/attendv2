@@ -40,8 +40,8 @@ import {
 import type { RequestActor } from "./types";
 import { AppError } from "../common/app-error";
 import { AuditService } from "../audit/audit.service";
-import { EmailProvider, TicketReceipt } from "@cinema/notifications";
-import { EMAIL_PROVIDER } from "../notifications/notifications.module";
+import { EmailProvider, TicketReceipt, WalletPassArtifact, WalletPassProvider, WalletPlatform } from "@cinema/notifications";
+import { APPLE_WALLET_PROVIDER, EMAIL_PROVIDER, GOOGLE_WALLET_PROVIDER } from "../notifications/notifications.module";
 
 const employeeInclude = {
   authAccount: true,
@@ -98,6 +98,8 @@ export class AuthService {
   constructor(
     private readonly audit: AuditService,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
+    @Inject(APPLE_WALLET_PROVIDER) private readonly appleWalletProvider: WalletPassProvider,
+    @Inject(GOOGLE_WALLET_PROVIDER) private readonly googleWalletProvider: WalletPassProvider,
   ) {}
 
   // ---------------------------------------------------------------------
@@ -703,6 +705,10 @@ export class AuthService {
 
     return {
       customer: this.customerToProfile(customer),
+      walletAvailability: {
+        apple: this.appleWalletProvider.available,
+        google: this.googleWalletProvider.available,
+      },
       orders: customer.ticketOrders.map((order) => ({
         id: order.id,
         orderNumber: order.orderNumber,
@@ -727,6 +733,52 @@ export class AuthService {
         })),
       })),
     };
+  }
+
+  async customerTicketWalletPass(
+    customerId: string,
+    ticketId: string,
+    platform: WalletPlatform,
+  ): Promise<WalletPassArtifact> {
+    const provider = platform === "apple" ? this.appleWalletProvider : this.googleWalletProvider;
+    if (!provider.available) throw AppError.notFound(`${platform === "apple" ? "Apple" : "Google"} Wallet passes are not available.`);
+
+    const ticket = await prisma.ticket.findFirst({
+      where: {
+        id: ticketId,
+        status: { in: ["ISSUED", "ADMITTED"] },
+        ticketOrder: { customerId },
+      },
+      include: {
+        ticketType: true,
+        ticketOrder: { include: { location: { select: { name: true, timezone: true } } } },
+        showtimeSeat: {
+          include: {
+            seat: true,
+            showtime: { include: { movie: true, auditorium: true } },
+          },
+        },
+      },
+    });
+    if (!ticket) throw AppError.notFound("Ticket not found.");
+
+    const artifact = await provider.issueTicketPass({
+      ticketId: ticket.id,
+      orderNumber: ticket.ticketOrder.orderNumber,
+      credential: ticket.qrToken,
+      venueName: ticket.ticketOrder.location.name,
+      movieTitle: ticket.showtimeSeat.showtime.movie.title,
+      auditoriumName: ticket.showtimeSeat.showtime.auditorium.name,
+      seatLabel: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION"
+        ? "General admission"
+        : ticket.showtimeSeat.seat.label,
+      ticketTypeName: ticket.ticketType.name,
+      startsAt: ticket.showtimeSeat.showtime.startsAt,
+      endsAt: ticket.showtimeSeat.showtime.endsAt,
+      timeZone: ticket.ticketOrder.location.timezone,
+    });
+    if (!artifact) throw AppError.notFound("Wallet pass is not available.");
+    return artifact;
   }
 
   async updateCustomerProfile(

@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Get, Headers, Patch, HttpCode, HttpStatus, Param, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Post, Get, Headers, Patch, HttpCode, HttpStatus, Param, Req, Res, StreamableFile, UseGuards } from "@nestjs/common";
 import type { Request, Response } from "express";
 import {
   customerLoginRequestSchema,
@@ -233,6 +233,27 @@ export class AuthController {
   async customerMe(@CurrentActor() actor: RequestActor) {
     if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
     return this.authService.customerAccount(actor.sub);
+  }
+
+  @Get("customers/tickets/:ticketId/wallet/:platform")
+  @UseGuards(JwtAuthGuard, RequestRateLimitGuard)
+  @RateLimit({ scope: "auth", identity: "actor" })
+  async customerTicketWalletPass(
+    @CurrentActor() actor: RequestActor,
+    @Param("ticketId") ticketId: string,
+    @Param("platform") platformValue: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    if (actor.actorType !== "CUSTOMER") throw AppError.forbidden();
+    if (platformValue !== "apple" && platformValue !== "google") throw AppError.notFound("Wallet platform not found.");
+    const artifact = await this.authService.customerTicketWalletPass(actor.sub, ticketId, platformValue);
+    response.setHeader("Cache-Control", "private, no-store");
+    if (artifact.kind === "file") {
+      response.setHeader("Content-Type", artifact.contentType);
+      response.setHeader("Content-Disposition", `attachment; filename="${artifact.fileName}"`);
+      return new StreamableFile(Buffer.from(artifact.data));
+    }
+    return artifact;
   }
 
   @Patch("customers/me")

@@ -25,6 +25,17 @@ describe("wallet environment safety", () => {
     expect(() => loadEnv({ ...base, APPLE_WALLET_PROVIDER: "passkit" })).toThrow("APPLE_WALLET_TEAM_ID is required");
   });
 
+  it("requires the Apple trust certificate and pass icon", () => {
+    expect(() => loadEnv({
+      ...base,
+      APPLE_WALLET_PROVIDER: "passkit",
+      APPLE_WALLET_TEAM_ID: "TEAM",
+      APPLE_WALLET_PASS_TYPE_ID: "pass.test.attend",
+      APPLE_WALLET_CERTIFICATE_BASE64: "certificate",
+      APPLE_WALLET_PRIVATE_KEY_BASE64: "key",
+    })).toThrow("APPLE_WALLET_WWDR_CERTIFICATE_BASE64 is required");
+  });
+
   it("rejects incomplete Google issuer configuration", () => {
     expect(() => loadEnv({ ...base, GOOGLE_WALLET_PROVIDER: "google" })).toThrow("GOOGLE_WALLET_ISSUER_ID is required");
   });
