@@ -6,3 +6,4 @@ export * from "./disabled-sms-provider";
 export * from "./test-sms-provider";
 export * from "./twilio-sms-provider";
 export * from "./wallet-pass-provider";
+export * from "./apple-wallet-pass-provider";
