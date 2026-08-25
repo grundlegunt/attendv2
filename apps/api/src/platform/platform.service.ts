@@ -147,6 +147,7 @@ export class PlatformService {
   async overview() {
     const now = new Date();
     const activitySince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const staleBefore = new Date(now.getTime() - 10 * 60 * 1000);
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },
       include: { locations: { orderBy: { name: "asc" } } },
@@ -163,7 +164,7 @@ export class PlatformService {
               { giftCardPurchase: { organizationId: organization.id } },
             ],
           };
-          const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment] = await Promise.all([
+          const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog] = await Promise.all([
             prisma.payment.count({ where: { AND: [paymentScope, { status: "FAILED", updatedAt: { gte: activitySince } }] } }),
             prisma.payment.count({ where: { AND: [paymentScope, { status: "PROCESSING" }] } }),
             prisma.payment.count({ where: { AND: [paymentScope, { verificationFailedAt: { not: null } }] } }),
@@ -173,6 +174,10 @@ export class PlatformService {
               orderBy: { updatedAt: "desc" },
               select: { updatedAt: true },
             }),
+            prisma.payment.count({ where: { AND: [paymentScope, { status: { in: ["PROCESSING", "AUTHORIZED"] }, updatedAt: { lt: staleBefore } }] } }),
+            prisma.refund.count({ where: { status: { in: ["CREATED", "PROCESSING"] }, updatedAt: { lt: staleBefore }, payment: paymentScope } }),
+            prisma.restaurantTab.count({ where: { location: { organizationId: organization.id }, status: "MANAGER_REVIEW" } }),
+            prisma.seatHold.count({ where: { releasedAt: null, expiresAt: { lt: now }, showtimeSeat: { showtime: { auditorium: { location: { organizationId: organization.id } } } } } }),
           ]);
           return {
           id: organization.id,
@@ -191,6 +196,10 @@ export class PlatformService {
             processingPayments,
             verificationReviews,
             failedRefunds,
+            stalePayments,
+            staleRefunds,
+            managerReviewTabs,
+            expiredHoldBacklog,
             lastSuccessfulPaymentAt: lastSuccessfulPayment?.updatedAt.toISOString() ?? null,
           },
           locations: await Promise.all(

@@ -915,6 +915,10 @@ describe("Attend platform authentication boundary", () => {
           processingPayments: expect.any(Number),
           verificationReviews: expect.any(Number),
           failedRefunds: expect.any(Number),
+          stalePayments: expect.any(Number),
+          staleRefunds: expect.any(Number),
+          managerReviewTabs: expect.any(Number),
+          expiredHoldBacklog: expect.any(Number),
         }),
         locations: expect.arrayContaining([
           expect.objectContaining({
