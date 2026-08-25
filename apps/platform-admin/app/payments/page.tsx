@@ -62,6 +62,8 @@ export default function PlatformPayments() {
   const [error, setError] = useState<string | null>(null);
   const [workingOrganizationId, setWorkingOrganizationId] = useState<string | null>(null);
   const [showExceptionsOnly, setShowExceptionsOnly] = useState(false);
+  const [query, setQuery] = useState("");
+  const [onboardingStatus, setOnboardingStatus] = useState("ALL");
   const overviewRequestRef = useRef(0);
   const authRequestRef = useRef(0);
 
@@ -122,9 +124,14 @@ export default function PlatformPayments() {
 
   const displayedOrganizations = useMemo(() => {
     const organizations = overview?.organizations ?? [];
-    if (!showExceptionsOnly) return organizations;
-    return organizations.filter((organization) => organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + organization.health.stalePayments + organization.health.staleRefunds > 0);
-  }, [overview, showExceptionsOnly]);
+    const normalizedQuery = query.trim().toLowerCase();
+    return organizations.filter((organization) => {
+      if (normalizedQuery && !`${organization.name} ${organization.legalName ?? ""}`.toLowerCase().includes(normalizedQuery)) return false;
+      if (onboardingStatus !== "ALL" && organization.payments.onboardingStatus !== onboardingStatus) return false;
+      if (showExceptionsOnly && organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + organization.health.stalePayments + organization.health.staleRefunds === 0) return false;
+      return true;
+    });
+  }, [onboardingStatus, overview, query, showExceptionsOnly]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -219,7 +226,13 @@ export default function PlatformPayments() {
         <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
       </section>
-      <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><label><input type="checkbox" checked={showExceptionsOnly} onChange={(event) => setShowExceptionsOnly(event.target.checked)} /> Show exceptions only</label></div>
+      <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><span>{displayedOrganizations.length} of {overview?.organizations.length ?? 0} clients</span></div>
+      <section className="payments-filters" aria-label="Filter payment operations">
+        <label>Find client<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cinema or legal name" /></label>
+        <label>Stripe status<select value={onboardingStatus} onChange={(event) => setOnboardingStatus(event.target.value)}><option value="ALL">All statuses</option><option value="COMPLETE">Complete</option><option value="IN_PROGRESS">In progress</option><option value="NOT_STARTED">Not started</option></select></label>
+        <label className="payments-exception-filter"><input type="checkbox" checked={showExceptionsOnly} onChange={(event) => setShowExceptionsOnly(event.target.checked)} /> Show exceptions only</label>
+        <button className="quiet" type="button" disabled={!query && onboardingStatus === "ALL" && !showExceptionsOnly} onClick={() => { setQuery(""); setOnboardingStatus("ALL"); setShowExceptionsOnly(false); }}>Clear filters</button>
+      </section>
       <section className="payments-table">
         <div className="payments-table-heading"><span>Client</span><span>Locations</span><span>Stripe status</span><span>Operational status</span><span>Action</span></div>
         {!overview && <p className="muted payments-loading">Loading payment readiness…</p>}
