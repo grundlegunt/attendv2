@@ -12,6 +12,8 @@ test("Admin records completed and failed requests without exposing request data"
   assert.match(recorder, /path: path\.split\("\?"\)\[0\]/);
   assert.match(recorder, /page: window\.location\.pathname/);
   assert.match(recorder, /Content-Length/);
+  assert.match(recorder, /timeToHeadersMs: headersAt === null/);
+  assert.match(recorder, /bodyAndParseMs: headersAt === null/);
   assert.doesNotMatch(recorder, /accessToken|Authorization|body:/);
 });
 
@@ -22,6 +24,8 @@ test("Admin diagnostics separate API latency from browser and transfer overhead"
   assert.match(page, /Average browser wait/);
   assert.match(page, /Average API time/);
   assert.match(page, /Outside API/);
+  assert.match(page, /To headers/);
+  assert.match(page, /Body\/parse/);
   assert.match(page, /Response size is shown when the server reports it/);
 });
 

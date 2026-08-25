@@ -8,6 +8,8 @@ export interface AdminRequestTiming {
   method: string;
   status: number | null;
   totalMs: number;
+  timeToHeadersMs: number | null;
+  bodyAndParseMs: number | null;
   serverMs: number | null;
   databaseMs: number | null;
   databaseQueryCount: number | null;
@@ -44,17 +46,21 @@ export function recordAdminRequestTiming(
   path: string,
   method: string,
   startedAt: number,
+  headersAt: number | null,
   response: Response | null,
 ) {
   try {
     const serverTiming = response?.headers.get("Server-Timing")?.match(/app;dur=([0-9.]+)/)?.[1];
     const databaseTiming = response?.headers.get("Server-Timing")?.match(/db;dur=([0-9.]+);desc="([0-9]+) queries"/);
+    const completedAt = performance.now();
     const timing: AdminRequestTiming = {
       page: window.location.pathname,
       path: path.split("?")[0] ?? path,
       method,
       status: response?.status ?? null,
-      totalMs: Math.round(performance.now() - startedAt),
+      totalMs: Math.round(completedAt - startedAt),
+      timeToHeadersMs: headersAt === null ? null : Math.round(headersAt - startedAt),
+      bodyAndParseMs: headersAt === null ? null : Math.round(completedAt - headersAt),
       serverMs: serverTiming ? Number(serverTiming) : null,
       databaseMs: databaseTiming ? Number(databaseTiming[1]) : null,
       databaseQueryCount: databaseTiming ? Number(databaseTiming[2]) : null,
