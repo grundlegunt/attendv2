@@ -323,6 +323,7 @@ export default function GlobalSearchPage() {
                   <span>
                     {customer._count.ticketOrders} ticket orders · {customer._count.restaurantTabs} dining visits
                   </span>
+                  <Link href={`/customers/${encodeURIComponent(customer.id)}`}>Open profile</Link>
                   <button className="secondary" type="button" onClick={() => void openCustomer(customer.id)} disabled={customerLoadingId === customer.id}>
                     {customerLoadingId === customer.id ? "Loading…" : customerHistory?.id === customer.id ? "Close history" : "View history"}
                   </button>
