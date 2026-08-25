@@ -1,4 +1,4 @@
-import { createTicketCheckoutRequestSchema } from "./ticketing-schemas";
+import { createTicketCheckoutRequestSchema, redeemMobileTicketAccessRequestSchema } from "./ticketing-schemas";
 
 const validCheckout = {
   holdTokens: ["fd1d2bea-a043-4d2a-b70b-4e71f76c6bec"],
@@ -60,5 +60,16 @@ describe("ticket checkout SMS consent", () => {
 
   it("defaults SMS delivery to not requested", () => {
     expect(createTicketCheckoutRequestSchema.parse(validCheckout).smsTicketsRequested).toBe(false);
+  });
+});
+
+describe("mobile ticket access", () => {
+  it("accepts a 256-bit base64url token", () => {
+    const token = "A".repeat(43);
+    expect(redeemMobileTicketAccessRequestSchema.parse({ token })).toEqual({ token });
+  });
+
+  it.each(["short", `${"A".repeat(42)}!`, "A".repeat(44)])("rejects malformed token %s", (token) => {
+    expect(() => redeemMobileTicketAccessRequestSchema.parse({ token })).toThrow("valid mobile ticket token");
   });
 });

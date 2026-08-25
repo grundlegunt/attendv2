@@ -824,6 +824,9 @@ model TicketOrder {
   receiptEmailSentAt           DateTime?
   receiptEmailMessageId        String?
   receiptEmailError            String?
+  mobileAccessTokenHash        String?              @unique
+  mobileAccessExpiresAt        DateTime?
+  mobileAccessRevokedAt        DateTime?
   receiptResendRequestId       String?
   receiptResendActorType       AuditActorType?
   receiptResendActorId         String?
@@ -873,6 +876,7 @@ model TicketOrder {
   @@index([giftCardId, createdAt])
   @@index([receiptEmailSentAt, receiptEmailClaimedAt, updatedAt])
   @@index([receiptEmailSentAt, receiptEmailError, updatedAt])
+  @@index([mobileAccessExpiresAt, mobileAccessRevokedAt])
   @@map("ticket_orders")
 }
 

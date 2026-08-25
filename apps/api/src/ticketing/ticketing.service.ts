@@ -157,6 +157,10 @@ export class TicketingService {
     return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey, requestId));
   }
 
+  redeemMobileTicketAccess(orderId: string, token: string) {
+    return this.wrap(() => this.domain.redeemMobileTicketAccess(orderId, token));
+  }
+
   reconcileFailedReceipts(limit?: number) {
     return this.domain.reconcileFailedReceipts(limit);
   }
