@@ -550,6 +550,10 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .sold-seat-ledger { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
 .sold-seat-ledger > div { display: grid; gap: 3px; padding: 10px; border: 1px solid var(--color-border); }
 .sold-seat-ledger span, .sold-seat-ledger small { color: var(--color-text-secondary); }
+.customer-profile-metrics { margin-bottom: 24px; }
+.customer-profile-history { margin-top: 24px; }
+.customer-profile-history .customer-history-order { margin: 0; border-left: 0; border-right: 0; }
+.history-load-more { margin-top: 18px; }
 .report-movie-row a { color: inherit; text-decoration: none; }
 .report-movie-row a:hover { color: var(--color-accent); }
 .film-detail-heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
