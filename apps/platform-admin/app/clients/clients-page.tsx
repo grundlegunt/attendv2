@@ -123,7 +123,7 @@ interface OrganizationDetail {
   registeredTicketFeeMinor: number;
   createdAt: string;
   payments: { connected: boolean; onboardingStatus: string };
-  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null };
+  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null; trends: { paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } }; refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } } } };
   locations: Array<{
     id: string;
     name: string;
@@ -287,6 +287,7 @@ function money(cents: number) {
     currency: "USD",
   }).format(cents / 100);
 }
+function healthRate(value: number | null) { return value === null ? "No activity" : `${value.toFixed(2)}%`; }
 function revenuePath(
   organizationId: string,
   days: number,
@@ -1576,7 +1577,7 @@ export default function AttendMaster() {
               </div>
               <section className="client-health-panel">
                 <div><p className="eyebrow">OPERATOR HEALTH</p><h3>Live operational state</h3><p className="muted">Last completed payment: {organization.health.lastSuccessfulPaymentAt ? new Date(organization.health.lastSuccessfulPaymentAt).toLocaleString() : "none recorded"}</p></div>
-                <div className="client-health-metrics"><span><strong>{organization.health.failedPayments24h}</strong>Failed payments · 24h</span><span><strong>{organization.health.processingPayments}</strong>Processing now</span><span><strong>{organization.health.verificationReviews}</strong>Payment reviews</span><span><strong>{organization.health.failedRefunds}</strong>Failed refunds</span><span><strong>{organization.health.stalePayments}</strong>Stale payments</span><span><strong>{organization.health.staleRefunds}</strong>Stale refunds</span><span><strong>{organization.health.managerReviewTabs}</strong>Manager-review tabs</span><span><strong>{organization.health.expiredHoldBacklog}</strong>Expired holds</span></div>
+                <div><div className="client-health-trends"><span><small>Payment failure · 7d</small><strong>{healthRate(organization.health.trends.paymentFailure.current.ratePercent)}</strong><em>{organization.health.trends.paymentFailure.current.failed} failed of {organization.health.trends.paymentFailure.current.total} attempts · prior 7d {healthRate(organization.health.trends.paymentFailure.previous.ratePercent)}</em></span><span><small>Refund rate · 7d</small><strong>{healthRate(organization.health.trends.refunds.current.ratePercent)}</strong><em>{money(organization.health.trends.refunds.current.refundedCents)} of {money(organization.health.trends.refunds.current.capturedCents)} captured · prior 7d {healthRate(organization.health.trends.refunds.previous.ratePercent)}</em></span></div><div className="client-health-metrics"><span><strong>{organization.health.failedPayments24h}</strong>Failed payments · 24h</span><span><strong>{organization.health.processingPayments}</strong>Processing now</span><span><strong>{organization.health.verificationReviews}</strong>Payment reviews</span><span><strong>{organization.health.failedRefunds}</strong>Failed refunds</span><span><strong>{organization.health.stalePayments}</strong>Stale payments</span><span><strong>{organization.health.staleRefunds}</strong>Stale refunds</span><span><strong>{organization.health.managerReviewTabs}</strong>Manager-review tabs</span><span><strong>{organization.health.expiredHoldBacklog}</strong>Expired holds</span></div></div>
               </section>
               {organizationDraft && (
                 <form className="editor" onSubmit={saveOrganization}>

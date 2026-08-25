@@ -35,7 +35,7 @@ interface OrganizationOverview {
   name: string;
   legalName: string | null;
   payments: { connected: boolean; onboardingStatus: string };
-  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null };
+  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null; trends: { paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } }; refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } } } };
   locations: LocationOverview[];
 }
 
@@ -55,6 +55,7 @@ function statusLabel(status: string) {
 
 function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
 function lastActivity(value: string | null) { return value ? new Date(value).toLocaleString() : "No completed payments"; }
+function rate(value: number | null) { return value === null ? "No activity" : `${value.toFixed(2)}%`; }
 const revenueRanges = [
   { days: 1, label: "Today" },
   { days: 7, label: "Last 7 days" },
@@ -209,12 +210,12 @@ export default function PlatformDashboard() {
         <div className="panel-heading"><div><p className="eyebrow">OPERATIONS</p><h2>Operator health</h2><p className="muted">Live payment and refund facts without speculative alert thresholds.</p></div><Link href="/clients">Open client controls</Link></div>
         {!overview && <p className="muted">Loading operator health…</p>}
         {overview && <div className="operator-health-list">
-          <div><strong>Client</strong><span>Last completed payment</span><span>Failed · 24h</span><span>Processing</span><span>Payment review</span><span>Failed refunds</span><span>Operational backlogs</span><span>Upcoming shows</span></div>
+          <div><strong>Client</strong><span>Last completed payment</span><span>Payment failure · 7d</span><span>Refund rate · 7d</span><span>Failed · 24h</span><span>Processing</span><span>Payment review</span><span>Failed refunds</span><span>Operational backlogs</span><span>Upcoming shows</span></div>
           {overview.organizations.map((organization) => {
             const upcomingShowtimes = organization.locations.reduce((total, location) => total + location.configuration.upcomingShowtimes, 0);
             const backlogTotal = organization.health.stalePayments + organization.health.staleRefunds + organization.health.managerReviewTabs + organization.health.expiredHoldBacklog;
             const hasException = organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + backlogTotal > 0;
-            return <Link className={hasException ? "has-exception" : ""} key={organization.id} href={`/clients?organizationId=${encodeURIComponent(organization.id)}`}><strong>{organization.name}</strong><span>{lastActivity(organization.health.lastSuccessfulPaymentAt)}</span><span>{organization.health.failedPayments24h}</span><span>{organization.health.processingPayments}</span><span>{organization.health.verificationReviews}</span><span>{organization.health.failedRefunds}</span><span className="backlog-summary"><strong>{backlogTotal}</strong><small>{organization.health.stalePayments} payments · {organization.health.staleRefunds} refunds · {organization.health.managerReviewTabs} tabs · {organization.health.expiredHoldBacklog} holds</small></span><span>{upcomingShowtimes}</span></Link>;
+            return <Link className={hasException ? "has-exception" : ""} key={organization.id} href={`/clients?organizationId=${encodeURIComponent(organization.id)}`}><strong>{organization.name}</strong><span>{lastActivity(organization.health.lastSuccessfulPaymentAt)}</span><span className="rate-summary"><strong>{rate(organization.health.trends.paymentFailure.current.ratePercent)}</strong><small>prior 7d: {rate(organization.health.trends.paymentFailure.previous.ratePercent)} · {organization.health.trends.paymentFailure.current.failed}/{organization.health.trends.paymentFailure.current.total} attempts</small></span><span className="rate-summary"><strong>{rate(organization.health.trends.refunds.current.ratePercent)}</strong><small>prior 7d: {rate(organization.health.trends.refunds.previous.ratePercent)} · {money(organization.health.trends.refunds.current.refundedCents)} refunded</small></span><span>{organization.health.failedPayments24h}</span><span>{organization.health.processingPayments}</span><span>{organization.health.verificationReviews}</span><span>{organization.health.failedRefunds}</span><span className="backlog-summary"><strong>{backlogTotal}</strong><small>{organization.health.stalePayments} payments · {organization.health.staleRefunds} refunds · {organization.health.managerReviewTabs} tabs · {organization.health.expiredHoldBacklog} holds</small></span><span>{upcomingShowtimes}</span></Link>;
           })}
         </div>}
         {overview && <p className="dashboard-updated">{metrics.operationalExceptions} unresolved or recent payment/refund exceptions across all clients.</p>}

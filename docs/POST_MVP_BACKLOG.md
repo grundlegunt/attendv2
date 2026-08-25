@@ -6,7 +6,6 @@ Status: Living reference, reconciled August 23, 2026 — tracks real gaps and op
 
 These items have a clear operator or customer benefit and can be scoped without inventing an outside business relationship.
 
-- **Attend Master client-health signals.** Once multiple real clients are operating, add trend, refund-rate, and payment-failure indicators alongside revenue. Validate thresholds against real operating history rather than hardcoding speculative alerts.
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
 - **Analytics provider and funnel instrumentation.** The public site now defaults optional analytics off, records a versioned browser choice, provides a persistent way to change it, and keeps analytics separate from essential ticketing and marketing consent. Choose a privacy-reviewed provider and event policy before connecting funnel events to that consent signal.
 
@@ -44,6 +43,7 @@ Surfaced by testing the plan against a real nonprofit arthouse (Belcourt Theatre
 
 ## Resolved since this backlog was drafted
 
+- **Attend Master client-health signals** — the cross-client dashboard and client profiles report current operational backlogs plus seven-day payment-attempt failure and refund-dollar rates beside the preceding seven days. Rates include their raw denominators and deliberately avoid speculative alert thresholds until real operating history exists.
 - **General-admission ticketing** — auditoriums can sell capacity-backed GA inventory without exposing a seat map, with concurrency-safe customer and box-office checkout plus support in setup, onboarding, receipts, scanning, waitlists, reporting, and schedule exports.
 - **Production observability** — unexpected API failures and root crashes across the customer site, Admin, Attend Master, Staff POS, and KDS produce vendor-neutral alerts with rate limiting, stable fingerprints, safe code frames, and recovery screens; exception messages, query strings, credentials, and customer/payment data are excluded.
 - **Distributor and cinema revenue split reporting** — Revenue Overview calculates theatrical-week distributor and cinema shares from validated film terms, identifies unallocated revenue, and exports distributor box-office detail without treating settlement as a register-time payment split.

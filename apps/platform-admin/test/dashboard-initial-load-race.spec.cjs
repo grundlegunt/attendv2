@@ -27,4 +27,7 @@ test("Attend Master exposes real operator payment and refund health facts", () =
   assert.match(source, /staleRefunds/);
   assert.match(source, /managerReviewTabs/);
   assert.match(source, /expiredHoldBacklog/);
+  assert.match(source, /Payment failure · 7d/);
+  assert.match(source, /Refund rate · 7d/);
+  assert.match(source, /prior 7d:/);
 });
