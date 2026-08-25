@@ -15,3 +15,9 @@ test("Attend Master onboarding can filter a growing client pipeline", () => {
   assert.match(source, /No clients match/);
   assert.match(source, /Clear filters/);
 });
+
+test("Stripe onboarding actions hand off the selected client directly", () => {
+  assert.match(source, /organizationId=\$\{encodeURIComponent\(organization\.id\)\}&connect=refresh/);
+  assert.match(source, /Resume Stripe/);
+  assert.match(source, /Connect Stripe/);
+});
