@@ -9,7 +9,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { Request } from "express";
+import type { Request } from "express";
 import { createTicketCheckoutRequestSchema, finalizeTicketOrderRequestSchema, resendGuestTicketReceiptRequestSchema, resumeTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
