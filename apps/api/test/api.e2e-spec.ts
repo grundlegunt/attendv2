@@ -995,6 +995,80 @@ describe("Attend platform authentication boundary", () => {
       .expect(400);
   });
 
+  it("lets Attend Master maintain a searchable canonical film catalog", async () => {
+    const cinemaLogin = await loginOwner();
+    const platformLogin = await loginPlatformOwner();
+    expect(cinemaLogin.status).toBe(200);
+    expect(platformLogin.status).toBe(200);
+    const cinemaToken = cinemaLogin.body.accessToken as string;
+    const masterToken = platformLogin.body.accessToken as string;
+
+    await request(app.getHttpServer())
+      .get("/api/v1/platform/film-catalog")
+      .set("Authorization", `Bearer ${cinemaToken}`)
+      .expect(403);
+
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/platform/film-catalog")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .send({
+        title: "Catalog Test Film",
+        runtimeMinutes: 97,
+        releaseYear: 2026,
+        director: "Attend Director",
+        primaryDistributorName: "Attend Distribution",
+        imdbId: "tt123456789",
+      })
+      .expect(201);
+    expect(created.body).toEqual(expect.objectContaining({
+      title: "Catalog Test Film",
+      runtimeMinutes: 97,
+      verified: false,
+      active: true,
+      operatorMovieCount: 0,
+    }));
+
+    const search = await request(app.getHttpServer())
+      .get("/api/v1/platform/film-catalog?q=Attend%20Distribution")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(search.body.total).toBe(1);
+    expect(search.body.entries[0].id).toBe(created.body.id);
+
+    await request(app.getHttpServer())
+      .post("/api/v1/platform/film-catalog")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .send({ title: "Duplicate External ID", runtimeMinutes: 90, imdbId: "tt123456789" })
+      .expect(409);
+
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/v1/platform/film-catalog/${created.body.id}`)
+      .set("Authorization", `Bearer ${masterToken}`)
+      .send({ verified: true, active: false })
+      .expect(200);
+    expect(updated.body).toEqual(expect.objectContaining({ verified: true, active: false }));
+
+    const hidden = await request(app.getHttpServer())
+      .get("/api/v1/platform/film-catalog?q=Catalog%20Test%20Film")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(hidden.body.total).toBe(0);
+    const inactive = await request(app.getHttpServer())
+      .get("/api/v1/platform/film-catalog?q=Catalog%20Test%20Film&includeInactive=true")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(inactive.body.total).toBe(1);
+
+    const audit = await request(app.getHttpServer())
+      .get("/api/v1/platform/audit-events?action=platform.film_catalog_entry_")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(audit.body.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ action: "platform.film_catalog_entry_created", entityId: created.body.id }),
+      expect.objectContaining({ action: "platform.film_catalog_entry_updated", entityId: created.body.id }),
+    ]));
+  });
+
   it("lets Attend operators add and revoke company team access safely", async () => {
     await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${ownerAccessToken}`).expect(403);
     const initial = await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
