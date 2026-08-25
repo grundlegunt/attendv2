@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "./lib/api-client";
 import { formatPermillePercentage, percentageToPermille } from "./lib/tax-rate";
@@ -63,6 +64,11 @@ type Refunds = {
     totalCents: number;
     guestName: string | null;
     guestEmail: string | null;
+    customer: {
+      id: string;
+      name: string | null;
+      email: string | null;
+    } | null;
     payment: {
       status: string;
       verificationFailedAt: string | null;
@@ -83,7 +89,11 @@ type Refunds = {
     status: string;
     label: string | null;
     totalCents: number | null;
-    primaryCustomer: { name: string | null; email: string | null } | null;
+    primaryCustomer: {
+      id: string;
+      name: string | null;
+      email: string | null;
+    } | null;
     showtime: { movie: { title: string } } | null;
     receipt: { receiptNumber: string } | null;
     payments: Array<{ status: string; refunds: RefundAttempt[] }>;
@@ -2079,12 +2089,23 @@ function RefundWorkbench({
                   {order.orderNumber} · {money(order.totalCents)}
                 </strong>
                 <span>
-                  {order.guestName || order.guestEmail || "Walk-up customer"} ·{" "}
+                  {order.customer?.name ||
+                    order.customer?.email ||
+                    order.guestName ||
+                    order.guestEmail ||
+                    "Walk-up customer"} ·{" "}
                   {order.tickets[0]?.showtimeSeat.showtime.movie.title} ·{" "}
                   {order.tickets
                     .map((ticket) => ticket.showtimeSeat.seat.label)
                     .join(", ")}
                 </span>
+                {order.customer && (
+                  <Link
+                    href={`/customers/${encodeURIComponent(order.customer.id)}`}
+                  >
+                    Open customer
+                  </Link>
+                )}
                 <div className="status-row">
                   <b
                     className={needsAttention ? "status-alert" : "status-chip"}
@@ -2142,6 +2163,13 @@ function RefundWorkbench({
                     "Guest"}{" "}
                   · {tab.showtime?.movie.title ?? "Walk-in"}
                 </span>
+                {tab.primaryCustomer && (
+                  <Link
+                    href={`/customers/${encodeURIComponent(tab.primaryCustomer.id)}`}
+                  >
+                    Open customer
+                  </Link>
+                )}
                 <div className="status-row">
                   <b
                     className={needsAttention ? "status-alert" : "status-chip"}
@@ -2231,9 +2259,20 @@ function RefundHistoryList({ history, timeZone }: { history: Refunds | null; tim
             </strong>
             <span>
               Ticket order ·{" "}
-              {order.guestName || order.guestEmail || "Walk-up customer"} ·{" "}
+              {order.customer?.name ||
+                order.customer?.email ||
+                order.guestName ||
+                order.guestEmail ||
+                "Walk-up customer"} ·{" "}
               {order.tickets[0]?.showtimeSeat.showtime.movie.title ?? "Film"}
             </span>
+            {order.customer && (
+              <Link
+                href={`/customers/${encodeURIComponent(order.customer.id)}`}
+              >
+                Open customer
+              </Link>
+            )}
             <div className="status-row">
               {order.payment?.refunds.map((attempt, index) => (
                 <RefundAttemptBadge
@@ -2265,6 +2304,13 @@ function RefundHistoryList({ history, timeZone }: { history: Refunds | null; tim
                 "Guest"}{" "}
               · {tab.showtime?.movie.title ?? "Walk-in"}
             </span>
+            {tab.primaryCustomer && (
+              <Link
+                href={`/customers/${encodeURIComponent(tab.primaryCustomer.id)}`}
+              >
+                Open customer
+              </Link>
+            )}
             <div className="status-row">
               {tab.payments
                 .flatMap((payment) => payment.refunds)

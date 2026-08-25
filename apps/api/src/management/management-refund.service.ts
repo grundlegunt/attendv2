@@ -18,6 +18,7 @@ export class ManagementRefundService {
       prisma.ticketOrder.findMany({
         where: { locationId, status: { in: ["PAID", "EXCHANGED"] }, ...(normalized ? { OR: [{ orderNumber: { contains: normalized, mode: "insensitive" } }, { guestEmail: { contains: normalized, mode: "insensitive" } }, { guestName: { contains: normalized, mode: "insensitive" } }] } : {}) },
         include: {
+          customer: { select: { id: true, name: true, email: true } },
           tickets: {
             include: {
               showtimeSeat: {
@@ -32,7 +33,7 @@ export class ManagementRefundService {
       }),
       prisma.restaurantTab.findMany({
         where: { locationId, status: { in: ["CLOSED", "MANAGER_REVIEW"] }, payments: { some: { status: { in: ["SUCCEEDED", "REFUNDED"] } } }, ...(normalized ? { OR: [{ label: { contains: normalized, mode: "insensitive" } }, { primaryCustomer: { is: { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { name: { contains: normalized, mode: "insensitive" } }] } } }] } : {}) },
-        include: { primaryCustomer: { select: { name: true, email: true } }, showtime: { include: { movie: true } }, receipt: true, payments: { where: { status: { in: ["SUCCEEDED", "REFUNDED"] } }, include: { refunds: true } } },
+        include: { primaryCustomer: { select: { id: true, name: true, email: true } }, showtime: { include: { movie: true } }, receipt: true, payments: { where: { status: { in: ["SUCCEEDED", "REFUNDED"] } }, include: { refunds: true } } },
         orderBy: { closedAt: "desc" }, take: 50,
       }),
     ]);
@@ -46,6 +47,7 @@ export class ManagementRefundService {
       prisma.ticketOrder.findMany({
         where: { locationId, status: { in: ["REFUNDED", "PARTIALLY_REFUNDED"] }, ...(createdAt ? { updatedAt: createdAt } : {}), ...(normalized ? { OR: [{ orderNumber: { contains: normalized, mode: "insensitive" } }, { guestEmail: { contains: normalized, mode: "insensitive" } }, { guestName: { contains: normalized, mode: "insensitive" } }] } : {}) },
         include: {
+          customer: { select: { id: true, name: true, email: true } },
           tickets: { include: { showtimeSeat: { include: { seat: true, showtime: { include: { movie: true } } } } } },
           payment: { include: { refunds: { orderBy: { createdAt: "desc" } } } },
           cashTransactions: { where: { type: "REFUND" }, orderBy: { createdAt: "desc" } },
@@ -54,7 +56,7 @@ export class ManagementRefundService {
       }),
       prisma.restaurantTab.findMany({
         where: { locationId, status: "REFUNDED", ...(createdAt ? { updatedAt: createdAt } : {}), ...(normalized ? { OR: [{ label: { contains: normalized, mode: "insensitive" } }, { primaryCustomer: { is: { OR: [{ email: { contains: normalized, mode: "insensitive" } }, { name: { contains: normalized, mode: "insensitive" } }] } } }] } : {}) },
-        include: { primaryCustomer: { select: { name: true, email: true } }, showtime: { include: { movie: true } }, receipt: true, payments: { include: { refunds: { orderBy: { createdAt: "desc" } } } } },
+        include: { primaryCustomer: { select: { id: true, name: true, email: true } }, showtime: { include: { movie: true } }, receipt: true, payments: { include: { refunds: { orderBy: { createdAt: "desc" } } } } },
         orderBy: { updatedAt: "desc" }, take: 100,
       }),
     ]);
