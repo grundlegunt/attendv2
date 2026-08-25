@@ -30,7 +30,11 @@ type SearchResults = {
   tickets: Array<{
     id: string;
     status: string;
-    ticketOrder: { id: string; orderNumber: string };
+    ticketOrder: {
+      id: string;
+      orderNumber: string;
+      customer: { id: string } | null;
+    };
     ticketType: { name: string };
     showtimeSeat: {
       seat: { label: string };
@@ -470,7 +474,20 @@ export default function GlobalSearchPage() {
                     {ticket.ticketType.name} · {ticket.status} · {new Date(ticket.showtimeSeat.showtime.startsAt).toLocaleString([], { timeZone: employee.timezone })}
                   </small>
                 </div>
-                <Link href={`/refunds?query=${encodeURIComponent(ticket.ticketOrder.orderNumber)}`}>{ticket.ticketOrder.orderNumber}</Link>
+                <div className="search-result-actions">
+                  {ticket.ticketOrder.customer && (
+                    <Link
+                      href={`/customers/${encodeURIComponent(ticket.ticketOrder.customer.id)}`}
+                    >
+                      Open customer
+                    </Link>
+                  )}
+                  <Link
+                    href={`/refunds?query=${encodeURIComponent(ticket.ticketOrder.orderNumber)}`}
+                  >
+                    {ticket.ticketOrder.orderNumber}
+                  </Link>
+                </div>
               </article>
             ))}
             {!results.tickets.length && <p className="dashboard-empty">No exact ticket match.</p>}

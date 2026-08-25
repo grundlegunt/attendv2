@@ -20,6 +20,11 @@ test("registered order search results link to their customer profile", () => {
   assert.match(search, /Open customer/);
 });
 
+test("exact registered ticket results link to their customer profile", () => {
+  assert.match(managementService, /ticketOrder: \{[\s\S]*customer: \{ select: \{ id: true \} \}/);
+  assert.match(search, /ticket\.ticketOrder\.customer\.id/);
+});
+
 test("customer profiles reuse authenticated history, pagination, and export endpoints", () => {
   assert.match(profile, /apiFetch<Customer>\(`\/management\/customers\/\$\{id\}`/);
   assert.match(profile, /ticketOffset/);

@@ -125,7 +125,13 @@ export class ManagementService {
         select: {
           id: true,
           status: true,
-          ticketOrder: { select: { id: true, orderNumber: true } },
+          ticketOrder: {
+            select: {
+              id: true,
+              orderNumber: true,
+              customer: { select: { id: true } },
+            },
+          },
           ticketType: { select: { name: true } },
           showtimeSeat: { select: { seat: { select: { label: true } }, showtime: { select: { startsAt: true, movie: { select: { title: true } }, auditorium: { select: { name: true } } } } } },
         },
