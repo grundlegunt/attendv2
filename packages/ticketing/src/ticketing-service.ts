@@ -1045,6 +1045,32 @@ export class TicketingService {
     return { receiptDelivery, email: staged.email };
   }
 
+  async resendGuestSmsTickets(orderId: string, holderKey: string, requestId: string) {
+    if (!requestId || requestId.length < 16) {
+      throw TicketingError.validation("A valid SMS resend idempotency key is required.");
+    }
+    const order = await this.prisma.ticketOrder.findFirst({
+      where: {
+        id: orderId,
+        holderKey,
+        status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
+        guestPhone: { not: null },
+        smsTicketsRequested: true,
+        consents: { some: { type: "SMS_TICKET_DELIVERY", granted: true } },
+        tickets: { some: { status: { in: ["ISSUED", "ADMITTED"] } } },
+      },
+      select: { id: true, smsDeliverySentAt: true },
+    });
+    if (!order) throw TicketingError.notFound("Ticket order was not found.");
+    if (order.smsDeliverySentAt) return { smsDelivery: "SENT" as const };
+
+    await this.prisma.ticketOrder.update({
+      where: { id: order.id },
+      data: { smsDeliveryClaimedAt: null, smsDeliveryError: null },
+    });
+    return { smsDelivery: await this.deliverSmsTickets(order.id) };
+  }
+
   async issueMobileTicketAccess(orderId: string) {
     const order = await this.prisma.ticketOrder.findFirst({
       where: { id: orderId, status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] } },

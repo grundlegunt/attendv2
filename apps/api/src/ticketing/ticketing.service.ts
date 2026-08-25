@@ -163,6 +163,10 @@ export class TicketingService {
     return this.wrap(() => this.domain.resendGuestReceipt(orderId, holderKey, requestId));
   }
 
+  resendGuestSmsTickets(orderId: string, holderKey: string, requestId: string) {
+    return this.wrap(() => this.domain.resendGuestSmsTickets(orderId, holderKey, requestId));
+  }
+
   redeemMobileTicketAccess(orderId: string, token: string) {
     return this.wrap(() => this.domain.redeemMobileTicketAccess(orderId, token));
   }

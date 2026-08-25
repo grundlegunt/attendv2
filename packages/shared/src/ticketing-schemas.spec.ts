@@ -1,4 +1,4 @@
-import { createTicketCheckoutRequestSchema, redeemMobileTicketAccessRequestSchema } from "./ticketing-schemas";
+import { createTicketCheckoutRequestSchema, redeemMobileTicketAccessRequestSchema, resendGuestTicketSmsRequestSchema } from "./ticketing-schemas";
 
 const validCheckout = {
   holdTokens: ["fd1d2bea-a043-4d2a-b70b-4e71f76c6bec"],
@@ -71,5 +71,19 @@ describe("mobile ticket access", () => {
 
   it.each(["short", `${"A".repeat(42)}!`, "A".repeat(44)])("rejects malformed token %s", (token) => {
     expect(() => redeemMobileTicketAccessRequestSchema.parse({ token })).toThrow("valid mobile ticket token");
+  });
+});
+
+describe("ticket SMS retry", () => {
+  it("requires both the checkout holder and an idempotency key", () => {
+    const request = { holderKey: "checkout-holder-key", requestId: "85d9f14d-c989-4aa8-b940-3c17a2e526bb" };
+    expect(resendGuestTicketSmsRequestSchema.parse(request)).toEqual(request);
+  });
+
+  it("rejects malformed retry identifiers", () => {
+    expect(() => resendGuestTicketSmsRequestSchema.parse({
+      holderKey: "checkout-holder-key",
+      requestId: "not-a-uuid",
+    })).toThrow();
   });
 });
