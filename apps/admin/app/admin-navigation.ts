@@ -48,6 +48,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
   ] },
   { label: "Team", items: [
     { href: "/users", label: "Team Access", permissions: ["employee.edit"] },
+    { href: "/labor", label: "Labor", permissions: ["reports.view"] },
     { href: "/audit-log", label: "Recent Activity", permissions: ["audit.log.view"] },
   ] },
 ] as const;
