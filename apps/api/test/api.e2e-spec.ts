@@ -910,6 +910,12 @@ describe("Attend platform authentication boundary", () => {
     expect(res.body.organizations).toEqual(expect.arrayContaining([
       expect.objectContaining({
         name: "Meridian Cinema Co.",
+        health: expect.objectContaining({
+          failedPayments24h: expect.any(Number),
+          processingPayments: expect.any(Number),
+          verificationReviews: expect.any(Number),
+          failedRefunds: expect.any(Number),
+        }),
         locations: expect.arrayContaining([
           expect.objectContaining({
             name: "Meridian Cinema",
@@ -923,6 +929,9 @@ describe("Attend platform authentication boundary", () => {
         ]),
       }),
     ]));
+    const meridian = res.body.organizations.find((organization: { name: string }) => organization.name === "Meridian Cinema Co.");
+    expect(meridian.health).toHaveProperty("lastSuccessfulPaymentAt");
+    expect(meridian.health.lastSuccessfulPaymentAt === null || typeof meridian.health.lastSuccessfulPaymentAt === "string").toBe(true);
   });
 
   it("returns a separated cross-client revenue rollup only to Attend operators", async () => {
