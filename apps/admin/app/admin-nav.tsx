@@ -52,6 +52,7 @@ export function AdminNav() {
               <span>{group.label}</span><span aria-hidden="true">{expanded ? "−" : "+"}</span>
             </button>
             {expanded && <div id={groupId} className="admin-nav-links">{group.items.map((item) => {
+              if (item.external) return <a key={item.href} href={item.href} target="_blank" rel="noreferrer">{item.label} <span aria-hidden="true">↗</span></a>;
               const active = isAdminItemActive(pathname, item.href);
               return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>{item.label}</Link>;
             })}</div>}

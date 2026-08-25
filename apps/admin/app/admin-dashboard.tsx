@@ -359,7 +359,7 @@ export function AdminDashboard() {
   }).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
   const scheduleSales = new Map((scheduleRevenue?.showtimes ?? []).map((showtime) => [showtime.showtimeId, showtime.ticketsSold]));
   const navigation = visibleAdminNavigation(employee.permissions);
-  const quickActions = navigation.flatMap((group) => group.items).filter((item) => item.href !== "/").slice(0, 5);
+  const quickActions = navigation.flatMap((group) => group.items).filter((item) => item.href !== "/" && !item.external).slice(0, 5);
   const topFilms = [...(filmRevenue?.movies ?? [])].sort((a, b) => b.ticketsSold - a.ticketsSold || b.ticketRevenueCents - a.ticketRevenueCents).slice(0, 5);
   const topTicketCount = Math.max(1, ...topFilms.map((film) => film.ticketsSold));
   const ticketsByShowtime = new Map((filmRevenue?.showtimes ?? []).map((showtime) => [showtime.showtimeId, showtime.ticketsSold]));

@@ -3,12 +3,15 @@ export type AdminNavItem = {
   label: string;
   permissions: readonly string[];
   permissionMode?: "all" | "any";
+  external?: boolean;
 };
 
 export type AdminNavGroup = {
   label: string;
   items: readonly AdminNavItem[];
 };
+
+const staffPosUrl = (process.env.NEXT_PUBLIC_STAFF_POS_URL?.trim() || "https://attend-staff-pos.vercel.app").replace(/\/$/, "");
 
 export const adminNavigation: readonly AdminNavGroup[] = [
   { label: "Dashboard", items: [
@@ -30,6 +33,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
   ] },
   { label: "F&B", items: [
     { href: "/menu", label: "Menu", permissions: ["menu.edit"] },
+    { href: staffPosUrl, label: "POS", permissions: ["restaurant.order.create", "seat.sell", "ticket.scan"], permissionMode: "any", external: true },
   ] },
   { label: "Financial Reports", items: [
     { href: "/reports", label: "Revenue Overview", permissions: ["reports.view.financial"] },
