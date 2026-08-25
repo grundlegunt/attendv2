@@ -22,6 +22,13 @@ interface OrganizationOverview {
   name: string;
   legalName: string | null;
   payments: { connected: boolean; onboardingStatus: string };
+  health: {
+    failedPayments24h: number;
+    processingPayments: number;
+    verificationReviews: number;
+    failedRefunds: number;
+    lastSuccessfulPaymentAt: string | null;
+  };
   locations: Array<{ id: string; name: string; active: boolean }>;
 }
 
@@ -44,6 +51,7 @@ export default function PlatformPayments() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [workingOrganizationId, setWorkingOrganizationId] = useState<string | null>(null);
+  const [showExceptionsOnly, setShowExceptionsOnly] = useState(false);
   const overviewRequestRef = useRef(0);
   const authRequestRef = useRef(0);
 
@@ -85,8 +93,18 @@ export default function PlatformPayments() {
       complete: organizations.filter((organization) => organization.payments.onboardingStatus === "COMPLETE").length,
       inProgress: organizations.filter((organization) => organization.payments.onboardingStatus === "IN_PROGRESS").length,
       notStarted: organizations.filter((organization) => organization.payments.onboardingStatus === "NOT_STARTED").length,
+      failedPayments24h: organizations.reduce((sum, organization) => sum + organization.health.failedPayments24h, 0),
+      processingPayments: organizations.reduce((sum, organization) => sum + organization.health.processingPayments, 0),
+      verificationReviews: organizations.reduce((sum, organization) => sum + organization.health.verificationReviews, 0),
+      failedRefunds: organizations.reduce((sum, organization) => sum + organization.health.failedRefunds, 0),
     };
   }, [overview]);
+
+  const displayedOrganizations = useMemo(() => {
+    const organizations = overview?.organizations ?? [];
+    if (!showExceptionsOnly) return organizations;
+    return organizations.filter((organization) => organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds > 0);
+  }, [overview, showExceptionsOnly]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -169,10 +187,18 @@ export default function PlatformPayments() {
         <article><strong>{totals.inProgress}</strong><span>In progress</span></article>
         <article><strong>{totals.notStarted}</strong><span>Not started</span></article>
       </section>
+      <section className="payment-summary payment-health-summary" aria-label="Payment operations totals">
+        <article><strong>{totals.failedPayments24h}</strong><span>Failed payments · 24h</span></article>
+        <article><strong>{totals.processingPayments}</strong><span>Processing now</span></article>
+        <article><strong>{totals.verificationReviews}</strong><span>Payment reviews</span></article>
+        <article><strong>{totals.failedRefunds}</strong><span>Failed refunds</span></article>
+      </section>
+      <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><label><input type="checkbox" checked={showExceptionsOnly} onChange={(event) => setShowExceptionsOnly(event.target.checked)} /> Show exceptions only</label></div>
       <section className="payments-table">
-        <div className="payments-table-heading"><span>Client</span><span>Locations</span><span>Stripe status</span><span>Action</span></div>
+        <div className="payments-table-heading"><span>Client</span><span>Locations</span><span>Stripe status</span><span>Operational status</span><span>Action</span></div>
         {!overview && <p className="muted payments-loading">Loading payment readiness…</p>}
-        {overview?.organizations.map((organization) => {
+        {overview && displayedOrganizations.length === 0 && <p className="empty-state payments-loading">No clients match this view.</p>}
+        {displayedOrganizations.map((organization) => {
           const complete = organization.payments.onboardingStatus === "COMPLETE";
           const working = workingOrganizationId === organization.id;
           return (
@@ -180,6 +206,7 @@ export default function PlatformPayments() {
               <span><strong>{organization.name}</strong><small>{organization.legalName ?? "Legal name not configured"}</small></span>
               <span>{organization.locations.length}</span>
               <span className={complete ? "status good" : "status warning"}>{statusLabel(organization.payments.onboardingStatus)}</span>
+              <span className="payment-health"><strong>{organization.health.failedPayments24h} failed · 24h</strong><small>{organization.health.processingPayments} processing · {organization.health.verificationReviews} reviews · {organization.health.failedRefunds} failed refunds</small><small>Last completed: {organization.health.lastSuccessfulPaymentAt ? new Date(organization.health.lastSuccessfulPaymentAt).toLocaleString() : "none"}</small></span>
               <span className="payment-actions">
                 {!complete && <button disabled={working} onClick={() => void startConnectOnboarding(organization.id)}>{working ? "Opening…" : organization.payments.connected ? "Resume onboarding" : "Connect Stripe"}</button>}
                 {organization.payments.connected && <button className="quiet" disabled={working} onClick={() => void refreshConnectStatus(organization.id)}>Refresh</button>}
