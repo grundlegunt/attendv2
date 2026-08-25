@@ -1,6 +1,6 @@
 import { prisma } from "@cinema/database";
 import { StripePaymentProvider } from "@cinema/payments";
-import { PostmarkEmailProvider } from "@cinema/notifications";
+import { DisabledSmsProvider, PostmarkEmailProvider, TwilioSmsProvider } from "@cinema/notifications";
 import { TicketingError, TicketingService } from "@cinema/ticketing";
 import { loadStripeEnv } from "@cinema/config/env";
 
@@ -22,6 +22,12 @@ export function getTicketingService() {
   const qrCredentialSecret = process.env.QR_CREDENTIAL_SECRET;
   const postmarkToken = process.env.POSTMARK_SERVER_TOKEN;
   const emailFrom = process.env.EMAIL_FROM;
+  const smsProvider = process.env.SMS_PROVIDER === "twilio"
+    && process.env.TWILIO_ACCOUNT_SID
+    && process.env.TWILIO_AUTH_TOKEN
+    && process.env.TWILIO_FROM
+    ? new TwilioSmsProvider(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN, process.env.TWILIO_FROM)
+    : new DisabledSmsProvider();
   if (
     !qrCredentialSecret ||
     qrCredentialSecret.length < 32 ||
@@ -39,6 +45,8 @@ export function getTicketingService() {
     new StripePaymentProvider(stripe.STRIPE_SECRET_KEY, stripe.STRIPE_WEBHOOK_SECRET),
     qrCredentialSecret,
     new PostmarkEmailProvider(postmarkToken, emailFrom),
+    smsProvider,
+    process.env.CUSTOMER_WEB_URL ?? process.env.NEXT_PUBLIC_CUSTOMER_WEB_URL ?? "http://localhost:3000",
   );
 }
 

@@ -19,7 +19,7 @@ import {
   ProviderRefundStatus,
   VerifiedProviderEvent,
 } from "@cinema/payments";
-import { EmailProvider, TicketReceipt } from "@cinema/notifications";
+import { DisabledSmsProvider, EmailProvider, SmsProvider, TicketReceipt } from "@cinema/notifications";
 import { TicketingError } from "./ticketing-error";
 import { createTicketCredential } from "./qr-credential";
 import {
@@ -163,6 +163,8 @@ export class TicketingService {
     private readonly paymentProvider: PaymentProvider,
     private readonly qrCredentialSecret: string,
     private readonly emailProvider: EmailProvider,
+    private readonly smsProvider: SmsProvider = new DisabledSmsProvider(),
+    private readonly customerWebUrl = "http://localhost:3000",
   ) {}
 
   async createCheckout(input: CreateTicketCheckoutInput) {
@@ -976,7 +978,8 @@ export class TicketingService {
         providerResult.paymentMethod,
       );
       const receiptDelivery = await this.deliverReceipt(finalized);
-      return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization);
+      const smsDelivery = await this.deliverSmsTickets(finalized.id);
+      return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization, smsDelivery);
     } catch (error) {
       if (
         error instanceof TicketingError &&
@@ -1143,6 +1146,108 @@ export class TicketingService {
     return { scanned: orders.length, delivered, failed };
   }
 
+  private async deliverSmsTickets(orderId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> {
+    const order = await this.prisma.ticketOrder.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNumber: true,
+        guestPhone: true,
+        smsTicketsRequested: true,
+        smsDeliverySentAt: true,
+        location: { select: { name: true } },
+        consents: {
+          where: { type: "SMS_TICKET_DELIVERY", granted: true },
+          select: { grantedAt: true },
+          take: 1,
+        },
+      },
+    });
+    if (!order?.smsTicketsRequested || !order.guestPhone || !order.consents[0]) return "NOT_REQUESTED";
+    if (order.smsDeliverySentAt) return "SENT";
+
+    const now = new Date();
+    const claimed = await this.prisma.ticketOrder.updateMany({
+      where: {
+        id: order.id,
+        smsDeliverySentAt: null,
+        OR: [
+          { smsDeliveryClaimedAt: null },
+          { smsDeliveryClaimedAt: { lt: new Date(now.getTime() - 5 * 60_000) } },
+        ],
+      },
+      data: { smsDeliveryClaimedAt: now, smsDeliveryError: null },
+    });
+    if (claimed.count === 0) {
+      const current = await this.prisma.ticketOrder.findUniqueOrThrow({
+        where: { id: order.id },
+        select: { smsDeliverySentAt: true },
+      });
+      return current.smsDeliverySentAt ? "SENT" : "NOT_REQUESTED";
+    }
+
+    try {
+      const access = await this.issueMobileTicketAccess(order.id);
+      const mobileUrl = `${this.customerWebUrl.replace(/\/$/, "")}/tickets/${encodeURIComponent(order.id)}#token=${access.token}`;
+      const delivery = await this.smsProvider.send({
+        to: order.guestPhone,
+        body: `${order.location.name} tickets (${order.orderNumber}): ${mobileUrl}`,
+        consent: { grantedAt: order.consents[0].grantedAt, source: "customer_checkout" },
+      });
+      if (delivery.status === "disabled") {
+        await this.prisma.ticketOrder.update({
+          where: { id: order.id },
+          data: { smsDeliveryClaimedAt: null, smsDeliveryError: "SMS delivery is not configured." },
+        });
+        return "FAILED";
+      }
+      await this.prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: {
+          smsDeliveryClaimedAt: null,
+          smsDeliverySentAt: new Date(),
+          smsDeliveryMessageId: delivery.messageId,
+          smsDeliveryError: null,
+        },
+      });
+      return "SENT";
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "SMS delivery failed.";
+      await this.prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: { smsDeliveryClaimedAt: null, smsDeliveryError: message.slice(0, 1000) },
+      });
+      return "FAILED";
+    }
+  }
+
+  async reconcileFailedSmsDeliveries(limit = 25) {
+    const staleClaimedAt = new Date(Date.now() - 5 * 60_000);
+    const orders = await this.prisma.ticketOrder.findMany({
+      where: {
+        status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
+        smsTicketsRequested: true,
+        guestPhone: { not: null },
+        smsDeliverySentAt: null,
+        OR: [
+          { smsDeliveryError: { not: null } },
+          { smsDeliveryClaimedAt: { lt: staleClaimedAt } },
+        ],
+      },
+      select: { id: true },
+      orderBy: { updatedAt: "asc" },
+      take: limit,
+    });
+    let delivered = 0;
+    let failed = 0;
+    for (const order of orders) {
+      const result = await this.deliverSmsTickets(order.id);
+      if (result === "SENT") delivered += 1;
+      if (result === "FAILED") failed += 1;
+    }
+    return { attempted: orders.length, delivered, failed };
+  }
+
   private async finalizeGiftCardOnlyOrder(orderId: string) {
     const finalized = await this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${orderId} FOR UPDATE`);
@@ -1177,7 +1282,8 @@ export class TicketingService {
     });
     const diningAuthorization = await this.persistDiningAuthorization(finalized, undefined);
     const receiptDelivery = await this.deliverReceipt(finalized);
-    return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization);
+    const smsDelivery = await this.deliverSmsTickets(finalized.id);
+    return this.presentConfirmation(finalized, receiptDelivery, diningAuthorization, smsDelivery);
   }
 
   private async createPrepaidOrderAheadTab(
@@ -2432,6 +2538,7 @@ export class TicketingService {
   },
   receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED",
   diningAuthorization: "AUTHORIZED" | "DECLINED" | "UNAVAILABLE",
+  smsDelivery: "SENT" | "FAILED" | "NOT_REQUESTED" = "NOT_REQUESTED",
   ) {
     return {
       orderId: order.id,
@@ -2440,6 +2547,7 @@ export class TicketingService {
       totalCents: order.totalCents,
       currency: order.currency,
       receiptDelivery,
+      smsDelivery,
       diningAuthorization,
       tickets: order.tickets.map((ticket) => ({
         id: ticket.id,

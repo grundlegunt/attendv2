@@ -10,10 +10,11 @@ import { GiftCardPurchaseModule } from "../gift-card-purchases/gift-card-purchas
 import { TicketReceiptReconciliationService } from "./ticket-receipt-reconciliation.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { OptionalCustomerAuthGuard } from "../auth/guards/optional-customer-auth.guard";
+import { SmsTicketReconciliationService } from "./sms-ticket-reconciliation.service";
 
 @Module({
   imports: [PaymentsModule, NotificationsModule, GiftCardPurchaseModule],
   controllers: [TicketingController],
-  providers: [TicketingService, RefundReconciliationService, TicketReceiptReconciliationService, ScanRateLimitGuard, RequestRateLimitGuard, JwtAuthGuard, OptionalCustomerAuthGuard],
+  providers: [TicketingService, RefundReconciliationService, TicketReceiptReconciliationService, SmsTicketReconciliationService, ScanRateLimitGuard, RequestRateLimitGuard, JwtAuthGuard, OptionalCustomerAuthGuard],
 })
 export class TicketingModule {}

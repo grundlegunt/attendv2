@@ -104,6 +104,7 @@ const envSchema = z.object({
   // delivery uses a database lease, so concurrent API instances can sweep
   // safely.
   TICKET_RECEIPT_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
+  SMS_TICKET_RECONCILIATION_INTERVAL_MS: z.coerce.number().int().nonnegative().default(60_000),
 
   // How often unsent customer password-reset emails are retried. Reset tokens
   // are generated only when a leased delivery attempt begins and are never
