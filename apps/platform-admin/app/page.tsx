@@ -69,9 +69,11 @@ export default function PlatformDashboard() {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
   const [revenueDays, setRevenueDays] = useState(7);
   const [revenueLoading, setRevenueLoading] = useState(false);
+  const overviewRequestRef = useRef(0);
   const revenueRequestRef = useRef(0);
   const authRequestRef = useRef(0);
   const [email, setEmail] = useState("");
@@ -86,16 +88,18 @@ export default function PlatformDashboard() {
   useEffect(() => {
     if (!session) return;
     let active = true;
+    const overviewRequestId = ++overviewRequestRef.current;
     const revenueRequestId = ++revenueRequestRef.current;
     Promise.all([request<Overview>("/platform/overview", undefined, session.accessToken), request<RevenueReport>(revenueRange(7), undefined, session.accessToken)])
       .then(([nextOverview, nextRevenue]) => {
         if (!active) return;
-        setOverview(nextOverview);
+        if (overviewRequestId === overviewRequestRef.current) setOverview(nextOverview);
         if (revenueRequestId === revenueRequestRef.current) setRevenue(nextRevenue);
       })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : "Could not load platform health."); });
     return () => {
       active = false;
+      if (overviewRequestId === overviewRequestRef.current) overviewRequestRef.current += 1;
       if (revenueRequestId === revenueRequestRef.current) revenueRequestRef.current += 1;
     };
   }, [session]);
@@ -110,6 +114,20 @@ export default function PlatformDashboard() {
     }
     catch (reason) { if (requestId === revenueRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load platform revenue."); }
     finally { if (requestId === revenueRequestRef.current) setRevenueLoading(false); }
+  }
+
+  async function refreshOverview() {
+    if (!session) return;
+    const requestId = ++overviewRequestRef.current;
+    setOverviewLoading(true); setError(null);
+    try {
+      const nextOverview = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      if (requestId === overviewRequestRef.current) setOverview(nextOverview);
+    } catch (reason) {
+      if (requestId === overviewRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not refresh platform health.");
+    } finally {
+      if (requestId === overviewRequestRef.current) setOverviewLoading(false);
+    }
   }
 
   async function downloadRevenue() {
@@ -160,6 +178,7 @@ export default function PlatformDashboard() {
     authRequestRef.current += 1;
     void revokePlatformSession(API_BASE_URL, session?.accessToken);
     window.sessionStorage.removeItem(STORAGE_KEY);
+    overviewRequestRef.current += 1;
     revenueRequestRef.current += 1;
     setSession(null);
     setOverview(null);
@@ -182,7 +201,12 @@ export default function PlatformDashboard() {
           <h1>Platform health</h1>
           <p className="muted">A cross-client view of onboarding and operating readiness.</p>
         </div>
-        <div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
+        <div className="identity">
+          {overview && <small>Updated {new Date(overview.generatedAt).toLocaleTimeString()}</small>}
+          <button className="quiet" disabled={overviewLoading} onClick={() => void refreshOverview()}>{overviewLoading ? "Refreshing…" : "Refresh health"}</button>
+          <span>{session.user.name}</span>
+          <button className="quiet" onClick={signOut}>Sign out</button>
+        </div>
       </header>
       <nav className="platform-nav" aria-label="Attend Master">
         <Link className="active" href="/">Dashboard</Link>
