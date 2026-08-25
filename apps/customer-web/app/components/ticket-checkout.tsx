@@ -52,6 +52,9 @@ interface CheckoutConfig {
     publishableKey: string | null;
     connectedAccountId: string | null;
   };
+  notifications: {
+    smsTicketsAvailable: boolean;
+  };
 }
 
 type OrderAheadSelection = {
@@ -109,6 +112,15 @@ function money(cents: number, currency: string) {
   }).format(cents / 100);
 }
 
+function normalizePhoneNumber(value: string) {
+  const trimmed = value.trim();
+  if (/^\+[1-9]\d{7,14}$/.test(trimmed)) return trimmed;
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return trimmed;
+}
+
 export function TicketCheckout({
   showtimeId,
   holdTokens,
@@ -145,6 +157,8 @@ export function TicketCheckout({
   const receiptRetryPendingRef = useRef(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [smsTicketsRequested, setSmsTicketsRequested] = useState(false);
   const [accountRecognized, setAccountRecognized] = useState(false);
   const [promotionCode, setPromotionCode] = useState("");
   const [giftCardCode, setGiftCardCode] = useState("");
@@ -563,6 +577,11 @@ export function TicketCheckout({
       diningAuthorization === null ||
       pendingRef.current
     ) return;
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (smsTicketsRequested && !/^\+[1-9]\d{7,14}$/.test(normalizedPhone)) {
+      setError("Enter a valid mobile number, including the country code for numbers outside the U.S.");
+      return;
+    }
     pendingRef.current = true;
     setPending(true);
     setError(null);
@@ -587,6 +606,8 @@ export function TicketCheckout({
             })),
             email,
             name: name || undefined,
+            phone: smsTicketsRequested ? normalizedPhone : undefined,
+            smsTicketsRequested,
             promotionCode: promotionCode.trim() || undefined,
             giftCardCode: giftCardCode.trim() || undefined,
             diningAuthorizationRequested: diningAuthorization,
@@ -707,6 +728,14 @@ export function TicketCheckout({
             >
               {receiptRetryPending ? "Sending…" : "Retry ticket email"}
             </button>
+          </p>
+        )}
+        {confirmation.smsDelivery === "SENT" && (
+          <p>Your mobile tickets were also sent by text.</p>
+        )}
+        {confirmation.smsDelivery === "FAILED" && (
+          <p role="status">
+            We couldn&apos;t send the text message. Your tickets are available below, and your email receipt remains available.
           </p>
         )}
         {receiptRetryMessage && <p role="status">{receiptRetryMessage}</p>}
@@ -831,6 +860,35 @@ export function TicketCheckout({
               />
               {accountRecognized && <small id="signed-in-checkout-email-note">Sign out from Account to purchase under a different email.</small>}
             </label>
+            {config?.notifications.smsTicketsAvailable && (
+              <div className="sms-ticket-choice">
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={smsTicketsRequested}
+                    onChange={(event) => setSmsTicketsRequested(event.target.checked)}
+                  />
+                  <span>Text my mobile tickets</span>
+                </label>
+                {smsTicketsRequested && (
+                  <label className="field">
+                    <span>Mobile number</span>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      required
+                      value={phone}
+                      placeholder="(555) 555-0123"
+                      onChange={(event) => setPhone(event.target.value)}
+                    />
+                  </label>
+                )}
+                <small>
+                  By selecting this option, you agree to receive one transactional text for this order. Message and data rates may apply. No marketing messages.
+                </small>
+              </div>
+            )}
             <label className="field">
               <span>Promotion code</span>
               <input value={promotionCode} onChange={(event) => setPromotionCode(event.target.value.toUpperCase())} autoComplete="off" />

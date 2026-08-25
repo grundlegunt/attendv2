@@ -2061,6 +2061,22 @@ body:has(.signage-shell) .site-header { display: none; }
   gap: 10px;
   align-items: start;
 }
+.sms-ticket-choice {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+}
+.sms-ticket-choice > label:first-child {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-weight: 700;
+}
+.sms-ticket-choice small {
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
 .configuration-note,
 .authorization-note {
   grid-column: 1 / -1;

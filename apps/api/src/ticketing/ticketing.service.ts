@@ -136,6 +136,9 @@ export class TicketingService {
               showtime.auditorium.location.organization
                 .stripeConnectedAccountId,
           },
+          notifications: {
+            smsTicketsAvailable: env.SMS_PROVIDER !== "disabled",
+          },
         };
       });
   }
