@@ -23,11 +23,26 @@ type Bootstrap = {
   showtimes: Array<{ startsAt: string; movie: { id: string } }>;
 };
 
+type CatalogFilm = Movie & {
+  synopsis: string | null;
+  starring: string | null;
+  primaryDistributorName: string | null;
+  imdbId: string | null;
+  verified: boolean;
+  importedMovieId: string | null;
+};
+
 export default function FilmLibraryPage() {
   const { accessToken } = useAdminSession();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState("");
+  const [catalog, setCatalog] = useState<CatalogFilm[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [importingId, setImportingId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -37,7 +52,33 @@ export default function FilmLibraryPage() {
         if (!controller.signal.aborted) setError(reason instanceof ApiRequestError ? reason.body.message : "The film library could not be loaded.");
       });
     return () => controller.abort();
-  }, [accessToken]);
+  }, [accessToken, refreshKey]);
+
+  useEffect(() => {
+    if (!catalogOpen) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setCatalogLoading(true);
+      const params = new URLSearchParams();
+      if (catalogQuery.trim()) params.set("q", catalogQuery.trim());
+      apiFetch<{ entries: CatalogFilm[] }>(`/cinema/film-catalog?${params}`, { accessToken, signal: controller.signal })
+        .then((result) => setCatalog(result.entries))
+        .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof ApiRequestError ? reason.body.message : "The shared film catalog could not be loaded."); })
+        .finally(() => { if (!controller.signal.aborted) setCatalogLoading(false); });
+    }, 250);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [accessToken, catalogOpen, catalogQuery, refreshKey]);
+
+  async function importFilm(film: CatalogFilm) {
+    if (importingId) return;
+    setImportingId(film.id); setError(null);
+    try {
+      await apiFetch(`/cinema/film-catalog/${encodeURIComponent(film.id)}/import`, { accessToken, method: "POST" });
+      setRefreshKey((current) => current + 1);
+    } catch (reason) {
+      setError(reason instanceof ApiRequestError ? reason.body.message : "The film could not be added to this cinema.");
+    } finally { setImportingId(null); }
+  }
 
   const counts = useMemo(() => {
     const now = Date.now();
@@ -58,7 +99,8 @@ export default function FilmLibraryPage() {
   const archived = (data?.archivedMovies ?? []).filter(matches);
 
   return <main className="admin-route-page standalone-film-library">
-    <header className="admin-page-heading"><div><p className="kicker">PROGRAMMING</p><h1>Film Library</h1><p>Browse every film, open its complete performance record, or manage its programming details.</p></div><Link href="/scheduling" className="primary">Add or edit films</Link></header>
+    <header className="admin-page-heading"><div><p className="kicker">PROGRAMMING</p><h1>Film Library</h1><p>Browse every film, open its complete performance record, or manage its programming details.</p></div><div className="film-library-heading-actions"><button className="secondary" onClick={() => setCatalogOpen((current) => !current)}>{catalogOpen ? "Close shared catalog" : "Add from Attend catalog"}</button><Link href="/scheduling" className="primary">Add manually</Link></div></header>
+    {catalogOpen && <section className="panel shared-film-catalog" aria-labelledby="shared-catalog-heading"><div className="dashboard-section-heading"><div><p className="kicker">ATTEND FILM DATABASE</p><h2 id="shared-catalog-heading">Add a shared film</h2><p>Reuse verified film facts. Your cinema’s bookings, deal terms, pricing, and performance remain private.</p></div><span>{catalog.length} results</span></div><label><span>Search title, filmmaker, cast, distributor, IMDb, or EIDR</span><input autoFocus type="search" value={catalogQuery} onChange={(event) => setCatalogQuery(event.target.value)} placeholder="Search shared films" /></label>{catalogLoading && <p className="dashboard-empty">Searching Attend’s catalog…</p>}<div className="shared-film-catalog-grid">{!catalogLoading && catalog.map((film) => <article key={film.id}><div>{film.posterUrl ? <img src={film.posterUrl} alt="" /> : <span aria-hidden="true">{film.title.slice(0, 1)}</span>}</div><div><span className={`status-chip ${film.verified ? "status-success" : ""}`}>{film.verified ? "Attend verified" : "Community record"}</span><h3>{film.title}</h3><p>{[film.releaseYear, `${film.runtimeMinutes} min`, film.rating].filter(Boolean).join(" · ")}</p><small>{film.primaryDistributorName || "Distributor not set"}{film.imdbId ? ` · ${film.imdbId}` : ""}</small></div>{film.importedMovieId ? <Link href={`/films/${encodeURIComponent(film.importedMovieId)}`}>Already in library</Link> : <button disabled={Boolean(importingId)} onClick={() => void importFilm(film)}>{importingId === film.id ? "Adding…" : "Add to library"}</button>}</article>)}</div>{!catalogLoading && !catalog.length && <p className="dashboard-empty">No shared films match this search. You can still add the film manually.</p>}</section>}
     <label className="film-library-index-search"><span>Search films</span><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Title, director, or distributor" /></label>
     {error && <div className="error-banner" role="alert">{error}</div>}
     {!data && !error && <p className="dashboard-empty">Loading film library…</p>}

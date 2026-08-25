@@ -368,6 +368,23 @@ export class CinemaController {
     );
   }
 
+  @Get("film-catalog")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  filmCatalog(@CurrentActor() actor: RequestActor, @Query("q") query?: string) {
+    return this.cinemaService.filmCatalog(actor, query);
+  }
+
+  @Post("film-catalog/:catalogEntryId/import")
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(Permission.MovieManage)
+  importCatalogMovie(
+    @CurrentActor() actor: RequestActor,
+    @Param("catalogEntryId") catalogEntryId: string,
+  ) {
+    return this.cinemaService.importCatalogMovie(actor, catalogEntryId);
+  }
+
   @Patch("movies/:id")
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(Permission.MovieManage)
