@@ -820,6 +820,18 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .admin-nav a.active { border-color: var(--accent); color: var(--accent); }
 .admin-route-page { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
 .standalone-film-library { display: grid; gap: 32px; }
+.membership-directory-page { display: grid; gap: 24px; }
+.membership-directory-filters { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(180px, 1fr); gap: 16px; }
+.membership-directory-filters label { display: grid; gap: 8px; }
+.membership-directory-filters input, .membership-directory-filters select { width: 100%; }
+.membership-directory { display: grid; gap: 16px; }
+.membership-directory-table { display: grid; overflow-x: auto; }
+.membership-directory-table > header, .membership-directory-table > a { display: grid; grid-template-columns: 1fr 1.5fr .8fr .7fr .9fr .9fr; gap: 14px; align-items: center; min-width: 900px; padding: 13px 0; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
+.membership-directory-table > header { color: var(--muted); font-size: .75rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.membership-directory-table > a:hover { color: var(--color-accent); }
+.membership-directory-table span { min-width: 0; }
+.membership-directory-table small { display: block; margin-top: 3px; color: var(--muted); }
+@media (max-width: 700px) { .membership-directory-filters { grid-template-columns: 1fr; } }
 .standalone-film-library > section { display: grid; gap: 16px; }
 .film-library-index-search { display: grid; gap: 8px; max-width: 620px; font-weight: 800; }
 .film-library-index-search input { width: 100%; }

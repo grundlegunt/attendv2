@@ -145,6 +145,27 @@ export class ManagementService {
     return { query: normalized, orders, customers, tickets, giftCards };
   }
 
+  async memberships(locationId: string, filters: { query?: string; status?: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED" }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
+    const query = filters.query?.trim();
+    return prisma.membership.findMany({
+      where: {
+        organizationId: location.organizationId,
+        ...(filters.status ? { status: filters.status } : {}),
+        ...(query ? { OR: [
+          { membershipNumber: { contains: query, mode: "insensitive" } },
+          { tier: { contains: query, mode: "insensitive" } },
+          { customer: { name: { contains: query, mode: "insensitive" } } },
+          { customer: { email: { contains: query, mode: "insensitive" } } },
+          { customer: { phone: { contains: query } } },
+        ] } : {}),
+      },
+      select: { id: true, membershipNumber: true, tier: true, status: true, expiresAt: true, createdAt: true, updatedAt: true, customer: { select: { id: true, name: true, email: true, phone: true } } },
+      orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
+      take: 500,
+    });
+  }
+
   async settings(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({
       where: { id: locationId },

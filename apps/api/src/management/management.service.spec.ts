@@ -7,6 +7,23 @@ describe("membership identity", () => {
   });
 });
 
+describe("membership directory", () => {
+  it("scopes records to the active organization and applies operator filters", async () => {
+    const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
+    const memberships = jest.spyOn(prisma.membership, "findMany").mockResolvedValue([]);
+    try {
+      await new ManagementService().memberships("location-1", { query: "Jane", status: "ACTIVE" });
+      expect(location).toHaveBeenCalledWith({ where: { id: "location-1" }, select: { organizationId: true } });
+      expect(memberships).toHaveBeenCalledWith(expect.objectContaining({
+        where: expect.objectContaining({ organizationId: "organization-1", status: "ACTIVE", OR: expect.any(Array) }),
+        take: 500,
+      }));
+    } finally {
+      location.mockRestore(); memberships.mockRestore();
+    }
+  });
+});
+
 describe("ManagementService private-event inquiry export", () => {
   it("keeps inquiry searches location-scoped and applies the selected status", async () => {
     const findMany = jest.spyOn(prisma.privateEventInquiry, "findMany").mockResolvedValue([]);
