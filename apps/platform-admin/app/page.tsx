@@ -121,7 +121,7 @@ export default function PlatformDashboard() {
     const requestId = ++overviewRequestRef.current;
     setOverviewLoading(true); setError(null);
     try {
-      const nextOverview = await request<Overview>("/platform/overview", undefined, session.accessToken);
+      const nextOverview = await request<Overview>("/platform/overview?refresh=true", undefined, session.accessToken);
       if (requestId === overviewRequestRef.current) setOverview(nextOverview);
     } catch (reason) {
       if (requestId === overviewRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not refresh platform health.");

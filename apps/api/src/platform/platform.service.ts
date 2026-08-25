@@ -152,9 +152,15 @@ export class PlatformService {
     });
   }
 
-  private organizationHealth(organizationId: string, now = new Date()) {
+  private organizationHealth(
+    organizationId: string,
+    now = new Date(),
+    forceRefresh = false,
+  ) {
     const cached = this.organizationHealthCache.get(organizationId);
-    if (cached && cached.expiresAt > now.getTime()) return cached.value;
+    if (!forceRefresh && cached && cached.expiresAt > now.getTime()) {
+      return cached.value;
+    }
 
     const value = this.computeOrganizationHealth(organizationId, now).catch(
       (error) => {
@@ -222,7 +228,7 @@ export class PlatformService {
     } };
   }
 
-  async overview() {
+  async overview(forceRefresh = false) {
     const now = new Date();
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },
@@ -295,7 +301,11 @@ export class PlatformService {
       generatedAt: new Date().toISOString(),
       organizations: await Promise.all(
         organizations.map(async (organization) => {
-          const health = await this.organizationHealth(organization.id, now);
+          const health = await this.organizationHealth(
+            organization.id,
+            now,
+            forceRefresh,
+          );
           return {
             id: organization.id,
             name: organization.name,
