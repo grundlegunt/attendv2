@@ -21,3 +21,11 @@ test("Stripe onboarding actions hand off the selected client directly", () => {
   assert.match(source, /Resume Stripe/);
   assert.match(source, /Connect Stripe/);
 });
+
+test("branding and staff steps open the selected location editor", () => {
+  assert.match(source, /section=branding/);
+  assert.match(source, /section=staff/);
+  assert.match(source, /locationId=\$\{encodeURIComponent\(location\.id\)\}/);
+  assert.match(source, /find\(\(item\) => !item\.configuration\.branding\)/);
+  assert.match(source, /find\(\(item\) => item\.configuration\.employees === 0\)/);
+});
