@@ -10,7 +10,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import type { Request } from "express";
-import { createTicketCheckoutRequestSchema, finalizeTicketOrderRequestSchema, resendGuestTicketReceiptRequestSchema, resumeTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
+import { createTicketCheckoutRequestSchema, finalizeTicketOrderRequestSchema, redeemMobileTicketAccessRequestSchema, resendGuestTicketReceiptRequestSchema, resumeTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { TicketingService } from "./ticketing.service";
@@ -83,6 +83,17 @@ export class TicketingController {
   ) {
     const parsed = resendGuestTicketReceiptRequestSchema.parse(body);
     return this.ticketingService.resendGuestReceipt(orderId, parsed.holderKey, parsed.requestId);
+  }
+
+  @Post("mobile-orders/:orderId/access")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
+  mobileTicketAccess(
+    @Param("orderId") orderId: string,
+    @Body(new ZodValidationPipe(redeemMobileTicketAccessRequestSchema)) body: unknown,
+  ) {
+    const parsed = redeemMobileTicketAccessRequestSchema.parse(body);
+    return this.ticketingService.redeemMobileTicketAccess(orderId, parsed.token);
   }
 
   @Post("scans")

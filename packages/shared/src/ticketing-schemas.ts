@@ -104,12 +104,25 @@ export interface TicketConfirmationResponse {
   }>;
 }
 
+export type MobileTicketAccessResponse = Omit<
+  TicketConfirmationResponse,
+  "receiptDelivery" | "diningAuthorization"
+>;
+
 export const resendGuestTicketReceiptRequestSchema = z.object({
   holderKey: z.string().min(16).max(200),
   requestId: z.string().uuid(),
 }).strict();
 export type ResendGuestTicketReceiptRequest = z.infer<
   typeof resendGuestTicketReceiptRequestSchema
+>;
+
+export const redeemMobileTicketAccessRequestSchema = z.object({
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/, "A valid mobile ticket token is required."),
+}).strict();
+
+export type RedeemMobileTicketAccessRequest = z.infer<
+  typeof redeemMobileTicketAccessRequestSchema
 >;
 
 export const scanTicketRequestSchema = z.object({

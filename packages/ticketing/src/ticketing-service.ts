@@ -153,6 +153,10 @@ function publicOrderNumber() {
   return `AT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3).toString("hex").toUpperCase()}`;
 }
 
+function mobileAccessTokenHash(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
 export class TicketingService {
   constructor(
     private readonly prisma: PrismaClient,
@@ -1036,6 +1040,64 @@ export class TicketingService {
     });
     const receiptDelivery = await this.deliverReceipt(order);
     return { receiptDelivery, email: staged.email };
+  }
+
+  async issueMobileTicketAccess(orderId: string) {
+    const order = await this.prisma.ticketOrder.findFirst({
+      where: { id: orderId, status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] } },
+      select: {
+        id: true,
+        tickets: {
+          where: { status: { in: ["ISSUED", "ADMITTED"] } },
+          select: { showtimeSeat: { select: { showtime: { select: { endsAt: true } } } } },
+        },
+      },
+    });
+    if (!order?.tickets.length) throw TicketingError.notFound("Ticket order was not found.");
+
+    const token = randomBytes(32).toString("base64url");
+    const latestEnd = Math.max(...order.tickets.map((ticket) => ticket.showtimeSeat.showtime.endsAt.getTime()));
+    const expiresAt = new Date(Math.max(Date.now() + 24 * 60 * 60_000, latestEnd + 30 * 24 * 60 * 60_000));
+    await this.prisma.ticketOrder.update({
+      where: { id: order.id },
+      data: {
+        mobileAccessTokenHash: mobileAccessTokenHash(token),
+        mobileAccessExpiresAt: expiresAt,
+        mobileAccessRevokedAt: null,
+      },
+    });
+    return { token, expiresAt };
+  }
+
+  async redeemMobileTicketAccess(orderId: string, token: string) {
+    const order = await this.prisma.ticketOrder.findFirst({
+      where: {
+        id: orderId,
+        mobileAccessTokenHash: mobileAccessTokenHash(token),
+        mobileAccessExpiresAt: { gt: new Date() },
+        mobileAccessRevokedAt: null,
+        status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
+      },
+      include: {
+        tickets: {
+          where: { status: { in: ["ISSUED", "ADMITTED"] } },
+          include: {
+            ticketType: true,
+            showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } },
+          },
+        },
+      },
+    });
+    if (!order?.tickets.length) throw TicketingError.notFound("Mobile tickets were not found or have expired.");
+    const confirmation = this.presentConfirmation(order, "NOT_REQUESTED", "DECLINED");
+    return {
+      orderId: confirmation.orderId,
+      orderNumber: confirmation.orderNumber,
+      status: confirmation.status,
+      totalCents: confirmation.totalCents,
+      currency: confirmation.currency,
+      tickets: confirmation.tickets,
+    };
   }
 
   async reconcileFailedReceipts(limit = 25) {
