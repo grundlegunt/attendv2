@@ -15,7 +15,7 @@ type SearchResults = {
     currency: string;
     guestName: string | null;
     guestEmail: string | null;
-    customer: { name: string | null; email: string | null } | null;
+    customer: { id: string; name: string | null; email: string | null } | null;
     createdAt: string;
     _count: { tickets: number };
   }>;
@@ -304,7 +304,20 @@ export default function GlobalSearchPage() {
                     {order._count.tickets} tickets · {order.status}
                   </small>
                 </div>
-                <Link href={`/refunds?query=${encodeURIComponent(order.orderNumber)}`}>Open order</Link>
+                <div className="search-result-actions">
+                  {order.customer && (
+                    <Link
+                      href={`/customers/${encodeURIComponent(order.customer.id)}`}
+                    >
+                      Open customer
+                    </Link>
+                  )}
+                  <Link
+                    href={`/refunds?query=${encodeURIComponent(order.orderNumber)}`}
+                  >
+                    Open order
+                  </Link>
+                </div>
               </article>
             ))}
             {!results.orders.length && <p className="dashboard-empty">No matching orders.</p>}

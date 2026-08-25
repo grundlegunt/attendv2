@@ -7,10 +7,17 @@ const profile = readFileSync(resolve(__dirname, "../app/customers/[id]/page.tsx"
 const search = readFileSync(resolve(__dirname, "../app/search/page.tsx"), "utf8");
 const managementControls = readFileSync(resolve(__dirname, "../app/management-controls.tsx"), "utf8");
 const refundService = readFileSync(resolve(__dirname, "../../api/src/management/management-refund.service.ts"), "utf8");
+const managementService = readFileSync(resolve(__dirname, "../../api/src/management/management.service.ts"), "utf8");
 
 test("customer search links to durable customer profiles", () => {
   assert.match(search, /href=\{`\/customers\/\$\{encodeURIComponent\(customer\.id\)\}`\}/);
   assert.match(search, /Open profile/);
+});
+
+test("registered order search results link to their customer profile", () => {
+  assert.match(managementService, /customer: \{ select: \{ id: true, name: true, email: true \} \}/);
+  assert.match(search, /order\.customer\.id/);
+  assert.match(search, /Open customer/);
 });
 
 test("customer profiles reuse authenticated history, pagination, and export endpoints", () => {
