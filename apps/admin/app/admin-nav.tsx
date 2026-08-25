@@ -7,6 +7,7 @@ import { useAdminSession } from "./admin-session";
 import { isAdminItemActive, visibleAdminNavigation } from "./admin-navigation";
 import { CUSTOMER_WEB_URL } from "./lib/customer-site";
 import { visibleOperationalSites } from "./lib/operational-sites";
+import { markAdminNavigationStart } from "./lib/request-diagnostics";
 
 export function AdminNav() {
   const pathname = usePathname();
@@ -54,7 +55,7 @@ export function AdminNav() {
             {expanded && <div id={groupId} className="admin-nav-links">{group.items.map((item) => {
               if (item.external) return <a key={item.href} href={item.href} target="_blank" rel="noreferrer">{item.label} <span aria-hidden="true">↗</span></a>;
               const active = isAdminItemActive(pathname, item.href);
-              return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined}>{item.label}</Link>;
+              return <Link key={item.href} href={item.href} className={active ? "active" : ""} aria-current={active ? "page" : undefined} onClick={() => markAdminNavigationStart(item.href)}>{item.label}</Link>;
             })}</div>}
           </section>;
         })}

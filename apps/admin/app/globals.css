@@ -1024,6 +1024,14 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .diagnostics-row.slow { box-shadow: inset 4px 0 0 #e3ad65; }
 .diagnostics-header { background: var(--color-bg); color: var(--color-text-secondary); font-size: .68rem; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
 .diagnostics-empty { margin-top: 0; border: 1px solid var(--color-border); border-top: 0; }
+.diagnostics-render-panel { margin-top: 18px; }
+.diagnostics-render-panel > p { color: var(--color-text-secondary); }
+.diagnostics-render-list { border: 1px solid var(--color-border); }
+.diagnostics-render-row { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(150px, .7fr) minmax(110px, .5fr) minmax(110px, .5fr); align-items: center; border-bottom: 1px solid var(--color-border); }
+.diagnostics-render-row:last-child { border-bottom: 0; }
+.diagnostics-render-row > * { padding: 12px 14px; }
+.diagnostics-render-row span, .diagnostics-render-row time { color: var(--color-text-secondary); font-size: .78rem; }
+.diagnostics-render-row.slow { box-shadow: inset 4px 0 0 #e3ad65; }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: 18px; align-items: start; }
 .dashboard-customizer { margin-top: 18px; }
 .dashboard-customizer .dashboard-section-heading p:last-child { max-width: 720px; margin: 8px 0 0; color: var(--color-text-secondary); }

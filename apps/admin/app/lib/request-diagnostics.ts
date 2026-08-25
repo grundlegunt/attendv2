@@ -1,5 +1,7 @@
 const STORAGE_KEY = "attend-admin-request-timings";
 const TIMING_EVENT = "attend-admin-request-timing";
+const RENDER_STORAGE_KEY = "attend-admin-render-timings";
+const NAVIGATION_STORAGE_KEY = "attend-admin-navigation-start";
 const MAX_TIMINGS = 100;
 
 export interface AdminRequestTiming {
@@ -17,6 +19,15 @@ export interface AdminRequestTiming {
   recordedAt: string;
 }
 
+export interface AdminRenderTiming {
+  page: string;
+  durationMs: number;
+  source: "navigation" | "render";
+  recordedAt: string;
+}
+
+type NavigationStart = { page: string; startedAt: number };
+
 export function readAdminRequestTimings(): AdminRequestTiming[] {
   try {
     const parsed: unknown = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? "[]");
@@ -28,7 +39,47 @@ export function readAdminRequestTimings(): AdminRequestTiming[] {
 
 export function clearAdminRequestTimings() {
   window.sessionStorage.removeItem(STORAGE_KEY);
+  window.sessionStorage.removeItem(RENDER_STORAGE_KEY);
   window.dispatchEvent(new Event(TIMING_EVENT));
+}
+
+export function readAdminRenderTimings(): AdminRenderTiming[] {
+  try {
+    const parsed: unknown = JSON.parse(window.sessionStorage.getItem(RENDER_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed as AdminRenderTiming[] : [];
+  } catch {
+    return [];
+  }
+}
+
+export function markAdminNavigationStart(page: string) {
+  try {
+    const start: NavigationStart = { page, startedAt: performance.now() };
+    window.sessionStorage.setItem(NAVIGATION_STORAGE_KEY, JSON.stringify(start));
+  } catch {
+    // Navigation must continue if diagnostics storage is unavailable.
+  }
+}
+
+export function recordAdminRenderTiming(page: string, renderStartedAt: number) {
+  try {
+    const stored: unknown = JSON.parse(window.sessionStorage.getItem(NAVIGATION_STORAGE_KEY) ?? "null");
+    const navigation = stored && typeof stored === "object" && !Array.isArray(stored)
+      ? stored as Partial<NavigationStart>
+      : null;
+    const hasNavigationStart = navigation?.page === page && typeof navigation.startedAt === "number";
+    const timing: AdminRenderTiming = {
+      page,
+      durationMs: Math.round(performance.now() - (hasNavigationStart ? navigation.startedAt! : renderStartedAt)),
+      source: hasNavigationStart ? "navigation" : "render",
+      recordedAt: new Date().toISOString(),
+    };
+    window.sessionStorage.removeItem(NAVIGATION_STORAGE_KEY);
+    window.sessionStorage.setItem(RENDER_STORAGE_KEY, JSON.stringify([timing, ...readAdminRenderTimings()].slice(0, MAX_TIMINGS)));
+    window.dispatchEvent(new Event(TIMING_EVENT));
+  } catch {
+    // Diagnostics must never interrupt page rendering.
+  }
 }
 
 export function adminRequestTimingEvent() {
