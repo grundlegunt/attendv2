@@ -32,6 +32,12 @@ test("customer-linked attention items open durable customer profiles", () => {
   assert.ok(attention.match(/Open customer/g).length >= 2);
 });
 
+test("failed refunds retain their originating customer profile", () => {
+  assert.match(managementService, /ticketOrder: \{ select: \{ orderNumber: true, customer: \{ select: \{ id: true \} \}/);
+  assert.match(managementService, /restaurantTab: \{ select: \{ id: true, label: true, primaryCustomer: \{ select: \{ id: true \} \}/);
+  assert.match(attention, /failedRefundCustomerId\(refund\)/);
+});
+
 test("customer profiles reuse authenticated history, pagination, and export endpoints", () => {
   assert.match(profile, /apiFetch<Customer>\(`\/management\/customers\/\$\{id\}`/);
   assert.match(profile, /ticketOffset/);

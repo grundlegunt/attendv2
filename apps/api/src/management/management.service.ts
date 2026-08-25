@@ -85,7 +85,7 @@ export class ManagementService {
       }),
       prisma.refund.findMany({
         where: { status: "FAILED", payment: { OR: [{ ticketOrder: { locationId } }, { restaurantTab: { locationId } }] } },
-        select: { id: true, amountCents: true, reason: true, scope: true, status: true, updatedAt: true, payment: { select: { currency: true, ticketOrder: { select: { orderNumber: true } }, restaurantTab: { select: { id: true, label: true } } } } },
+        select: { id: true, amountCents: true, reason: true, scope: true, status: true, updatedAt: true, payment: { select: { currency: true, ticketOrder: { select: { orderNumber: true, customer: { select: { id: true } } } }, restaurantTab: { select: { id: true, label: true, primaryCustomer: { select: { id: true } } } } } } },
         orderBy: { updatedAt: "asc" },
         take: 50,
       }),
