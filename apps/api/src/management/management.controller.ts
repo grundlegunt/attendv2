@@ -95,6 +95,10 @@ const membershipSchema = z.object({
   status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]),
   expiresAt: z.coerce.date().nullable(),
 }).strict();
+const membershipDirectorySchema = z.object({
+  query: z.string().trim().max(100).optional(),
+  status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]).optional(),
+}).strict();
 const dashboardWidget = z.enum(["metrics", "topFilms", "schedule", "setup", "activity", "quickActions"]);
 const dashboardPreferencesSchema = z.object({
   hidden: z.array(dashboardWidget).max(6),
@@ -208,6 +212,9 @@ export class ManagementController {
 
   @Get("customers/:customerId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   customer(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Query(new ZodValidationPipe(customerHistorySchema)) query: unknown) { return this.management.customer(this.location(actor), customerId, customerHistorySchema.parse(query)); }
+
+  @Get("memberships") @RequirePermissions(Permission.TicketPriceEdit)
+  memberships(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipDirectorySchema)) query: unknown) { return this.management.memberships(this.location(actor), membershipDirectorySchema.parse(query)); }
 
   @Get("customers/:customerId/history.csv") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   async customerHistoryCsv(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Res() response: Response) {

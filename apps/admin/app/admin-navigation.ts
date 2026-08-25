@@ -45,6 +45,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
     { href: "/private-events", label: "Private Events", permissions: ["reports.view"] },
     { href: "/gift-cards", label: "Gift Cards", permissions: ["payment.refund"] },
     { href: "/promotions", label: "Promos", permissions: ["ticket.price.edit"] },
+    { href: "/memberships", label: "Memberships", permissions: ["ticket.price.edit"] },
   ] },
   { label: "Team", items: [
     { href: "/users", label: "Team Access", permissions: ["employee.edit"] },

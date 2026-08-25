@@ -11,6 +11,7 @@ const adminNavSource = readFileSync(resolve(__dirname, "../app/admin-nav.tsx"), 
 const dashboardSource = readFileSync(resolve(__dirname, "../app/admin-dashboard.tsx"), "utf8");
 const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
 const filmLibrarySource = readFileSync(resolve(__dirname, "../app/films/page.tsx"), "utf8");
+const membershipsSource = readFileSync(resolve(__dirname, "../app/memberships/page.tsx"), "utf8");
 const globalStylesSource = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
 const compiled = ts.transpileModule(source, {
@@ -106,6 +107,14 @@ describe("admin navigation", () => {
   it("offers Labor from both financial reporting and team management", () => {
     const groups = visibleAdminNavigation(["reports.view"]);
     assert.deepEqual(groups.filter((group) => group.items.some((item) => item.href === "/labor")).map((group) => group.label), ["Financial Reports", "Team"]);
+  });
+
+  it("exposes a searchable external-membership directory linked to customer profiles", () => {
+    const links = visibleAdminNavigation(["ticket.price.edit"]).flatMap((group) => group.items);
+    assert.equal(links.some((item) => item.href === "/memberships"), true);
+    assert.match(membershipsSource, /\/management\/memberships/);
+    assert.match(membershipsSource, /`\/customers\/\$\{membership\.customer\.id\}`/);
+    assert.match(membershipsSource, /All statuses/);
   });
 
   it("shows distributor and financial reporting tools only with financial reporting permission", () => {
