@@ -9,6 +9,8 @@ export interface AdminRequestTiming {
   status: number | null;
   totalMs: number;
   serverMs: number | null;
+  databaseMs: number | null;
+  databaseQueryCount: number | null;
   responseBytes: number | null;
   recordedAt: string;
 }
@@ -46,6 +48,7 @@ export function recordAdminRequestTiming(
 ) {
   try {
     const serverTiming = response?.headers.get("Server-Timing")?.match(/app;dur=([0-9.]+)/)?.[1];
+    const databaseTiming = response?.headers.get("Server-Timing")?.match(/db;dur=([0-9.]+);desc="([0-9]+) queries"/);
     const timing: AdminRequestTiming = {
       page: window.location.pathname,
       path: path.split("?")[0] ?? path,
@@ -53,6 +56,8 @@ export function recordAdminRequestTiming(
       status: response?.status ?? null,
       totalMs: Math.round(performance.now() - startedAt),
       serverMs: serverTiming ? Number(serverTiming) : null,
+      databaseMs: databaseTiming ? Number(databaseTiming[1]) : null,
+      databaseQueryCount: databaseTiming ? Number(databaseTiming[2]) : null,
       responseBytes: numericHeader(response, "Content-Length"),
       recordedAt: new Date().toISOString(),
     };

@@ -17,6 +17,8 @@ test("Admin records completed and failed requests without exposing request data"
 
 test("Admin diagnostics separate API latency from browser and transfer overhead", () => {
   assert.match(recorder, /Server-Timing/);
+  assert.match(recorder, /db;dur=/);
+  assert.match(page, /High database time or query count/);
   assert.match(page, /Average browser wait/);
   assert.match(page, /Average API time/);
   assert.match(page, /Outside API/);

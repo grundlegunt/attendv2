@@ -1015,7 +1015,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .diagnostics-explanation { margin-bottom: 18px; }
 .diagnostics-explanation p { max-width: 920px; margin: 8px 0 0; color: var(--color-text-secondary); line-height: 1.5; }
 .diagnostics-table { overflow-x: auto; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
-.diagnostics-row { display: grid; grid-template-columns: minmax(280px, 2fr) repeat(5, minmax(100px, .7fr)) minmax(110px, .8fr); align-items: center; min-width: 1060px; border-bottom: 1px solid var(--color-border); }
+.diagnostics-row { display: grid; grid-template-columns: minmax(280px, 2fr) repeat(7, minmax(100px, .7fr)) minmax(110px, .8fr); align-items: center; min-width: 1280px; border-bottom: 1px solid var(--color-border); }
 .diagnostics-row:last-child { border-bottom: 0; }
 .diagnostics-row > * { min-width: 0; padding: 14px 16px; }
 .diagnostics-row strong { display: grid; gap: 4px; overflow-wrap: anywhere; }
