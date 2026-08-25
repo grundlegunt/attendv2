@@ -16,7 +16,7 @@
  * Those imports are deliberately dynamic below.
  */
 import type { INestApplication } from "@nestjs/common";
-import type { TestEmailProvider } from "@cinema/notifications";
+import type { TestEmailProvider, TestWalletPassProvider } from "@cinema/notifications";
 import type { TestPaymentProvider } from "@cinema/payments";
 import { authenticator } from "otplib";
 import request from "supertest";
@@ -81,6 +81,8 @@ beforeAll(async () => {
   process.env.QR_CREDENTIAL_SECRET = "test-qr-credential-secret-32-characters-min";
   process.env.PAYMENT_PROVIDER = "test";
   process.env.EMAIL_PROVIDER = "test";
+  process.env.APPLE_WALLET_PROVIDER = "test";
+  process.env.GOOGLE_WALLET_PROVIDER = "test";
   process.env.RESTAURANT_SETTLEMENT_INTERVAL_MS = "0";
   process.env.OBSERVABILITY_TOKEN = "test-observability-token-at-least-32-characters";
   process.env.AUTH_RATE_LIMIT_ATTEMPTS = "100";
@@ -5140,6 +5142,7 @@ describe("Customer authentication", () => {
     expect(account.status).toBe(200);
     expect(account.body.customer).toMatchObject({ email, isGuest: false });
     expect(account.body.orders).toEqual(expect.any(Array));
+    expect(account.body.walletAvailability).toEqual({ apple: true, google: true });
   });
 
   it("lets a signed-in customer update their profile name", async () => {
@@ -5266,6 +5269,36 @@ describe("Customer authentication", () => {
       .set("Idempotency-Key", crypto.randomUUID())
       .send();
     expect(blocked.status).toBe(404);
+
+    const ticket = await prisma.ticket.findFirstOrThrow({ where: { ticketOrderId: order.id } });
+    const applePass = await request(app.getHttpServer())
+      .get(`/api/v1/auth/customers/tickets/${ticket.id}/wallet/apple`)
+      .set("Cookie", accessCookie);
+    expect(applePass.status).toBe(200);
+    expect(applePass.headers["content-type"]).toContain("application/vnd.apple.pkpass");
+    expect(applePass.headers["content-disposition"]).toContain(`ticket-${ticket.id}.pkpass`);
+    const { APPLE_WALLET_PROVIDER } = await import("../src/notifications/notifications.module");
+    const appleProvider = app.get(APPLE_WALLET_PROVIDER) as TestWalletPassProvider;
+    expect(appleProvider.issued.at(-1)).toMatchObject({ ticketId: ticket.id, credential: ticket.qrToken });
+
+    const googlePass = await request(app.getHttpServer())
+      .get(`/api/v1/auth/customers/tickets/${ticket.id}/wallet/google`)
+      .set("Cookie", accessCookie);
+    expect(googlePass.status).toBe(200);
+    expect(googlePass.body).toEqual({
+      platform: "google",
+      kind: "url",
+      saveUrl: `https://pay.google.com/gp/v/save/test-${ticket.id}`,
+    });
+    await request(app.getHttpServer())
+      .get(`/api/v1/auth/customers/tickets/${ticket.id}/wallet/apple`)
+      .expect(401);
+
+    await prisma.ticket.update({ where: { id: ticket.id }, data: { status: "CANCELED" } });
+    await request(app.getHttpServer())
+      .get(`/api/v1/auth/customers/tickets/${ticket.id}/wallet/google`)
+      .set("Cookie", accessCookie)
+      .expect(404);
   });
 
   it("refreshes from the HttpOnly refresh cookie and restores an access-cookie session", async () => {

@@ -79,9 +79,12 @@ const envSchema = z.object({
   APPLE_WALLET_PROVIDER: z.enum(["disabled", "passkit", "test"]).default("disabled"),
   APPLE_WALLET_TEAM_ID: z.string().min(1).optional(),
   APPLE_WALLET_PASS_TYPE_ID: z.string().startsWith("pass.").optional(),
+  APPLE_WALLET_WWDR_CERTIFICATE_BASE64: z.string().min(1).optional(),
   APPLE_WALLET_CERTIFICATE_BASE64: z.string().min(1).optional(),
   APPLE_WALLET_PRIVATE_KEY_BASE64: z.string().min(1).optional(),
   APPLE_WALLET_PRIVATE_KEY_PASSWORD: z.string().optional(),
+  APPLE_WALLET_ICON_BASE64: z.string().min(1).optional(),
+  APPLE_WALLET_ICON_2X_BASE64: z.string().min(1).optional(),
   GOOGLE_WALLET_PROVIDER: z.enum(["disabled", "google", "test"]).default("disabled"),
   GOOGLE_WALLET_ISSUER_ID: z.string().min(1).optional(),
   GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: z.string().email().optional(),
@@ -181,7 +184,7 @@ const envSchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["APPLE_WALLET_PROVIDER"], message: "Test wallet providers are only allowed when NODE_ENV=test." });
   }
   if (env.APPLE_WALLET_PROVIDER === "passkit") {
-    for (const key of ["APPLE_WALLET_TEAM_ID", "APPLE_WALLET_PASS_TYPE_ID", "APPLE_WALLET_CERTIFICATE_BASE64", "APPLE_WALLET_PRIVATE_KEY_BASE64"] as const) {
+    for (const key of ["APPLE_WALLET_TEAM_ID", "APPLE_WALLET_PASS_TYPE_ID", "APPLE_WALLET_WWDR_CERTIFICATE_BASE64", "APPLE_WALLET_CERTIFICATE_BASE64", "APPLE_WALLET_PRIVATE_KEY_BASE64", "APPLE_WALLET_ICON_BASE64"] as const) {
       if (!env[key]) context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required when APPLE_WALLET_PROVIDER=passkit.` });
     }
   }

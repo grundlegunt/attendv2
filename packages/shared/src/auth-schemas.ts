@@ -158,4 +158,5 @@ export interface CustomerTicketOrderSummary {
 export interface CustomerAccountResponse {
   customer: AuthenticatedCustomer;
   orders: CustomerTicketOrderSummary[];
+  walletAvailability: { apple: boolean; google: boolean };
 }
