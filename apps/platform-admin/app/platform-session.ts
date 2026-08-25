@@ -9,6 +9,41 @@ export interface StoredPlatformSession {
 let refreshInFlight: Promise<StoredPlatformSession | null> | null = null;
 const REQUEST_TIMEOUT_MS = 20_000;
 const DOWNLOAD_TIMEOUT_MS = 60_000;
+const TIMING_STORAGE_KEY = "attend-platform-request-timings";
+const TIMING_EVENT = "attend-platform-request-timing";
+
+export interface PlatformRequestTiming {
+  path: string;
+  status: number | null;
+  totalMs: number;
+  serverMs: number | null;
+  recordedAt: string;
+}
+
+export function readPlatformRequestTimings(): PlatformRequestTiming[] {
+  try {
+    const parsed: unknown = JSON.parse(window.sessionStorage.getItem(TIMING_STORAGE_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed as PlatformRequestTiming[] : [];
+  } catch { return []; }
+}
+
+export function clearPlatformRequestTimings() {
+  window.sessionStorage.removeItem(TIMING_STORAGE_KEY);
+  window.dispatchEvent(new Event(TIMING_EVENT));
+}
+
+export function platformRequestTimingEvent() { return TIMING_EVENT; }
+
+function recordPlatformRequestTiming(path: string, startedAt: number, response: Response | null) {
+  try {
+    const serverTiming = response?.headers.get("Server-Timing")?.match(/app;dur=([0-9.]+)/)?.[1];
+    const timing: PlatformRequestTiming = { path: path.split("?")[0] ?? path, status: response?.status ?? null, totalMs: Math.round(performance.now() - startedAt), serverMs: serverTiming ? Number(serverTiming) : null, recordedAt: new Date().toISOString() };
+    window.sessionStorage.setItem(TIMING_STORAGE_KEY, JSON.stringify([timing, ...readPlatformRequestTimings()].slice(0, 100)));
+    window.dispatchEvent(new Event(TIMING_EVENT));
+  } catch {
+    // Diagnostics must never interrupt an operational request.
+  }
+}
 
 async function fetchPlatform(
   url: string,
@@ -101,6 +136,9 @@ export function readPlatformSession(storageKey: string): StoredPlatformSession |
 }
 
 async function platformResponse(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const startedAt = performance.now();
+  let response: Response | null = null;
+  let recorded = false;
   const send = (token?: string) => {
     const headers = new Headers(init?.headers);
     headers.set("Content-Type", "application/json");
@@ -108,7 +146,8 @@ async function platformResponse(apiBaseUrl: string, storageKey: string, path: st
     return fetchPlatform(`${apiBaseUrl}${path}`, { ...init, headers }, timeoutMs);
   };
   const stored = accessToken ? readPlatformSession(storageKey) : null;
-  let response = await send(stored?.accessToken ?? accessToken);
+  try {
+  response = await send(stored?.accessToken ?? accessToken);
   if (response.status === 401 && accessToken) {
     const session = readPlatformSession(storageKey);
     if (session) {
@@ -141,7 +180,12 @@ async function platformResponse(apiBaseUrl: string, storageKey: string, path: st
     );
     throw new Error(message);
   }
+  recordPlatformRequestTiming(path, startedAt, response);
+  recorded = true;
   return response;
+  } finally {
+    if (!recorded) recordPlatformRequestTiming(path, startedAt, response);
+  }
 }
 
 export async function platformRequest<T>(apiBaseUrl: string, storageKey: string, path: string, init?: RequestInit, accessToken?: string): Promise<T> {
