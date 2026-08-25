@@ -819,6 +819,22 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .admin-nav a:hover { color: white; border-color: var(--line); }
 .admin-nav a.active { border-color: var(--accent); color: var(--accent); }
 .admin-route-page { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
+.standalone-film-library { display: grid; gap: 32px; }
+.standalone-film-library > section { display: grid; gap: 16px; }
+.film-library-index-search { display: grid; gap: 8px; max-width: 620px; font-weight: 800; }
+.film-library-index-search input { width: 100%; }
+.film-library-index-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.film-library-index-card { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 18px; min-width: 0; padding: 0; overflow: hidden; }
+.film-library-index-card > img, .film-library-index-placeholder { width: 120px; height: 100%; min-height: 190px; object-fit: cover; background: #0c0d0b; }
+.film-library-index-placeholder { display: grid; place-items: center; color: var(--color-accent); font-family: Georgia, serif; font-size: 4rem; }
+.film-library-index-card > div:last-child { display: grid; align-content: start; justify-items: start; gap: 8px; padding: 18px 18px 18px 0; min-width: 0; }
+.film-library-index-card h3, .film-library-index-card p { margin: 0; }
+.film-library-index-card h3 { font-family: Georgia, serif; font-size: 1.45rem; }
+.film-library-index-card p, .film-library-index-card small { color: #aaa99f; }
+.film-library-index-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.film-library-index-actions a { padding: 8px 10px; border: 1px solid var(--color-accent); color: var(--color-accent); font-weight: 800; text-decoration: none; }
+@media (max-width: 1180px) { .film-library-index-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .film-library-index-grid { grid-template-columns: 1fr; } .film-library-index-card { grid-template-columns: 92px minmax(0, 1fr); } .film-library-index-card > img, .film-library-index-placeholder { width: 92px; } }
 .role-assignment-list, .modifier-summary { display: grid; gap: 12px; margin: 16px 0 24px; }
 .custom-role-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 10px; margin: 16px 0 22px; }
 .custom-role-form button { width: auto; margin: 0; }
