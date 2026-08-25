@@ -6,7 +6,7 @@ import {
 } from "../../../../lib/ticket-checkout";
 import {
   CheckoutSessionError,
-  trustedCheckoutEmail,
+  trustedCheckoutCustomer,
 } from "../../../../lib/checkout-customer";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +15,12 @@ export async function POST(request: Request) {
   try {
     const body = createTicketCheckoutRequestSchema.parse(await request.json());
     const idempotencyKey = request.headers.get("idempotency-key") ?? "";
-    const email = await trustedCheckoutEmail(request, body.email);
+    const customer = await trustedCheckoutCustomer(request, body.email);
     return NextResponse.json(
       await getTicketingService().createCheckout({
         ...body,
-        email,
+        email: customer.email,
+        authenticatedCustomerId: customer.customerId,
         checkoutIdempotencyKey: idempotencyKey,
       }),
     );

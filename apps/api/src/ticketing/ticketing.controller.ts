@@ -9,7 +9,7 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { Request } from "express";
+import type { Request } from "express";
 import { createTicketCheckoutRequestSchema, finalizeTicketOrderRequestSchema, resendGuestTicketReceiptRequestSchema, resumeTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -22,6 +22,7 @@ import { RequestActor } from "../auth/types";
 import { AppError } from "../common/app-error";
 import { ScanRateLimitGuard } from "./scan-rate-limit.guard";
 import { RateLimit, RequestRateLimitGuard } from "../common/request-rate-limit.guard";
+import { OptionalCustomerAuthGuard } from "../auth/guards/optional-customer-auth.guard";
 
 @Controller("ticketing")
 export class TicketingController {
@@ -33,16 +34,18 @@ export class TicketingController {
   }
 
   @Post("checkouts")
-  @UseGuards(RequestRateLimitGuard)
+  @UseGuards(OptionalCustomerAuthGuard, RequestRateLimitGuard)
   @RateLimit({ scope: "checkout" })
   createCheckout(
     @Headers("idempotency-key") idempotencyKey: string | undefined,
+    @Req() request: Request,
     @Body(new ZodValidationPipe(createTicketCheckoutRequestSchema)) body: unknown,
   ) {
     const parsed = createTicketCheckoutRequestSchema.parse(body);
     return this.ticketingService.createCheckout({
       ...parsed,
       checkoutIdempotencyKey: idempotencyKey ?? "",
+      authenticatedCustomerId: request.actor?.actorType === "CUSTOMER" ? request.actor.sub : undefined,
     });
   }
 

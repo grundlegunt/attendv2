@@ -21,6 +21,7 @@ const organizationUpdateSchema = z.object({
   defaultSeatingMode: z.enum(["RESERVED", "GENERAL_ADMISSION"]).optional(),
   timezone: z.string().trim().min(1).max(100).optional(),
   ticketFeeMinor: z.number().int().min(0).max(100_000).optional(),
+  registeredTicketFeeMinor: z.number().int().min(0).max(100_000).optional(),
   active: z.boolean().optional(),
 }).strict();
 

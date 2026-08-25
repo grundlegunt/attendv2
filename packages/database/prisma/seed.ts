@@ -329,24 +329,26 @@ export async function seedDatabase(
 
   const standardPrice = await prisma.priceTier.upsert({
     where: { organizationId_name: { organizationId: org.id, name: "Standard" } },
-    update: { ticketPriceMinor: 1700, feeMinor: 200, currency: "USD", appliesOnWeekdays: [] },
+    update: { ticketPriceMinor: 1700, feeMinor: 200, registeredFeeMinor: 200, currency: "USD", appliesOnWeekdays: [] },
     create: {
       organizationId: org.id,
       name: "Standard",
       ticketPriceMinor: 1700,
       feeMinor: 200,
+      registeredFeeMinor: 200,
       currency: "USD",
       appliesOnWeekdays: [],
     },
   });
   const tuesdayPrice = await prisma.priceTier.upsert({
     where: { organizationId_name: { organizationId: org.id, name: "Tuesday" } },
-    update: { ticketPriceMinor: 800, feeMinor: 200, currency: "USD", appliesOnWeekdays: [2] },
+    update: { ticketPriceMinor: 800, feeMinor: 200, registeredFeeMinor: 200, currency: "USD", appliesOnWeekdays: [2] },
     create: {
       organizationId: org.id,
       name: "Tuesday",
       ticketPriceMinor: 800,
       feeMinor: 200,
+      registeredFeeMinor: 200,
       currency: "USD",
       appliesOnWeekdays: [2],
     },

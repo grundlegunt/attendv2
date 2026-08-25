@@ -738,6 +738,7 @@ export class PlatformService {
       timezone: organization.timezone,
       active: organization.active,
       ticketFeeMinor: organization.ticketFeeMinor,
+      registeredTicketFeeMinor: organization.registeredTicketFeeMinor,
       createdAt: organization.createdAt.toISOString(),
       payments: {
         connected: Boolean(organization.stripeConnectedAccountId),
@@ -1354,9 +1355,11 @@ export class PlatformService {
     defaultSeatingMode?: "RESERVED" | "GENERAL_ADMISSION";
     timezone?: string;
     ticketFeeMinor?: number;
+    registeredTicketFeeMinor?: number;
     active?: boolean;
   }) {
     await prisma.$transaction(async (tx) => {
+      const registeredTicketFeeMinor = input.registeredTicketFeeMinor ?? input.ticketFeeMinor;
       const before = await tx.organization.findUnique({
         where: { id: input.organizationId },
       });
@@ -1370,6 +1373,7 @@ export class PlatformService {
           defaultSeatingMode: input.defaultSeatingMode,
           timezone: input.timezone,
           ticketFeeMinor: input.ticketFeeMinor,
+          registeredTicketFeeMinor,
           active: input.active,
         },
       });
@@ -1386,6 +1390,11 @@ export class PlatformService {
           where: { organizationId: input.organizationId },
           data: { feeMinor: input.ticketFeeMinor },
         });
+      if (registeredTicketFeeMinor !== undefined)
+        await tx.priceTier.updateMany({
+          where: { organizationId: input.organizationId },
+          data: { registeredFeeMinor: registeredTicketFeeMinor },
+        });
       const state = (organization: typeof updated) => ({
         name: organization.name,
         legalName: organization.legalName,
@@ -1395,6 +1404,7 @@ export class PlatformService {
         active: organization.active,
         onboardingStatus: organization.connectOnboardingStatus,
         ticketFeeMinor: organization.ticketFeeMinor,
+        registeredTicketFeeMinor: organization.registeredTicketFeeMinor,
       });
       await this.audit.record(
         {
