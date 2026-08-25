@@ -7,6 +7,8 @@ const ts = require("typescript");
 
 const navigationPath = resolve(__dirname, "../app/admin-navigation.ts");
 const adminSessionSource = readFileSync(resolve(__dirname, "../app/admin-session.tsx"), "utf8");
+const adminNavSource = readFileSync(resolve(__dirname, "../app/admin-nav.tsx"), "utf8");
+const dashboardSource = readFileSync(resolve(__dirname, "../app/admin-dashboard.tsx"), "utf8");
 const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
 const filmLibrarySource = readFileSync(resolve(__dirname, "../app/films/page.tsx"), "utf8");
 const globalStylesSource = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
@@ -90,6 +92,15 @@ describe("admin navigation", () => {
   it("supports any-of permission destinations without widening other sections", () => {
     const links = visibleAdminNavigation(["menu.edit"]).flatMap((group) => group.items);
     assert.deepEqual(links.map((item) => item.href), ["/", "/taxes", "/menu"]);
+  });
+
+  it("puts the permission-gated Staff POS link inside F&B without treating it as an internal quick action", () => {
+    const links = visibleAdminNavigation(["seat.sell"]).flatMap((group) => group.items);
+    assert.deepEqual(links.map((item) => item.label), ["Dashboard", "POS"]);
+    assert.equal(links[1].external, true);
+    assert.match(adminNavSource, /item\.external/);
+    assert.match(adminNavSource, /target="_blank"/);
+    assert.match(dashboardSource, /item\.href !== "\/" && !item\.external/);
   });
 
   it("shows distributor and financial reporting tools only with financial reporting permission", () => {
