@@ -37,6 +37,7 @@ export default function CustomerPage() {
   }, [accessToken, id]);
 
   const dateTime = (value: string) => new Date(value).toLocaleString([], { timeZone: employee.timezone, month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+  const date = (value: string) => new Date(value).toLocaleDateString([], { timeZone: employee.timezone, month: "short", day: "numeric", year: "numeric" });
   async function loadOlder(kind: "tickets" | "dining") {
     if (!customer || historyLoading) return;
     setHistoryLoading(kind); setError(null);
@@ -66,7 +67,7 @@ export default function CustomerPage() {
       <section className="admin-heading"><div><p className="kicker">CUSTOMER PROFILE</p><h1>{customer.name ?? "Guest customer"}</h1><p>{customer.email ?? "No email"}{customer.phone ? ` · ${customer.phone}` : ""}</p></div><button type="button" className="secondary" disabled={exporting} onClick={() => void exportHistory()}>{exporting ? "Exporting…" : "Export history CSV"}</button></section>
       <section className="series-performance-metrics customer-profile-metrics">
         <div><span>Customer type</span><strong>{customer.isGuest ? "Guest" : "Account"}</strong><small>Since {new Date(customer.createdAt).toLocaleDateString([], { timeZone: employee.timezone })}</small></div>
-        <div><span>Membership</span><strong>{customer.membership?.tier ?? "None"}</strong><small>{customer.membership ? `#${customer.membership.membershipNumber} · ${customer.membership.status.toLowerCase()}` : "No external membership"}</small></div>
+        <div><span>Membership</span><strong>{customer.membership?.tier ?? "None"}</strong><small>{customer.membership ? `#${customer.membership.membershipNumber} · ${customer.membership.status.toLowerCase()}${customer.membership.expiresAt ? ` · Expires ${date(customer.membership.expiresAt)}` : " · No expiration"}` : "No external membership"}</small></div>
         <div><span>Ticket orders</span><strong>{customer.summary.orderCount}</strong><small>{customer.summary.ticketCount} tickets</small></div>
         <div><span>Ticket spend</span><strong>{money(customer.summary.lifetimeSpendCents, customer.summary.currency)}</strong><small>Completed purchases</small></div>
         <div><span>Dining visits</span><strong>{customer.summary.diningVisitCount}</strong><small>{money(customer.summary.diningSpendCents, customer.summary.diningCurrency)} spend</small></div>
