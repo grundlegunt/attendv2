@@ -1079,6 +1079,7 @@ export class TicketingService {
         status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
       },
       include: {
+        location: { select: { timezone: true } },
         tickets: {
           where: { status: { in: ["ISSUED", "ADMITTED"] } },
           include: {
@@ -1096,6 +1097,7 @@ export class TicketingService {
       status: confirmation.status,
       totalCents: confirmation.totalCents,
       currency: confirmation.currency,
+      timeZone: order.location.timezone,
       tickets: confirmation.tickets,
     };
   }
