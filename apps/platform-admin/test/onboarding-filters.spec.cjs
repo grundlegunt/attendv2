@@ -29,3 +29,10 @@ test("branding and staff steps open the selected location editor", () => {
   assert.match(source, /find\(\(item\) => !item\.configuration\.branding\)/);
   assert.match(source, /find\(\(item\) => item\.configuration\.employees === 0\)/);
 });
+
+test("ready-to-sell clients without a room open the auditorium builder", () => {
+  assert.match(source, /next === "Ready to sell"/);
+  assert.match(source, /configuration\.auditoriums === 0/);
+  assert.match(source, /label: "Create auditorium"/);
+  assert.match(source, /section=auditorium/);
+});
