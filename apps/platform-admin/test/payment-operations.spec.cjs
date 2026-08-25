@@ -20,5 +20,14 @@ test("Attend Master payment operations exposes factual client health", () => {
 
 test("payment operations can focus on clients with actual exceptions", () => {
   assert.match(source, /Show exceptions only/);
-  assert.match(source, /failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds \+ organization\.health\.stalePayments \+ organization\.health\.staleRefunds > 0/);
+  assert.match(source, /showExceptionsOnly && organization\.health\.failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds \+ organization\.health\.stalePayments \+ organization\.health\.staleRefunds === 0/);
+});
+
+test("payment operations can find clients and filter Stripe readiness", () => {
+  assert.match(source, /Find client/);
+  assert.match(source, /Cinema or legal name/);
+  assert.match(source, /Stripe status/);
+  assert.match(source, /All statuses/);
+  assert.match(source, /Clear filters/);
+  assert.match(source, /organization\.payments\.onboardingStatus !== onboardingStatus/);
 });
