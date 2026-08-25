@@ -708,6 +708,7 @@ enum CustomerConsentType {
   DINING_AUTO_SETTLEMENT
   TERMS_OF_SERVICE
   MARKETING
+  SMS_TICKET_DELIVERY
 }
 
 enum RestaurantTabType {
@@ -816,6 +817,8 @@ model TicketOrder {
   holderKey                    String
   guestEmail                   String?
   guestName                    String?
+  guestPhone                   String?
+  smsTicketsRequested          Boolean             @default(false)
   zipCode                      String?
   receiptEmailClaimedAt        DateTime?
   receiptEmailSentAt           DateTime?

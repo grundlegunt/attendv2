@@ -39,3 +39,26 @@ describe("ticket checkout admission types", () => {
       .toEqual(ticketTypeSelections);
   });
 });
+
+describe("ticket checkout SMS consent", () => {
+  it("accepts an E.164 phone number with explicit opt-in", () => {
+    const parsed = createTicketCheckoutRequestSchema.parse({
+      ...validCheckout,
+      phone: "+13125551212",
+      smsTicketsRequested: true,
+    });
+    expect(parsed.phone).toBe("+13125551212");
+    expect(parsed.smsTicketsRequested).toBe(true);
+  });
+
+  it("requires a phone number when SMS tickets are requested", () => {
+    expect(() => createTicketCheckoutRequestSchema.parse({
+      ...validCheckout,
+      smsTicketsRequested: true,
+    })).toThrow("A phone number is required");
+  });
+
+  it("defaults SMS delivery to not requested", () => {
+    expect(createTicketCheckoutRequestSchema.parse(validCheckout).smsTicketsRequested).toBe(false);
+  });
+});

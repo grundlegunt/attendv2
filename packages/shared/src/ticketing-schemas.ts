@@ -11,6 +11,8 @@ export const createTicketCheckoutRequestSchema = z.object({
     .optional(),
   email: z.string().email().max(320),
   name: z.string().trim().min(1).max(120).optional(),
+  phone: z.string().trim().regex(/^\+[1-9]\d{7,14}$/, "Enter a valid phone number including country code.").optional(),
+  smsTicketsRequested: z.boolean().default(false),
   zipCode: z
     .string()
     .trim()
@@ -29,6 +31,14 @@ export const createTicketCheckoutRequestSchema = z.object({
     )
     .max(50)
     .optional(),
+}).superRefine((input, context) => {
+  if (input.smsTicketsRequested && !input.phone) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["phone"],
+      message: "A phone number is required to receive tickets by text.",
+    });
+  }
 });
 
 export type CreateTicketCheckoutRequest = z.infer<

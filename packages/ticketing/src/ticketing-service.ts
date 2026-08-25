@@ -36,6 +36,8 @@ export interface CreateTicketCheckoutInput {
   ticketTypeSelections?: Array<{ holdToken: string; ticketTypeId: string }>;
   email: string;
   name?: string;
+  phone?: string;
+  smsTicketsRequested: boolean;
   zipCode?: string;
   promotionCode?: string;
   giftCardCode?: string;
@@ -60,6 +62,7 @@ interface LockedHold {
 // reconcilePendingRefunds below.
 const REFUND_LEASE_MS = 60_000;
 const DINING_CONSENT_TERMS_VERSION = "dining-auto-settlement-2026-07-29";
+const SMS_TICKET_CONSENT_TERMS_VERSION = "sms-ticket-delivery-2026-08-25";
 
 type PersistedOrderAheadLine = OrderAheadQuote["lines"][number];
 type TicketTypeSelection = { holdToken: string; ticketTypeId: string; priceCents?: number };
@@ -172,6 +175,9 @@ export class TicketingService {
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email)) {
       throw TicketingError.validation("A valid receipt email is required.");
+    }
+    if (input.smsTicketsRequested && !/^\+[1-9]\d{7,14}$/.test(input.phone ?? "")) {
+      throw TicketingError.validation("A valid phone number is required to receive tickets by text.");
     }
 
     const existing = await this.prisma.ticketOrder.findUnique({
@@ -383,6 +389,8 @@ export class TicketingService {
           holderKey: input.holderKey,
           guestEmail: normalizedEmail,
           guestName: input.name?.trim() || null,
+          guestPhone: input.smsTicketsRequested ? input.phone : null,
+          smsTicketsRequested: input.smsTicketsRequested,
           zipCode: input.zipCode?.trim() || null,
           diningAuthorizationRequested: input.diningAuthorizationRequested,
           status: TicketOrderStatus.AWAITING_PAYMENT,
@@ -401,6 +409,17 @@ export class TicketingService {
           promotionId: promotion?.id,
           giftCardId: giftCard?.id,
           giftCardCents,
+          ...(input.smsTicketsRequested ? {
+            consents: {
+              create: {
+                customerId: customer.id,
+                type: "SMS_TICKET_DELIVERY",
+                granted: true,
+                termsVersion: SMS_TICKET_CONSENT_TERMS_VERSION,
+                grantedAt: now,
+              },
+            },
+          } : {}),
           ...(totalCents - giftCardCents > 0 ? { payment: {
             create: {
               purpose: "TICKET_ORDER",
@@ -462,6 +481,8 @@ export class TicketingService {
       holderKey: string;
       guestEmail: string | null;
       guestName: string | null;
+      guestPhone: string | null;
+      smsTicketsRequested: boolean;
       zipCode: string | null;
       diningAuthorizationRequested: boolean | null;
       orderAheadItems: Prisma.JsonValue | null;
@@ -487,6 +508,8 @@ export class TicketingService {
       && order.holdTokens.every((token, index) => token === holdTokens[index])
       && order.guestEmail === input.email.toLowerCase()
       && order.guestName === (input.name?.trim() || null)
+      && order.guestPhone === (input.smsTicketsRequested ? input.phone : null)
+      && order.smsTicketsRequested === input.smsTicketsRequested
       && order.zipCode === (input.zipCode?.trim() || null)
       && order.diningAuthorizationRequested === input.diningAuthorizationRequested
       && JSON.stringify(persistedTicketTypes) === JSON.stringify(requestedTicketTypes)
