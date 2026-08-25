@@ -109,7 +109,7 @@ export class ManagementService {
     const [orders, customers, tickets, giftCards] = await Promise.all([
       prisma.ticketOrder.findMany({
         where: { locationId, OR: [{ orderNumber: { contains: normalized, mode: "insensitive" } }, { guestEmail: { contains: normalized, mode: "insensitive" } }, { guestName: { contains: normalized, mode: "insensitive" } }, { customer: { email: { contains: normalized, mode: "insensitive" } } }, { customer: { name: { contains: normalized, mode: "insensitive" } } }] },
-        select: { id: true, orderNumber: true, status: true, totalCents: true, currency: true, guestName: true, guestEmail: true, customer: { select: { name: true, email: true } }, createdAt: true, _count: { select: { tickets: true } } }, orderBy: { createdAt: "desc" }, take: 10,
+        select: { id: true, orderNumber: true, status: true, totalCents: true, currency: true, guestName: true, guestEmail: true, customer: { select: { id: true, name: true, email: true } }, createdAt: true, _count: { select: { tickets: true } } }, orderBy: { createdAt: "desc" }, take: 10,
       }),
       prisma.customer.findMany({
         where: {
