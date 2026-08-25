@@ -601,9 +601,9 @@ export default function AccountPage() {
                         </p>
                         <p>{ticket.ticketTypeName}</p>
                         <p>{money(ticket.priceCentsPaid, order.currency)}</p>
-                        {!['CANCELED', 'REFUNDED'].includes(ticket.status) && (account?.walletAvailability.apple || account?.walletAvailability.google) && (
+                        {!['CANCELED', 'REFUNDED'].includes(ticket.status) && (account?.walletAvailability?.apple || account?.walletAvailability?.google) && (
                           <div className="account-ticket__wallet-actions">
-                            {account?.walletAvailability.apple && (
+                            {account?.walletAvailability?.apple && (
                               <a
                                 className="account-secondary-button"
                                 href={`/api/v1/auth/customers/tickets/${ticket.id}/wallet/apple`}
@@ -611,7 +611,7 @@ export default function AccountPage() {
                                 Add to Apple Wallet
                               </a>
                             )}
-                            {account?.walletAvailability.google && (
+                            {account?.walletAvailability?.google && (
                               <button
                                 className="account-secondary-button"
                                 type="button"
