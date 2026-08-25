@@ -35,6 +35,7 @@ interface OrganizationOverview {
   name: string;
   legalName: string | null;
   payments: { connected: boolean; onboardingStatus: string };
+  health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; lastSuccessfulPaymentAt: string | null };
   locations: LocationOverview[];
 }
 
@@ -53,6 +54,7 @@ function statusLabel(status: string) {
 }
 
 function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+function lastActivity(value: string | null) { return value ? new Date(value).toLocaleString() : "No completed payments"; }
 const revenueRanges = [
   { days: 1, label: "Today" },
   { days: 7, label: "Last 7 days" },
@@ -131,6 +133,7 @@ export default function PlatformDashboard() {
       activeLocations: locations.filter((location) => location.active).length,
       connectedClients: organizations.filter((organization) => organization.payments.onboardingStatus === "COMPLETE").length,
       attentionClients: organizations.filter((organization) => organization.payments.onboardingStatus !== "COMPLETE"),
+      operationalExceptions: organizations.reduce((total, organization) => total + organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds, 0),
     };
   }, [overview]);
 
@@ -201,6 +204,19 @@ export default function PlatformDashboard() {
         <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="revenue-actions"><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}</div><button className="quiet" disabled={revenueLoading || !revenue} onClick={() => void downloadRevenue()}>Export CSV</button></div></div>
         {!revenue && <p className="muted">Loading revenue rollup…</p>}
         {revenue && <><div className="revenue-breakdown"><article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article><article><span>Attend ticket-fee revenue</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article><article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article><article><span>Ticket total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article><article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article><article><span>Combined net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article><article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article></div><div className="client-revenue-list"><div><strong>Client</strong><span>Tickets sold</span><span>Ticket collected</span><span>F&amp;B</span><span>Combined net</span></div>{revenue.clients.map((client) => <Link key={client.id} href={`/clients?organizationId=${encodeURIComponent(client.id)}`}><strong>{client.name}</strong><span>{client.ticketsSold.toLocaleString()}</span><span>{money(client.ticketCollectedCents)}</span><span>{money(client.fnbRevenueCents)}</span><span>{money(client.combinedRevenueCents)}</span></Link>)}</div></>}
+      </section>
+      <section className="dashboard-panel operator-health">
+        <div className="panel-heading"><div><p className="eyebrow">OPERATIONS</p><h2>Operator health</h2><p className="muted">Live payment and refund facts without speculative alert thresholds.</p></div><Link href="/clients">Open client controls</Link></div>
+        {!overview && <p className="muted">Loading operator health…</p>}
+        {overview && <div className="operator-health-list">
+          <div><strong>Client</strong><span>Last completed payment</span><span>Failed · 24h</span><span>Processing</span><span>Payment review</span><span>Failed refunds</span><span>Upcoming shows</span></div>
+          {overview.organizations.map((organization) => {
+            const upcomingShowtimes = organization.locations.reduce((total, location) => total + location.configuration.upcomingShowtimes, 0);
+            const hasException = organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds > 0;
+            return <Link className={hasException ? "has-exception" : ""} key={organization.id} href={`/clients?organizationId=${encodeURIComponent(organization.id)}`}><strong>{organization.name}</strong><span>{lastActivity(organization.health.lastSuccessfulPaymentAt)}</span><span>{organization.health.failedPayments24h}</span><span>{organization.health.processingPayments}</span><span>{organization.health.verificationReviews}</span><span>{organization.health.failedRefunds}</span><span>{upcomingShowtimes}</span></Link>;
+          })}
+        </div>}
+        {overview && <p className="dashboard-updated">{metrics.operationalExceptions} unresolved or recent payment/refund exceptions across all clients.</p>}
       </section>
       <div className="dashboard-grid">
         <section className="dashboard-panel">

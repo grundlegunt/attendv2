@@ -145,6 +145,8 @@ export class PlatformService {
   }
 
   async overview() {
+    const now = new Date();
+    const activitySince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },
       include: { locations: { orderBy: { name: "asc" } } },
@@ -153,7 +155,26 @@ export class PlatformService {
     return {
       generatedAt: new Date().toISOString(),
       organizations: await Promise.all(
-        organizations.map(async (organization) => ({
+        organizations.map(async (organization) => {
+          const paymentScope: Prisma.PaymentWhereInput = {
+            OR: [
+              { ticketOrder: { location: { organizationId: organization.id } } },
+              { restaurantTab: { location: { organizationId: organization.id } } },
+              { giftCardPurchase: { organizationId: organization.id } },
+            ],
+          };
+          const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment] = await Promise.all([
+            prisma.payment.count({ where: { AND: [paymentScope, { status: "FAILED", updatedAt: { gte: activitySince } }] } }),
+            prisma.payment.count({ where: { AND: [paymentScope, { status: "PROCESSING" }] } }),
+            prisma.payment.count({ where: { AND: [paymentScope, { verificationFailedAt: { not: null } }] } }),
+            prisma.refund.count({ where: { status: "FAILED", payment: paymentScope } }),
+            prisma.payment.findFirst({
+              where: { AND: [paymentScope, { status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] } }] },
+              orderBy: { updatedAt: "desc" },
+              select: { updatedAt: true },
+            }),
+          ]);
+          return {
           id: organization.id,
           name: organization.name,
           legalName: organization.legalName,
@@ -164,6 +185,13 @@ export class PlatformService {
           payments: {
             connected: Boolean(organization.stripeConnectedAccountId),
             onboardingStatus: organization.connectOnboardingStatus,
+          },
+          health: {
+            failedPayments24h,
+            processingPayments,
+            verificationReviews,
+            failedRefunds,
+            lastSuccessfulPaymentAt: lastSuccessfulPayment?.updatedAt.toISOString() ?? null,
           },
           locations: await Promise.all(
             organization.locations.map(async (location) => {
@@ -218,7 +246,8 @@ export class PlatformService {
               };
             }),
           ),
-        })),
+          };
+        }),
       ),
     };
   }
