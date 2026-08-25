@@ -25,3 +25,10 @@ test("client profiles open the requested staff-access editor", () => {
   assert.match(source, /data-onboarding-section="branding"/);
   assert.match(source, /scrollIntoView/);
 });
+
+test("client profiles open and focus the requested auditorium builder", () => {
+  assert.match(source, /section !== "auditorium"/);
+  assert.match(source, /location && section === "auditorium"/);
+  assert.match(source, /setAuditoriumDraft/);
+  assert.match(source, /data-onboarding-section="auditorium"/);
+});

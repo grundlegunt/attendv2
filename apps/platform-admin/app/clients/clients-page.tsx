@@ -401,7 +401,7 @@ export default function AttendMaster() {
         setOrganization(nextOrganization);
         const params = new URLSearchParams(window.location.search);
         const section = params.get("section");
-        if (section !== "content" && section !== "branding" && section !== "staff") return;
+        if (section !== "content" && section !== "branding" && section !== "staff" && section !== "auditorium") return;
         const locationId = params.get("locationId");
         const location =
           nextOrganization.locations.find((item) => item.id === locationId) ??
@@ -418,6 +418,18 @@ export default function AttendMaster() {
             name: "",
             email: "",
             password: "",
+          });
+        if (location && section === "auditorium")
+          setAuditoriumDraft({
+            locationId: location.id,
+            name: `Theater ${location.auditoriums.length + 1}`,
+            seatingMode: nextOrganization.defaultSeatingMode,
+            seatingStyle: "SINGLE",
+            capacity: 96,
+            rows: 8,
+            seatsPerRow: 12,
+            centerAisle: true,
+            accessiblePairs: 1,
           });
         if (location)
           window.requestAnimationFrame(() =>
@@ -2104,6 +2116,7 @@ export default function AttendMaster() {
                     {auditoriumDraft?.locationId === location.id && (
                       <form
                         className="master-auditorium-builder"
+                        data-onboarding-section="auditorium"
                         onSubmit={saveAuditorium}
                       >
                         <div className="editor-heading">

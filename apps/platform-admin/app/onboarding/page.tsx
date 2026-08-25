@@ -73,6 +73,10 @@ function nextAction(organization: OrganizationOverview, steps: OnboardingStep[])
     const location = locationsToPrepare.find((item) => item.configuration.employees === 0) ?? locationsToPrepare[0];
     if (location) return { label: "Complete staff access", href: `/clients?organizationId=${encodeURIComponent(organization.id)}&locationId=${encodeURIComponent(location.id)}&section=staff` };
   }
+  if (next === "Ready to sell") {
+    const location = locationsToPrepare.find((item) => item.configuration.auditoriums === 0);
+    if (location) return { label: "Create auditorium", href: `/clients?organizationId=${encodeURIComponent(organization.id)}&locationId=${encodeURIComponent(location.id)}&section=auditorium` };
+  }
   if (next) return { label: `Complete ${next.toLowerCase()}`, href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
   return { label: "Review client", href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
 }
