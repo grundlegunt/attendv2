@@ -28,6 +28,10 @@ interface OrganizationOverview {
     verificationReviews: number;
     failedRefunds: number;
     lastSuccessfulPaymentAt: string | null;
+    trends: {
+      paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } };
+      refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } };
+    };
   };
   locations: Array<{ id: string; name: string; active: boolean }>;
 }
@@ -41,6 +45,10 @@ function request<T>(path: string, init?: RequestInit, accessToken?: string): Pro
 
 function statusLabel(status: string) {
   return status.toLowerCase().replaceAll("_", " ");
+}
+
+function percentage(numerator: number, denominator: number) {
+  return denominator > 0 ? `${(numerator / denominator * 100).toFixed(2)}%` : "No activity";
 }
 
 export default function PlatformPayments() {
@@ -97,6 +105,14 @@ export default function PlatformPayments() {
       processingPayments: organizations.reduce((sum, organization) => sum + organization.health.processingPayments, 0),
       verificationReviews: organizations.reduce((sum, organization) => sum + organization.health.verificationReviews, 0),
       failedRefunds: organizations.reduce((sum, organization) => sum + organization.health.failedRefunds, 0),
+      failedAttempts7d: organizations.reduce((sum, organization) => sum + organization.health.trends.paymentFailure.current.failed, 0),
+      paymentAttempts7d: organizations.reduce((sum, organization) => sum + organization.health.trends.paymentFailure.current.total, 0),
+      previousFailedAttempts7d: organizations.reduce((sum, organization) => sum + organization.health.trends.paymentFailure.previous.failed, 0),
+      previousPaymentAttempts7d: organizations.reduce((sum, organization) => sum + organization.health.trends.paymentFailure.previous.total, 0),
+      refundedCents7d: organizations.reduce((sum, organization) => sum + organization.health.trends.refunds.current.refundedCents, 0),
+      capturedCents7d: organizations.reduce((sum, organization) => sum + organization.health.trends.refunds.current.capturedCents, 0),
+      previousRefundedCents7d: organizations.reduce((sum, organization) => sum + organization.health.trends.refunds.previous.refundedCents, 0),
+      previousCapturedCents7d: organizations.reduce((sum, organization) => sum + organization.health.trends.refunds.previous.capturedCents, 0),
     };
   }, [overview]);
 
@@ -193,6 +209,10 @@ export default function PlatformPayments() {
         <article><strong>{totals.verificationReviews}</strong><span>Payment reviews</span></article>
         <article><strong>{totals.failedRefunds}</strong><span>Failed refunds</span></article>
       </section>
+      <section className="payment-trend-summary" aria-label="Seven-day payment trends">
+        <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
+        <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
+      </section>
       <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><label><input type="checkbox" checked={showExceptionsOnly} onChange={(event) => setShowExceptionsOnly(event.target.checked)} /> Show exceptions only</label></div>
       <section className="payments-table">
         <div className="payments-table-heading"><span>Client</span><span>Locations</span><span>Stripe status</span><span>Operational status</span><span>Action</span></div>
@@ -206,7 +226,7 @@ export default function PlatformPayments() {
               <span><strong>{organization.name}</strong><small>{organization.legalName ?? "Legal name not configured"}</small></span>
               <span>{organization.locations.length}</span>
               <span className={complete ? "status good" : "status warning"}>{statusLabel(organization.payments.onboardingStatus)}</span>
-              <span className="payment-health"><strong>{organization.health.failedPayments24h} failed · 24h</strong><small>{organization.health.processingPayments} processing · {organization.health.verificationReviews} reviews · {organization.health.failedRefunds} failed refunds</small><small>Last completed: {organization.health.lastSuccessfulPaymentAt ? new Date(organization.health.lastSuccessfulPaymentAt).toLocaleString() : "none"}</small></span>
+              <span className="payment-health"><strong>{organization.health.failedPayments24h} failed · 24h</strong><small>{organization.health.processingPayments} processing · {organization.health.verificationReviews} reviews · {organization.health.failedRefunds} failed refunds</small><small>7d failure: {organization.health.trends.paymentFailure.current.ratePercent === null ? "No activity" : `${organization.health.trends.paymentFailure.current.ratePercent.toFixed(2)}%`} · prior {organization.health.trends.paymentFailure.previous.ratePercent === null ? "No activity" : `${organization.health.trends.paymentFailure.previous.ratePercent.toFixed(2)}%`}</small><small>7d refunds: {organization.health.trends.refunds.current.ratePercent === null ? "No activity" : `${organization.health.trends.refunds.current.ratePercent.toFixed(2)}%`} · prior {organization.health.trends.refunds.previous.ratePercent === null ? "No activity" : `${organization.health.trends.refunds.previous.ratePercent.toFixed(2)}%`}</small><small>Last completed: {organization.health.lastSuccessfulPaymentAt ? new Date(organization.health.lastSuccessfulPaymentAt).toLocaleString() : "none"}</small></span>
               <span className="payment-actions">
                 {!complete && <button disabled={working} onClick={() => void startConnectOnboarding(organization.id)}>{working ? "Opening…" : organization.payments.connected ? "Resume onboarding" : "Connect Stripe"}</button>}
                 {organization.payments.connected && <button className="quiet" disabled={working} onClick={() => void refreshConnectStatus(organization.id)}>Refresh</button>}
