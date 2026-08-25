@@ -13,10 +13,12 @@ test("Attend Master payment operations exposes factual client health", () => {
   assert.match(source, /Processing now/);
   assert.match(source, /Payment reviews/);
   assert.match(source, /Failed refunds/);
+  assert.match(source, /Stale payments/);
+  assert.match(source, /Stale refunds/);
   assert.match(source, /Last completed:/);
 });
 
 test("payment operations can focus on clients with actual exceptions", () => {
   assert.match(source, /Show exceptions only/);
-  assert.match(source, /failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds > 0/);
+  assert.match(source, /failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds \+ organization\.health\.stalePayments \+ organization\.health\.staleRefunds > 0/);
 });
