@@ -146,6 +146,8 @@ export class PlatformService {
 
   private async organizationHealth(organizationId: string, now = new Date()) {
     const activitySince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const currentWeekSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const previousWeekSince = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
     const staleBefore = new Date(now.getTime() - 10 * 60 * 1000);
     const paymentScope: Prisma.PaymentWhereInput = {
       OR: [
@@ -154,7 +156,7 @@ export class PlatformService {
         { giftCardPurchase: { organizationId } },
       ],
     };
-    const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog] = await Promise.all([
+    const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog, currentPaymentAttempts, currentFailedPaymentAttempts, previousPaymentAttempts, previousFailedPaymentAttempts, currentCapturedPayments, previousCapturedPayments, currentRefunds, previousRefunds] = await Promise.all([
       prisma.payment.count({ where: { AND: [paymentScope, { status: "FAILED", updatedAt: { gte: activitySince } }] } }),
       prisma.payment.count({ where: { AND: [paymentScope, { status: "PROCESSING" }] } }),
       prisma.payment.count({ where: { AND: [paymentScope, { verificationFailedAt: { not: null } }] } }),
@@ -164,8 +166,30 @@ export class PlatformService {
       prisma.refund.count({ where: { status: { in: ["CREATED", "PROCESSING"] }, updatedAt: { lt: staleBefore }, payment: paymentScope } }),
       prisma.restaurantTab.count({ where: { location: { organizationId }, status: "MANAGER_REVIEW" } }),
       prisma.seatHold.count({ where: { releasedAt: null, expiresAt: { lt: now }, showtimeSeat: { showtime: { auditorium: { location: { organizationId } } } } } }),
+      prisma.paymentAttempt.count({ where: { payment: paymentScope, attemptedAt: { gte: currentWeekSince, lt: now } } }),
+      prisma.paymentAttempt.count({ where: { payment: paymentScope, status: "FAILED", attemptedAt: { gte: currentWeekSince, lt: now } } }),
+      prisma.paymentAttempt.count({ where: { payment: paymentScope, attemptedAt: { gte: previousWeekSince, lt: currentWeekSince } } }),
+      prisma.paymentAttempt.count({ where: { payment: paymentScope, status: "FAILED", attemptedAt: { gte: previousWeekSince, lt: currentWeekSince } } }),
+      prisma.payment.aggregate({ where: { AND: [paymentScope, { status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] }, createdAt: { gte: currentWeekSince, lt: now } }] }, _sum: { amountCents: true } }),
+      prisma.payment.aggregate({ where: { AND: [paymentScope, { status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] }, createdAt: { gte: previousWeekSince, lt: currentWeekSince } }] }, _sum: { amountCents: true } }),
+      prisma.refund.aggregate({ where: { payment: paymentScope, status: "SUCCEEDED", updatedAt: { gte: currentWeekSince, lt: now } }, _sum: { amountCents: true } }),
+      prisma.refund.aggregate({ where: { payment: paymentScope, status: "SUCCEEDED", updatedAt: { gte: previousWeekSince, lt: currentWeekSince } }, _sum: { amountCents: true } }),
     ]);
-    return { failedPayments24h, processingPayments, verificationReviews, failedRefunds, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog, lastSuccessfulPaymentAt: lastSuccessfulPayment?.updatedAt.toISOString() ?? null };
+    const rate = (numerator: number, denominator: number) => denominator > 0 ? Math.round((numerator / denominator) * 10_000) / 100 : null;
+    const currentCapturedCents = currentCapturedPayments._sum.amountCents ?? 0;
+    const previousCapturedCents = previousCapturedPayments._sum.amountCents ?? 0;
+    const currentRefundedCents = currentRefunds._sum.amountCents ?? 0;
+    const previousRefundedCents = previousRefunds._sum.amountCents ?? 0;
+    return { failedPayments24h, processingPayments, verificationReviews, failedRefunds, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog, lastSuccessfulPaymentAt: lastSuccessfulPayment?.updatedAt.toISOString() ?? null, trends: {
+      paymentFailure: {
+        current: { failed: currentFailedPaymentAttempts, total: currentPaymentAttempts, ratePercent: rate(currentFailedPaymentAttempts, currentPaymentAttempts) },
+        previous: { failed: previousFailedPaymentAttempts, total: previousPaymentAttempts, ratePercent: rate(previousFailedPaymentAttempts, previousPaymentAttempts) },
+      },
+      refunds: {
+        current: { refundedCents: currentRefundedCents, capturedCents: currentCapturedCents, ratePercent: rate(currentRefundedCents, currentCapturedCents) },
+        previous: { refundedCents: previousRefundedCents, capturedCents: previousCapturedCents, ratePercent: rate(previousRefundedCents, previousCapturedCents) },
+      },
+    } };
   }
 
   async overview() {

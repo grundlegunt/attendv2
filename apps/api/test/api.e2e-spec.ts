@@ -919,6 +919,10 @@ describe("Attend platform authentication boundary", () => {
           staleRefunds: expect.any(Number),
           managerReviewTabs: expect.any(Number),
           expiredHoldBacklog: expect.any(Number),
+          trends: expect.objectContaining({
+            paymentFailure: expect.objectContaining({ current: expect.objectContaining({ failed: expect.any(Number), total: expect.any(Number) }), previous: expect.objectContaining({ failed: expect.any(Number), total: expect.any(Number) }) }),
+            refunds: expect.objectContaining({ current: expect.objectContaining({ refundedCents: expect.any(Number), capturedCents: expect.any(Number) }), previous: expect.objectContaining({ refundedCents: expect.any(Number), capturedCents: expect.any(Number) }) }),
+          }),
         }),
         locations: expect.arrayContaining([
           expect.objectContaining({
@@ -936,6 +940,12 @@ describe("Attend platform authentication boundary", () => {
     const meridian = res.body.organizations.find((organization: { name: string }) => organization.name === "Meridian Cinema Co.");
     expect(meridian.health).toHaveProperty("lastSuccessfulPaymentAt");
     expect(meridian.health.lastSuccessfulPaymentAt === null || typeof meridian.health.lastSuccessfulPaymentAt === "string").toBe(true);
+    for (const period of [meridian.health.trends.paymentFailure.current, meridian.health.trends.paymentFailure.previous]) {
+      expect(period.ratePercent).toBe(period.total > 0 ? Math.round((period.failed / period.total) * 10_000) / 100 : null);
+    }
+    for (const period of [meridian.health.trends.refunds.current, meridian.health.trends.refunds.previous]) {
+      expect(period.ratePercent).toBe(period.capturedCents > 0 ? Math.round((period.refundedCents / period.capturedCents) * 10_000) / 100 : null);
+    }
   });
 
   it("returns a separated cross-client revenue rollup only to Attend operators", async () => {
@@ -1047,7 +1057,7 @@ describe("Attend platform authentication boundary", () => {
     expect(res.body).toEqual(expect.objectContaining({
       id: organizationId,
       payments: expect.objectContaining({ onboardingStatus: expect.any(String) }),
-      health: expect.objectContaining({ stalePayments: expect.any(Number), staleRefunds: expect.any(Number), managerReviewTabs: expect.any(Number), expiredHoldBacklog: expect.any(Number) }),
+      health: expect.objectContaining({ stalePayments: expect.any(Number), staleRefunds: expect.any(Number), managerReviewTabs: expect.any(Number), expiredHoldBacklog: expect.any(Number), trends: expect.any(Object) }),
       locations: expect.arrayContaining([expect.objectContaining({
         branding: expect.any(Object),
         adminBranding: expect.any(Object),

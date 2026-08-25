@@ -12,4 +12,7 @@ test("client profiles retain the cross-operator health context", () => {
   assert.match(source, /Stale refunds/);
   assert.match(source, /Manager-review tabs/);
   assert.match(source, /Expired holds/);
+  assert.match(source, /Payment failure · 7d/);
+  assert.match(source, /Refund rate · 7d/);
+  assert.match(source, /prior 7d/);
 });
