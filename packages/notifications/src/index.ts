@@ -7,3 +7,4 @@ export * from "./test-sms-provider";
 export * from "./twilio-sms-provider";
 export * from "./wallet-pass-provider";
 export * from "./apple-wallet-pass-provider";
+export * from "./google-wallet-pass-provider";
