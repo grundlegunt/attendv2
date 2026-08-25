@@ -83,6 +83,7 @@ export async function apiFetch<T>(
   init?: RequestInit & { accessToken?: string },
 ): Promise<T> {
   const startedAt = performance.now();
+  let headersAt: number | null = null;
   let res: Response | null = null;
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
@@ -90,6 +91,7 @@ export async function apiFetch<T>(
 
   try {
     res = await fetchWithTimeout(path, { ...init, headers }, REQUEST_TIMEOUT_MS);
+    headersAt = performance.now();
     if (!res.ok) {
       const body = parseErrorBody(await res.text(), res.status, res.statusText);
       throw new ApiRequestError(res.status, body);
@@ -97,7 +99,7 @@ export async function apiFetch<T>(
     if (res.status === 204) return undefined as T;
     return parseSuccessBody<T>(await res.text(), res.status);
   } finally {
-    recordAdminRequestTiming(path, init?.method ?? "GET", startedAt, res);
+    recordAdminRequestTiming(path, init?.method ?? "GET", startedAt, headersAt, res);
   }
 }
 
@@ -106,18 +108,20 @@ export async function apiDownload(
   init?: RequestInit & { accessToken?: string },
 ): Promise<Blob> {
   const startedAt = performance.now();
+  let headersAt: number | null = null;
   let res: Response | null = null;
   const headers = new Headers(init?.headers);
   if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
 
   try {
     res = await fetchWithTimeout(path, { ...init, headers }, DOWNLOAD_TIMEOUT_MS);
+    headersAt = performance.now();
     if (!res.ok) {
       const body = parseErrorBody(await res.text(), res.status, res.statusText);
       throw new ApiRequestError(res.status, body);
     }
     return await res.blob();
   } finally {
-    recordAdminRequestTiming(path, init?.method ?? "GET", startedAt, res);
+    recordAdminRequestTiming(path, init?.method ?? "GET", startedAt, headersAt, res);
   }
 }
