@@ -122,8 +122,8 @@ export class PlatformController {
 
   @Get("overview")
   @UseGuards(PlatformAuthGuard)
-  overview() {
-    return this.platform.overview();
+  overview(@Query("refresh") refresh?: string) {
+    return this.platform.overview(refresh === "true");
   }
 
   @Get("revenue")
