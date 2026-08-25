@@ -66,6 +66,28 @@ const DUPLICATE_DAY_TRANSACTION_TIMEOUT_MS = 60_000;
 const PUBLISH_PLAN_TRANSACTION_MAX_WAIT_MS = 10_000;
 const PUBLISH_PLAN_TRANSACTION_TIMEOUT_MS = 60_000;
 
+function resolvedSeatingStyle(
+  layoutJson: unknown,
+  seats: Array<{ tableGroupId: string | null; tablePosition: "LEFT" | "RIGHT" | null }>,
+) {
+  const layout = seatMapLayoutSchema.safeParse(layoutJson);
+  if (layout.success && layout.data.seatingStyle !== "SINGLE") return layout.data.seatingStyle;
+
+  // Early auditorium records stored pair membership on Seat before layoutJson
+  // gained seatingStyle. Preserve that intent instead of presenting a legacy
+  // paired room (notably seeded Theater 1) as singles.
+  const groups = new Map<string, Set<"LEFT" | "RIGHT">>();
+  for (const seat of seats) {
+    if (!seat.tableGroupId || !seat.tablePosition) continue;
+    const positions = groups.get(seat.tableGroupId) ?? new Set<"LEFT" | "RIGHT">();
+    positions.add(seat.tablePosition);
+    groups.set(seat.tableGroupId, positions);
+  }
+  return [...groups.values()].some((positions) => positions.has("LEFT") && positions.has("RIGHT"))
+    ? "PAIR" as const
+    : "SINGLE" as const;
+}
+
 function addIsoDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -452,6 +474,41 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       }),
     ]);
     return { location, showtimes, archivedMovies };
+  }
+
+  async adminDashboardBootstrap(actor: RequestActor) {
+    const locationId = this.requireLocation(actor);
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: {
+        name: true,
+        timezone: true,
+        auditoriums: {
+          where: { active: true },
+          select: { id: true, name: true, capacity: true, seatMap: { select: { id: true } } },
+          orderBy: { name: "asc" },
+        },
+        organization: {
+          select: {
+            movies: { where: { active: true }, select: { id: true, title: true }, orderBy: { title: "asc" } },
+            filmSeries: { select: { id: true, name: true, active: true }, orderBy: [{ active: "desc" }, { sortOrder: "asc" }, { name: "asc" }] },
+          },
+        },
+      },
+    });
+    if (!location) throw AppError.notFound("Location not found.");
+    const showtimes = await prisma.showtime.findMany({
+      where: { auditorium: { locationId } },
+      select: {
+        id: true,
+        startsAt: true,
+        onSale: true,
+        movie: { select: { id: true, title: true } },
+        auditorium: { select: { id: true, name: true, capacity: true } },
+      },
+      orderBy: { startsAt: "asc" },
+    });
+    return { location, showtimes };
   }
 
   async schedulePlans(actor: RequestActor) {
@@ -4728,7 +4785,6 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       },
     });
     if (!showtime) throw AppError.notFound("Showtime not found.");
-    const seatMapLayout = seatMapLayoutSchema.safeParse(showtime.auditorium.seatMap?.layoutJson);
     const seats = showtime.showtimeSeats
       .sort((a, b) => a.seat.y - b.seat.y || a.seat.x - b.seat.x)
       .map((inventory) => {
@@ -4773,7 +4829,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           name: showtime.auditorium.name,
           capacity: showtime.auditorium.capacity,
           seatingMode: showtime.auditorium.seatingMode,
-          seatingStyle: seatMapLayout.success ? seatMapLayout.data.seatingStyle : "SINGLE",
+          seatingStyle: resolvedSeatingStyle(
+            showtime.auditorium.seatMap?.layoutJson,
+            seats,
+          ),
         },
         priceTier: {
           ticketPriceMinor: showtime.priceTier.ticketPriceMinor,
