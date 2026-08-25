@@ -15,12 +15,15 @@ test("Attend Master payment operations exposes factual client health", () => {
   assert.match(source, /Failed refunds/);
   assert.match(source, /Stale payments/);
   assert.match(source, /Stale refunds/);
+  assert.match(source, /Manager-review tabs/);
+  assert.match(source, /Expired seat holds/);
   assert.match(source, /Last completed:/);
 });
 
 test("payment operations can focus on clients with actual exceptions", () => {
   assert.match(source, /Show exceptions only/);
-  assert.match(source, /showExceptionsOnly && organization\.health\.failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds \+ organization\.health\.stalePayments \+ organization\.health\.staleRefunds === 0/);
+  assert.match(source, /showExceptionsOnly && organization\.health\.failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds \+ organization\.health\.stalePayments \+ organization\.health\.staleRefunds \+ organization\.health\.managerReviewTabs \+ organization\.health\.expiredHoldBacklog === 0/);
+  assert.match(source, /params\.get\("exceptions"\) === "true"/);
 });
 
 test("payment operations can find clients and filter Stripe readiness", () => {
