@@ -57,6 +57,14 @@ type PlatformAuditoriumUpdateInput = z.infer<
 
 @Injectable()
 export class PlatformService {
+  private readonly organizationHealthCache = new Map<
+    string,
+    {
+      expiresAt: number;
+      value: ReturnType<PlatformService["computeOrganizationHealth"]>;
+    }
+  >();
+
   constructor(
     private readonly audit: AuditService,
     @Inject(CONNECT_ONBOARDING_PROVIDER)
@@ -144,7 +152,29 @@ export class PlatformService {
     });
   }
 
-  private async organizationHealth(organizationId: string, now = new Date()) {
+  private organizationHealth(organizationId: string, now = new Date()) {
+    const cached = this.organizationHealthCache.get(organizationId);
+    if (cached && cached.expiresAt > now.getTime()) return cached.value;
+
+    const value = this.computeOrganizationHealth(organizationId, now).catch(
+      (error) => {
+        if (this.organizationHealthCache.get(organizationId)?.value === value) {
+          this.organizationHealthCache.delete(organizationId);
+        }
+        throw error;
+      },
+    );
+    this.organizationHealthCache.set(organizationId, {
+      expiresAt: now.getTime() + 15_000,
+      value,
+    });
+    return value;
+  }
+
+  private async computeOrganizationHealth(
+    organizationId: string,
+    now = new Date(),
+  ) {
     const activitySince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const currentWeekSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const previousWeekSince = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
