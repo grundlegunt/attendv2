@@ -1,3 +1,7 @@
 export * from "./email-provider";
 export * from "./postmark-email-provider";
 export * from "./test-email-provider";
+export * from "./sms-provider";
+export * from "./disabled-sms-provider";
+export * from "./test-sms-provider";
+export * from "./twilio-sms-provider";
