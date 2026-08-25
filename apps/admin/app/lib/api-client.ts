@@ -1,4 +1,5 @@
 import type { ApiErrorBody } from "@cinema/shared";
+import { recordAdminRequestTiming } from "./request-diagnostics";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -81,32 +82,42 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit & { accessToken?: string },
 ): Promise<T> {
+  const startedAt = performance.now();
+  let res: Response | null = null;
   const headers = new Headers(init?.headers);
   headers.set("Content-Type", "application/json");
   if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
 
-  const res = await fetchWithTimeout(path, { ...init, headers }, REQUEST_TIMEOUT_MS);
-
-  if (!res.ok) {
-    const body = parseErrorBody(await res.text(), res.status, res.statusText);
-    throw new ApiRequestError(res.status, body);
+  try {
+    res = await fetchWithTimeout(path, { ...init, headers }, REQUEST_TIMEOUT_MS);
+    if (!res.ok) {
+      const body = parseErrorBody(await res.text(), res.status, res.statusText);
+      throw new ApiRequestError(res.status, body);
+    }
+    if (res.status === 204) return undefined as T;
+    return parseSuccessBody<T>(await res.text(), res.status);
+  } finally {
+    recordAdminRequestTiming(path, init?.method ?? "GET", startedAt, res);
   }
-
-  if (res.status === 204) return undefined as T;
-  return parseSuccessBody<T>(await res.text(), res.status);
 }
 
 export async function apiDownload(
   path: string,
   init?: RequestInit & { accessToken?: string },
 ): Promise<Blob> {
+  const startedAt = performance.now();
+  let res: Response | null = null;
   const headers = new Headers(init?.headers);
   if (init?.accessToken) headers.set("Authorization", `Bearer ${init.accessToken}`);
 
-  const res = await fetchWithTimeout(path, { ...init, headers }, DOWNLOAD_TIMEOUT_MS);
-  if (!res.ok) {
-    const body = parseErrorBody(await res.text(), res.status, res.statusText);
-    throw new ApiRequestError(res.status, body);
+  try {
+    res = await fetchWithTimeout(path, { ...init, headers }, DOWNLOAD_TIMEOUT_MS);
+    if (!res.ok) {
+      const body = parseErrorBody(await res.text(), res.status, res.statusText);
+      throw new ApiRequestError(res.status, body);
+    }
+    return await res.blob();
+  } finally {
+    recordAdminRequestTiming(path, init?.method ?? "GET", startedAt, res);
   }
-  return res.blob();
 }
