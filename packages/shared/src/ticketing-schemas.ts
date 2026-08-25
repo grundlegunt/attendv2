@@ -107,7 +107,7 @@ export interface TicketConfirmationResponse {
 export type MobileTicketAccessResponse = Omit<
   TicketConfirmationResponse,
   "receiptDelivery" | "diningAuthorization"
->;
+> & { timeZone: string };
 
 export const resendGuestTicketReceiptRequestSchema = z.object({
   holderKey: z.string().min(16).max(200),
