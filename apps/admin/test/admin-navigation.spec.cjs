@@ -12,6 +12,7 @@ const dashboardSource = readFileSync(resolve(__dirname, "../app/admin-dashboard.
 const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
 const filmLibrarySource = readFileSync(resolve(__dirname, "../app/films/page.tsx"), "utf8");
 const membershipsSource = readFileSync(resolve(__dirname, "../app/memberships/page.tsx"), "utf8");
+const merchSource = readFileSync(resolve(__dirname, "../app/merch/page.tsx"), "utf8");
 const globalStylesSource = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
 const compiled = ts.transpileModule(source, {
@@ -115,6 +116,12 @@ describe("admin navigation", () => {
     assert.match(membershipsSource, /\/management\/memberships/);
     assert.match(membershipsSource, /`\/customers\/\$\{membership\.customer\.id\}`/);
     assert.match(membershipsSource, /All statuses/);
+  });
+
+  it("keeps the external merchandise shop editor discoverable under Extras", () => {
+    const extras = adminNavigation.find((group) => group.label === "Extras");
+    assert.equal(extras.items.some((item) => item.href === "/merch" && item.label === "Merch"), true);
+    assert.match(merchSource, /section="merch"/);
   });
 
   it("shows distributor and financial reporting tools only with financial reporting permission", () => {
