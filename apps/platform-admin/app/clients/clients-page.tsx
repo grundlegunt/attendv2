@@ -401,7 +401,7 @@ export default function AttendMaster() {
         setOrganization(nextOrganization);
         const params = new URLSearchParams(window.location.search);
         const section = params.get("section");
-        if (section !== "content" && section !== "branding") return;
+        if (section !== "content" && section !== "branding" && section !== "staff") return;
         const locationId = params.get("locationId");
         const location =
           nextOrganization.locations.find((item) => item.id === locationId) ??
@@ -412,6 +412,21 @@ export default function AttendMaster() {
             values: structuredClone(location.content.draft),
           });
         if (location && section === "branding") beginLocationEdit(location);
+        if (location && section === "staff")
+          setCinemaManagerDraft({
+            locationId: location.id,
+            name: "",
+            email: "",
+            password: "",
+          });
+        if (location)
+          window.requestAnimationFrame(() =>
+            window.requestAnimationFrame(() =>
+              document
+                .querySelector(`[data-onboarding-section="${section}"]`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            ),
+          );
       })
       .catch((reason: unknown) =>
         active && setError(
@@ -2529,6 +2544,7 @@ export default function AttendMaster() {
                   {cinemaManagerDraft?.locationId === location.id && (
                     <form
                       className="editor location-editor"
+                      data-onboarding-section="staff"
                       onSubmit={createCinemaManager}
                     >
                       <div className="editor-heading">
@@ -2606,6 +2622,7 @@ export default function AttendMaster() {
                   {locationDraft?.id === location.id && (
                     <form
                       className="editor location-editor"
+                      data-onboarding-section="branding"
                       onSubmit={saveLocation}
                     >
                       <div className="editor-heading">

@@ -16,3 +16,12 @@ test("client profiles retain the cross-operator health context", () => {
   assert.match(source, /Refund rate · 7d/);
   assert.match(source, /prior 7d/);
 });
+
+test("client profiles open the requested staff-access editor", () => {
+  assert.match(source, /section !== "content" && section !== "branding" && section !== "staff"/);
+  assert.match(source, /location && section === "staff"/);
+  assert.match(source, /setCinemaManagerDraft/);
+  assert.match(source, /data-onboarding-section="staff"/);
+  assert.match(source, /data-onboarding-section="branding"/);
+  assert.match(source, /scrollIntoView/);
+});

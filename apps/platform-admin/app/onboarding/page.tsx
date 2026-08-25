@@ -63,6 +63,16 @@ function onboardingSteps(organization: OrganizationOverview): OnboardingStep[] {
 function nextAction(organization: OrganizationOverview, steps: OnboardingStep[]) {
   const next = steps.find((step) => !step.complete)?.label;
   if (next === "Stripe Connect") return { label: organization.payments.connected ? "Resume Stripe" : "Connect Stripe", href: `/payments?organizationId=${encodeURIComponent(organization.id)}&connect=refresh` };
+  const operatingLocations = organization.locations.filter((location) => location.active);
+  const locationsToPrepare = operatingLocations.length ? operatingLocations : organization.locations;
+  if (next === "Branding") {
+    const location = locationsToPrepare.find((item) => !item.configuration.branding) ?? locationsToPrepare[0];
+    if (location) return { label: "Complete branding", href: `/clients?organizationId=${encodeURIComponent(organization.id)}&locationId=${encodeURIComponent(location.id)}&section=branding` };
+  }
+  if (next === "Staff access") {
+    const location = locationsToPrepare.find((item) => item.configuration.employees === 0) ?? locationsToPrepare[0];
+    if (location) return { label: "Complete staff access", href: `/clients?organizationId=${encodeURIComponent(organization.id)}&locationId=${encodeURIComponent(location.id)}&section=staff` };
+  }
   if (next) return { label: `Complete ${next.toLowerCase()}`, href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
   return { label: "Review client", href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
 }
