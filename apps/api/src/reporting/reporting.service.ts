@@ -21,6 +21,59 @@ export class ReportingService {
     return { revenueCents: gross - refunded, refundedCents: refunded };
   }
 
+  async platformRevenueTotals(locationIds: string[], range: ReportRange) {
+    const totalsByLocation = new Map<string, { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }>();
+    const totalsFor = (locationId: string) => {
+      let totals = totalsByLocation.get(locationId);
+      if (!totals) {
+        totals = { ticketRevenueCents: 0, ticketFeesCents: 0, ticketTaxCents: 0, ticketCollectedCents: 0, fnbRevenueCents: 0, combinedRevenueCents: 0, refundedCents: 0, ticketsSold: 0, fnbOrders: 0 };
+        totalsByLocation.set(locationId, totals);
+      }
+      return totals;
+    };
+    if (locationIds.length === 0) return totalsByLocation;
+    const [ticketOrders, tabs] = await Promise.all([
+      prisma.ticketOrder.findMany({
+        where: { locationId: { in: locationIds }, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
+        select: { locationId: true, status: true, totalCents: true, feesCents: true, taxCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, tickets: { select: { priceCentsPaid: true } } },
+      }),
+      prisma.restaurantTab.findMany({
+        where: { locationId: { in: locationIds }, closedAt: { gte: range.from, lt: range.to }, status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } },
+        select: { locationId: true, totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } },
+      }),
+    ]);
+    for (const order of ticketOrders) {
+      const totals = totalsFor(order.locationId);
+      const orderAheadRevenueCents = this.orderAheadRevenue(order);
+      const ticketOrderCollectedCents = Math.max(0, order.totalCents - orderAheadRevenueCents);
+      if (order.status === "REFUNDED") {
+        totals.refundedCents += ticketOrderCollectedCents + orderAheadRevenueCents;
+        continue;
+      }
+      if (order.tickets.length === 0) continue;
+      totals.ticketRevenueCents += order.tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
+      totals.ticketFeesCents += order.feesCents;
+      totals.ticketTaxCents += order.taxCents;
+      totals.ticketCollectedCents += ticketOrderCollectedCents;
+      totals.ticketsSold += order.tickets.length;
+      if (orderAheadRevenueCents > 0) {
+        totals.fnbRevenueCents += orderAheadRevenueCents;
+        totals.fnbOrders += 1;
+      }
+    }
+    for (const tab of tabs) {
+      const totals = totalsFor(tab.locationId);
+      const { revenueCents, refundedCents } = this.tabRevenue(tab);
+      totals.refundedCents += refundedCents;
+      if (revenueCents > 0) {
+        totals.fnbRevenueCents += revenueCents;
+        totals.fnbOrders += 1;
+      }
+    }
+    for (const totals of totalsByLocation.values()) totals.combinedRevenueCents = totals.ticketCollectedCents + totals.fnbRevenueCents;
+    return totalsByLocation;
+  }
+
   private advanceSalesBucket(purchasedAt: Date, startsAt: Date) {
     const hours = Math.max(0, (startsAt.getTime() - purchasedAt.getTime()) / 3_600_000);
     if (hours < 24) return { key: "SAME_DAY", label: "Same day", order: 0, hours };

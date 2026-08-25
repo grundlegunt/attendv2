@@ -628,25 +628,25 @@ export class PlatformService {
       ticketsSold: 0,
       fnbOrders: 0,
     });
-    const clients = await Promise.all(
-      organizations.map(async (organization) => {
+    const revenueByLocation = await this.reporting.platformRevenueTotals(
+      organizations.flatMap((organization) => organization.locations.map((location) => location.id)),
+      { from, to },
+    );
+    const clients = organizations.map((organization) => {
         const totals = zero();
-        const reports = await Promise.all(
-          organization.locations.map((location) =>
-            this.reporting.revenue(location.id, { from, to }),
-          ),
-        );
-        for (const report of reports)
+        for (const location of organization.locations) {
+          const report = revenueByLocation.get(location.id);
+          if (!report) continue;
           for (const key of Object.keys(totals) as Array<keyof typeof totals>)
-            totals[key] += report.totals[key];
+            totals[key] += report[key];
+        }
         return {
           id: organization.id,
           name: organization.name,
           locations: organization.locations.length,
           ...totals,
         };
-      }),
-    );
+      });
     const totals = zero();
     for (const client of clients)
       for (const key of Object.keys(totals) as Array<keyof typeof totals>)
