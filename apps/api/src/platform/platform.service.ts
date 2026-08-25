@@ -64,6 +64,11 @@ export class PlatformService {
       value: ReturnType<PlatformService["computeOrganizationHealth"]>;
     }
   >();
+  private overviewHealthCache: {
+    organizationKey: string;
+    expiresAt: number;
+    value: ReturnType<PlatformService["computeOrganizationHealthOverview"]>;
+  } | null = null;
 
   constructor(
     private readonly audit: AuditService,
@@ -228,6 +233,233 @@ export class PlatformService {
     } };
   }
 
+  private async organizationHealthOverview(
+    organizationIds: string[],
+    now: Date,
+    forceRefresh = false,
+  ) {
+    const organizationKey = [...organizationIds].sort().join(":");
+    if (
+      !forceRefresh &&
+      this.overviewHealthCache?.organizationKey === organizationKey &&
+      this.overviewHealthCache.expiresAt > now.getTime()
+    ) {
+      return this.overviewHealthCache.value;
+    }
+    const value = this.computeOrganizationHealthOverview(
+      organizationIds,
+      now,
+    ).catch((error) => {
+      if (this.overviewHealthCache?.value === value) {
+        this.overviewHealthCache = null;
+      }
+      throw error;
+    });
+    this.overviewHealthCache = {
+      organizationKey,
+      expiresAt: now.getTime() + 15_000,
+      value,
+    };
+    return value;
+  }
+
+  private async computeOrganizationHealthOverview(
+    organizationIds: string[],
+    now: Date,
+  ): Promise<
+    Map<
+      string,
+      Awaited<ReturnType<PlatformService["computeOrganizationHealth"]>>
+    >
+  > {
+    if (organizationIds.length === 0) return new Map();
+    const activitySince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const currentWeekSince = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const previousWeekSince = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    const staleBefore = new Date(now.getTime() - 10 * 60 * 1000);
+    type PaymentRow = {
+      organizationId: string;
+      failedPayments24h: bigint;
+      processingPayments: bigint;
+      verificationReviews: bigint;
+      stalePayments: bigint;
+      lastSuccessfulPaymentAt: Date | null;
+      currentCapturedCents: bigint;
+      previousCapturedCents: bigint;
+    };
+    type AttemptRow = {
+      organizationId: string;
+      currentPaymentAttempts: bigint;
+      currentFailedPaymentAttempts: bigint;
+      previousPaymentAttempts: bigint;
+      previousFailedPaymentAttempts: bigint;
+    };
+    type RefundRow = {
+      organizationId: string;
+      failedRefunds: bigint;
+      staleRefunds: bigint;
+      currentRefundedCents: bigint;
+      previousRefundedCents: bigint;
+    };
+    type CountRow = { organizationId: string; count: bigint };
+    const paymentOrganizationCte = Prisma.sql`
+      SELECT p.*,
+        COALESCE(ticket_location."organizationId", tab_location."organizationId", purchase."organizationId") AS "organizationId"
+      FROM payments p
+      LEFT JOIN ticket_orders ticket_order ON ticket_order.id = p."ticketOrderId"
+      LEFT JOIN locations ticket_location ON ticket_location.id = ticket_order."locationId"
+      LEFT JOIN restaurant_tabs tab ON tab.id = p."restaurantTabId"
+      LEFT JOIN locations tab_location ON tab_location.id = tab."locationId"
+      LEFT JOIN gift_card_purchases purchase ON purchase."paymentId" = p.id
+    `;
+    const organizationFilter = Prisma.sql`ARRAY[${Prisma.join(
+      organizationIds,
+    )}]::text[]`;
+    const [payments, attempts, refunds, reviewTabs, expiredHolds] =
+      await Promise.all([
+        prisma.$queryRaw<PaymentRow[]>(Prisma.sql`
+          WITH payment_organizations AS (${paymentOrganizationCte})
+          SELECT "organizationId",
+            COUNT(*) FILTER (WHERE status::text = 'FAILED' AND "updatedAt" >= ${activitySince}) AS "failedPayments24h",
+            COUNT(*) FILTER (WHERE status::text = 'PROCESSING') AS "processingPayments",
+            COUNT(*) FILTER (WHERE "verificationFailedAt" IS NOT NULL) AS "verificationReviews",
+            COUNT(*) FILTER (WHERE status::text IN ('PROCESSING', 'AUTHORIZED') AND "updatedAt" < ${staleBefore}) AS "stalePayments",
+            MAX("updatedAt") FILTER (WHERE status::text IN ('SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED')) AS "lastSuccessfulPaymentAt",
+            COALESCE(SUM("amountCents") FILTER (WHERE status::text IN ('SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED') AND "createdAt" >= ${currentWeekSince} AND "createdAt" < ${now}), 0) AS "currentCapturedCents",
+            COALESCE(SUM("amountCents") FILTER (WHERE status::text IN ('SUCCEEDED', 'PARTIALLY_REFUNDED', 'REFUNDED') AND "createdAt" >= ${previousWeekSince} AND "createdAt" < ${currentWeekSince}), 0) AS "previousCapturedCents"
+          FROM payment_organizations
+          WHERE "organizationId" = ANY(${organizationFilter})
+          GROUP BY "organizationId"
+        `),
+        prisma.$queryRaw<AttemptRow[]>(Prisma.sql`
+          WITH payment_organizations AS (${paymentOrganizationCte})
+          SELECT payment."organizationId",
+            COUNT(*) FILTER (WHERE attempt."attemptedAt" >= ${currentWeekSince} AND attempt."attemptedAt" < ${now}) AS "currentPaymentAttempts",
+            COUNT(*) FILTER (WHERE attempt.status::text = 'FAILED' AND attempt."attemptedAt" >= ${currentWeekSince} AND attempt."attemptedAt" < ${now}) AS "currentFailedPaymentAttempts",
+            COUNT(*) FILTER (WHERE attempt."attemptedAt" >= ${previousWeekSince} AND attempt."attemptedAt" < ${currentWeekSince}) AS "previousPaymentAttempts",
+            COUNT(*) FILTER (WHERE attempt.status::text = 'FAILED' AND attempt."attemptedAt" >= ${previousWeekSince} AND attempt."attemptedAt" < ${currentWeekSince}) AS "previousFailedPaymentAttempts"
+          FROM payment_attempts attempt
+          JOIN payment_organizations payment ON payment.id = attempt."paymentId"
+          WHERE payment."organizationId" = ANY(${organizationFilter})
+          GROUP BY payment."organizationId"
+        `),
+        prisma.$queryRaw<RefundRow[]>(Prisma.sql`
+          WITH payment_organizations AS (${paymentOrganizationCte})
+          SELECT payment."organizationId",
+            COUNT(*) FILTER (WHERE refund.status::text = 'FAILED') AS "failedRefunds",
+            COUNT(*) FILTER (WHERE refund.status::text IN ('CREATED', 'PROCESSING') AND refund."updatedAt" < ${staleBefore}) AS "staleRefunds",
+            COALESCE(SUM(refund."amountCents") FILTER (WHERE refund.status::text = 'SUCCEEDED' AND refund."updatedAt" >= ${currentWeekSince} AND refund."updatedAt" < ${now}), 0) AS "currentRefundedCents",
+            COALESCE(SUM(refund."amountCents") FILTER (WHERE refund.status::text = 'SUCCEEDED' AND refund."updatedAt" >= ${previousWeekSince} AND refund."updatedAt" < ${currentWeekSince}), 0) AS "previousRefundedCents"
+          FROM refunds refund
+          JOIN payment_organizations payment ON payment.id = refund."paymentId"
+          WHERE payment."organizationId" = ANY(${organizationFilter})
+          GROUP BY payment."organizationId"
+        `),
+        prisma.$queryRaw<CountRow[]>(Prisma.sql`
+          SELECT location."organizationId", COUNT(*) AS count
+          FROM restaurant_tabs tab
+          JOIN locations location ON location.id = tab."locationId"
+          WHERE location."organizationId" = ANY(${organizationFilter})
+            AND tab.status::text = 'MANAGER_REVIEW'
+          GROUP BY location."organizationId"
+        `),
+        prisma.$queryRaw<CountRow[]>(Prisma.sql`
+          SELECT location."organizationId", COUNT(*) AS count
+          FROM seat_holds hold
+          JOIN showtime_seats inventory ON inventory.id = hold."showtimeSeatId"
+          JOIN showtimes showtime ON showtime.id = inventory."showtimeId"
+          JOIN auditoriums auditorium ON auditorium.id = showtime."auditoriumId"
+          JOIN locations location ON location.id = auditorium."locationId"
+          WHERE location."organizationId" = ANY(${organizationFilter})
+            AND hold."releasedAt" IS NULL AND hold."expiresAt" < ${now}
+          GROUP BY location."organizationId"
+        `),
+      ]);
+    const byId = <T extends { organizationId: string }>(rows: T[]) =>
+      new Map(rows.map((row) => [row.organizationId, row]));
+    const paymentById = byId(payments);
+    const attemptById = byId(attempts);
+    const refundById = byId(refunds);
+    const tabsById = byId(reviewTabs);
+    const holdsById = byId(expiredHolds);
+    const rate = (numerator: number, denominator: number) =>
+      denominator > 0
+        ? Math.round((numerator / denominator) * 10_000) / 100
+        : null;
+    return new Map(
+      organizationIds.map((organizationId) => {
+        const payment = paymentById.get(organizationId);
+        const attempt = attemptById.get(organizationId);
+        const refund = refundById.get(organizationId);
+        const number = (value: bigint | undefined) => Number(value ?? 0n);
+        const currentPaymentAttempts = number(attempt?.currentPaymentAttempts);
+        const currentFailedPaymentAttempts = number(
+          attempt?.currentFailedPaymentAttempts,
+        );
+        const previousPaymentAttempts = number(
+          attempt?.previousPaymentAttempts,
+        );
+        const previousFailedPaymentAttempts = number(
+          attempt?.previousFailedPaymentAttempts,
+        );
+        const currentCapturedCents = number(payment?.currentCapturedCents);
+        const previousCapturedCents = number(payment?.previousCapturedCents);
+        const currentRefundedCents = number(refund?.currentRefundedCents);
+        const previousRefundedCents = number(refund?.previousRefundedCents);
+        return [
+          organizationId,
+          {
+            failedPayments24h: number(payment?.failedPayments24h),
+            processingPayments: number(payment?.processingPayments),
+            verificationReviews: number(payment?.verificationReviews),
+            failedRefunds: number(refund?.failedRefunds),
+            stalePayments: number(payment?.stalePayments),
+            staleRefunds: number(refund?.staleRefunds),
+            managerReviewTabs: number(tabsById.get(organizationId)?.count),
+            expiredHoldBacklog: number(holdsById.get(organizationId)?.count),
+            lastSuccessfulPaymentAt:
+              payment?.lastSuccessfulPaymentAt?.toISOString() ?? null,
+            trends: {
+              paymentFailure: {
+                current: {
+                  failed: currentFailedPaymentAttempts,
+                  total: currentPaymentAttempts,
+                  ratePercent: rate(
+                    currentFailedPaymentAttempts,
+                    currentPaymentAttempts,
+                  ),
+                },
+                previous: {
+                  failed: previousFailedPaymentAttempts,
+                  total: previousPaymentAttempts,
+                  ratePercent: rate(
+                    previousFailedPaymentAttempts,
+                    previousPaymentAttempts,
+                  ),
+                },
+              },
+              refunds: {
+                current: {
+                  refundedCents: currentRefundedCents,
+                  capturedCents: currentCapturedCents,
+                  ratePercent: rate(currentRefundedCents, currentCapturedCents),
+                },
+                previous: {
+                  refundedCents: previousRefundedCents,
+                  capturedCents: previousCapturedCents,
+                  ratePercent: rate(
+                    previousRefundedCents,
+                    previousCapturedCents,
+                  ),
+                },
+              },
+            },
+          },
+        ];
+      }),
+    );
+  }
+
   async overview(forceRefresh = false) {
     const now = new Date();
     const organizations = await prisma.organization.findMany({
@@ -237,7 +469,12 @@ export class PlatformService {
     const locationIds = organizations.flatMap((organization) =>
       organization.locations.map((location) => location.id),
     );
-    const [activeAuditoriums, employeeCounts, menuCategories] = await Promise.all([
+    const [healthByOrganization, activeAuditoriums, employeeCounts, menuCategories] = await Promise.all([
+      this.organizationHealthOverview(
+        organizations.map((organization) => organization.id),
+        now,
+        forceRefresh,
+      ),
       prisma.auditorium.findMany({
         where: { locationId: { in: locationIds }, active: true },
         select: {
@@ -301,11 +538,7 @@ export class PlatformService {
       generatedAt: new Date().toISOString(),
       organizations: await Promise.all(
         organizations.map(async (organization) => {
-          const health = await this.organizationHealth(
-            organization.id,
-            now,
-            forceRefresh,
-          );
+          const health = healthByOrganization.get(organization.id)!;
           return {
             id: organization.id,
             name: organization.name,
