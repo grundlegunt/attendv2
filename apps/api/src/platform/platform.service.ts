@@ -144,10 +144,32 @@ export class PlatformService {
     });
   }
 
-  async overview() {
-    const now = new Date();
+  private async organizationHealth(organizationId: string, now = new Date()) {
     const activitySince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const staleBefore = new Date(now.getTime() - 10 * 60 * 1000);
+    const paymentScope: Prisma.PaymentWhereInput = {
+      OR: [
+        { ticketOrder: { location: { organizationId } } },
+        { restaurantTab: { location: { organizationId } } },
+        { giftCardPurchase: { organizationId } },
+      ],
+    };
+    const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog] = await Promise.all([
+      prisma.payment.count({ where: { AND: [paymentScope, { status: "FAILED", updatedAt: { gte: activitySince } }] } }),
+      prisma.payment.count({ where: { AND: [paymentScope, { status: "PROCESSING" }] } }),
+      prisma.payment.count({ where: { AND: [paymentScope, { verificationFailedAt: { not: null } }] } }),
+      prisma.refund.count({ where: { status: "FAILED", payment: paymentScope } }),
+      prisma.payment.findFirst({ where: { AND: [paymentScope, { status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] } }] }, orderBy: { updatedAt: "desc" }, select: { updatedAt: true } }),
+      prisma.payment.count({ where: { AND: [paymentScope, { status: { in: ["PROCESSING", "AUTHORIZED"] }, updatedAt: { lt: staleBefore } }] } }),
+      prisma.refund.count({ where: { status: { in: ["CREATED", "PROCESSING"] }, updatedAt: { lt: staleBefore }, payment: paymentScope } }),
+      prisma.restaurantTab.count({ where: { location: { organizationId }, status: "MANAGER_REVIEW" } }),
+      prisma.seatHold.count({ where: { releasedAt: null, expiresAt: { lt: now }, showtimeSeat: { showtime: { auditorium: { location: { organizationId } } } } } }),
+    ]);
+    return { failedPayments24h, processingPayments, verificationReviews, failedRefunds, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog, lastSuccessfulPaymentAt: lastSuccessfulPayment?.updatedAt.toISOString() ?? null };
+  }
+
+  async overview() {
+    const now = new Date();
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },
       include: { locations: { orderBy: { name: "asc" } } },
@@ -157,28 +179,7 @@ export class PlatformService {
       generatedAt: new Date().toISOString(),
       organizations: await Promise.all(
         organizations.map(async (organization) => {
-          const paymentScope: Prisma.PaymentWhereInput = {
-            OR: [
-              { ticketOrder: { location: { organizationId: organization.id } } },
-              { restaurantTab: { location: { organizationId: organization.id } } },
-              { giftCardPurchase: { organizationId: organization.id } },
-            ],
-          };
-          const [failedPayments24h, processingPayments, verificationReviews, failedRefunds, lastSuccessfulPayment, stalePayments, staleRefunds, managerReviewTabs, expiredHoldBacklog] = await Promise.all([
-            prisma.payment.count({ where: { AND: [paymentScope, { status: "FAILED", updatedAt: { gte: activitySince } }] } }),
-            prisma.payment.count({ where: { AND: [paymentScope, { status: "PROCESSING" }] } }),
-            prisma.payment.count({ where: { AND: [paymentScope, { verificationFailedAt: { not: null } }] } }),
-            prisma.refund.count({ where: { status: "FAILED", payment: paymentScope } }),
-            prisma.payment.findFirst({
-              where: { AND: [paymentScope, { status: { in: ["SUCCEEDED", "PARTIALLY_REFUNDED", "REFUNDED"] } }] },
-              orderBy: { updatedAt: "desc" },
-              select: { updatedAt: true },
-            }),
-            prisma.payment.count({ where: { AND: [paymentScope, { status: { in: ["PROCESSING", "AUTHORIZED"] }, updatedAt: { lt: staleBefore } }] } }),
-            prisma.refund.count({ where: { status: { in: ["CREATED", "PROCESSING"] }, updatedAt: { lt: staleBefore }, payment: paymentScope } }),
-            prisma.restaurantTab.count({ where: { location: { organizationId: organization.id }, status: "MANAGER_REVIEW" } }),
-            prisma.seatHold.count({ where: { releasedAt: null, expiresAt: { lt: now }, showtimeSeat: { showtime: { auditorium: { location: { organizationId: organization.id } } } } } }),
-          ]);
+          const health = await this.organizationHealth(organization.id, now);
           return {
           id: organization.id,
           name: organization.name,
@@ -191,17 +192,7 @@ export class PlatformService {
             connected: Boolean(organization.stripeConnectedAccountId),
             onboardingStatus: organization.connectOnboardingStatus,
           },
-          health: {
-            failedPayments24h,
-            processingPayments,
-            verificationReviews,
-            failedRefunds,
-            stalePayments,
-            staleRefunds,
-            managerReviewTabs,
-            expiredHoldBacklog,
-            lastSuccessfulPaymentAt: lastSuccessfulPayment?.updatedAt.toISOString() ?? null,
-          },
+          health,
           locations: await Promise.all(
             organization.locations.map(async (location) => {
               const [auditoriums, employees, menuItems, upcomingShowtimes] =
@@ -782,6 +773,7 @@ export class PlatformService {
         connected: Boolean(organization.stripeConnectedAccountId),
         onboardingStatus: organization.connectOnboardingStatus,
       },
+      health: await this.organizationHealth(organization.id),
       locations: await Promise.all(
         organization.locations.map(async (location) => {
           const [

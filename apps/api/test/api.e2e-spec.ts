@@ -1047,6 +1047,7 @@ describe("Attend platform authentication boundary", () => {
     expect(res.body).toEqual(expect.objectContaining({
       id: organizationId,
       payments: expect.objectContaining({ onboardingStatus: expect.any(String) }),
+      health: expect.objectContaining({ stalePayments: expect.any(Number), staleRefunds: expect.any(Number), managerReviewTabs: expect.any(Number), expiredHoldBacklog: expect.any(Number) }),
       locations: expect.arrayContaining([expect.objectContaining({
         branding: expect.any(Object),
         adminBranding: expect.any(Object),
