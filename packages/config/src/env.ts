@@ -76,6 +76,17 @@ const envSchema = z.object({
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_FROM: z.string().regex(/^\+[1-9]\d{7,14}$/, "TWILIO_FROM must be an E.164 phone number").optional(),
 
+  APPLE_WALLET_PROVIDER: z.enum(["disabled", "passkit", "test"]).default("disabled"),
+  APPLE_WALLET_TEAM_ID: z.string().min(1).optional(),
+  APPLE_WALLET_PASS_TYPE_ID: z.string().startsWith("pass.").optional(),
+  APPLE_WALLET_CERTIFICATE_BASE64: z.string().min(1).optional(),
+  APPLE_WALLET_PRIVATE_KEY_BASE64: z.string().min(1).optional(),
+  APPLE_WALLET_PRIVATE_KEY_PASSWORD: z.string().optional(),
+  GOOGLE_WALLET_PROVIDER: z.enum(["disabled", "google", "test"]).default("disabled"),
+  GOOGLE_WALLET_ISSUER_ID: z.string().min(1).optional(),
+  GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL: z.string().email().optional(),
+  GOOGLE_WALLET_PRIVATE_KEY: z.string().min(1).optional(),
+
   PAYMENT_PROVIDER: z.enum(["stripe", "test"]).default("stripe"),
   // Live mode is an explicit production-only opt-in. Test mode remains valid
   // in production previews and staging environments.
@@ -164,6 +175,19 @@ const envSchema = z.object({
   if (env.SMS_PROVIDER === "twilio") {
     for (const key of ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_FROM"] as const) {
       if (!env[key]) context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required when SMS_PROVIDER=twilio.` });
+    }
+  }
+  if ((env.APPLE_WALLET_PROVIDER === "test" || env.GOOGLE_WALLET_PROVIDER === "test") && env.NODE_ENV !== "test") {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["APPLE_WALLET_PROVIDER"], message: "Test wallet providers are only allowed when NODE_ENV=test." });
+  }
+  if (env.APPLE_WALLET_PROVIDER === "passkit") {
+    for (const key of ["APPLE_WALLET_TEAM_ID", "APPLE_WALLET_PASS_TYPE_ID", "APPLE_WALLET_CERTIFICATE_BASE64", "APPLE_WALLET_PRIVATE_KEY_BASE64"] as const) {
+      if (!env[key]) context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required when APPLE_WALLET_PROVIDER=passkit.` });
+    }
+  }
+  if (env.GOOGLE_WALLET_PROVIDER === "google") {
+    for (const key of ["GOOGLE_WALLET_ISSUER_ID", "GOOGLE_WALLET_SERVICE_ACCOUNT_EMAIL", "GOOGLE_WALLET_PRIVATE_KEY"] as const) {
+      if (!env[key]) context.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${key} is required when GOOGLE_WALLET_PROVIDER=google.` });
     }
   }
   if (env.PAYMENT_PROVIDER === "stripe") {
