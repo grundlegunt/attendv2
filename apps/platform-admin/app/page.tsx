@@ -203,6 +203,7 @@ export default function PlatformDashboard() {
         </div>
         <div className="identity">
           {overview && <small>Updated {new Date(overview.generatedAt).toLocaleTimeString()}</small>}
+          <Link className="diagnostics-link" href="/diagnostics">Diagnostics</Link>
           <button className="quiet" disabled={overviewLoading} onClick={() => void refreshOverview()}>{overviewLoading ? "Refreshing…" : "Refresh health"}</button>
           <span>{session.user.name}</span>
           <button className="quiet" onClick={signOut}>Sign out</button>
