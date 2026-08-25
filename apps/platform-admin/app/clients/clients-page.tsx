@@ -120,6 +120,7 @@ interface OrganizationDetail {
   timezone: string;
   active: boolean;
   ticketFeeMinor: number;
+  registeredTicketFeeMinor: number;
   createdAt: string;
   payments: { connected: boolean; onboardingStatus: string };
   locations: Array<{
@@ -211,6 +212,7 @@ type OrganizationDraft = {
   defaultSeatingMode: "RESERVED" | "GENERAL_ADMISSION";
   timezone: string;
   ticketFee: string;
+  registeredTicketFee: string;
 };
 type OrganizationCreateDraft = {
   name: string;
@@ -513,6 +515,7 @@ export default function AttendMaster() {
       defaultSeatingMode: detail.defaultSeatingMode,
       timezone: detail.timezone,
       ticketFee: (detail.ticketFeeMinor / 100).toFixed(2),
+      registeredTicketFee: (detail.registeredTicketFeeMinor / 100).toFixed(2),
     });
   }
 
@@ -628,7 +631,7 @@ export default function AttendMaster() {
     setSaving(true);
     setError(null);
     try {
-      const { ticketFee, ...draft } = organizationDraft;
+      const { ticketFee, registeredTicketFee, ...draft } = organizationDraft;
       const updated = await request<OrganizationDetail>(
         `/platform/organizations/${organization.id}`,
         {
@@ -639,6 +642,7 @@ export default function AttendMaster() {
             businessTypeLabel: draft.businessTypeLabel || null,
             defaultSeatingMode: draft.defaultSeatingMode,
             ticketFeeMinor: Math.round(Number(ticketFee) * 100),
+            registeredTicketFeeMinor: Math.round(Number(registeredTicketFee) * 100),
           }),
         },
         session.accessToken,
@@ -1657,7 +1661,7 @@ export default function AttendMaster() {
                       </small>
                     </label>
                     <label>
-                      Attend ticket fee per ticket
+                      Guest service fee per ticket
                       <input
                         required
                         type="number"
@@ -1672,11 +1676,27 @@ export default function AttendMaster() {
                         }
                       />
                     </label>
+                    <label>
+                      Registered-customer service fee per ticket
+                      <input
+                        required
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={organizationDraft.registeredTicketFee}
+                        onChange={(event) =>
+                          setOrganizationDraft({
+                            ...organizationDraft,
+                            registeredTicketFee: event.target.value,
+                          })
+                        }
+                      />
+                    </label>
                   </div>
                   <p className="form-note">
-                    The ticket fee is controlled by Attend and applies to every
-                    ticket group for this client. Payment status is read from
-                    Stripe.
+                    Service fees are controlled by Attend and apply to every
+                    ticket group for this client. Keep both amounts equal when
+                    the cinema does not distinguish guests from registered customers.
                   </p>
                   <button disabled={saving}>
                     {saving ? "Saving…" : "Save organization"}

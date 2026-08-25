@@ -30,6 +30,7 @@ model Organization {
   stripeConnectedAccountId String?
   connectOnboardingStatus  ConnectOnboardingStatus @default(NOT_STARTED)
   ticketFeeMinor           Int                     @default(0)
+  registeredTicketFeeMinor Int                     @default(0)
   active                   Boolean                 @default(true)
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
@@ -485,16 +486,17 @@ model PriceTier {
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
 
-  name              String
-  ticketPriceMinor  Int
-  feeMinor          Int
-  currency          String   @default("USD")
+  name               String
+  ticketPriceMinor   Int
+  feeMinor           Int
+  registeredFeeMinor Int      @default(0)
+  currency           String   @default("USD")
   // JavaScript weekday numbers: Sunday 0 through Saturday 6.
   // Empty means the default tier.
-  appliesOnWeekdays Int[]
-  active            Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  appliesOnWeekdays  Int[]
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   showtimes Showtime[]
 

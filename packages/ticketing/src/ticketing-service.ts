@@ -42,6 +42,8 @@ export interface CreateTicketCheckoutInput {
   diningAuthorizationRequested: boolean;
   checkoutIdempotencyKey: string;
   orderAhead?: OrderAheadSelection[];
+  /** Set only by a server after validating the customer's session. */
+  authenticatedCustomerId?: string;
 }
 
 interface LockedHold {
@@ -283,7 +285,20 @@ export class TicketingService {
       priceCents: Math.max(0, showtime.priceTier.ticketPriceMinor + ticketTypes.find((type) => type.id === selection.ticketTypeId)!.priceAdjustmentMinor),
     }));
     const subtotalCents = quotedTicketTypeSelections.reduce((sum, selection) => sum + selection.priceCents, 0);
-    const feesCents = showtime.priceTier.feeMinor * holds.length;
+    let authenticatedCustomer: { id: string; email: string | null } | null = null;
+    if (input.authenticatedCustomerId) {
+      authenticatedCustomer = await this.prisma.customer.findUnique({
+        where: { id: input.authenticatedCustomerId },
+        select: { id: true, email: true },
+      });
+      if (!authenticatedCustomer?.email || authenticatedCustomer.email.toLowerCase() !== input.email.toLowerCase()) {
+        throw new TicketingError("UNAUTHENTICATED", "Your account session is no longer valid. Please sign in again.", 401);
+      }
+    }
+    const perTicketFeeMinor = authenticatedCustomer
+      ? showtime.priceTier.registeredFeeMinor
+      : showtime.priceTier.feeMinor;
+    const feesCents = perTicketFeeMinor * holds.length;
     const promotion = input.promotionCode
       ? await this.prisma.promotion.findFirst({
           where: {

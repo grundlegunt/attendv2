@@ -186,7 +186,7 @@ export class ManagementService {
   async createPriceTier(input: { locationId: string; employeeId: string; requestId: string; name: string; ticketPriceMinor: number }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     return prisma.$transaction(async (tx) => {
-      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, organization: { select: { ticketFeeMinor: true } } } });
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true, organization: { select: { ticketFeeMinor: true, registeredTicketFeeMinor: true } } } });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
       const requestFingerprint = createHash("sha256").update(JSON.stringify({ organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor })).digest("hex");
       const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "ticket.price_tier_created", afterState: { path: ["requestId"], equals: input.requestId } } });
@@ -199,7 +199,7 @@ export class ManagementService {
       }
       const duplicate = await tx.priceTier.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
       if (duplicate) throw AppError.conflict("A ticket price group with this name already exists.");
-      const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor, appliesOnWeekdays: [] } });
+      const tier = await tx.priceTier.create({ data: { organizationId: location.organizationId, name: input.name, ticketPriceMinor: input.ticketPriceMinor, feeMinor: location.organization.ticketFeeMinor, registeredFeeMinor: location.organization.registeredTicketFeeMinor, appliesOnWeekdays: [] } });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket.price_tier_created", entityType: "PriceTier", entityId: tier.id, afterState: { requestId: input.requestId, requestFingerprint, name: tier.name, ticketPriceMinor: tier.ticketPriceMinor, active: tier.active } } });
       return tier;
     });

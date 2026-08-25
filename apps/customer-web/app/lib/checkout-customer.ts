@@ -27,12 +27,12 @@ function readCookie(request: Request, name: string): string | undefined {
   return undefined;
 }
 
-export async function trustedCheckoutEmail(
+export async function trustedCheckoutCustomer(
   request: Request,
   requestedEmail: string,
-): Promise<string> {
+): Promise<{ email: string; customerId?: string }> {
   const token = readCookie(request, CUSTOMER_ACCESS_COOKIE);
-  if (!token) return requestedEmail;
+  if (!token) return { email: requestedEmail };
 
   const secret = process.env.JWT_ACCESS_SECRET;
   if (!secret) throw new CheckoutSessionError();
@@ -58,5 +58,5 @@ export async function trustedCheckoutEmail(
   });
   if (!customer?.email) throw new CheckoutSessionError();
 
-  return customer.email;
+  return { email: customer.email, customerId: actor.sub };
 }
