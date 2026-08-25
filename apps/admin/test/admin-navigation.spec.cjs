@@ -8,6 +8,7 @@ const ts = require("typescript");
 const navigationPath = resolve(__dirname, "../app/admin-navigation.ts");
 const adminSessionSource = readFileSync(resolve(__dirname, "../app/admin-session.tsx"), "utf8");
 const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
+const filmLibrarySource = readFileSync(resolve(__dirname, "../app/films/page.tsx"), "utf8");
 const globalStylesSource = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
 const compiled = ts.transpileModule(source, {
@@ -76,7 +77,14 @@ describe("admin navigation", () => {
     assert.deepEqual(incomplete.map((item) => item.href), ["/"]);
 
     const complete = visibleAdminNavigation(["auditorium.manage", "movie.manage", "showtime.manage"]).flatMap((group) => group.items);
-    assert.deepEqual(complete.map((item) => item.href), ["/", "/scheduling", "/film-series", "/cinema-setup"]);
+    assert.deepEqual(complete.map((item) => item.href), ["/", "/scheduling", "/films", "/film-series", "/cinema-setup"]);
+  });
+
+  it("exposes a standalone searchable film library with performance drilldowns", () => {
+    assert.match(filmLibrarySource, /apiFetch<Bootstrap>\("\/cinema\/admin\/bootstrap"/);
+    assert.match(filmLibrarySource, /placeholder="Title, director, or distributor"/);
+    assert.match(filmLibrarySource, /`\/films\/\$\{encodeURIComponent\(movie\.id\)\}`/);
+    assert.match(filmLibrarySource, /Archived films/);
   });
 
   it("supports any-of permission destinations without widening other sections", () => {
