@@ -108,5 +108,8 @@ export async function GET(
       publishableKey: stripe?.STRIPE_PUBLISHABLE_KEY ?? null,
       connectedAccountId: location.organization.stripeConnectedAccountId,
     },
+    notifications: {
+      smsTicketsAvailable: process.env.SMS_PROVIDER === "twilio",
+    },
   });
 }
