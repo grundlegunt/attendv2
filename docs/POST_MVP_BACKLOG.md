@@ -7,7 +7,7 @@ Status: Living reference, reconciled August 23, 2026 — tracks real gaps and op
 These items have a clear operator or customer benefit and can be scoped without inventing an outside business relationship.
 
 - **Wallet passes and SMS.** Add Apple/Google wallet tickets and a transactional SMS provider for time-sensitive showtime, ticket, and food-ready notifications. Define consent, delivery fallback, and provider cost controls before implementation.
-- **Analytics provider and funnel instrumentation.** The public site now defaults optional analytics off, records a versioned browser choice, provides a persistent way to change it, and keeps analytics separate from essential ticketing and marketing consent. Choose a privacy-reviewed provider and event policy before connecting funnel events to that consent signal.
+- **Analytics funnel instrumentation.** The public site now supports disabled-by-default Plausible analytics, loads its personalized script only after explicit opt-in, redacts identifier-bearing routes, records manual pageviews only while consent remains active, and exposes a deliberately small event vocabulary that excludes customer, payment, ticket, seat, and order identifiers. Production still needs a Plausible site and its personalized script URL; checkout conversion events should be wired incrementally and reviewed against that vocabulary.
 
 ## 2. Items needing a product decision or reproducible case
 
