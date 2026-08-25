@@ -74,6 +74,8 @@ export default function PlatformOnboarding() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [progressFilter, setProgressFilter] = useState("ALL");
   const authRequestRef = useRef(0);
 
   useEffect(() => {
@@ -98,6 +100,15 @@ export default function PlatformOnboarding() {
 
   const launched = pipeline.filter((item) => item.completed === item.steps.length).length;
   const inProgress = pipeline.length - launched;
+  const displayedPipeline = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return pipeline.filter((item) => {
+      if (normalizedQuery && !item.organization.name.toLowerCase().includes(normalizedQuery)) return false;
+      if (progressFilter === "IN_PROGRESS" && item.completed === item.steps.length) return false;
+      if (progressFilter === "READY" && item.completed !== item.steps.length) return false;
+      return true;
+    });
+  }, [pipeline, progressFilter, query]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -148,10 +159,17 @@ export default function PlatformOnboarding() {
         <article><strong>{launched}</strong><span>Ready to sell</span></article>
         <article><strong>{pipeline.length}</strong><span>Total clients</span></article>
       </section>
+      <section className="onboarding-filters" aria-label="Filter client onboarding">
+        <label>Find client<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cinema name" /></label>
+        <label>Progress<select value={progressFilter} onChange={(event) => setProgressFilter(event.target.value)}><option value="ALL">All clients</option><option value="IN_PROGRESS">In progress</option><option value="READY">Ready to sell</option></select></label>
+        <span><strong>{displayedPipeline.length}</strong> of {pipeline.length} clients</span>
+        <button className="quiet" type="button" disabled={!query && progressFilter === "ALL"} onClick={() => { setQuery(""); setProgressFilter("ALL"); }}>Clear filters</button>
+      </section>
       <section className="onboarding-pipeline">
         {!overview && <p className="muted">Loading onboarding pipeline…</p>}
         {overview && pipeline.length === 0 && <div className="client-empty-state"><h2>No clients yet</h2><p className="muted">Create the first cinema organization and location to begin.</p><Link className="link-button" href="/clients?create=1">Start first client</Link></div>}
-        {pipeline.map(({ organization, steps, completed, action }) => (
+        {overview && pipeline.length > 0 && displayedPipeline.length === 0 && <div className="client-empty-state"><h2>No clients match</h2><p className="muted">Adjust or clear the onboarding filters.</p></div>}
+        {displayedPipeline.map(({ organization, steps, completed, action }) => (
           <article key={organization.id}>
             <div className="pipeline-heading">
               <div><p className="eyebrow">CLIENT ONBOARDING</p><h2>{organization.name}</h2><span className={completed === steps.length ? "status good" : "status warning"}>{completed} of {steps.length} complete</span></div>
