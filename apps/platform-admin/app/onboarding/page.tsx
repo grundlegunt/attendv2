@@ -62,7 +62,7 @@ function onboardingSteps(organization: OrganizationOverview): OnboardingStep[] {
 
 function nextAction(organization: OrganizationOverview, steps: OnboardingStep[]) {
   const next = steps.find((step) => !step.complete)?.label;
-  if (next === "Stripe Connect") return { label: organization.payments.connected ? "Resume Stripe" : "Connect Stripe", href: "/payments" };
+  if (next === "Stripe Connect") return { label: organization.payments.connected ? "Resume Stripe" : "Connect Stripe", href: `/payments?organizationId=${encodeURIComponent(organization.id)}&connect=refresh` };
   if (next) return { label: `Complete ${next.toLowerCase()}`, href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
   return { label: "Review client", href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
 }
