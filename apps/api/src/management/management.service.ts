@@ -1070,7 +1070,7 @@ export class ManagementService {
         createdAt: true,
         memberships: {
           where: { organization: { locations: { some: { id: locationId } } } },
-          select: { membershipNumber: true, tier: true, status: true, expiresAt: true },
+          select: { membershipNumber: true, planId: true, tier: true, status: true, expiresAt: true, plan: { select: { id: true, name: true, durationMonths: true, active: true } } },
           take: 1,
         },
         ticketOrders: {
