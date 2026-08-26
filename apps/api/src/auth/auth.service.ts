@@ -687,7 +687,7 @@ export class AuthService {
             checkouts: {
               where: { status: "PAID" },
               orderBy: { createdAt: "desc" },
-              select: { id: true, planName: true, amountCents: true, currency: true, createdAt: true, location: { select: { name: true } } },
+              select: { id: true, planName: true, amountCents: true, taxDeductibleAmountCents: true, currency: true, createdAt: true, location: { select: { name: true } } },
             },
           },
         },
@@ -733,6 +733,7 @@ export class AuthService {
           id: checkout.id,
           planName: checkout.planName,
           amountCents: checkout.amountCents,
+          taxDeductibleAmountCents: checkout.taxDeductibleAmountCents,
           currency: checkout.currency,
           purchasedAt: checkout.createdAt.toISOString(),
           locationName: checkout.location.name,

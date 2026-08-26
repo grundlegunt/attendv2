@@ -166,7 +166,7 @@ export interface CustomerAccountResponse {
     status: string;
     expiresAt: string | null;
     plan: { id: string; name: string; description: string | null; benefits: unknown } | null;
-    purchases: Array<{ id: string; planName: string; amountCents: number; currency: string; purchasedAt: string; locationName: string }>;
+    purchases: Array<{ id: string; planName: string; amountCents: number; taxDeductibleAmountCents: number; currency: string; purchasedAt: string; locationName: string }>;
   }>;
   walletAvailability: { apple: boolean; google: boolean };
 }
