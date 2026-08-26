@@ -22,3 +22,14 @@ test("campaign performance is organization scoped and uses database aggregates",
   assert.match(service, /prisma\.donation\.aggregate\(\{ where: \{ \.\.\.period, status: "REFUNDED" \}/);
   assert.match(service, /take: 250/);
 });
+
+test("campaign details use stable retries and cinema-local inclusive dates", () => {
+  assert.match(detail, /updateRequestId\.current \?\?= crypto\.randomUUID\(\)/);
+  assert.match(detail, /if \(!data \|\| mutationPending\.current\) return; mutationPending\.current = true/);
+  assert.match(detail, /finally \{ mutationPending\.current = false; setUpdating\(false\); \}/);
+  assert.match(detail, /inclusiveReportRange\(startsOn, startsOn, data\.location\.timezone\)\.from/);
+  assert.match(detail, /inclusiveDateCutoff\(endsOn, data\.location\.timezone\)/);
+  assert.match(detail, /changeDraft\(setName/);
+  assert.match(detail, /changeDraft\(setEndsOn/);
+  assert.match(detail, /The end date includes the full selected day\./);
+});

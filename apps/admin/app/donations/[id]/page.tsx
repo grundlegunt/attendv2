@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useAdminSession } from "../../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../../lib/api-client";
+import { inclusiveDateCutoff, inclusiveReportRange, localDateInputValue } from "../../report-range";
 
 type Period = "all" | "30" | "90" | "365";
 type CampaignPerformance = {
@@ -26,7 +27,13 @@ export default function DonationCampaignPage() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [goal, setGoal] = useState("");
+  const [startsOn, setStartsOn] = useState("");
+  const [endsOn, setEndsOn] = useState("");
   const updateRequestId = useRef<string | null>(null);
+  const mutationPending = useRef(false);
   const query = useMemo(() => {
     if (period === "all") return "";
     const to = new Date(); const from = new Date(to.getTime() - Number(period) * 24 * 60 * 60 * 1000);
@@ -36,7 +43,7 @@ export default function DonationCampaignPage() {
 
   useEffect(() => {
     let cancelled = false; setLoading(true); setError(null);
-    apiFetch<CampaignPerformance>(path, { accessToken }).then((result) => { if (!cancelled) setData(result); }).catch((reason) => { if (!cancelled) setError(reason instanceof ApiRequestError ? reason.body.message : "Campaign performance could not be loaded."); }).finally(() => { if (!cancelled) setLoading(false); });
+    apiFetch<CampaignPerformance>(path, { accessToken }).then((result) => { if (!cancelled) { setData(result); setName(result.campaign.name); setDescription(result.campaign.description ?? ""); setGoal(result.campaign.goalAmountCents ? String(result.campaign.goalAmountCents / 100) : ""); setStartsOn(result.campaign.startsAt ? localDateInputValue(new Date(result.campaign.startsAt), result.location.timezone) : ""); setEndsOn(result.campaign.endsAt ? localDateInputValue(new Date(result.campaign.endsAt), result.location.timezone) : ""); } }).catch((reason) => { if (!cancelled) setError(reason instanceof ApiRequestError ? reason.body.message : "Campaign performance could not be loaded."); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [accessToken, path]);
 
@@ -52,13 +59,32 @@ export default function DonationCampaignPage() {
   }
 
   async function toggleCampaign() {
-    if (!data || updating) return; setUpdating(true); setError(null);
+    if (!data || mutationPending.current) return; mutationPending.current = true; setUpdating(true); setError(null);
     updateRequestId.current ??= crypto.randomUUID();
     try {
       await apiFetch(`/management/donation-campaigns/${encodeURIComponent(id)}`, { method: "PATCH", accessToken, headers: { "Idempotency-Key": updateRequestId.current }, body: JSON.stringify({ active: !data.campaign.active }) });
       updateRequestId.current = null; setData({ ...data, campaign: { ...data.campaign, active: !data.campaign.active } });
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Campaign status could not be updated."); }
-    finally { setUpdating(false); }
+    finally { mutationPending.current = false; setUpdating(false); }
+  }
+
+  function changeDraft(setter: (value: string) => void, value: string) { updateRequestId.current = null; setter(value); }
+
+  async function saveCampaign(event: FormEvent) {
+    event.preventDefault(); if (!data || mutationPending.current) return; mutationPending.current = true; setUpdating(true); setError(null);
+    updateRequestId.current ??= crypto.randomUUID();
+    try {
+      if (startsOn && endsOn) inclusiveReportRange(startsOn, endsOn, data.location.timezone);
+      const body = {
+        name, description: description.trim() || null,
+        goalAmountCents: goal ? Math.round(Number(goal) * 100) : null,
+        startsAt: startsOn ? inclusiveReportRange(startsOn, startsOn, data.location.timezone).from : null,
+        endsAt: endsOn ? inclusiveDateCutoff(endsOn, data.location.timezone) : null,
+      };
+      const campaign = await apiFetch<CampaignPerformance["campaign"]>(`/management/donation-campaigns/${encodeURIComponent(id)}`, { method: "PATCH", accessToken, headers: { "Idempotency-Key": updateRequestId.current }, body: JSON.stringify(body) });
+      updateRequestId.current = null; setData({ ...data, campaign, totals: { ...data.totals, goalProgressPercent: campaign.goalAmountCents ? Math.round((data.totals.raisedAmountCents / campaign.goalAmountCents) * 10_000) / 100 : null } });
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : reason instanceof Error ? reason.message : "Campaign details could not be updated."); }
+    finally { mutationPending.current = false; setUpdating(false); }
   }
 
   const currency = data?.location.currency ?? "USD";
@@ -71,6 +97,7 @@ export default function DonationCampaignPage() {
     <div className="series-period-switch" role="group" aria-label="Reporting period">{(["all", "30", "90", "365"] as Period[]).map((value) => <button type="button" className={period === value ? "active" : ""} onClick={() => setPeriod(value)} key={value}>{value === "all" ? "All time" : `${value} days`}</button>)}</div>
     {error && <div className="error-banner" role="alert">{error}</div>}{loading && <p className="dashboard-empty">Loading campaign performance…</p>}
     {data && <><section className="donation-campaign-metrics"><article className="panel"><span>Raised</span><strong>{money(data.totals.raisedAmountCents, currency)}</strong><small>{data.totals.goalProgressPercent === null ? "No campaign goal" : `${data.totals.goalProgressPercent}% of ${money(data.campaign.goalAmountCents!, currency)}`}</small></article><article className="panel"><span>Contributions</span><strong>{data.totals.contributions}</strong><small>{money(data.totals.averageContributionCents, currency)} average gift</small></article><article className="panel"><span>Tax deductible</span><strong>{money(data.totals.taxDeductibleAmountCents, currency)}</strong><small>{data.totals.refundedContributions} refunded · {money(data.totals.refundedAmountCents, currency)}</small></article><article className="panel"><span>Status</span><strong>{data.campaign.active ? "Active" : "Inactive"}</strong><small>{data.campaign.startsAt ? date(data.campaign.startsAt) : "No start date"} – {data.campaign.endsAt ? date(data.campaign.endsAt) : "No end date"}</small></article></section>
+      {canManage && <form className="panel donation-campaign-editor" onSubmit={saveCampaign}><div><p className="kicker">CAMPAIGN SETTINGS</p><h2>Campaign details</h2><p>Dates follow {data.location.name}’s local timezone. The end date includes the full selected day.</p></div><label>Name<input required maxLength={120} value={name} onChange={(event) => changeDraft(setName, event.target.value)} /></label><label className="donation-campaign-description">Description<textarea rows={3} maxLength={1000} value={description} onChange={(event) => changeDraft(setDescription, event.target.value)} /></label><label>Goal<input type="number" min="0.01" max="10000000" step="0.01" value={goal} onChange={(event) => changeDraft(setGoal, event.target.value)} placeholder="No goal" /></label><label>Starts on<input type="date" value={startsOn} onChange={(event) => changeDraft(setStartsOn, event.target.value)} /></label><label>Ends on<input type="date" value={endsOn} onChange={(event) => changeDraft(setEndsOn, event.target.value)} /></label><button disabled={updating}>{updating ? "Saving…" : "Save campaign"}</button></form>}
       <section className="panel donation-history"><div className="dashboard-section-heading"><div><p className="kicker">CONTRIBUTIONS</p><h2>Campaign activity</h2></div><span>{data.donations.length} recent records</span></div><div className="donation-history-table"><header><span>Date</span><span>Donor</span><span>Status</span><span>Method</span><span>Amount</span><span>Deductible</span></header>{data.donations.map((donation) => <div key={donation.id}><span>{date(donation.receivedAt)}</span><span><strong>{donation.customer?.name || donation.donorName || "Anonymous"}</strong><small>{donation.customer?.email || donation.donorEmail || "No email"}</small></span><span>{donation.status.toLowerCase()}</span><span>{donation.paymentMethod.toLowerCase()}</span><span>{money(donation.amountCents, currency)}</span><span>{money(donation.taxDeductibleAmountCents, currency)}</span></div>)}</div>{data.donations.length === 0 && <p className="dashboard-empty">No contributions in this period.</p>}</section></>}
   </main>;
 }
