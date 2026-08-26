@@ -166,7 +166,7 @@ export class PlatformService {
         ],
       } : {}),
     };
-    const [entries, total] = await prisma.$transaction([
+    const [entries, total, operatorMovieCount, linkedOperatorMovieCount, activeCatalogEntryCount, inactiveCatalogEntryCount] = await prisma.$transaction([
       prisma.filmCatalogEntry.findMany({
         where,
         orderBy: [{ title: "asc" }, { releaseYear: "desc" }],
@@ -175,6 +175,10 @@ export class PlatformService {
         include: { _count: { select: { operatorMovies: true } } },
       }),
       prisma.filmCatalogEntry.count({ where }),
+      prisma.movie.count(),
+      prisma.movie.count({ where: { catalogEntryId: { not: null } } }),
+      prisma.filmCatalogEntry.count({ where: { active: true } }),
+      prisma.filmCatalogEntry.count({ where: { active: false } }),
     ]);
     return {
       entries: entries.map(({ _count, ...entry }) => ({
@@ -186,6 +190,14 @@ export class PlatformService {
       total,
       limit: take,
       offset: skip,
+      syncStatus: {
+        operatorMovieCount,
+        linkedOperatorMovieCount,
+        unlinkedOperatorMovieCount: operatorMovieCount - linkedOperatorMovieCount,
+        activeCatalogEntryCount,
+        inactiveCatalogEntryCount,
+        checkedAt: new Date().toISOString(),
+      },
     };
   }
 
