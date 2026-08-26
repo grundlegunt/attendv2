@@ -183,6 +183,18 @@ export class ManagementService {
     return { active, expiringSoon, lapsed, recentEnrollments, collectedAmountCents: collected._sum.amountCents ?? 0, paidEnrollments: collected._count._all, currency: location.currency };
   }
 
+  membershipsCsv(rows: Awaited<ReturnType<ManagementService["memberships"]>>) {
+    const cell = (value: unknown) => {
+      const raw = String(value ?? "");
+      const safe = /^[\t\r ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    return [
+      "Membership number,Customer name,Email,Phone,Plan,Tier,Status,Expiration,Created,Updated",
+      ...rows.map((row) => [row.membershipNumber, row.customer.name, row.customer.email, row.customer.phone, row.plan?.name, row.tier, row.status, row.expiresAt?.toISOString(), row.createdAt.toISOString(), row.updatedAt.toISOString()].map(cell).join(",")),
+    ].join("\n");
+  }
+
   async membershipPlans(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     return prisma.membershipPlan.findMany({ where: { organizationId: location.organizationId }, include: { _count: { select: { memberships: true } } }, orderBy: [{ active: "desc" }, { name: "asc" }] });
