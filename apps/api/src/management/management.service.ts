@@ -1070,7 +1070,27 @@ export class ManagementService {
         createdAt: true,
         memberships: {
           where: { organization: { locations: { some: { id: locationId } } } },
-          select: { membershipNumber: true, planId: true, tier: true, status: true, expiresAt: true, plan: { select: { id: true, name: true, durationMonths: true, active: true } } },
+          select: {
+            membershipNumber: true,
+            planId: true,
+            tier: true,
+            status: true,
+            expiresAt: true,
+            plan: { select: { id: true, name: true, durationMonths: true, active: true } },
+            checkouts: {
+              where: { status: "PAID" },
+              orderBy: { createdAt: "desc" },
+              select: {
+                id: true,
+                planName: true,
+                amountCents: true,
+                currency: true,
+                createdAt: true,
+                receiptSentAt: true,
+                location: { select: { id: true, name: true } },
+              },
+            },
+          },
           take: 1,
         },
         ticketOrders: {
@@ -1154,9 +1174,11 @@ export class ManagementService {
       prisma.donation.aggregate({ where: { customerId, locationId, status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true }, _avg: { amountCents: true }, _min: { receivedAt: true }, _max: { receivedAt: true } }),
     ]);
     const { memberships, ...customerRecord } = customer;
+    const membership = memberships[0] ?? null;
+    const membershipPurchases = membership?.checkouts ?? [];
     return {
       ...customerRecord,
-      membership: memberships[0] ?? null,
+      membership,
       summary: {
         orderCount,
         ticketCount,
@@ -1172,6 +1194,9 @@ export class ManagementService {
         donationFirstReceivedAt: donationSummary._min.receivedAt,
         donationLastReceivedAt: donationSummary._max.receivedAt,
         donationCurrency: customer.donations[0]?.location.currency ?? "USD",
+        membershipPurchaseCount: membershipPurchases.length,
+        membershipSpendCents: membershipPurchases.reduce((total, purchase) => total + purchase.amountCents, 0),
+        membershipCurrency: membershipPurchases[0]?.currency ?? "USD",
       },
       historyWindow: {
         ticketOrdersShown: Math.min(orderCount, page.ticketOffset + customer.ticketOrders.length),
