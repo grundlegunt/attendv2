@@ -16,3 +16,10 @@ test("membership plans can be fully edited with stable retries", () => {
   assert.match(source, /planToggleAttemptRef\.current\?\.fingerprint !== fingerprint/);
   assert.match(source, /mutationLockRef\.current/);
 });
+
+test("membership plans show active enrollment and paid performance", () => {
+  assert.match(source, /activeMemberCount/);
+  assert.match(source, /paidPurchaseCount/);
+  assert.match(source, /paidRevenueCents/);
+  assert.match(source, /online revenue/);
+});
