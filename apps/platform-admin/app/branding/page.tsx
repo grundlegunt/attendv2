@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
+import { PlatformBrandEditor } from "./platform-brand-editor";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -145,7 +146,7 @@ export default function BrandingDashboard() {
   if (!restored)
     return (
       <main className="center">
-        <p>Loading Attend Master…</p>
+        <p>Loading Ringo Master…</p>
       </main>
     );
   if (!session)
@@ -156,7 +157,7 @@ export default function BrandingDashboard() {
     <main className="shell">
       <header>
         <div>
-          <p className="eyebrow">ATTEND MASTER</p>
+          <p className="eyebrow platform-master-label" />
           <h1>Branding</h1>
           <p className="muted">
             Review customer and cinema-admin identities across every location.
@@ -169,7 +170,7 @@ export default function BrandingDashboard() {
           </button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Attend Master">
+      <nav className="platform-nav" aria-label="Ringo Master">
         <Link href="/">Dashboard</Link>
         <Link href="/clients">Clients</Link>
         <Link href="/onboarding">Onboarding</Link>
@@ -182,6 +183,7 @@ export default function BrandingDashboard() {
         <Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
+      <PlatformBrandEditor accessToken={session.accessToken} canEdit={session.user.role !== "VIEWER"} request={request} />
       <div className="content-toolbar">
         <label>
           Find client or location

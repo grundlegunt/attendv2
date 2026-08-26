@@ -15,6 +15,6 @@ describe("PlatformPermissionGuard", () => {
 
   it("rejects a platform actor without the required permission", () => {
     const reflector = { getAllAndOverride: jest.fn().mockReturnValue(PLATFORM_WRITE_PERMISSION) } as unknown as Reflector;
-    expect(() => new PlatformPermissionGuard(reflector).canActivate(context([]))).toThrow("Your Attend Master role does not allow this action.");
+    expect(() => new PlatformPermissionGuard(reflector).canActivate(context([]))).toThrow("Your Ringo Master role does not allow this action.");
   });
 });

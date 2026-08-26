@@ -50,14 +50,15 @@ auditoriumLayoutModule._compile(auditoriumLayoutCompiled.outputText, auditoriumL
 const { normalizeSeatTableMetadata, replaceSeatTypeAtCoordinate } = auditoriumLayoutModule.exports;
 
 describe("admin navigation", () => {
-  it("keeps the signed-out identity fixed to Attend instead of client branding", () => {
+  it("uses the centrally managed Ringo identity instead of client branding while signed out", () => {
     const signedOutStart = adminSessionSource.indexOf("if (!value)");
     const passwordChangeStart = adminSessionSource.indexOf("if (value.employee.mustChangePassword)");
     const signedOutMarkup = adminSessionSource.slice(signedOutStart, passwordChangeStart);
 
     assert.match(signedOutMarkup, /login-monogram/);
-    assert.match(signedOutMarkup, /ATTEND ADMIN/);
-    assert.match(signedOutMarkup, /<h1>Cinema operations<\/h1>/);
+    assert.match(signedOutMarkup, /signInBrand\?\.eyebrow \?\? "RINGO ADMIN"/);
+    assert.match(signedOutMarkup, /signInBrand\?\.title \?\? "Cinema operations"/);
+    assert.match(adminSessionSource, /\/platform\/branding\/public/);
     assert.doesNotMatch(signedOutMarkup, /publicBranding\?\.logoUrl/);
     assert.doesNotMatch(signedOutMarkup, /publicBranding\?\.name/);
   });

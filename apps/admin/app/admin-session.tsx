@@ -7,6 +7,7 @@ import { apiFetch, ApiRequestError } from "./lib/api-client";
 type Session = { employee: AuthenticatedEmployee; accessToken: string; refreshToken?: string; expiresInSeconds?: number; supportSession?: boolean };
 type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type PublicAdminBranding = { name: string; logoUrl: string | null; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
+type PlatformBranding = { companyName: string; adminSignIn: { accentColor: string; backgroundColor: string; surfaceColor: string; textColor: string; mutedTextColor: string; eyebrow: string; title: string; description: string; formEyebrow: string; formTitle: string; formDescription: string; securityNote: string } };
 type AdminSessionValue = Session & { signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
 const AdminSessionContext = createContext<AdminSessionValue | null>(null);
@@ -41,6 +42,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [publicBranding, setPublicBranding] = useState<PublicAdminBranding | null>(null);
+  const [platformBranding, setPlatformBranding] = useState<PlatformBranding | null>(null);
   const brandingRequestRef = useRef(0);
 
   function storeSession(next: Session) {
@@ -82,7 +84,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
         }
       } catch {
         window.sessionStorage.removeItem(STORAGE_KEY);
-        setError("Your Attend Admin session expired. Please sign in again.");
+        setError("Your Ringo Admin session expired. Please sign in again.");
       } finally {
         setRestored(true);
       }
@@ -97,7 +99,7 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
       void refreshSession(session.refreshToken!).catch(() => {
         window.sessionStorage.removeItem(STORAGE_KEY);
         setSession(null);
-        setError("Your Attend Admin session expired. Please sign in again.");
+        setError("Your Ringo Admin session expired. Please sign in again.");
       });
     }, delayMs);
     return () => window.clearTimeout(timer);
@@ -112,6 +114,12 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
       .catch(() => undefined);
     return () => { brandingRequestRef.current += 1; };
   }, [session?.employee.locationId]);
+
+  useEffect(() => {
+    apiFetch<PlatformBranding>("/platform/branding/public")
+      .then(setPlatformBranding)
+      .catch(() => undefined);
+  }, []);
 
   async function login(event: FormEvent) {
     event.preventDefault(); setError(null);
@@ -150,9 +158,14 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     if (!session.supportSession) void apiFetch("/auth/staff/logout", { accessToken: session.accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY); setSession(null);
   } } : null, [session]);
-  // Keep the unauthenticated surface recognizably Attend. Client colors and UI
-  // customization apply only after the staff member has established a session.
-  const branding = value ? (value.employee.adminBranding ?? publicBranding) : null;
+  // The company controls the unauthenticated identity. A cinema's own Admin
+  // palette takes over only after staff have established their location.
+  const signInBrand = platformBranding?.adminSignIn;
+  const branding = value ? (value.employee.adminBranding ?? publicBranding) : signInBrand ? {
+    accentColor: signInBrand.accentColor, accentMutedColor: signInBrand.accentColor,
+    backgroundColor: signInBrand.backgroundColor, surfaceColor: signInBrand.surfaceColor,
+    textColor: signInBrand.textColor, mutedTextColor: signInBrand.mutedTextColor,
+  } : null;
   const adminUi = value ? (publicBranding?.ui ?? adminUiDefaults) : adminUiDefaults;
   const fontFamilies: Record<AdminUiConfig["fontFamily"], string> = { SYSTEM: "Inter, ui-sans-serif, system-ui, sans-serif", SERIF: "Georgia, 'Times New Roman', serif", MODERN: "'Avenir Next', 'Helvetica Neue', Arial, sans-serif", MONO: "'SFMono-Regular', Consolas, monospace" };
   const theme = {
@@ -169,20 +182,20 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     "--admin-font-family": fontFamilies[adminUi.fontFamily], "--schedule-on-sale": adminUi.onSaleColor, "--schedule-draft": adminUi.draftColor, "--schedule-past": adminUi.pastColor,
     "--showtime-remove-control": adminUi.removeControlColor, "--showtime-duplicate-control": adminUi.duplicateControlColor,
   } as CSSProperties;
-  if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Attend Admin…</p></main></div>;
+  if (!restored) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><p>Loading Ringo Admin…</p></main></div>;
   if (!value) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><section className="login-layout">
     <div className="login-identity">
-      <div className="login-monogram" aria-hidden="true">A</div>
-      <p className="kicker">ATTEND ADMIN</p>
-      <h1>Cinema operations</h1>
-      <p>Programming, ticketing, restaurant, staff, and reporting tools in one secure workspace.</p>
+      <div className="login-monogram" aria-hidden="true">{platformBranding?.companyName.slice(0, 1).toUpperCase() ?? "R"}</div>
+      <p className="kicker">{signInBrand?.eyebrow ?? "RINGO ADMIN"}</p>
+      <h1>{signInBrand?.title ?? "Cinema operations"}</h1>
+      <p>{signInBrand?.description ?? "Programming, ticketing, restaurant, staff, and reporting tools in one secure workspace."}</p>
     </div>
     <form className="panel login-panel" onSubmit={login}>
-      <p className="kicker">MANAGER ACCESS</p><h2>Sign in</h2><p className="login-instruction">Use the staff credentials issued by your manager.</p>{error && <div className="error-banner">{error}</div>}
+      <p className="kicker">{signInBrand?.formEyebrow ?? "MANAGER ACCESS"}</p><h2>{signInBrand?.formTitle ?? "Sign in"}</h2><p className="login-instruction">{signInBrand?.formDescription ?? "Use the staff credentials issued by your manager."}</p>{error && <div className="error-banner">{error}</div>}
       <label>Email<input type="email" autoComplete="username" required value={email} onChange={(event) => setEmail(event.target.value)} /></label>
       <label>Password<input type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} /></label>
       <button className="primary">Sign in</button>
-      <small className="login-security-note">Authorized staff only · Sessions expire automatically</small>
+      <small className="login-security-note">{signInBrand?.securityNote ?? "Authorized staff only · Sessions expire automatically"}</small>
     </form>
   </section></main></div>;
   if (value.employee.mustChangePassword) return <div className="admin-theme-root" style={theme}><main className="admin-shell login-shell"><form className="panel login-panel" onSubmit={changePassword}>
@@ -192,5 +205,5 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     <label>Confirm new password<input type="password" minLength={12} required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} /></label>
     <button className="primary">Change password</button><button type="button" className="secondary" onClick={value.signOut}>Sign out</button>
   </form></main></div>;
-  return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className={`admin-theme-root ${value.supportSession ? "support-read-only" : ""}`} style={theme}>{value.supportSession && <div className="support-session-banner" role="status"><strong>Attend Support · Read only</strong><span>This temporary session cannot change cinema data.</span><button type="button" className="support-exit" onClick={value.signOut}>Exit support view</button></div>}{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
+  return <AdminSessionContext.Provider value={value}><AdminUiContext.Provider value={adminUi}><div className={`admin-theme-root ${value.supportSession ? "support-read-only" : ""}`} style={theme}>{value.supportSession && <div className="support-session-banner" role="status"><strong>Ringo Support · Read only</strong><span>This temporary session cannot change cinema data.</span><button type="button" className="support-exit" onClick={value.signOut}>Exit support view</button></div>}{children}</div></AdminUiContext.Provider></AdminSessionContext.Provider>;
 }

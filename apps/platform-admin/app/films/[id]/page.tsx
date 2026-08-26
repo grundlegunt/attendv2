@@ -166,7 +166,7 @@ export default function FilmPerformancePage() {
   if (!restored)
     return (
       <main className="center">
-        <p>Loading Attend Master…</p>
+        <p>Loading Ringo Master…</p>
       </main>
     );
   if (!session)
@@ -199,7 +199,7 @@ export default function FilmPerformancePage() {
           </button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Attend Master">
+      <nav className="platform-nav" aria-label="Ringo Master">
         <Link href="/">Dashboard</Link>
         <Link href="/clients">Clients</Link>
         <Link className="active" href="/films">
@@ -343,7 +343,7 @@ export default function FilmPerformancePage() {
             )}
           </section>
           <p className="detail-note">
-            Attend Master shows calculated performance allocations. Each
+            Ringo Master shows calculated performance allocations. Each
             operator&apos;s underlying deal schedules and private terms remain
             private.
           </p>

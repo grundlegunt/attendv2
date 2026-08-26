@@ -126,7 +126,7 @@ export function readPlatformSession(storageKey: string): StoredPlatformSession |
   try {
     const value: unknown = JSON.parse(stored);
     if (!isPlatformSession(value)) {
-      throw new Error("Stored Attend Master session is incompatible.");
+      throw new Error("Stored Ringo Master session is incompatible.");
     }
     return value;
   } catch {

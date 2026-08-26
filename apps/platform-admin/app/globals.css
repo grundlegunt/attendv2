@@ -1,5 +1,17 @@
 :root { color-scheme: dark; --bg: #0a0b0d; --surface: #13151a; --surface-2: #1a1d23; --border: #2d323b; --text: #f5f2ea; --muted: #989faa; --accent: #7c9cff; --good: #62d49b; --warning: #efb85c; }
 * { box-sizing: border-box; }
+.platform-brand-root { min-height: 100vh; background: var(--bg); color: var(--text); }
+.platform-master-label::after { content: var(--platform-master-label); }
+.platform-brand-editor { margin-bottom: 24px; padding: 24px; border: 1px solid var(--border); background: var(--surface); }
+.platform-brand-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
+.platform-brand-fields > label, .platform-brand-fields fieldset { min-width: 0; margin: 0; }
+.platform-brand-fields fieldset { padding: 18px; border: 1px solid var(--border); }
+.platform-brand-fields legend { padding: 0 8px; color: var(--text); font-weight: 900; }
+.platform-brand-fields textarea { min-height: 70px; padding: 10px 12px; border: 1px solid var(--border); background: #090a0c; color: var(--text); font: inherit; resize: vertical; }
+.brand-color-control { display: grid; grid-template-columns: 58px 1fr; gap: 8px; }
+.brand-color-control input[type="color"] { padding: 5px; }
+.brand-save-message { margin: 18px 0 0; color: var(--accent); }
+@media (max-width: 900px) { .platform-brand-fields { grid-template-columns: 1fr; } }
 body { margin: 0; background: radial-gradient(circle at 85% 0%, #172037 0, transparent 36%), var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
 button, input, select { font: inherit; }
 .center { min-height: 100vh; display: grid; place-items: center; padding: 24px; }

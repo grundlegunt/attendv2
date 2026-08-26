@@ -22,7 +22,7 @@ describe("isCorsOriginAllowed", () => {
     expect(isCorsOriginAllowed("http://127.0.0.1:3000", ["http://127.0.0.1:3000"])).toBe(true);
   });
 
-  it("allows this project's Vercel customer, cinema admin, and Attend Master preview aliases", () => {
+  it("allows this project's Vercel customer, cinema admin, and Ringo Master preview aliases", () => {
     expect(
       isCorsOriginAllowed(
         "https://attendv2-admin-git-agent-admin-calendar-scheduling-attend3.vercel.app",
@@ -48,7 +48,7 @@ describe("isCorsOriginAllowed", () => {
 });
 
 describe("isPlatformOriginAllowed", () => {
-  it("allows both Attend Master production aliases", () => {
+  it("allows both Ringo Master production aliases", () => {
     expect(isPlatformOriginAllowed("https://attend-master-attend3.vercel.app")).toBe(true);
     expect(isPlatformOriginAllowed("https://attend-company.vercel.app")).toBe(true);
   });

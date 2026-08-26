@@ -186,7 +186,7 @@ export default function PlatformDashboard() {
     setError(null);
   }
 
-  if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
+  if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
       <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />
@@ -197,7 +197,7 @@ export default function PlatformDashboard() {
     <main className="shell">
       <header>
         <div>
-          <p className="eyebrow">ATTEND MASTER</p>
+          <p className="eyebrow platform-master-label" />
           <h1>Platform health</h1>
           <p className="muted">A cross-client view of onboarding and operating readiness.</p>
         </div>
@@ -209,7 +209,7 @@ export default function PlatformDashboard() {
           <button className="quiet" onClick={signOut}>Sign out</button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Attend Master">
+      <nav className="platform-nav" aria-label="Ringo Master">
         <Link className="active" href="/">Dashboard</Link>
         <Link href="/clients">Clients</Link>
         <Link href="/films">Films</Link>
