@@ -2104,7 +2104,7 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
           await tx.$executeRaw(Prisma.sql`
             UPDATE "showtime_seats" AS inventory
             SET "seatId" = replacements."newSeatId", "updatedAt" = NOW()
-            FROM (VALUES ${Prisma.join([...seatReplacements].map(([oldSeatId, newSeatId]) => Prisma.sql`(${oldSeatId}::uuid, ${newSeatId}::uuid)`))}) AS replacements("oldSeatId", "newSeatId")
+            FROM (VALUES ${Prisma.join([...seatReplacements].map(([oldSeatId, newSeatId]) => Prisma.sql`(${oldSeatId}::text, ${newSeatId}::text)`))}) AS replacements("oldSeatId", "newSeatId")
             WHERE inventory."seatId" = replacements."oldSeatId"
               AND inventory."showtimeId" IN (${Prisma.join(eligibleShowtimes.map((showtime) => showtime.id))})
           `);
