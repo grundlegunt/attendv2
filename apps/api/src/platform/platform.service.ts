@@ -920,6 +920,86 @@ export class PlatformService {
     };
   }
 
+  async audienceAnalytics(input: {
+    from?: string;
+    to?: string;
+    organizationId?: string;
+  }) {
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 29 * 86_400_000);
+    const from = new Date(`${input.from ?? defaultFrom.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    const to = new Date(`${input.to ?? now.toISOString().slice(0, 10)}T00:00:00.000Z`);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || from > to || to.getTime() - from.getTime() > 366 * 86_400_000) {
+      throw AppError.validationFailed("A valid audience analytics date range of 366 days or less is required.");
+    }
+    const clients = await prisma.organization.findMany({
+      where: input.organizationId ? { id: input.organizationId } : undefined,
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    });
+    if (input.organizationId && clients.length === 0) throw AppError.notFound("Cinema client not found.");
+    const rows = await prisma.customerAnalyticsDaily.findMany({
+      where: {
+        date: { gte: from, lte: to },
+        ...(input.organizationId ? { location: { organizationId: input.organizationId } } : {}),
+      },
+      orderBy: [{ date: "asc" }, { event: "asc" }],
+      select: {
+        date: true,
+        event: true,
+        path: true,
+        count: true,
+        location: { select: { id: true, name: true, organization: { select: { id: true, name: true } } } },
+      },
+    });
+    const events = [
+      "Pageview", "Checkout Started", "Checkout Completed", "Account Created",
+      "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started",
+      "Membership Activated", "Donation Checkout Started", "Donation Completed",
+      "Private Event Inquiry Submitted", "Waitlist Joined",
+    ] as const;
+    type EventName = (typeof events)[number];
+    const emptyCounts = () => Object.fromEntries(events.map((event) => [event, 0])) as Record<EventName, number>;
+    const totals = emptyCounts();
+    const daily = new Map<string, Record<EventName, number>>();
+    const locations = new Map<string, { organization: { id: string; name: string }; location: { id: string; name: string }; events: Record<EventName, number> }>();
+    const pages = new Map<string, number>();
+    for (const row of rows) {
+      if (!events.includes(row.event as EventName)) continue;
+      const event = row.event as EventName;
+      totals[event] += row.count;
+      const date = row.date.toISOString().slice(0, 10);
+      const dateCounts = daily.get(date) ?? emptyCounts();
+      dateCounts[event] += row.count;
+      daily.set(date, dateCounts);
+      const location = locations.get(row.location.id) ?? {
+        organization: row.location.organization,
+        location: { id: row.location.id, name: row.location.name },
+        events: emptyCounts(),
+      };
+      location.events[event] += row.count;
+      locations.set(row.location.id, location);
+      if (event === "Pageview" && row.path) pages.set(row.path, (pages.get(row.path) ?? 0) + row.count);
+    }
+    const rate = (completed: number, started: number) => started > 0 ? Number((completed / started * 100).toFixed(2)) : null;
+    const withRates = (counts: Record<EventName, number>) => ({
+      ...counts,
+      checkoutCompletionRatePercent: rate(counts["Checkout Completed"], counts["Checkout Started"]),
+      giftCardCompletionRatePercent: rate(counts["Gift Card Purchased"], counts["Gift Card Started"]),
+      membershipCompletionRatePercent: rate(counts["Membership Activated"], counts["Membership Checkout Started"]),
+      donationCompletionRatePercent: rate(counts["Donation Completed"], counts["Donation Checkout Started"]),
+    });
+    return {
+      generatedAt: now.toISOString(),
+      range: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
+      clients,
+      totals: withRates(totals),
+      daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
+      pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
+      locations: [...locations.values()].map((location) => ({ ...location, ...withRates(location.events), events: undefined })).sort((left, right) => left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
+    };
+  }
+
   revenueCsv(report: Awaited<ReturnType<PlatformService["revenue"]>>) {
     const quote = (value: unknown) =>
       `"${String(value ?? "").replaceAll('"', '""')}"`;
