@@ -88,12 +88,18 @@ export function OptionalAnalytics() {
     const handleConsent = (event: Event) => {
       const choice = (event as CustomEvent<{ choice?: string }>).detail?.choice;
       const scriptUrl = scriptUrlRef.current;
-      if (choice === "analytics" && scriptUrl) installPlausible(scriptUrl, track);
+      if (choice === "analytics" && scriptUrl) {
+        installPlausible(scriptUrl, () => undefined);
+        track();
+      }
       else lastTrackedPath.current = null;
     };
     const handleConfiguration = () => {
       const scriptUrl = scriptUrlRef.current;
-      if (scriptUrl && document.documentElement.dataset.analyticsConsent === "analytics") installPlausible(scriptUrl, track);
+      if (scriptUrl && document.documentElement.dataset.analyticsConsent === "analytics") {
+        installPlausible(scriptUrl, () => undefined);
+        track();
+      }
     };
 
     window.addEventListener("attend:analytics-consent", handleConsent);

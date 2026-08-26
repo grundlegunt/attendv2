@@ -37,6 +37,11 @@ test("analytics uses manual pageviews so withdrawing consent stops future tracki
   assert.match(component, /attend:analytics-consent/);
 });
 
+test("first-party aggregates do not wait for the third-party script", () => {
+  assert.match(component, /installPlausible\(scriptUrl, \(\) => undefined\);\s*track\(\);/);
+  assert.match(tracker, /keepalive: true/);
+});
+
 test("identifier-bearing customer routes are redacted and query strings are excluded", () => {
   assert.match(tracker, /\/movie\/:movieId/);
   assert.match(tracker, /\/film-series\/:seriesId/);
