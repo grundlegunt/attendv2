@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
+import { inclusiveReportRange } from "../report-range";
 
 type Status = "" | "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED";
 type Lifecycle = "" | "EXPIRING" | "LAPSED";
@@ -11,6 +12,7 @@ type Membership = { id: string; membershipNumber: string; tier: string; status: 
 type Plan = { id: string; name: string; description: string | null; priceCents: number; benefitsFairMarketValueCents: number; durationMonths: number; benefits: unknown; autoRenew: boolean; active: boolean; _count: { memberships: number }; activeMemberCount: number; paidPurchaseCount: number; paidRevenueCents: number };
 type Summary = { active: number; expiringSoon: number; lapsed: number; recentEnrollments: number; collectedAmountCents: number; paidEnrollments: number; currency: string };
 type PlanDraft = { name: string; description: string; price: string; benefitsFairMarketValue: string; duration: string; benefits: string };
+type MembershipPayment = { id: string; createdAt: string; memberName: string; memberEmail: string; planName: string; amountCents: number; taxDeductibleAmountCents: number; currency: string; receiptSentAt: string | null; location: { name: string }; membership: { membershipNumber: string } | null };
 
 export default function MembershipsPage() {
   const { accessToken, employee } = useAdminSession();
@@ -23,6 +25,10 @@ export default function MembershipsPage() {
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [payments, setPayments] = useState<MembershipPayment[]>([]);
+  const [paymentFrom, setPaymentFrom] = useState("");
+  const [paymentThrough, setPaymentThrough] = useState("");
+  const [appliedPaymentRange, setAppliedPaymentRange] = useState<{ from: string; through: string }>({ from: "", through: "" });
   const [planName, setPlanName] = useState("");
   const [planDescription, setPlanDescription] = useState("");
   const [planPrice, setPlanPrice] = useState("50.00");
@@ -59,6 +65,19 @@ export default function MembershipsPage() {
     }, 200);
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [accessToken, query, status, lifecycle, planId]);
+
+  function paymentPath(path: string) {
+    if (!appliedPaymentRange.from || !appliedPaymentRange.through) return path;
+    const range = inclusiveReportRange(appliedPaymentRange.from, appliedPaymentRange.through, employee.timezone);
+    return `${path}?${new URLSearchParams(range).toString()}`;
+  }
+  useEffect(() => {
+    const controller = new AbortController();
+    apiFetch<MembershipPayment[]>(paymentPath("/management/membership-payments"), { accessToken, signal: controller.signal })
+      .then(setPayments)
+      .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof ApiRequestError ? reason.body.message : "Membership payments could not be loaded."); });
+    return () => controller.abort();
+  }, [accessToken, appliedPaymentRange, employee.timezone]);
 
   const date = (value: string) => new Date(value).toLocaleDateString([], { timeZone: employee.timezone, month: "short", day: "numeric", year: "numeric" });
   const money = (cents: number, currency = "USD") => new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
@@ -118,11 +137,19 @@ export default function MembershipsPage() {
   async function exportPaymentsCsv() {
     setError(null);
     try {
-      const blob = await apiDownload("/management/membership-payments.csv", { accessToken });
+      const blob = await apiDownload(paymentPath("/management/membership-payments.csv"), { accessToken });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url; anchor.download = "membership-payments.csv"; anchor.click(); URL.revokeObjectURL(url);
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The membership payment export could not be downloaded."); }
+  }
+  function applyPaymentRange(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    if (Boolean(paymentFrom) !== Boolean(paymentThrough)) { setError("Choose both payment dates, or leave both blank."); return; }
+    try {
+      if (paymentFrom && paymentThrough) inclusiveReportRange(paymentFrom, paymentThrough, employee.timezone);
+      setAppliedPaymentRange({ from: paymentFrom, through: paymentThrough });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Choose a valid payment date range."); }
   }
   return <main className="admin-route-page membership-directory-page">
     <header className="admin-page-heading"><div><p className="kicker">CUSTOMER PROGRAMS</p><h1>Memberships</h1><p>Configure cinema membership plans and maintain member records.</p></div><div className="film-library-heading-actions"><button className="secondary" type="button" onClick={() => void exportPaymentsCsv()}>Export payments CSV</button><button className="secondary" type="button" onClick={() => void exportCsv()}>Export filtered directory</button><Link href="/search" className="primary">Find a customer</Link></div></header>
@@ -136,6 +163,12 @@ export default function MembershipsPage() {
     <section className="panel membership-directory"><div className="dashboard-section-heading"><div><p className="kicker">DIRECTORY</p><h2>Member records</h2></div><span>{memberships.length} shown</span></div>
       {loading ? <p className="dashboard-empty">Loading memberships…</p> : <div className="membership-directory-table"><header><span>Member</span><span>Customer</span><span>Tier</span><span>Status</span><span>Expiration</span><span>Updated</span></header>{memberships.map((membership) => <Link href={`/customers/${membership.customer.id}`} key={membership.id}><span><strong>#{membership.membershipNumber}</strong></span><span><strong>{membership.customer.name || "Unnamed customer"}</strong><small>{membership.customer.email || membership.customer.phone || "No contact details"}</small></span><span>{membership.tier}</span><span className="status-chip">{membership.status.toLowerCase()}</span><span>{membership.expiresAt ? date(membership.expiresAt) : "No expiration"}</span><span>{date(membership.updatedAt)}</span></Link>)}</div>}
       {!loading && !memberships.length && <p className="dashboard-empty">No memberships match these filters.</p>}
+    </section>
+    <section className="panel membership-payment-ledger">
+      <div className="dashboard-section-heading"><div><p className="kicker">PAYMENT HISTORY</p><h2>Completed enrollments and renewals</h2></div><div><strong>{money(payments.reduce((total, payment) => total + payment.amountCents, 0), payments[0]?.currency)}</strong><small>{money(payments.reduce((total, payment) => total + payment.taxDeductibleAmountCents, 0), payments[0]?.currency)} potentially deductible</small></div></div>
+      <form className="membership-payment-filters" onSubmit={applyPaymentRange}><label>From<input type="date" value={paymentFrom} onChange={(event) => setPaymentFrom(event.target.value)} /></label><label>Through<input type="date" value={paymentThrough} onChange={(event) => setPaymentThrough(event.target.value)} /></label><button type="submit">Apply</button><button className="secondary" type="button" onClick={() => { setPaymentFrom(""); setPaymentThrough(""); setAppliedPaymentRange({ from: "", through: "" }); }}>Clear</button></form>
+      <div className="membership-payment-table"><header><span>Date</span><span>Member</span><span>Plan / cinema</span><span>Paid</span><span>Potentially deductible</span><span>Receipt</span></header>{payments.map((payment) => <div key={payment.id}><span>{date(payment.createdAt)}</span><span><strong>{payment.memberName}</strong><small>{payment.membership ? `#${payment.membership.membershipNumber}` : payment.memberEmail}</small></span><span><strong>{payment.planName}</strong><small>{payment.location.name}</small></span><span>{money(payment.amountCents, payment.currency)}</span><span>{money(payment.taxDeductibleAmountCents, payment.currency)}</span><span>{payment.receiptSentAt ? date(payment.receiptSentAt) : "Not sent"}</span></div>)}</div>
+      {!payments.length && <p className="dashboard-empty">No completed membership payments match this period.</p>}
     </section>
   </main>;
 }
