@@ -3,13 +3,27 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
+import { inclusiveReportRange } from "../report-range";
 
 type Campaign = { id: string; name: string; description: string | null; goalAmountCents: number | null; active: boolean; raisedAmountCents: number; taxDeductibleAmountCents: number; _count: { donations: number } };
 type Donation = { id: string; donorName: string | null; donorEmail: string | null; amountCents: number; taxDeductibleAmountCents: number; paymentMethod: string; status: string; receivedAt: string; campaign: { id: string; name: string } | null; customer: { id: string; name: string | null; email: string | null } | null };
 type DonationData = { campaigns: Campaign[]; donations: Donation[]; summary: { count: number; amountCents: number; taxDeductibleAmountCents: number } };
+type DonationFilters = { campaignId: string; from: string; through: string };
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const cents = (value: string) => Math.round(Number(value) * 100);
+
+function donationReportPath(path: string, filters: DonationFilters, timeZone: string) {
+  const search = new URLSearchParams();
+  if (filters.campaignId) search.set("campaignId", filters.campaignId);
+  if (filters.from && filters.through) {
+    const range = inclusiveReportRange(filters.from, filters.through, timeZone);
+    search.set("from", range.from);
+    search.set("to", range.to);
+  }
+  const query = search.toString();
+  return query ? `${path}?${query}` : path;
+}
 
 export default function DonationsPage() {
   const { accessToken, employee } = useAdminSession();
@@ -25,11 +39,15 @@ export default function DonationsPage() {
   const [amount, setAmount] = useState("");
   const [deductible, setDeductible] = useState("");
   const [method, setMethod] = useState<"CASH" | "CHECK" | "EXTERNAL">("CHECK");
+  const [filterCampaignId, setFilterCampaignId] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [throughDate, setThroughDate] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState<DonationFilters>({ campaignId: "", from: "", through: "" });
 
   const load = useCallback(async () => {
-    try { setData(await apiFetch<DonationData>("/management/donations", { accessToken })); }
+    try { setData(await apiFetch<DonationData>(donationReportPath("/management/donations", appliedFilters, employee.timezone), { accessToken })); }
     catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Donation records could not be loaded."); }
-  }, [accessToken]);
+  }, [accessToken, appliedFilters, employee.timezone]);
   useEffect(() => { void load(); }, [load]);
 
   async function createCampaign(event: FormEvent) {
@@ -53,15 +71,32 @@ export default function DonationsPage() {
   async function exportCsv() {
     setError(null);
     try {
-      const blob = await apiDownload("/management/donations.csv", { accessToken });
+      const blob = await apiDownload(donationReportPath("/management/donations.csv", appliedFilters, employee.timezone), { accessToken });
       const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
       anchor.href = url; anchor.download = "donations.csv"; anchor.click(); URL.revokeObjectURL(url);
     } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The donation export could not be downloaded."); }
   }
 
+  function applyFilters(event: FormEvent) {
+    event.preventDefault(); setError(null);
+    if (Boolean(fromDate) !== Boolean(throughDate)) {
+      setError("Choose both a From and Through date, or leave both blank."); return;
+    }
+    try {
+      if (fromDate && throughDate) inclusiveReportRange(fromDate, throughDate, employee.timezone);
+      setAppliedFilters({ campaignId: filterCampaignId, from: fromDate, through: throughDate });
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Choose a valid report date range."); }
+  }
+
+  function clearFilters() {
+    setFilterCampaignId(""); setFromDate(""); setThroughDate(""); setError(null);
+    setAppliedFilters({ campaignId: "", from: "", through: "" });
+  }
+
   return <main className="admin-route-page donations-page">
     <header className="admin-page-heading"><div><p className="kicker">NONPROFIT DEVELOPMENT</p><h1>Donations</h1><p>Track campaigns and settled contributions separately from ticket and concession revenue.</p></div><button className="secondary" type="button" onClick={() => void exportCsv()}>Export CSV</button></header>
     {error && <div className="error-banner" role="alert">{error}</div>}
+    <form className="panel donation-report-filters" onSubmit={applyFilters}><div><p className="kicker">REPORT FILTERS</p><h2>Donation activity</h2><p>Filters apply to the totals, contribution activity, and CSV export.</p></div><label>Campaign<select value={filterCampaignId} onChange={(event) => setFilterCampaignId(event.target.value)}><option value="">All campaigns and general support</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label><label>From<input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label><label>Through<input type="date" value={throughDate} onChange={(event) => setThroughDate(event.target.value)} /></label><div className="donation-filter-actions"><button type="submit">Apply filters</button><button className="secondary" type="button" onClick={clearFilters}>Clear</button></div></form>
     <section className="donation-metrics"><article className="panel"><span>Raised</span><strong>{money(data.summary.amountCents)}</strong></article><article className="panel"><span>Contributions</span><strong>{data.summary.count}</strong></article><article className="panel"><span>Tax deductible</span><strong>{money(data.summary.taxDeductibleAmountCents)}</strong></article></section>
     <section className="donation-workspace">
       <div className="panel"><div className="dashboard-section-heading"><div><p className="kicker">CAMPAIGNS</p><h2>Fundraising programs</h2></div></div>

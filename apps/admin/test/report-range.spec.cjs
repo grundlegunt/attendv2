@@ -9,6 +9,7 @@ const helperPath = resolve(__dirname, "../app/report-range.ts");
 const dashboardPath = resolve(__dirname, "../app/management-dashboard.tsx");
 const expensesPath = resolve(__dirname, "../app/expenses/page.tsx");
 const controlsPath = resolve(__dirname, "../app/management-controls.tsx");
+const donationsPath = resolve(__dirname, "../app/donations/page.tsx");
 const compiled = ts.transpileModule(readFileSync(helperPath, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   fileName: helperPath,
@@ -104,6 +105,15 @@ describe("Admin report date ranges", () => {
 
     assert.match(dashboard, /inclusiveDateCutoff\(inactiveSince, timeZone\)/);
     assert.doesNotMatch(dashboard, /T23:59:59/);
+  });
+
+  it("applies the same cinema-local donation filters to the screen and CSV export", () => {
+    const donations = readFileSync(donationsPath, "utf8");
+
+    assert.match(donations, /inclusiveReportRange\(filters\.from, filters\.through, timeZone\)/);
+    assert.match(donations, /donationReportPath\("\/management\/donations", appliedFilters, employee\.timezone\)/);
+    assert.match(donations, /apiDownload\(donationReportPath\("\/management\/donations\.csv", appliedFilters, employee\.timezone\)/);
+    assert.match(donations, /Filters apply to the totals, contribution activity, and CSV export\./);
   });
 
   it("keeps expense defaults in the cinema timezone and uses the shared inclusive range", () => {
