@@ -166,4 +166,11 @@ dl { margin: 0; }dl div { display: flex; justify-content: space-between; gap: 14
 .analytics-location-list a:hover strong { color: var(--accent); }
 .analytics-location-list strong small { display: block; color: var(--muted); font-weight: 400; margin-top: .2rem; }
 .analytics-page-list > div { display: flex; justify-content: space-between; gap: 1rem; padding: .75rem 0; border-bottom: 1px solid var(--border); }
+.analytics-trend { margin: 1rem 0; }
+.analytics-trend-list > div { display: grid; grid-template-columns: 5rem minmax(8rem, 1fr) repeat(3, 5rem); gap: 1rem; align-items: center; padding: .65rem 0; border-bottom: 1px solid var(--border); }
+.analytics-trend-list time { color: var(--muted); font-size: .78rem; font-weight: 800; }
+.analytics-trend-list strong { text-align: right; }
+.analytics-trend-list small { display: block; color: var(--muted); font-size: .62rem; font-weight: 400; }
+.analytics-trend-bar { height: 7px; background: var(--surface-2); overflow: hidden; }
+.analytics-trend-bar i { display: block; height: 100%; background: var(--accent); }
 @media (max-width: 900px) { .analytics-filters, .analytics-funnels { grid-template-columns: 1fr 1fr; } .analytics-grid { grid-template-columns: 1fr; } .analytics-location-list { overflow-x: auto; } .analytics-location-list > div, .analytics-location-list > a { min-width: 700px; } }
