@@ -12,6 +12,7 @@ import { loadStripeScript } from "../lib/stripe-loader";
 import { QRCodeSVG } from "qrcode.react";
 import { downloadTicketCalendar } from "../lib/ticket-calendar";
 import { isCheckoutHoldExpired } from "../lib/checkout-hold";
+import { trackOptionalAnalyticsEvent } from "../lib/optional-analytics";
 
 interface CheckoutConfig {
   currency: string;
@@ -194,6 +195,13 @@ export function TicketCheckout({
   const paymentContainerRef = useRef<HTMLDivElement | null>(null);
   const expressCheckoutContainerRef = useRef<HTMLDivElement | null>(null);
   const nameDirtyRef = useRef(false);
+  const checkoutCompletedTrackedRef = useRef(false);
+
+  function trackCheckoutCompletedOnce() {
+    if (checkoutCompletedTrackedRef.current) return;
+    checkoutCompletedTrackedRef.current = true;
+    trackOptionalAnalyticsEvent("Checkout Completed");
+  }
 
   const checkoutStorageKey = `attend-checkout:${showtimeId}:${holdTokens.join(":")}`;
   const holdExpired = isCheckoutHoldExpired(holdRemainingSeconds);
@@ -417,6 +425,7 @@ export function TicketCheckout({
             JSON.stringify({ email: resumed.email ?? "", name: resumed.name ?? "" }),
           );
         }
+        trackCheckoutCompletedOnce();
         setConfirmation(completed);
         return;
       }
@@ -470,6 +479,7 @@ export function TicketCheckout({
         JSON.stringify({ email, name }),
       );
     }
+    trackCheckoutCompletedOnce();
     setConfirmation(completed);
   }
 
@@ -625,6 +635,7 @@ export function TicketCheckout({
           }),
         },
       );
+      trackOptionalAnalyticsEvent("Checkout Started");
       setCheckout(created);
       if (!created.payment?.clientSecret) {
         await finalizeOrder(created.orderId);

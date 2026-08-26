@@ -5,6 +5,9 @@ const test = require("node:test");
 
 const component = fs.readFileSync(path.join(__dirname, "../app/components/optional-analytics.tsx"), "utf8");
 const tracker = fs.readFileSync(path.join(__dirname, "../app/lib/optional-analytics.ts"), "utf8");
+const ticketCheckout = fs.readFileSync(path.join(__dirname, "../app/components/ticket-checkout.tsx"), "utf8");
+const account = fs.readFileSync(path.join(__dirname, "../app/account/page.tsx"), "utf8");
+const giftCards = fs.readFileSync(path.join(__dirname, "../app/gift-cards/page.tsx"), "utf8");
 
 test("optional analytics is disabled without configuration and explicit consent", () => {
   assert.match(component, /if \(!scriptUrl\) return/);
@@ -22,4 +25,18 @@ test("identifier-bearing customer routes are redacted and query strings are excl
   assert.match(tracker, /\/film-series\/:seriesId/);
   assert.match(tracker, /\/tickets\/:orderId/);
   assert.doesNotMatch(tracker, /location\.search/);
+});
+
+test("anonymous conversion events are connected to successful customer actions", () => {
+  assert.match(ticketCheckout, /trackOptionalAnalyticsEvent\("Checkout Started"\)/);
+  assert.match(ticketCheckout, /trackOptionalAnalyticsEvent\("Checkout Completed"\)/);
+  assert.match(ticketCheckout, /checkoutCompletedTrackedRef/);
+  assert.match(account, /trackOptionalAnalyticsEvent\("Account Created"\)/);
+  assert.match(giftCards, /trackOptionalAnalyticsEvent\("Gift Card Started"\)/);
+});
+
+test("conversion tracking does not send customer or order properties", () => {
+  for (const source of [ticketCheckout, account, giftCards]) {
+    assert.doesNotMatch(source, /trackOptionalAnalyticsEvent\([^\n]+,\s*\{/);
+  }
 });
