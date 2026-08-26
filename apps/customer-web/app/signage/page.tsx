@@ -46,7 +46,7 @@ export default function SignagePage() {
   const time = (value: string) => new Intl.DateTimeFormat("en-US", { timeZone: program?.location.timezone, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 
   return <main className="signage-shell">
-    <header><div><span>NOW SHOWING</span><h1>{program?.location.name ?? "Attend Cinema"}</h1></div><time>{new Intl.DateTimeFormat("en-US", { timeZone: program?.location.timezone, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(now))}</time></header>
+    <header><div><span>NOW SHOWING</span><h1>{program?.location.name ?? "Ringo Cinema"}</h1></div><time>{new Intl.DateTimeFormat("en-US", { timeZone: program?.location.timezone, weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(now))}</time></header>
     {error && <div className="signage-message">{error}</div>}
     {!error && program && listings.length === 0 && <div className="signage-message">No more showtimes today.</div>}
     <section className="signage-grid">{listings.map(({ movie, showtime }: Listing) => <article key={showtime.id}>{movie.posterUrl ? <img src={movie.posterUrl} alt="" /> : <div className="signage-poster">ATTEND</div>}<div><time>{time(showtime.startsAt)}</time><h2>{movie.title}</h2><p>{showtime.auditorium.name}{showtime.format ? ` · ${showtime.format}` : ""}</p><small>{movie.rating ?? "NR"} · {movie.runtimeMinutes} min</small></div></article>)}</section>

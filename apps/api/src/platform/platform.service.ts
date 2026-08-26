@@ -1078,7 +1078,7 @@ export class PlatformService {
       "Locations",
       "Tickets sold",
       "Ticket face value (cents)",
-      "Attend ticket-fee revenue (cents)",
+      "Ringo ticket-fee revenue (cents)",
       "Ticket tax (cents)",
       "Ticket total collected (cents)",
       "F&B revenue (cents)",

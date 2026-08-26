@@ -14,14 +14,14 @@ export class PlatformAuthGuard implements CanActivate {
 
     try {
       const actor = verifyAccessToken(header.slice("Bearer ".length), loadEnv().JWT_ACCESS_SECRET);
-      if (actor.actorType !== "PLATFORM") throw AppError.forbidden("Attend platform access is required.");
-      if (!Number.isInteger(actor.tokenVersion)) throw AppError.unauthenticated("Attend platform session is invalid.");
+      if (actor.actorType !== "PLATFORM") throw AppError.forbidden("Ringo platform access is required.");
+      if (!Number.isInteger(actor.tokenVersion)) throw AppError.unauthenticated("Ringo platform session is invalid.");
       const user = await prisma.platformUser.findUnique({
         where: { id: actor.sub },
         select: { active: true, refreshTokenVersion: true },
       });
       if (!user?.active || user.refreshTokenVersion !== actor.tokenVersion) {
-        throw AppError.unauthenticated("The Attend platform session is no longer valid. Please sign in again.");
+        throw AppError.unauthenticated("The Ringo platform session is no longer valid. Please sign in again.");
       }
       request.actor = actor;
       return true;

@@ -53,7 +53,7 @@ describe("PlatformAuthGuard", () => {
 
   it("rejects an ordinary cinema employee token", async () => {
     const { executionContext } = context(`Bearer ${token("EMPLOYEE")}`);
-    await expect(new PlatformAuthGuard().canActivate(executionContext)).rejects.toThrow("Attend platform access is required.");
+    await expect(new PlatformAuthGuard().canActivate(executionContext)).rejects.toThrow("Ringo platform access is required.");
   });
 
   it("rejects an invalidated platform token", async () => {
