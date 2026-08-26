@@ -204,10 +204,14 @@ export class ManagementService {
     ].join("\n");
   }
 
-  async membershipPaymentExportRows(locationId: string) {
+  async membershipPaymentExportRows(locationId: string, filters: { from?: Date; to?: Date } = {}) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     return prisma.membershipCheckout.findMany({
-      where: { organizationId: location.organizationId, status: "PAID" },
+      where: {
+        organizationId: location.organizationId,
+        status: "PAID",
+        ...(filters.from || filters.to ? { createdAt: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lt: filters.to } : {}) } } : {}),
+      },
       select: {
         id: true,
         createdAt: true,

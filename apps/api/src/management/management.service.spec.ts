@@ -61,8 +61,9 @@ describe("membership directory", () => {
     const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
     const payments = jest.spyOn(prisma.membershipCheckout, "findMany").mockResolvedValue([]);
     try {
-      await new ManagementService().membershipPaymentExportRows("location-1");
-      expect(payments).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: "organization-1", status: "PAID" }, take: 10_000 }));
+      const from = new Date("2026-01-01T00:00:00.000Z"); const to = new Date("2027-01-01T00:00:00.000Z");
+      await new ManagementService().membershipPaymentExportRows("location-1", { from, to });
+      expect(payments).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: "organization-1", status: "PAID", createdAt: { gte: from, lt: to } }, take: 10_000 }));
     } finally { location.mockRestore(); payments.mockRestore(); }
 
     const csv = new ManagementService().membershipPaymentsCsv([{ id: "checkout-1", createdAt: new Date("2026-08-26T12:00:00.000Z"), memberName: "=2+2", memberEmail: "member@example.com", planName: "Supporting Member", amountCents: 10000, taxDeductibleAmountCents: 7500, currency: "USD", receiptSentAt: new Date("2026-08-26T12:01:00.000Z"), location: { name: "Meridian Cinema" }, membership: { membershipNumber: "MEM-1" } }] as never);

@@ -102,6 +102,10 @@ const membershipDirectorySchema = z.object({
   lifecycle: z.enum(["EXPIRING", "LAPSED"]).optional(),
   planId: z.string().uuid().optional(),
 }).strict();
+const membershipPaymentDirectorySchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+}).strict().refine((value) => !value.from || !value.to || value.from < value.to, "End date must be after start date.");
 const membershipPlanFields = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(1000).nullable().optional(),
@@ -270,9 +274,14 @@ export class ManagementController {
     response.send(this.management.membershipsCsv(rows));
   }
 
+  @Get("membership-payments") @RequirePermissions(Permission.TicketPriceEdit)
+  membershipPayments(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipPaymentDirectorySchema)) query: unknown) {
+    return this.management.membershipPaymentExportRows(this.location(actor), membershipPaymentDirectorySchema.parse(query));
+  }
+
   @Get("membership-payments.csv") @RequirePermissions(Permission.TicketPriceEdit)
-  async membershipPaymentsCsv(@CurrentActor() actor: RequestActor, @Res() response: Response) {
-    const rows = await this.management.membershipPaymentExportRows(this.location(actor));
+  async membershipPaymentsCsv(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipPaymentDirectorySchema)) query: unknown, @Res() response: Response) {
+    const rows = await this.management.membershipPaymentExportRows(this.location(actor), membershipPaymentDirectorySchema.parse(query));
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="membership-payments.csv"');
     response.send(this.management.membershipPaymentsCsv(rows));
