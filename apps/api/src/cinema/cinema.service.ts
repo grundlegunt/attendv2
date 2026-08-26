@@ -520,6 +520,17 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     return { location, showtimes };
   }
 
+  adminDeliveryReadiness(actor: RequestActor) {
+    this.requireLocation(actor);
+    const env = loadEnv();
+    return {
+      email: { ready: env.EMAIL_PROVIDER === "postmark", provider: env.EMAIL_PROVIDER },
+      sms: { ready: env.SMS_PROVIDER === "twilio", provider: env.SMS_PROVIDER },
+      appleWallet: { ready: env.APPLE_WALLET_PROVIDER === "passkit", provider: env.APPLE_WALLET_PROVIDER },
+      googleWallet: { ready: env.GOOGLE_WALLET_PROVIDER === "google", provider: env.GOOGLE_WALLET_PROVIDER },
+    };
+  }
+
   async schedulePlans(actor: RequestActor) {
     return prisma.schedulePlan.findMany({
       where: { locationId: this.requireLocation(actor) },
