@@ -8,7 +8,7 @@ import { apiDownload, apiFetch, ApiRequestError } from "../../lib/api-client";
 
 type Customer = {
   id: string; name: string | null; email: string | null; phone: string | null; isGuest: boolean; createdAt: string;
-  membership: { membershipNumber: string; tier: string; status: string; expiresAt: string | null } | null;
+  membership: { membershipNumber: string; tier: string; status: string; expiresAt: string | null; plan: { id: string; name: string; durationMonths: number; active: boolean } | null } | null;
   summary: { orderCount: number; ticketCount: number; lifetimeSpendCents: number; currency: string; diningVisitCount: number; diningSpendCents: number; diningCurrency: string; donationCount: number; donationAmountCents: number; donationTaxDeductibleAmountCents: number; donationAverageAmountCents: number; donationFirstReceivedAt: string | null; donationLastReceivedAt: string | null; donationCurrency: string };
   historyWindow: { ticketOrdersShown: number; ticketOrdersTotal: number; diningVisitsShown: number; diningVisitsTotal: number; donationsShown: number; donationsTotal: number };
   ticketOrders: Array<{ id: string; orderNumber: string; status: string; channel: string; totalCents: number; currency: string; createdAt: string; tickets: Array<{ id: string; status: string; ticketType: { name: string }; showtimeSeat: { seat: { label: string }; showtime: { startsAt: string; movie: { title: string }; auditorium: { name: string } } } }> }>;
@@ -68,7 +68,7 @@ export default function CustomerPage() {
       <section className="admin-heading"><div><p className="kicker">CUSTOMER PROFILE</p><h1>{customer.name ?? "Guest customer"}</h1><p>{customer.email ?? "No email"}{customer.phone ? ` · ${customer.phone}` : ""}</p></div><button type="button" className="secondary" disabled={exporting} onClick={() => void exportHistory()}>{exporting ? "Exporting…" : "Export history CSV"}</button></section>
       <section className="series-performance-metrics customer-profile-metrics">
         <div><span>Customer type</span><strong>{customer.isGuest ? "Guest" : "Account"}</strong><small>Since {new Date(customer.createdAt).toLocaleDateString([], { timeZone: employee.timezone })}</small></div>
-        <div><span>Membership</span><strong>{customer.membership?.tier ?? "None"}</strong><small>{customer.membership ? `#${customer.membership.membershipNumber} · ${customer.membership.status.toLowerCase()}${customer.membership.expiresAt ? ` · Expires ${date(customer.membership.expiresAt)}` : " · No expiration"}` : "No external membership"}</small></div>
+        <div><span>Membership</span><strong>{customer.membership?.plan?.name ?? customer.membership?.tier ?? "None"}</strong><small>{customer.membership ? `#${customer.membership.membershipNumber} · ${customer.membership.status.toLowerCase()}${customer.membership.expiresAt ? ` · Expires ${date(customer.membership.expiresAt)}` : " · No expiration"}` : "No membership"}</small></div>
         <div><span>Ticket orders</span><strong>{customer.summary.orderCount}</strong><small>{customer.summary.ticketCount} tickets</small></div>
         <div><span>Ticket spend</span><strong>{money(customer.summary.lifetimeSpendCents, customer.summary.currency)}</strong><small>Completed purchases</small></div>
         <div><span>Dining visits</span><strong>{customer.summary.diningVisitCount}</strong><small>{money(customer.summary.diningSpendCents, customer.summary.diningCurrency)} spend</small></div>

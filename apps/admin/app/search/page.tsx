@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 
@@ -63,7 +63,7 @@ type CustomerHistory = {
   phone: string | null;
   isGuest: boolean;
   createdAt: string;
-  membership: { membershipNumber: string; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: string | null } | null;
+  membership: { membershipNumber: string; planId: string | null; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: string | null; plan: { id: string; name: string; durationMonths: number; active: boolean } | null } | null;
   summary: {
     orderCount: number;
     ticketCount: number;
@@ -121,6 +121,8 @@ type CustomerHistory = {
   }>;
 };
 
+type MembershipPlan = { id: string; name: string; durationMonths: number; active: boolean };
+
 const money = (cents: number, currency: string) => new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
 
 export default function GlobalSearchPage() {
@@ -133,12 +135,24 @@ export default function GlobalSearchPage() {
   const [customerLoadingId, setCustomerLoadingId] = useState<string | null>(null);
   const [historyLoading, setHistoryLoading] = useState<"tickets" | "dining" | null>(null);
   const [membershipNumber, setMembershipNumber] = useState("");
+  const [membershipPlanId, setMembershipPlanId] = useState("");
   const [membershipTier, setMembershipTier] = useState("");
   const [membershipStatus, setMembershipStatus] = useState<"ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED">("ACTIVE");
   const [membershipExpiresAt, setMembershipExpiresAt] = useState("");
   const [membershipSaving, setMembershipSaving] = useState(false);
   const membershipAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const requestRef = useRef(0);
+  const [membershipPlans, setMembershipPlans] = useState<MembershipPlan[]>([]);
+  const canManageMemberships = employee.permissions.includes("ticket.price.edit");
+
+  useEffect(() => {
+    if (!canManageMemberships) return;
+    const controller = new AbortController();
+    apiFetch<MembershipPlan[]>("/management/membership-plans", { accessToken, signal: controller.signal })
+      .then(setMembershipPlans)
+      .catch((reason) => { if (!controller.signal.aborted) setError(reason instanceof ApiRequestError ? reason.body.message : "Membership plans could not be loaded."); });
+    return () => controller.abort();
+  }, [accessToken, canManageMemberships]);
 
   async function search(event: FormEvent) {
     event.preventDefault();
@@ -174,6 +188,7 @@ export default function GlobalSearchPage() {
       const next = await apiFetch<CustomerHistory>(`/management/customers/${customerId}`, { accessToken });
       setCustomerHistory(next);
       setMembershipNumber(next.membership?.membershipNumber ?? "");
+      setMembershipPlanId(next.membership?.planId ?? "");
       setMembershipTier(next.membership?.tier ?? "");
       setMembershipStatus(next.membership?.status ?? "ACTIVE");
       setMembershipExpiresAt(next.membership?.expiresAt?.slice(0, 10) ?? "");
@@ -248,7 +263,7 @@ export default function GlobalSearchPage() {
     if (!customerHistory || !membershipNumber.trim() || !membershipTier.trim()) return;
     setMembershipSaving(true);
     setError(null);
-    const payload = { membershipNumber: membershipNumber.trim(), tier: membershipTier.trim(), status: membershipStatus, expiresAt: membershipExpiresAt ? `${membershipExpiresAt}T00:00:00.000Z` : null };
+    const payload = { membershipNumber: membershipNumber.trim(), planId: membershipPlanId || null, tier: membershipTier.trim(), status: membershipStatus, expiresAt: membershipExpiresAt ? `${membershipExpiresAt}T00:00:00.000Z` : null };
     const fingerprint = JSON.stringify({ customerId: customerHistory.id, ...payload });
     if (membershipAttemptRef.current?.fingerprint !== fingerprint) membershipAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() };
     try {
@@ -373,11 +388,12 @@ export default function GlobalSearchPage() {
                         <small>Customer type</small>
                       </div>
                     </div>
-                    {employee.permissions.includes("ticket.price.edit") && (
+                    {canManageMemberships && (
                       <form className="customer-membership-form" onSubmit={(event) => void saveMembership(event)}>
-                        <h4>External membership</h4>
-                        <p>Record an existing cinema membership for lookup. Attend does not sell or renew memberships.</p>
+                        <h4>Membership record</h4>
+                        <p>Attach a configured Ringo membership plan or maintain a legacy membership without a plan.</p>
                         <label><span>Membership number</span><input value={membershipNumber} maxLength={100} required onChange={(event) => setMembershipNumber(event.target.value)} /></label>
+                        <label><span>Plan</span><select value={membershipPlanId} onChange={(event) => { const planId = event.target.value; setMembershipPlanId(planId); const plan = membershipPlans.find((candidate) => candidate.id === planId); if (plan) setMembershipTier(plan.name); }}><option value="">No configured plan</option>{membershipPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}{plan.active ? "" : " (inactive)"}</option>)}</select></label>
                         <label><span>Tier</span><input value={membershipTier} maxLength={100} required onChange={(event) => setMembershipTier(event.target.value)} /></label>
                         <label><span>Status</span><select value={membershipStatus} onChange={(event) => setMembershipStatus(event.target.value as typeof membershipStatus)}><option value="ACTIVE">Active</option><option value="EXPIRED">Expired</option><option value="SUSPENDED">Suspended</option><option value="CANCELED">Canceled</option></select></label>
                         <label><span>Expires (optional)</span><input type="date" value={membershipExpiresAt} onChange={(event) => setMembershipExpiresAt(event.target.value)} /></label>
