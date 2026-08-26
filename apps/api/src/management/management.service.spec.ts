@@ -23,6 +23,19 @@ describe("membership directory", () => {
     }
   });
 
+  it("turns lifecycle totals into date-bounded renewal queues", async () => {
+    const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
+    const memberships = jest.spyOn(prisma.membership, "findMany").mockResolvedValue([]);
+    const now = new Date("2026-08-26T12:00:00.000Z");
+    try {
+      await new ManagementService().memberships("location-1", { lifecycle: "EXPIRING" }, now);
+      const expiresBefore = new Date("2026-09-25T12:00:00.000Z");
+      expect(memberships).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ organizationId: "organization-1", status: "ACTIVE", expiresAt: { gt: now, lte: expiresBefore } }) }));
+      await new ManagementService().memberships("location-1", { lifecycle: "LAPSED" }, now);
+      expect(memberships).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ organizationId: "organization-1", OR: [{ status: "EXPIRED" }, { status: "ACTIVE", expiresAt: { lte: now } }] }) }));
+    } finally { location.mockRestore(); memberships.mockRestore(); }
+  });
+
   it("summarizes lifecycle and paid online enrollment data for the active organization", async () => {
     const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1", currency: "USD" } as never);
     const count = jest.spyOn(prisma.membership, "count").mockResolvedValueOnce(12).mockResolvedValueOnce(3).mockResolvedValueOnce(2).mockResolvedValueOnce(4);

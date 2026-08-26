@@ -145,13 +145,21 @@ export class ManagementService {
     return { query: normalized, orders, customers, tickets, giftCards };
   }
 
-  async memberships(locationId: string, filters: { query?: string; status?: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED" }) {
+  async memberships(locationId: string, filters: { query?: string; status?: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; lifecycle?: "EXPIRING" | "LAPSED" }, now = new Date()) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     const query = filters.query?.trim();
+    const expiresBefore = new Date(now);
+    expiresBefore.setUTCDate(expiresBefore.getUTCDate() + 30);
+    const lifecycle = filters.lifecycle === "EXPIRING"
+      ? { status: "ACTIVE" as const, expiresAt: { gt: now, lte: expiresBefore } }
+      : filters.lifecycle === "LAPSED"
+        ? { OR: [{ status: "EXPIRED" as const }, { status: "ACTIVE" as const, expiresAt: { lte: now } }] }
+        : {};
     return prisma.membership.findMany({
       where: {
         organizationId: location.organizationId,
         ...(filters.status ? { status: filters.status } : {}),
+        ...lifecycle,
         ...(query ? { OR: [
           { membershipNumber: { contains: query, mode: "insensitive" } },
           { tier: { contains: query, mode: "insensitive" } },
