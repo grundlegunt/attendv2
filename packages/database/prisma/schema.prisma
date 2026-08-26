@@ -182,8 +182,27 @@ model Location {
   donations             Donation[]
   donationCheckouts     DonationCheckout[]
   membershipCheckouts   MembershipCheckout[]
+  customerAnalytics     CustomerAnalyticsDaily[]
 
   @@map("locations")
+}
+
+// Privacy-safe, aggregate customer-site activity. No visitor, customer,
+// device, order, ticket, IP, or free-form property is stored here.
+model CustomerAnalyticsDaily {
+  id         String   @id @default(uuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  event      String
+  path       String   @default("")
+  count      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([locationId, date, event, path])
+  @@index([locationId, date])
+  @@map("customer_analytics_daily")
 }
 
 enum ExpenseCategory {

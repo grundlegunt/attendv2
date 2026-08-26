@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Headers, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { z } from "zod/v3";
 import { Permission } from "@cinema/auth";
 import {
@@ -37,6 +37,10 @@ const updateSchedulePlanShowtimeSchema = z.object({
 }).strict();
 const publishSchedulePlanSchema = z.object({ expectedUpdatedAt: z.string().datetime() }).strict();
 const joinShowtimeWaitlistSchema = z.object({ email: z.string().trim().email().max(200) }).strict();
+const customerAnalyticsEventSchema = z.object({
+  event: z.enum(["Pageview", "Checkout Started", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"]),
+  path: z.string().trim().max(160).optional(),
+}).strict();
 const bulkUpdateShowtimesSchema = z.object({
   showtimes: z.array(z.object({ id: z.string().uuid(), expectedUpdatedAt: z.string().datetime() }).strict()).min(1).max(100),
   onSale: z.boolean().optional(),
@@ -67,6 +71,14 @@ export class CinemaController {
   @Get("content")
   content(@Query("locationId") locationId?: string) {
     return this.cinemaService.publicContent(locationId);
+  }
+
+  @Post("analytics/events")
+  @HttpCode(HttpStatus.ACCEPTED)
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "analytics" })
+  analyticsEvent(@Query("locationId") locationId: string | undefined, @Body(new ZodValidationPipe(customerAnalyticsEventSchema)) body: unknown) {
+    return this.cinemaService.recordCustomerAnalyticsEvent(locationId, customerAnalyticsEventSchema.parse(body));
   }
 
   @Post("private-event-inquiries")

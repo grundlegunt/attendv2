@@ -4317,6 +4317,30 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async recordCustomerAnalyticsEvent(locationId: string | undefined, input: { event: string; path?: string }) {
+    const settings = await prisma.platformBrandSettings.findUnique({ where: { id: "platform" }, select: { analytics: true } });
+    const analytics = settings?.analytics as { enabled?: boolean; provider?: string } | undefined;
+    if (analytics?.enabled !== true) return { accepted: false };
+
+    const location = locationId
+      ? await prisma.location.findFirst({ where: { id: locationId, active: true, organization: { active: true } }, select: { id: true, timezone: true } })
+      : await prisma.location.findFirst({ where: { active: true, organization: { active: true } }, orderBy: { createdAt: "asc" }, select: { id: true, timezone: true } });
+    if (!location) throw AppError.notFound("Location not found.");
+
+    const parts = new Intl.DateTimeFormat("en-US", { timeZone: location.timezone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+    const part = (type: "year" | "month" | "day") => parts.find((entry) => entry.type === type)?.value ?? "";
+    const date = new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00.000Z`);
+    const requestedPath = input.path?.trim() || "/";
+    const publicAnalyticsPaths = new Set(["/", "/about", "/account", "/afterglow", "/coming-soon", "/dining-bar", "/directions", "/donate", "/film-series", "/film-series/:seriesId", "/gift-cards", "/membership", "/movie/:movieId", "/privacy", "/private-events", "/showtimes", "/signage", "/tickets/:orderId"]);
+    const path = input.event === "Pageview" && publicAnalyticsPaths.has(requestedPath) ? requestedPath : "";
+    await prisma.customerAnalyticsDaily.upsert({
+      where: { locationId_date_event_path: { locationId: location.id, date, event: input.event, path } },
+      create: { locationId: location.id, date, event: input.event, path, count: 1 },
+      update: { count: { increment: 1 } },
+    });
+    return { accepted: true };
+  }
+
   async publicAdminBranding(locationId?: string) {
     const location = locationId
       ? await prisma.location.findFirst({
