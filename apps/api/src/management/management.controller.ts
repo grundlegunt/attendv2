@@ -102,16 +102,18 @@ const membershipDirectorySchema = z.object({
   lifecycle: z.enum(["EXPIRING", "LAPSED"]).optional(),
   planId: z.string().uuid().optional(),
 }).strict();
-const membershipPlanSchema = z.object({
+const membershipPlanFields = z.object({
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(1000).nullable().optional(),
   priceCents: z.number().int().min(0).max(1_000_000),
+  benefitsFairMarketValueCents: z.number().int().min(0).max(1_000_000).default(0),
   durationMonths: z.number().int().min(1).max(120),
   benefits: z.array(z.string().trim().min(1).max(200)).max(25),
   autoRenew: z.boolean().default(false),
   active: z.boolean().default(true),
 }).strict();
-const membershipPlanUpdateSchema = membershipPlanSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one plan change.");
+const membershipPlanSchema = membershipPlanFields.refine((value) => value.benefitsFairMarketValueCents <= value.priceCents, "Benefits' fair-market value cannot exceed the plan price.");
+const membershipPlanUpdateSchema = membershipPlanFields.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one plan change.").refine((value) => value.priceCents === undefined || value.benefitsFairMarketValueCents === undefined || value.benefitsFairMarketValueCents <= value.priceCents, "Benefits' fair-market value cannot exceed the plan price.");
 const donationCampaignFields = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).nullable().optional(),

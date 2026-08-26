@@ -228,9 +228,9 @@ export class ManagementService {
     }));
   }
 
-  async createMembershipPlan(input: { locationId: string; employeeId: string; requestId: string; name: string; description?: string | null; priceCents: number; durationMonths: number; benefits: string[]; autoRenew: boolean; active: boolean }) {
+  async createMembershipPlan(input: { locationId: string; employeeId: string; requestId: string; name: string; description?: string | null; priceCents: number; benefitsFairMarketValueCents: number; durationMonths: number; benefits: string[]; autoRenew: boolean; active: boolean }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
-    const fingerprint = createHash("sha256").update(JSON.stringify({ name: input.name, description: input.description ?? null, priceCents: input.priceCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active })).digest("hex");
+    const fingerprint = createHash("sha256").update(JSON.stringify({ name: input.name, description: input.description ?? null, priceCents: input.priceCents, benefitsFairMarketValueCents: input.benefitsFairMarketValueCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active })).digest("hex");
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
@@ -242,15 +242,15 @@ export class ManagementService {
       }
       const duplicate = await tx.membershipPlan.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
       if (duplicate) throw AppError.conflict("A membership plan with this name already exists.");
-      const plan = await tx.membershipPlan.create({ data: { organizationId: location.organizationId, name: input.name, description: input.description, priceCents: input.priceCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active }, include: { _count: { select: { memberships: true } } } });
+      const plan = await tx.membershipPlan.create({ data: { organizationId: location.organizationId, name: input.name, description: input.description, priceCents: input.priceCents, benefitsFairMarketValueCents: input.benefitsFairMarketValueCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active }, include: { _count: { select: { memberships: true } } } });
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "membership.plan_created", entityType: "MembershipPlan", entityId: plan.id, afterState: { requestId: input.requestId, fingerprint, name: plan.name, priceCents: plan.priceCents, durationMonths: plan.durationMonths, benefits: input.benefits, autoRenew: plan.autoRenew, active: plan.active } } });
       return plan;
     });
   }
 
-  async updateMembershipPlan(input: { locationId: string; employeeId: string; planId: string; requestId: string; name?: string; description?: string | null; priceCents?: number; durationMonths?: number; benefits?: string[]; autoRenew?: boolean; active?: boolean }) {
+  async updateMembershipPlan(input: { locationId: string; employeeId: string; planId: string; requestId: string; name?: string; description?: string | null; priceCents?: number; benefitsFairMarketValueCents?: number; durationMonths?: number; benefits?: string[]; autoRenew?: boolean; active?: boolean }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
-    const changes = { name: input.name, description: input.description, priceCents: input.priceCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active };
+    const changes = { name: input.name, description: input.description, priceCents: input.priceCents, benefitsFairMarketValueCents: input.benefitsFairMarketValueCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active };
     const fingerprint = createHash("sha256").update(JSON.stringify({ planId: input.planId, ...changes })).digest("hex");
     return prisma.$transaction(async (tx) => {
       const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
@@ -263,6 +263,7 @@ export class ManagementService {
       }
       const before = await tx.membershipPlan.findFirst({ where: { id: input.planId, organizationId: location.organizationId } });
       if (!before) throw AppError.notFound("Membership plan was not found.");
+      if ((input.benefitsFairMarketValueCents ?? before.benefitsFairMarketValueCents) > (input.priceCents ?? before.priceCents)) throw AppError.validationFailed("Benefits' fair-market value cannot exceed the plan price.");
       if (input.name && input.name.toLowerCase() !== before.name.toLowerCase()) {
         const duplicate = await tx.membershipPlan.findFirst({ where: { organizationId: location.organizationId, id: { not: before.id }, name: { equals: input.name, mode: "insensitive" } } });
         if (duplicate) throw AppError.conflict("A membership plan with this name already exists.");
