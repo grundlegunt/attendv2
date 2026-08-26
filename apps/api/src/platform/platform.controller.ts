@@ -168,6 +168,12 @@ export class PlatformController {
     return this.platform.updateFilmCatalogEntry({ actorId: actor.sub, entryId, ...filmCatalogUpdateSchema.parse(body) });
   }
 
+  @Get("film-catalog/:entryId/performance")
+  @UseGuards(PlatformAuthGuard)
+  filmCatalogPerformance(@Param("entryId") entryId: string, @Query("from") from?: string, @Query("to") to?: string) {
+    return this.platform.filmCatalogPerformance({ entryId, from, to });
+  }
+
   @Get("revenue")
   @UseGuards(PlatformAuthGuard)
   revenue(@Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {

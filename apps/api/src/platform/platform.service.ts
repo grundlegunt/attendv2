@@ -244,6 +244,65 @@ export class PlatformService {
     }
   }
 
+  async filmCatalogPerformance(input: { entryId: string; from?: string; to?: string }) {
+    const from = input.from ? new Date(input.from) : undefined;
+    const to = input.to ? new Date(input.to) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime())) || (from && to && from >= to) || (from && to && to.getTime() - from.getTime() > 366 * 86_400_000)) {
+      throw AppError.validationFailed("A valid performance date range of 366 days or less is required.");
+    }
+    if (Boolean(from) !== Boolean(to)) throw AppError.validationFailed("Both performance range dates are required.");
+    const catalog = await prisma.filmCatalogEntry.findUnique({
+      where: { id: input.entryId },
+      include: {
+        operatorMovies: {
+          select: {
+            id: true,
+            organization: { select: { id: true, name: true, locations: { where: { active: true }, select: { id: true, name: true } } } },
+          },
+        },
+      },
+    });
+    if (!catalog) throw AppError.notFound("Catalog film not found.");
+    const range = from && to ? { from, to } : undefined;
+    const reports = await Promise.all(catalog.operatorMovies.flatMap((movie) => movie.organization.locations.map(async (location) => ({
+      organization: { id: movie.organization.id, name: movie.organization.name },
+      location,
+      localMovieId: movie.id,
+      report: await this.reporting.moviePerformance(location.id, movie.id, range),
+    }))));
+    const locations = reports.map(({ organization, location, localMovieId, report }) => ({ organization, location, localMovieId, totals: report.totals }));
+    const totals = locations.reduce((sum, row) => {
+      sum.showtimes += row.totals.showtimes;
+      sum.upcomingShowtimes += row.totals.upcomingShowtimes;
+      sum.pastShowtimes += row.totals.pastShowtimes;
+      sum.ticketsSold += row.totals.ticketsSold;
+      sum.totalCapacity += row.totals.totalCapacity;
+      sum.ticketRevenueCents += row.totals.ticketRevenueCents;
+      sum.fnbRevenueCents += row.totals.fnbRevenueCents;
+      sum.distributorRevenueCents += row.totals.distributorRevenueCents;
+      sum.cinemaRevenueCents += row.totals.cinemaRevenueCents;
+      sum.unallocatedRevenueCents += row.totals.unallocatedRevenueCents;
+      return sum;
+    }, { showtimes: 0, upcomingShowtimes: 0, pastShowtimes: 0, ticketsSold: 0, totalCapacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 });
+    return {
+      film: {
+        id: catalog.id, title: catalog.title, synopsis: catalog.synopsis, runtimeMinutes: catalog.runtimeMinutes, rating: catalog.rating,
+        releaseYear: catalog.releaseYear, director: catalog.director, starring: catalog.starring, posterUrl: catalog.posterUrl,
+        primaryDistributorName: catalog.primaryDistributorName, imdbId: catalog.imdbId, tmdbId: catalog.tmdbId, eidrId: catalog.eidrId,
+        verified: catalog.verified, active: catalog.active,
+      },
+      range: range ? { from: from!.toISOString(), to: to!.toISOString() } : null,
+      totals: {
+        ...totals,
+        attendancePercent: totals.totalCapacity ? Math.round((totals.ticketsSold / totals.totalCapacity) * 1000) / 10 : 0,
+        averageTicketsPerShow: totals.showtimes ? Math.round((totals.ticketsSold / totals.showtimes) * 10) / 10 : 0,
+        averageFnbPerShowCents: totals.showtimes ? Math.round(totals.fnbRevenueCents / totals.showtimes) : 0,
+        averageFnbPerTicketCents: totals.ticketsSold ? Math.round(totals.fnbRevenueCents / totals.ticketsSold) : 0,
+      },
+      operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
+    };
+  }
+
   private filmCatalogAuditState(entry: {
     title: string;
     synopsis: string | null;

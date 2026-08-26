@@ -1119,6 +1119,18 @@ describe("Attend platform authentication boundary", () => {
       .set("Authorization", `Bearer ${cinemaToken}`)
       .expect(200);
     expect(refreshed.body.entries[0].importedMovieId).toBe(imported.body.id);
+
+    const performance = await request(app.getHttpServer())
+      .get(`/api/v1/platform/film-catalog/${created.body.id}/performance`)
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(performance.body).toEqual(expect.objectContaining({
+      film: expect.objectContaining({ id: created.body.id, title: "Shared Import Test Film", runtimeMinutes: 104 }),
+      range: null,
+      totals: expect.objectContaining({ showtimes: 0, ticketsSold: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 }),
+      operators: expect.arrayContaining([expect.objectContaining({ localMovieId: imported.body.id })]),
+    }));
+    expect(JSON.stringify(performance.body)).not.toContain("distributorTerms");
   });
 
   it("lets Attend operators add and revoke company team access safely", async () => {
