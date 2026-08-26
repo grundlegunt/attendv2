@@ -204,6 +204,40 @@ export class ManagementService {
     ].join("\n");
   }
 
+  async membershipPaymentExportRows(locationId: string) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
+    return prisma.membershipCheckout.findMany({
+      where: { organizationId: location.organizationId, status: "PAID" },
+      select: {
+        id: true,
+        createdAt: true,
+        memberName: true,
+        memberEmail: true,
+        planName: true,
+        amountCents: true,
+        taxDeductibleAmountCents: true,
+        currency: true,
+        receiptSentAt: true,
+        location: { select: { name: true } },
+        membership: { select: { membershipNumber: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10_000,
+    });
+  }
+
+  membershipPaymentsCsv(rows: Awaited<ReturnType<ManagementService["membershipPaymentExportRows"]>>) {
+    const cell = (value: unknown) => {
+      const raw = String(value ?? "");
+      const safe = /^[\t\r ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    return [
+      "Purchased,Member number,Member name,Member email,Plan,Location,Paid amount (minor units),Potentially tax-deductible amount (minor units),Currency,Receipt sent",
+      ...rows.map((row) => [row.createdAt.toISOString(), row.membership?.membershipNumber, row.memberName, row.memberEmail, row.planName, row.location.name, row.amountCents, row.taxDeductibleAmountCents, row.currency, row.receiptSentAt?.toISOString()].map(cell).join(",")),
+    ].join("\n");
+  }
+
   async membershipPlans(locationId: string, now = new Date()) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     const [plans, checkoutTotals] = await Promise.all([

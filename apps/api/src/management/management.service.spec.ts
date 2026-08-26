@@ -56,6 +56,19 @@ describe("membership directory", () => {
     expect(csv).toContain('"MEM-1","\'=2+2","member@example.com"');
     expect(csv).toContain('"Annual","Supporter","ACTIVE","2027-08-25T00:00:00.000Z"');
   });
+
+  it("exports paid membership history with deductible values and organization scoping", async () => {
+    const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
+    const payments = jest.spyOn(prisma.membershipCheckout, "findMany").mockResolvedValue([]);
+    try {
+      await new ManagementService().membershipPaymentExportRows("location-1");
+      expect(payments).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: "organization-1", status: "PAID" }, take: 10_000 }));
+    } finally { location.mockRestore(); payments.mockRestore(); }
+
+    const csv = new ManagementService().membershipPaymentsCsv([{ id: "checkout-1", createdAt: new Date("2026-08-26T12:00:00.000Z"), memberName: "=2+2", memberEmail: "member@example.com", planName: "Supporting Member", amountCents: 10000, taxDeductibleAmountCents: 7500, currency: "USD", receiptSentAt: new Date("2026-08-26T12:01:00.000Z"), location: { name: "Meridian Cinema" }, membership: { membershipNumber: "MEM-1" } }] as never);
+    expect(csv).toContain('"MEM-1","\'=2+2","member@example.com"');
+    expect(csv).toContain('"10000","7500","USD"');
+  });
 });
 
 describe("membership plans", () => {
