@@ -438,7 +438,10 @@ export class PlatformService {
       upcomingShows: number;
       ticketsSold: number;
       ticketFaceValueCents: number;
-      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "UPCOMING" | "PAST" | "UNSCHEDULED"; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; terms: Prisma.JsonValue | null }>;
+      distributorRevenueCents: number;
+      cinemaRevenueCents: number;
+      unallocatedRevenueCents: number;
+      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "UPCOMING" | "PAST" | "UNSCHEDULED"; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; terms: Prisma.JsonValue | null }>;
     }>();
     for (const movie of movies) {
       const name = movie.distributorName?.trim();
@@ -446,13 +449,22 @@ export class PlatformService {
       const key = name.toLocaleLowerCase();
       let distributor = grouped.get(key);
       if (!distributor) {
-        distributor = { name, operators: new Set(), locations: new Set(), films: new Set(), shows: 0, upcomingShows: 0, ticketsSold: 0, ticketFaceValueCents: 0, deals: [] };
+        distributor = { name, operators: new Set(), locations: new Set(), films: new Set(), shows: 0, upcomingShows: 0, ticketsSold: 0, ticketFaceValueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0, deals: [] };
         grouped.set(key, distributor);
       }
       const locations = [...new Map(movie.showtimes.map((showtime) => [showtime.auditorium.location.id, showtime.auditorium.location.name])).values()];
       const upcomingShows = movie.showtimes.filter((showtime) => showtime.startsAt >= now).length;
       const tickets = movie.showtimes.flatMap((showtime) => showtime.showtimeSeats.flatMap((seat) => seat.tickets));
       const ticketFaceValueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
+      const openingStartsAt = movie.showtimes.reduce<Date | null>((opening, showtime) => !opening || showtime.startsAt < opening ? showtime.startsAt : opening, null);
+      const allocation = movie.showtimes.reduce((totals, showtime) => {
+        const showtimeRevenueCents = showtime.showtimeSeats.flatMap((seat) => seat.tickets).reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
+        const result = this.reporting.allocateDistributorShare(showtimeRevenueCents, showtime.startsAt, openingStartsAt, movie.distributorTerms);
+        totals.distributorRevenueCents += result.distributorRevenueCents;
+        totals.cinemaRevenueCents += result.cinemaRevenueCents;
+        totals.unallocatedRevenueCents += result.unallocatedRevenueCents;
+        return totals;
+      }, { distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 });
       distributor.operators.add(movie.organization.id);
       for (const showtime of movie.showtimes) distributor.locations.add(showtime.auditorium.location.id);
       distributor.films.add(movie.catalogEntryId ?? movie.id);
@@ -460,6 +472,9 @@ export class PlatformService {
       distributor.upcomingShows += upcomingShows;
       distributor.ticketsSold += tickets.length;
       distributor.ticketFaceValueCents += ticketFaceValueCents;
+      distributor.distributorRevenueCents += allocation.distributorRevenueCents;
+      distributor.cinemaRevenueCents += allocation.cinemaRevenueCents;
+      distributor.unallocatedRevenueCents += allocation.unallocatedRevenueCents;
       distributor.deals.push({
         movieId: movie.id,
         catalogEntryId: movie.catalogEntryId,
@@ -470,6 +485,7 @@ export class PlatformService {
         showtimes: movie.showtimes.length,
         ticketsSold: tickets.length,
         ticketFaceValueCents,
+        ...allocation,
         terms: movie.distributorTerms,
       });
     }
@@ -484,6 +500,9 @@ export class PlatformService {
         upcomingShows: distributor.upcomingShows,
         ticketsSold: distributor.ticketsSold,
         ticketFaceValueCents: distributor.ticketFaceValueCents,
+        distributorRevenueCents: distributor.distributorRevenueCents,
+        cinemaRevenueCents: distributor.cinemaRevenueCents,
+        unallocatedRevenueCents: distributor.unallocatedRevenueCents,
         deals: distributor.deals.sort((left, right) => (left.status === "UPCOMING" ? -1 : 1) - (right.status === "UPCOMING" ? -1 : 1) || right.ticketFaceValueCents - left.ticketFaceValueCents),
       })).sort((left, right) => right.ticketFaceValueCents - left.ticketFaceValueCents || left.name.localeCompare(right.name)),
     };

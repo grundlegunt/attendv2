@@ -19,11 +19,16 @@ test("distributor reporting excludes refunded tickets and distinguishes deal tim
   assert.match(service, /status: \{ notIn: \["REFUNDED", "CANCELED"\] \}/);
   assert.match(service, /status: upcomingShows > 0 \? "UPCOMING" : movie\.showtimes\.length > 0 \? "PAST" : "UNSCHEDULED"/);
   assert.match(service, /ticketFaceValueCents/);
+  assert.match(service, /allocateDistributorShare\(showtimeRevenueCents, showtime\.startsAt, openingStartsAt, movie\.distributorTerms\)/);
+  assert.match(service, /unallocatedRevenueCents/);
 });
 
 test("Master distributor workspace shows portfolios, performance, and terms readiness", () => {
   assert.match(page, /DISTRIBUTOR INTELLIGENCE/);
   assert.match(page, /Ticket face value/);
+  assert.match(page, /Distributor share/);
+  assert.match(page, /Cinema share/);
+  assert.match(page, /Needs terms/);
   assert.match(page, /deal\.terms \? "Saved" : "Missing"/);
   assert.match(page, /href=\{`\/films\/\$\{deal\.catalogEntryId\}`\}/);
 });
