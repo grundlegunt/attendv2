@@ -255,6 +255,12 @@ export class PlatformService {
         activeCatalogEntryCount,
         inactiveCatalogEntryCount,
       };
+    }, {
+      // A first synchronization can match, create, and link every film in an
+      // operator library. Railway's database latency can exceed Prisma's
+      // five-second interactive-transaction default even for a small cinema.
+      maxWait: 5_000,
+      timeout: 15_000,
     });
   }
 

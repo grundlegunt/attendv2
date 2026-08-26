@@ -8,6 +8,10 @@ const performanceSource = readFileSync(
   join(__dirname, "../app/films/[id]/page.tsx"),
   "utf8",
 );
+const serviceSource = readFileSync(
+  join(__dirname, "../../api/src/platform/platform.service.ts"),
+  "utf8",
+);
 
 test("Master film catalog supports discovery and lifecycle management", () => {
   assert.match(source, /\/platform\/film-catalog\?\$\{params\}/);
@@ -24,6 +28,12 @@ test("Master film catalog keeps viewers read-only", () => {
   assert.match(source, /session\.user\.role === "VIEWER"/);
   assert.match(source, /disabled=\{readOnly\}/);
   assert.match(source, /\{!readOnly && <button/);
+});
+
+test("operator film synchronization allows a production-sized transaction window", () => {
+  assert.match(serviceSource, /platform-film-catalog-sync/);
+  assert.match(serviceSource, /maxWait: 5_000/);
+  assert.match(serviceSource, /timeout: 15_000/);
 });
 
 test("Master film catalog opens cross-operator film intelligence", () => {
