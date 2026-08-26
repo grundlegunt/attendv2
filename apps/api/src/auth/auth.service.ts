@@ -144,7 +144,7 @@ export class AuthService {
     if (!operator?.active || !location) throw AppError.unauthenticated("Support session is no longer valid.");
     return {
       id: operator.id,
-      name: `${operator.name} (Attend Support)`,
+      name: `${operator.name} (Ringo Support)`,
       email: operator.email,
       locationId: location.id,
       roles: [],
@@ -202,7 +202,7 @@ export class AuthService {
       if (!employee.authAccount.mfaSecretEncrypted) {
         await tx.staffAuthAccount.update({ where: { employeeId }, data: { mfaSecretEncrypted: encryptMfaSecret(secret, loadEnv().JWT_REFRESH_SECRET) } });
       }
-      return { secret, uri: createMfaUri(secret, employee.email, "Attend Admin") };
+      return { secret, uri: createMfaUri(secret, employee.email, "Ringo Admin") };
     });
   }
 

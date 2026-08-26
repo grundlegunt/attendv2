@@ -910,7 +910,7 @@ export default function AttendMaster() {
     const supportWindow = window.open("about:blank", "_blank");
     if (!supportWindow) {
       setError(
-        "Your browser blocked the support tab. Allow pop-ups for Attend Master and try again.",
+        "Your browser blocked the support tab. Allow pop-ups for Ringo Master and try again.",
       );
       return;
     }
@@ -1326,7 +1326,7 @@ export default function AttendMaster() {
   if (!restored)
     return (
       <main className="center">
-        <p>Loading Attend Master…</p>
+        <p>Loading Ringo Master…</p>
       </main>
     );
   if (!session)
@@ -1336,7 +1336,7 @@ export default function AttendMaster() {
     <main className="shell">
       <header>
         <div>
-          <p className="eyebrow">ATTEND MASTER</p>
+          <p className="eyebrow platform-master-label" />
           <h1>
             {selectedOrganizationId ? "Cinema profile" : "Client operations"}
           </h1>
@@ -1357,7 +1357,7 @@ export default function AttendMaster() {
           </button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Attend Master">
+      <nav className="platform-nav" aria-label="Ringo Master">
         <Link href="/">Dashboard</Link>
         <Link className="active" href="/clients">
           Clients
@@ -2010,7 +2010,7 @@ export default function AttendMaster() {
                               location.adminBranding.accentColor ?? "#ffb800",
                           }}
                         />
-                        <span>Attend Admin · {location.name}</span>
+                        <span>Ringo Admin · {location.name}</span>
                       </div>
                       <div className="swatches">
                         {[
@@ -2894,7 +2894,7 @@ export default function AttendMaster() {
                               "#ffb800",
                           }}
                         >
-                          ATTEND ADMIN
+                          RINGO ADMIN
                         </span>
                         <strong>{locationDraft.values.name}</strong>
                         <small
@@ -3879,7 +3879,7 @@ export default function AttendMaster() {
                     </form>
                   )}
                   <footer className="detail-note">
-                    Attend Master changes are audited. Cinema staff retain their
+                    Ringo Master changes are audited. Cinema staff retain their
                     existing permissions and admin access.
                   </footer>
                 </article>

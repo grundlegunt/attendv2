@@ -1491,7 +1491,7 @@ describe("Attend platform authentication boundary", () => {
     expect(support.body).toEqual(expect.objectContaining({ accessToken: expect.any(String), expiresInSeconds: 900 }));
 
     const profile = await request(app.getHttpServer()).get("/api/v1/auth/staff/me").set("Authorization", `Bearer ${support.body.accessToken}`).expect(200);
-    expect(profile.body).toEqual(expect.objectContaining({ name: expect.stringContaining("Attend Support"), locationId: meridian.locations[0].id, supportSession: true }));
+    expect(profile.body).toEqual(expect.objectContaining({ name: expect.stringContaining("Ringo Support"), locationId: meridian.locations[0].id, supportSession: true }));
     await request(app.getHttpServer()).get("/api/v1/management/settings").set("Authorization", `Bearer ${support.body.accessToken}`).expect(200);
     await request(app.getHttpServer()).patch("/api/v1/management/settings/location").set("Authorization", `Bearer ${support.body.accessToken}`).send({ name: "Forbidden support edit" }).expect(403);
 

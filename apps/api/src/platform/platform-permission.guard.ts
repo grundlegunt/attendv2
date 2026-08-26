@@ -12,7 +12,7 @@ export class PlatformPermissionGuard implements CanActivate {
     const permission = this.reflector.getAllAndOverride<string>(PLATFORM_PERMISSION_METADATA, [context.getHandler(), context.getClass()]);
     if (!permission) return true;
     const actor = context.switchToHttp().getRequest<Request>().actor;
-    if (!actor?.permissions.includes(permission)) throw AppError.forbidden("Your Attend Master role does not allow this action.");
+    if (!actor?.permissions.includes(permission)) throw AppError.forbidden("Your Ringo Master role does not allow this action.");
     return true;
   }
 }

@@ -197,7 +197,7 @@ export default function PlatformPayments() {
     }
   }
 
-  if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
+  if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
       <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />
@@ -207,10 +207,10 @@ export default function PlatformPayments() {
   return (
     <main className="shell">
       <header>
-        <div><p className="eyebrow">ATTEND MASTER</p><h1>Payments</h1><p className="muted">Stripe Connect readiness across every cinema client.</p></div>
+        <div><p className="eyebrow platform-master-label" /><h1>Payments</h1><p className="muted">Stripe Connect readiness across every cinema client.</p></div>
         <div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
-      <nav className="platform-nav" aria-label="Attend Master">
+      <nav className="platform-nav" aria-label="Ringo Master">
         <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/onboarding">Onboarding</Link><Link className="active" href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}

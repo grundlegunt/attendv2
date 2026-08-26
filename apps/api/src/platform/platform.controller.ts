@@ -91,6 +91,39 @@ const platformUserCredentialsSchema = z.object({
 
 const platformRefreshSchema = z.object({ refreshToken: z.string().min(1) }).strict();
 
+const colorSchema = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/);
+const platformBrandSettingsSchema = z.object({
+  companyName: z.string().trim().min(1).max(80),
+  masterTheme: z.object({
+    accentColor: colorSchema,
+    backgroundColor: colorSchema,
+    surfaceColor: colorSchema,
+    textColor: colorSchema,
+    mutedTextColor: colorSchema,
+  }).strict(),
+  masterSignIn: z.object({
+    eyebrow: z.string().trim().min(1).max(80),
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().min(1).max(500),
+    formTitle: z.string().trim().min(1).max(100),
+    formDescription: z.string().trim().min(1).max(300),
+  }).strict(),
+  adminSignIn: z.object({
+    accentColor: colorSchema,
+    backgroundColor: colorSchema,
+    surfaceColor: colorSchema,
+    textColor: colorSchema,
+    mutedTextColor: colorSchema,
+    eyebrow: z.string().trim().min(1).max(80),
+    title: z.string().trim().min(1).max(160),
+    description: z.string().trim().min(1).max(500),
+    formEyebrow: z.string().trim().min(1).max(80),
+    formTitle: z.string().trim().min(1).max(100),
+    formDescription: z.string().trim().min(1).max(300),
+    securityNote: z.string().trim().min(1).max(200),
+  }).strict(),
+}).strict();
+
 const filmCatalogFields = {
   title: z.string().trim().min(1).max(240),
   synopsis: z.string().trim().max(5_000).nullable().optional(),
@@ -116,6 +149,18 @@ const filmCatalogUpdateSchema = filmCatalogCreateSchema.partial()
 @Controller("platform")
 export class PlatformController {
   constructor(private readonly platform: PlatformService) {}
+
+  @Get("branding/public")
+  platformBranding() {
+    return this.platform.platformBrandSettings();
+  }
+
+  @Patch("branding")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  updatePlatformBranding(@CurrentActor() actor: RequestActor, @Body(new ZodValidationPipe(platformBrandSettingsSchema)) body: unknown) {
+    return this.platform.updatePlatformBrandSettings(actor.sub, platformBrandSettingsSchema.parse(body));
+  }
 
   @Post("auth/login")
   @HttpCode(HttpStatus.OK)
@@ -256,7 +301,7 @@ export class PlatformController {
   connectOnboardingLink(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(connectOnboardingSchema)) body: unknown) {
     const { origin, returnPath } = connectOnboardingSchema.parse(body);
     if (new URL(origin).origin !== origin || !isPlatformOriginAllowed(origin)) {
-      throw AppError.validationFailed("Stripe onboarding must return to an allowed Attend Master origin.");
+      throw AppError.validationFailed("Stripe onboarding must return to an allowed Ringo Master origin.");
     }
     return this.platform.createConnectOnboardingLink({ actorId: actor.sub, organizationId, origin, returnPath });
   }

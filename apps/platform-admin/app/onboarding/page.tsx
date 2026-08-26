@@ -151,7 +151,7 @@ export default function PlatformOnboarding() {
     setError(null);
   }
 
-  if (!restored) return <main className="center"><p>Loading Attend Master…</p></main>;
+  if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
       <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />
@@ -161,10 +161,10 @@ export default function PlatformOnboarding() {
   return (
     <main className="shell">
       <header>
-        <div><p className="eyebrow">ATTEND MASTER</p><h1>Onboarding</h1><p className="muted">Move every cinema client from account creation to selling tickets.</p></div>
+        <div><p className="eyebrow platform-master-label" /><h1>Onboarding</h1><p className="muted">Move every cinema client from account creation to selling tickets.</p></div>
         <div className="identity">{session.user.role !== "VIEWER" && <Link className="quiet link-button" href="/clients?create=1">+ Start client</Link>}<span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
-      <nav className="platform-nav" aria-label="Attend Master">
+      <nav className="platform-nav" aria-label="Ringo Master">
         <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}

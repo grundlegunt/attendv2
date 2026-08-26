@@ -55,6 +55,15 @@ type PlatformAuditoriumUpdateInput = z.infer<
   typeof updateAuditoriumLayoutRequestSchema
 >;
 
+export const defaultPlatformBrandSettings = {
+  companyName: "Ringo",
+  masterTheme: { accentColor: "#7c9cff", backgroundColor: "#0a0b0d", surfaceColor: "#13151a", textColor: "#f5f2ea", mutedTextColor: "#989faa" },
+  masterSignIn: { eyebrow: "PLATFORM OPERATIONS", title: "Run every cinema from one place.", description: "Oversee clients, revenue, onboarding, payments, and access before entering a cinema workspace.", formTitle: "Company sign in", formDescription: "Use your Ringo company credentials." },
+  adminSignIn: { accentColor: "#ffbf00", backgroundColor: "#080808", surfaceColor: "#1a1a1a", textColor: "#f7f4ed", mutedTextColor: "#aaa7a0", eyebrow: "RINGO ADMIN", title: "Cinema operations", description: "Programming, ticketing, restaurant, staff, and reporting tools in one secure workspace.", formEyebrow: "MANAGER ACCESS", formTitle: "Sign in", formDescription: "Use the staff credentials issued by your manager.", securityNote: "Authorized staff only · Sessions expire automatically" },
+};
+
+type PlatformBrandSettingsInput = typeof defaultPlatformBrandSettings;
+
 @Injectable()
 export class PlatformService {
   private readonly organizationHealthCache = new Map<
@@ -76,6 +85,27 @@ export class PlatformService {
     private readonly connect: ConnectOnboardingProvider,
     private readonly reporting: ReportingService,
   ) {}
+
+  async platformBrandSettings(): Promise<PlatformBrandSettingsInput> {
+    const settings = await prisma.platformBrandSettings.findUnique({ where: { id: "platform" } });
+    if (!settings) return defaultPlatformBrandSettings;
+    return {
+      companyName: settings.companyName,
+      masterTheme: settings.masterTheme as PlatformBrandSettingsInput["masterTheme"],
+      masterSignIn: settings.masterSignIn as PlatformBrandSettingsInput["masterSignIn"],
+      adminSignIn: settings.adminSignIn as PlatformBrandSettingsInput["adminSignIn"],
+    };
+  }
+
+  async updatePlatformBrandSettings(actorId: string, input: PlatformBrandSettingsInput) {
+    const settings = await prisma.platformBrandSettings.upsert({
+      where: { id: "platform" },
+      create: { id: "platform", ...input },
+      update: input,
+    });
+    await this.audit.record({ actorType: "PLATFORM", actorId, action: "platform.branding_updated", entityType: "PlatformBrandSettings", entityId: settings.id });
+    return this.platformBrandSettings();
+  }
 
   async login(input: PlatformLoginRequest) {
     const user = await prisma.platformUser.findUnique({
@@ -348,7 +378,7 @@ export class PlatformService {
     } catch (error) {
       if (error instanceof InvalidTokenError)
         throw AppError.unauthenticated(
-          "The Attend Master session expired. Please sign in again.",
+          "The Ringo Master session expired. Please sign in again.",
         );
       throw error;
     }
@@ -358,7 +388,7 @@ export class PlatformService {
     });
     if (!user?.active || user.refreshTokenVersion !== payload.tokenVersion) {
       throw AppError.unauthenticated(
-        "The Attend Master session is no longer valid. Please sign in again.",
+        "The Ringo Master session is no longer valid. Please sign in again.",
       );
     }
     return {
@@ -1089,7 +1119,7 @@ export class PlatformService {
     });
     if (duplicate)
       throw AppError.conflict(
-        "An Attend Master operator with that email already exists.",
+        "A Ringo Master operator with that email already exists.",
       );
     const passwordHash = await hashPassword(input.password);
     try {
@@ -1135,7 +1165,7 @@ export class PlatformService {
         error.code === "P2002"
       )
         throw AppError.conflict(
-          "An Attend Master operator with that email already exists.",
+          "A Ringo Master operator with that email already exists.",
         );
       throw error;
     }
@@ -1150,7 +1180,7 @@ export class PlatformService {
   }) {
     if (input.userId === input.actorId && input.active === false)
       throw AppError.conflict(
-        "You cannot deactivate your own Attend Master account.",
+        "You cannot deactivate your own Ringo Master account.",
       );
     if (
       input.userId === input.actorId &&
@@ -1163,7 +1193,7 @@ export class PlatformService {
       const before = await tx.platformUser.findUnique({
         where: { id: input.userId },
       });
-      if (!before) throw AppError.notFound("Attend Master operator not found.");
+      if (!before) throw AppError.notFound("Ringo Master operator not found.");
       const removesActiveOwner =
         before.active &&
         before.role === PlatformUserRole.OWNER &&
@@ -1176,7 +1206,7 @@ export class PlatformService {
         })) <= 1
       ) {
         throw AppError.conflict(
-          "The last active Attend Master Owner cannot be deactivated or reassigned.",
+          "The last active Ringo Master Owner cannot be deactivated or reassigned.",
         );
       }
       const roleChanged =
@@ -1240,7 +1270,7 @@ export class PlatformService {
     const target = await prisma.platformUser.findUnique({
       where: { id: input.userId },
     });
-    if (!target) throw AppError.notFound("Attend Master operator not found.");
+    if (!target) throw AppError.notFound("Ringo Master operator not found.");
     const passwordHash = await hashPassword(input.password);
     await prisma.$transaction(async (tx) => {
       await tx.platformUser.update({

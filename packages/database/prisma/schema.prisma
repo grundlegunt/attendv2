@@ -65,6 +65,20 @@ model PlatformUser {
   @@map("platform_users")
 }
 
+// Singleton company identity managed from Master. Keeping this separate from
+// Location branding prevents a platform rename from changing a cinema's brand.
+model PlatformBrandSettings {
+  id           String   @id @default("platform")
+  companyName  String   @default("Ringo")
+  masterTheme  Json
+  masterSignIn Json
+  adminSignIn  Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("platform_brand_settings")
+}
+
 enum PlatformUserRole {
   OWNER
   OPERATOR

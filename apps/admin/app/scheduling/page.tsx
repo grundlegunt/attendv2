@@ -1177,7 +1177,7 @@ export default function AdminPage() {
     if (!data) return;
     if (supportSession) {
       setError(
-        "Attend Support view is read only. Sign in as a cinema manager to add a showing.",
+        "Ringo Support view is read only. Sign in as a cinema manager to add a showing.",
       );
       return;
     }
