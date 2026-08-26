@@ -44,6 +44,7 @@ model Organization {
   giftCards         GiftCard[]
   giftCardPurchases GiftCardPurchase[]
   memberships       Membership[]
+  membershipPlans   MembershipPlan[]
   donationCampaigns DonationCampaign[]
   donationCheckouts DonationCheckout[]
 
@@ -1386,6 +1387,26 @@ enum MembershipStatus {
   CANCELED
 }
 
+model MembershipPlan {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  priceCents     Int
+  durationMonths Int
+  benefits       Json
+  autoRenew      Boolean      @default(false)
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  memberships    Membership[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active])
+  @@map("membership_plans")
+}
+
 // Read-only representation of a membership issued by the cinema or an
 // external membership system. Attend does not sell or renew memberships.
 model Membership {
@@ -1394,6 +1415,8 @@ model Membership {
   organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   customerId       String
   customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  planId           String?
+  plan             MembershipPlan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
   membershipNumber String
   tier             String
   status           MembershipStatus @default(ACTIVE)
@@ -1404,6 +1427,7 @@ model Membership {
   @@unique([organizationId, membershipNumber])
   @@unique([organizationId, customerId])
   @@index([customerId, status])
+  @@index([planId, status])
   @@map("memberships")
 }
 
