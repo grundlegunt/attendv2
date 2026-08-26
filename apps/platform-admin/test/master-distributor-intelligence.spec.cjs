@@ -10,17 +10,21 @@ const page = readFileSync(join(root, "apps/platform-admin/app/distributors/page.
 
 test("Master exposes authenticated cross-operator distributor intelligence", () => {
   assert.match(controller, /@Get\("distributors"\)[\s\S]*@UseGuards\(PlatformAuthGuard\)[\s\S]*distributorPortfolio/);
-  assert.match(service, /async distributorPortfolio\(\)/);
+  assert.match(service, /async distributorPortfolio\(input: \{ from\?: string; to\?: string \} = \{\}\)/);
+  assert.match(controller, /distributors\(@Query\("from"\) from\?: string, @Query\("to"\) to\?: string\)/);
   assert.match(service, /distributorName: \{ not: null \}/);
   assert.match(service, /distributorTerms: true/);
 });
 
 test("distributor reporting excludes refunded tickets and distinguishes deal timing", () => {
   assert.match(service, /status: \{ notIn: \["REFUNDED", "CANCELED"\] \}/);
-  assert.match(service, /status: upcomingShows > 0 \? "UPCOMING" : movie\.showtimes\.length > 0 \? "PAST" : "UNSCHEDULED"/);
+  assert.match(service, /status: upcomingShows > 0 \? "UPCOMING" : reportingShowtimes\.length > 0 \? "PAST" : "UNSCHEDULED"/);
   assert.match(service, /ticketFaceValueCents/);
   assert.match(service, /allocateDistributorShare\(showtimeRevenueCents, showtime\.startsAt, openingStartsAt, movie\.distributorTerms\)/);
   assert.match(service, /unallocatedRevenueCents/);
+  assert.match(service, /const reportingShowtimes = range \? movie\.showtimes\.filter/);
+  assert.match(service, /const openingStartsAt = movie\.showtimes\.reduce/);
+  assert.match(service, /Both distributor performance range dates are required/);
 });
 
 test("Master distributor workspace shows portfolios, performance, and terms readiness", () => {
@@ -31,6 +35,9 @@ test("Master distributor workspace shows portfolios, performance, and terms read
   assert.match(page, /Needs terms/);
   assert.match(page, /deal\.terms \? "Saved" : "Missing"/);
   assert.match(page, /href=\{`\/films\/\$\{deal\.catalogEntryId\}`\}/);
+  assert.match(page, /type RangeKey = "30" \| "90" \| "all"/);
+  assert.match(page, /Distributor performance range/);
+  assert.match(page, /`\/platform\/distributors\$\{rangeQuery\(range\)\}`/);
 });
 
 test("Master exports engagement-level distributor settlements", () => {
@@ -39,5 +46,5 @@ test("Master exports engagement-level distributor settlements", () => {
   assert.match(service, /"Distributor share \(cents\)"/);
   assert.match(service, /"Unallocated \(cents\)"/);
   assert.match(page, /Export settlements/);
-  assert.match(page, /platformDownload\(API_BASE_URL, STORAGE_KEY, "\/platform\/distributors\.csv"/);
+  assert.match(page, /platformDownload\(API_BASE_URL, STORAGE_KEY, `\/platform\/distributors\.csv\$\{rangeQuery\(range\)\}`/);
 });
