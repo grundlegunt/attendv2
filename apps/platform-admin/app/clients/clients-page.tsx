@@ -1729,7 +1729,7 @@ export default function AttendMaster() {
                     </label>
                   </div>
                   <p className="form-note">
-                    Service fees are controlled by Attend and apply to every
+                    Service fees are controlled by Ringo and apply to every
                     ticket group for this client. Keep both amounts equal when
                     the cinema does not distinguish guests from registered customers.
                   </p>
@@ -1744,7 +1744,7 @@ export default function AttendMaster() {
                     <p className="eyebrow">FINANCIALS</p>
                     <h3>Client revenue</h3>
                     <p className="muted">
-                      Ticket face value, Attend fees, tax, food and beverage,
+                      Ticket face value, Ringo fees, tax, food and beverage,
                       and refunds across this client&apos;s cinemas.
                     </p>
                   </div>
@@ -1788,7 +1788,7 @@ export default function AttendMaster() {
                         </strong>
                       </article>
                       <article>
-                        <span>Attend fee revenue</span>
+                        <span>Ringo fee revenue</span>
                         <strong>{money(revenue.totals.ticketFeesCents)}</strong>
                       </article>
                       <article>
@@ -2371,7 +2371,7 @@ export default function AttendMaster() {
                           </button>
                         </div>
                         <p className="form-note">
-                          Attend models the layout supplied by the operator. It
+                          Ringo models the layout supplied by the operator. It
                           does not certify ADA, fire, egress, or building-code
                           compliance.
                         </p>

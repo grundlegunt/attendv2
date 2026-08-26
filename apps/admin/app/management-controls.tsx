@@ -1191,7 +1191,7 @@ export function ManagementControls({
               <p className="kicker">TICKET PRICES</p>
               <h2>Admission pricing</h2>
               <p className="muted">
-                Set the admission amount for each ticket group. Attend's
+                Set the admission amount for each ticket group. Ringo’s
                 per-ticket fee is controlled separately by Master. At least one
                 group must remain active.
               </p>

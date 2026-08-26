@@ -25,7 +25,7 @@ export default function PlatformTeam() {
   const authRequestRef = useRef(0);
 
   useEffect(() => { setSession(readPlatformSession(STORAGE_KEY)); setRestored(true); }, []);
-  const loadTeam = useCallback(async (current: Session) => { const requestId = ++teamRequestRef.current; try { const result = await request<{ users: TeamUser[] }>("/platform/team", undefined, current.accessToken); if (requestId === teamRequestRef.current) setUsers(result.users); } catch (reason) { if (requestId === teamRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load the Attend team."); } }, []);
+  const loadTeam = useCallback(async (current: Session) => { const requestId = ++teamRequestRef.current; try { const result = await request<{ users: TeamUser[] }>("/platform/team", undefined, current.accessToken); if (requestId === teamRequestRef.current) setUsers(result.users); } catch (reason) { if (requestId === teamRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load the Ringo team."); } }, []);
   useEffect(() => { if (!session) return; void loadTeam(session); return () => { teamRequestRef.current += 1; }; }, [session, loadTeam]);
 
   async function login(event: FormEvent) { event.preventDefault(); const requestId = ++authRequestRef.current; setError(null); try { const result = await request<Session>("/platform/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); if (requestId !== authRequestRef.current) return; window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result)); setSession(result); setPassword(""); } catch (reason) { if (requestId === authRequestRef.current) setError(reason instanceof Error ? reason.message : "Sign in failed."); } }

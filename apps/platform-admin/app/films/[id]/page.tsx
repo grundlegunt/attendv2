@@ -188,7 +188,7 @@ export default function FilmPerformancePage() {
           <p className="eyebrow">FILM INTELLIGENCE</p>
           <h1>{performance?.film.title ?? "Film performance"}</h1>
           <p className="muted">
-            Cross-operator theatrical performance from the shared Attend
+            Cross-operator theatrical performance from the shared Ringo
             catalog.
           </p>
         </div>
