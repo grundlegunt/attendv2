@@ -45,9 +45,11 @@ test("customer profiles reuse authenticated history, pagination, and export endp
   assert.match(profile, /diningOffset/);
   assert.match(profile, /donationOffset/);
   assert.match(profile, /apiDownload\(`\/management\/customers\/\$\{id\}\/history\.csv`/);
-  for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Giving", "Giving history", "Repeat donor", "One-time donor", "Ticket order history", "Food &amp; drink history", "Donation history"]) assert.ok(profile.includes(label));
+  for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Giving", "Giving history", "Repeat donor", "One-time donor", "Enrollment &amp; renewal history", "Ticket order history", "Food &amp; drink history", "Donation history"]) assert.ok(profile.includes(label));
   assert.match(profile, /Expires \$\{date\(customer\.membership\.expiresAt\)\}/);
   assert.match(profile, /No expiration/);
+  assert.match(profile, /customer\.membership\?\.checkouts\.map/);
+  assert.match(profile, /membershipSpendCents/);
 });
 
 test("registered donors use the existing customer profile and retain location-scoped giving history", () => {
