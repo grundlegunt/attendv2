@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 import { inclusiveReportRange } from "../report-range";
@@ -100,7 +101,7 @@ export default function DonationsPage() {
     <section className="donation-metrics"><article className="panel"><span>Raised</span><strong>{money(data.summary.amountCents)}</strong></article><article className="panel"><span>Contributions</span><strong>{data.summary.count}</strong></article><article className="panel"><span>Tax deductible</span><strong>{money(data.summary.taxDeductibleAmountCents)}</strong></article></section>
     <section className="donation-workspace">
       <div className="panel"><div className="dashboard-section-heading"><div><p className="kicker">CAMPAIGNS</p><h2>Fundraising programs</h2></div></div>
-        <div className="donation-campaign-list">{data.campaigns.map((campaign) => <article key={campaign.id}><div><strong>{campaign.name}</strong><span>{campaign.active ? "Active" : "Inactive"} · {campaign._count.donations} contributions</span></div><div><strong>{money(campaign.raisedAmountCents)}</strong><span>{campaign.goalAmountCents ? `of ${money(campaign.goalAmountCents)}` : "No goal"}</span></div></article>)}</div>
+        <div className="donation-campaign-list">{data.campaigns.map((campaign) => <Link href={`/donations/${campaign.id}`} key={campaign.id}><div><strong>{campaign.name}</strong><span>{campaign.active ? "Active" : "Inactive"} · {campaign._count.donations} contributions</span></div><div><strong>{money(campaign.raisedAmountCents)}</strong><span>{campaign.goalAmountCents ? `of ${money(campaign.goalAmountCents)}` : "No goal"}</span></div></Link>)}</div>
         {!data.campaigns.length && <p className="dashboard-empty">No donation campaigns yet.</p>}
         {canManage && <form className="donation-form" onSubmit={createCampaign}><h3>Create campaign</h3><label>Name<input required maxLength={120} value={campaignName} onChange={(event) => setCampaignName(event.target.value)} /></label><label>Goal (optional)<input inputMode="decimal" pattern="\d+(\.\d{1,2})?" value={goal} onChange={(event) => setGoal(event.target.value)} placeholder="25000.00" /></label><button disabled={busy}>Create campaign</button></form>}
       </div>
