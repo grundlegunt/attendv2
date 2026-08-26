@@ -84,6 +84,12 @@ interface RevenueTotals {
   ticketCollectedCents: number;
   fnbRevenueCents: number;
   combinedRevenueCents: number;
+  membershipRevenueCents: number;
+  membershipPurchases: number;
+  donationRevenueCents: number;
+  donations: number;
+  nonprofitRevenueCents: number;
+  totalCollectedCents: number;
   refundedCents: number;
   ticketsSold: number;
   fnbOrders: number;
@@ -1806,10 +1812,24 @@ export default function AttendMaster() {
                         <strong>{money(revenue.totals.fnbRevenueCents)}</strong>
                       </article>
                       <article>
-                        <span>Combined net</span>
+                        <span>Cinema net</span>
                         <strong>
                           {money(revenue.totals.combinedRevenueCents)}
                         </strong>
+                      </article>
+                      <article>
+                        <span>Memberships</span>
+                        <strong>{money(revenue.totals.membershipRevenueCents)}</strong>
+                        <small>{revenue.totals.membershipPurchases.toLocaleString()} purchases</small>
+                      </article>
+                      <article>
+                        <span>Donations</span>
+                        <strong>{money(revenue.totals.donationRevenueCents)}</strong>
+                        <small>{revenue.totals.donations.toLocaleString()} contributions</small>
+                      </article>
+                      <article>
+                        <span>All collected</span>
+                        <strong>{money(revenue.totals.totalCollectedCents)}</strong>
                       </article>
                       <article>
                         <span>Refunds</span>
