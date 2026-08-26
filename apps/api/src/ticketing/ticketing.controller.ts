@@ -7,9 +7,11 @@ import {
   Post,
   RawBodyRequest,
   Req,
+  Res,
+  StreamableFile,
   UseGuards,
 } from "@nestjs/common";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { createTicketCheckoutRequestSchema, finalizeTicketOrderRequestSchema, redeemMobileTicketAccessRequestSchema, resendGuestTicketReceiptRequestSchema, resendGuestTicketSmsRequestSchema, resumeTicketCheckoutRequestSchema, scanTicketRequestSchema } from "@cinema/shared";
 import { Permission } from "@cinema/auth";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
@@ -105,6 +107,27 @@ export class TicketingController {
   ) {
     const parsed = redeemMobileTicketAccessRequestSchema.parse(body);
     return this.ticketingService.redeemMobileTicketAccess(orderId, parsed.token);
+  }
+
+  @Post("mobile-orders/:orderId/tickets/:ticketId/wallet/:platform")
+  @UseGuards(RequestRateLimitGuard)
+  @RateLimit({ scope: "checkout" })
+  async mobileTicketWalletPass(
+    @Param("orderId") orderId: string,
+    @Param("ticketId") ticketId: string,
+    @Param("platform") platformValue: string,
+    @Body(new ZodValidationPipe(redeemMobileTicketAccessRequestSchema)) body: unknown,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    if (platformValue !== "apple" && platformValue !== "google") throw AppError.notFound("Wallet platform not found.");
+    const artifact = await this.ticketingService.redeemMobileTicketWalletPass(orderId, ticketId, redeemMobileTicketAccessRequestSchema.parse(body).token, platformValue);
+    response.setHeader("Cache-Control", "private, no-store");
+    if (artifact.kind === "file") {
+      response.setHeader("Content-Type", artifact.contentType);
+      response.setHeader("Content-Disposition", `attachment; filename="${artifact.fileName}"`);
+      return new StreamableFile(Buffer.from(artifact.data));
+    }
+    return artifact;
   }
 
   @Post("scans")

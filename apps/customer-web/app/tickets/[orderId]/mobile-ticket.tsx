@@ -14,6 +14,9 @@ function money(cents: number, currency: string) {
 
 export function MobileTicket({ orderId }: { orderId: string }) {
   const [tickets, setTickets] = useState<MobileTicketAccessResponse | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [walletPending, setWalletPending] = useState<string | null>(null);
+  const [walletMessage, setWalletMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,6 +33,7 @@ export function MobileTicket({ orderId }: { orderId: string }) {
       setError("This mobile-ticket link is incomplete. Open the full link from your ticket message.");
       return;
     }
+    setAccessToken(token);
 
     const controller = new AbortController();
     apiFetch<MobileTicketAccessResponse>(`/ticketing/mobile-orders/${encodeURIComponent(orderId)}/access`, {
@@ -50,6 +54,27 @@ export function MobileTicket({ orderId }: { orderId: string }) {
     return () => controller.abort();
   }, [orderId]);
 
+  async function addToWallet(ticketId: string, platform: "apple" | "google") {
+    if (!accessToken || walletPending) return;
+    setWalletPending(`${ticketId}:${platform}`); setWalletMessage(null);
+    try {
+      const response = await fetch(`/api/v1/ticketing/mobile-orders/${encodeURIComponent(orderId)}/tickets/${encodeURIComponent(ticketId)}/wallet/${platform}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: accessToken }),
+      });
+      if (!response.ok) throw new Error("Wallet pass could not be created.");
+      if (platform === "google") {
+        const artifact = await response.json() as { kind: "url"; url: string };
+        window.location.assign(artifact.url);
+      } else {
+        const blob = await response.blob(); const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
+        anchor.href = url; anchor.download = `ticket-${ticketId}.pkpass`; anchor.click(); URL.revokeObjectURL(url);
+      }
+    } catch (reason) { setWalletMessage(reason instanceof Error ? reason.message : "Wallet pass could not be created."); }
+    finally { setWalletPending(null); }
+  }
+
   if (error) {
     return <div className="error-banner" role="alert">{error}</div>;
   }
@@ -62,6 +87,7 @@ export function MobileTicket({ orderId }: { orderId: string }) {
       <span className="eyebrow">MOBILE TICKETS</span>
       <h1 id="mobile-ticket-heading">Your tickets</h1>
       <p>Confirmation <strong>{tickets.orderNumber}</strong></p>
+      {walletMessage && <p className="error-banner" role="alert">{walletMessage}</p>}
       <div className="mobile-ticket-wallet__cards">
         {tickets.tickets.map((ticket) => (
           <article className="confirmation-card digital-ticket" key={ticket.id}>
@@ -81,6 +107,10 @@ export function MobileTicket({ orderId }: { orderId: string }) {
             <div className="ticket-qr" aria-label={`Admission QR code for ${ticket.seat}`}>
               <QRCodeSVG value={ticket.issuanceToken} size={220} level="M" marginSize={2} />
             </div>
+            {(tickets.walletAvailability.apple || tickets.walletAvailability.google) && <div className="mobile-ticket-wallet__actions">
+              {tickets.walletAvailability.apple && <button type="button" disabled={walletPending !== null} onClick={() => void addToWallet(ticket.id, "apple")}>{walletPending === `${ticket.id}:apple` ? "Preparing…" : "Add to Apple Wallet"}</button>}
+              {tickets.walletAvailability.google && <button type="button" disabled={walletPending !== null} onClick={() => void addToWallet(ticket.id, "google")}>{walletPending === `${ticket.id}:google` ? "Opening…" : "Add to Google Wallet"}</button>}
+            </div>}
           </article>
         ))}
       </div>
