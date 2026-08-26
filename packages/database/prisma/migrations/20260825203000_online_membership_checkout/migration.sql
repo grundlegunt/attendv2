@@ -3,12 +3,12 @@ ALTER TYPE "PaymentPurpose" ADD VALUE 'MEMBERSHIP';
 CREATE TYPE "MembershipCheckoutStatus" AS ENUM ('PENDING', 'PAID', 'FAILED');
 
 CREATE TABLE "membership_checkouts" (
-  "id" UUID NOT NULL,
-  "organizationId" UUID NOT NULL,
-  "locationId" UUID NOT NULL,
-  "planId" UUID NOT NULL,
-  "paymentId" UUID NOT NULL,
-  "membershipId" UUID,
+  "id" TEXT NOT NULL,
+  "organizationId" TEXT NOT NULL,
+  "locationId" TEXT NOT NULL,
+  "planId" TEXT NOT NULL,
+  "paymentId" TEXT NOT NULL,
+  "membershipId" TEXT,
   "memberName" TEXT NOT NULL,
   "memberEmail" TEXT NOT NULL,
   "planName" TEXT NOT NULL,
