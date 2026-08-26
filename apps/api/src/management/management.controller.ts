@@ -254,6 +254,9 @@ export class ManagementController {
   @Get("memberships") @RequirePermissions(Permission.TicketPriceEdit)
   memberships(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipDirectorySchema)) query: unknown) { return this.management.memberships(this.location(actor), membershipDirectorySchema.parse(query)); }
 
+  @Get("memberships/summary") @RequirePermissions(Permission.TicketPriceEdit)
+  membershipSummary(@CurrentActor() actor: RequestActor) { return this.management.membershipSummary(this.location(actor)); }
+
   @Get("membership-plans") @RequirePermissions(Permission.TicketPriceEdit)
   membershipPlans(@CurrentActor() actor: RequestActor) { return this.management.membershipPlans(this.location(actor)); }
 

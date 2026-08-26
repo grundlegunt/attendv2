@@ -166,6 +166,23 @@ export class ManagementService {
     });
   }
 
+  async membershipSummary(locationId: string, now = new Date()) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true, currency: true } });
+    const expiresBefore = new Date(now);
+    expiresBefore.setUTCDate(expiresBefore.getUTCDate() + 30);
+    const recentSince = new Date(now);
+    recentSince.setUTCDate(recentSince.getUTCDate() - 30);
+    const organizationId = location.organizationId;
+    const [active, expiringSoon, lapsed, recentEnrollments, collected] = await Promise.all([
+      prisma.membership.count({ where: { organizationId, status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } }),
+      prisma.membership.count({ where: { organizationId, status: "ACTIVE", expiresAt: { gt: now, lte: expiresBefore } } }),
+      prisma.membership.count({ where: { organizationId, OR: [{ status: "EXPIRED" }, { status: "ACTIVE", expiresAt: { lte: now } }] } }),
+      prisma.membership.count({ where: { organizationId, createdAt: { gte: recentSince } } }),
+      prisma.membershipCheckout.aggregate({ where: { organizationId, status: "PAID" }, _sum: { amountCents: true }, _count: { _all: true } }),
+    ]);
+    return { active, expiringSoon, lapsed, recentEnrollments, collectedAmountCents: collected._sum.amountCents ?? 0, paidEnrollments: collected._count._all, currency: location.currency };
+  }
+
   async membershipPlans(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     return prisma.membershipPlan.findMany({ where: { organizationId: location.organizationId }, include: { _count: { select: { memberships: true } } }, orderBy: [{ active: "desc" }, { name: "asc" }] });

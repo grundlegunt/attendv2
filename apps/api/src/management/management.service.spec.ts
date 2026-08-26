@@ -22,6 +22,20 @@ describe("membership directory", () => {
       location.mockRestore(); memberships.mockRestore();
     }
   });
+
+  it("summarizes lifecycle and paid online enrollment data for the active organization", async () => {
+    const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1", currency: "USD" } as never);
+    const count = jest.spyOn(prisma.membership, "count").mockResolvedValueOnce(12).mockResolvedValueOnce(3).mockResolvedValueOnce(2).mockResolvedValueOnce(4);
+    const aggregate = jest.spyOn(prisma.membershipCheckout, "aggregate").mockResolvedValue({ _sum: { amountCents: 15000 }, _count: { _all: 3 } } as never);
+    try {
+      const now = new Date("2026-08-25T12:00:00.000Z");
+      await expect(new ManagementService().membershipSummary("location-1", now)).resolves.toEqual({ active: 12, expiringSoon: 3, lapsed: 2, recentEnrollments: 4, collectedAmountCents: 15000, paidEnrollments: 3, currency: "USD" });
+      expect(count).toHaveBeenCalledTimes(4);
+      expect(aggregate).toHaveBeenCalledWith({ where: { organizationId: "organization-1", status: "PAID" }, _sum: { amountCents: true }, _count: { _all: true } });
+    } finally {
+      location.mockRestore(); count.mockRestore(); aggregate.mockRestore();
+    }
+  });
 });
 
 describe("membership plans", () => {
