@@ -12,6 +12,7 @@ export function MovieSpecials({ specials, showtimes = false }: { specials: Publi
     return <section className="movie-specials movie-specials--showtimes">
     <span className="eyebrow">ONLY AT THIS SHOW</span>
     <h2>Dining Specials</h2>
+    <Link className="showtime-specials-menu-link" href="/dining-bar">See full menu</Link>
     <div className="showtime-specials-grid">{publishedSpecials.map((special) => {
       return <Link href={`/movie/${special.movieId}`} className="showtime-special-card" key={special.movieId}>
         <img className="showtime-special-card__artwork" src={special.artworkUrl!} alt="" />
