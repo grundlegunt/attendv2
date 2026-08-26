@@ -404,8 +404,15 @@ export class PlatformService {
     };
   }
 
-  async distributorPortfolio() {
+  async distributorPortfolio(input: { from?: string; to?: string } = {}) {
     const now = new Date();
+    const from = input.from ? new Date(input.from) : undefined;
+    const to = input.to ? new Date(input.to) : undefined;
+    if ((from && Number.isNaN(from.getTime())) || (to && Number.isNaN(to.getTime())) || (from && to && from >= to) || (from && to && to.getTime() - from.getTime() > 366 * 86_400_000)) {
+      throw AppError.validationFailed("A valid distributor performance date range of 366 days or less is required.");
+    }
+    if (Boolean(from) !== Boolean(to)) throw AppError.validationFailed("Both distributor performance range dates are required.");
+    const range = from && to ? { from, to } : null;
     const movies = await prisma.movie.findMany({
       where: { distributorName: { not: null } },
       orderBy: [{ distributorName: "asc" }, { title: "asc" }],
@@ -446,18 +453,20 @@ export class PlatformService {
     for (const movie of movies) {
       const name = movie.distributorName?.trim();
       if (!name) continue;
+      const reportingShowtimes = range ? movie.showtimes.filter((showtime) => showtime.startsAt >= range.from && showtime.startsAt < range.to) : movie.showtimes;
+      if (range && reportingShowtimes.length === 0) continue;
       const key = name.toLocaleLowerCase();
       let distributor = grouped.get(key);
       if (!distributor) {
         distributor = { name, operators: new Set(), locations: new Set(), films: new Set(), shows: 0, upcomingShows: 0, ticketsSold: 0, ticketFaceValueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0, deals: [] };
         grouped.set(key, distributor);
       }
-      const locations = [...new Map(movie.showtimes.map((showtime) => [showtime.auditorium.location.id, showtime.auditorium.location.name])).values()];
-      const upcomingShows = movie.showtimes.filter((showtime) => showtime.startsAt >= now).length;
-      const tickets = movie.showtimes.flatMap((showtime) => showtime.showtimeSeats.flatMap((seat) => seat.tickets));
+      const locations = [...new Map(reportingShowtimes.map((showtime) => [showtime.auditorium.location.id, showtime.auditorium.location.name])).values()];
+      const upcomingShows = reportingShowtimes.filter((showtime) => showtime.startsAt >= now).length;
+      const tickets = reportingShowtimes.flatMap((showtime) => showtime.showtimeSeats.flatMap((seat) => seat.tickets));
       const ticketFaceValueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       const openingStartsAt = movie.showtimes.reduce<Date | null>((opening, showtime) => !opening || showtime.startsAt < opening ? showtime.startsAt : opening, null);
-      const allocation = movie.showtimes.reduce((totals, showtime) => {
+      const allocation = reportingShowtimes.reduce((totals, showtime) => {
         const showtimeRevenueCents = showtime.showtimeSeats.flatMap((seat) => seat.tickets).reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
         const result = this.reporting.allocateDistributorShare(showtimeRevenueCents, showtime.startsAt, openingStartsAt, movie.distributorTerms);
         totals.distributorRevenueCents += result.distributorRevenueCents;
@@ -466,9 +475,9 @@ export class PlatformService {
         return totals;
       }, { distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 });
       distributor.operators.add(movie.organization.id);
-      for (const showtime of movie.showtimes) distributor.locations.add(showtime.auditorium.location.id);
+      for (const showtime of reportingShowtimes) distributor.locations.add(showtime.auditorium.location.id);
       distributor.films.add(movie.catalogEntryId ?? movie.id);
-      distributor.shows += movie.showtimes.length;
+      distributor.shows += reportingShowtimes.length;
       distributor.upcomingShows += upcomingShows;
       distributor.ticketsSold += tickets.length;
       distributor.ticketFaceValueCents += ticketFaceValueCents;
@@ -481,8 +490,8 @@ export class PlatformService {
         title: movie.title,
         organization: movie.organization,
         locations,
-        status: upcomingShows > 0 ? "UPCOMING" : movie.showtimes.length > 0 ? "PAST" : "UNSCHEDULED",
-        showtimes: movie.showtimes.length,
+        status: upcomingShows > 0 ? "UPCOMING" : reportingShowtimes.length > 0 ? "PAST" : "UNSCHEDULED",
+        showtimes: reportingShowtimes.length,
         ticketsSold: tickets.length,
         ticketFaceValueCents,
         ...allocation,
@@ -491,6 +500,7 @@ export class PlatformService {
     }
     return {
       generatedAt: now.toISOString(),
+      range: range ? { from: range.from.toISOString(), to: range.to.toISOString() } : null,
       distributors: [...grouped.values()].map((distributor) => ({
         name: distributor.name,
         operators: distributor.operators.size,
