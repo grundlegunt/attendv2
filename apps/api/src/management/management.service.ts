@@ -145,7 +145,7 @@ export class ManagementService {
     return { query: normalized, orders, customers, tickets, giftCards };
   }
 
-  async memberships(locationId: string, filters: { query?: string; status?: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; lifecycle?: "EXPIRING" | "LAPSED" }, now = new Date()) {
+  async memberships(locationId: string, filters: { query?: string; status?: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; lifecycle?: "EXPIRING" | "LAPSED"; planId?: string }, now = new Date()) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
     const query = filters.query?.trim();
     const expiresBefore = new Date(now);
@@ -158,6 +158,7 @@ export class ManagementService {
     return prisma.membership.findMany({
       where: {
         organizationId: location.organizationId,
+        ...(filters.planId ? { planId: filters.planId } : {}),
         ...(filters.status ? { status: filters.status } : {}),
         ...lifecycle,
         ...(query ? { OR: [

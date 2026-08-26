@@ -120,6 +120,8 @@ describe("admin navigation", () => {
     assert.match(membershipsSource, /All statuses/);
     assert.match(membershipsSource, /lifecycle/);
     assert.match(membershipsSource, /View memberships ending within 30 days/);
+    assert.match(membershipsSource, /All plans/);
+    assert.match(membershipsSource, /params\.set\("planId", planId\)/);
   });
 
   it("keeps the external merchandise shop editor discoverable under Extras", () => {
