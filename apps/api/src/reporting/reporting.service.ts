@@ -22,17 +22,17 @@ export class ReportingService {
   }
 
   async platformRevenueTotals(locationIds: string[], range: ReportRange) {
-    const totalsByLocation = new Map<string, { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }>();
+    const totalsByLocation = new Map<string, { ticketRevenueCents: number; ticketFeesCents: number; ticketTaxCents: number; ticketCollectedCents: number; fnbRevenueCents: number; combinedRevenueCents: number; membershipRevenueCents: number; membershipPurchases: number; donationRevenueCents: number; donations: number; nonprofitRevenueCents: number; totalCollectedCents: number; refundedCents: number; ticketsSold: number; fnbOrders: number }>();
     const totalsFor = (locationId: string) => {
       let totals = totalsByLocation.get(locationId);
       if (!totals) {
-        totals = { ticketRevenueCents: 0, ticketFeesCents: 0, ticketTaxCents: 0, ticketCollectedCents: 0, fnbRevenueCents: 0, combinedRevenueCents: 0, refundedCents: 0, ticketsSold: 0, fnbOrders: 0 };
+        totals = { ticketRevenueCents: 0, ticketFeesCents: 0, ticketTaxCents: 0, ticketCollectedCents: 0, fnbRevenueCents: 0, combinedRevenueCents: 0, membershipRevenueCents: 0, membershipPurchases: 0, donationRevenueCents: 0, donations: 0, nonprofitRevenueCents: 0, totalCollectedCents: 0, refundedCents: 0, ticketsSold: 0, fnbOrders: 0 };
         totalsByLocation.set(locationId, totals);
       }
       return totals;
     };
     if (locationIds.length === 0) return totalsByLocation;
-    const [ticketOrders, tabs] = await Promise.all([
+    const [ticketOrders, tabs, membershipCheckouts, donations] = await Promise.all([
       prisma.ticketOrder.findMany({
         where: { locationId: { in: locationIds }, createdAt: { gte: range.from, lt: range.to }, status: { in: ["PAID", "EXCHANGED", "REFUNDED"] } },
         select: { locationId: true, status: true, totalCents: true, feesCents: true, taxCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, tickets: { select: { priceCentsPaid: true } } },
@@ -40,6 +40,14 @@ export class ReportingService {
       prisma.restaurantTab.findMany({
         where: { locationId: { in: locationIds }, closedAt: { gte: range.from, lt: range.to }, status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } },
         select: { locationId: true, totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } },
+      }),
+      prisma.membershipCheckout.findMany({
+        where: { locationId: { in: locationIds }, createdAt: { gte: range.from, lt: range.to }, status: "PAID" },
+        select: { locationId: true, amountCents: true },
+      }),
+      prisma.donation.findMany({
+        where: { locationId: { in: locationIds }, receivedAt: { gte: range.from, lt: range.to }, status: "SETTLED" },
+        select: { locationId: true, amountCents: true },
       }),
     ]);
     for (const order of ticketOrders) {
@@ -70,7 +78,21 @@ export class ReportingService {
         totals.fnbOrders += 1;
       }
     }
-    for (const totals of totalsByLocation.values()) totals.combinedRevenueCents = totals.ticketCollectedCents + totals.fnbRevenueCents;
+    for (const checkout of membershipCheckouts) {
+      const totals = totalsFor(checkout.locationId);
+      totals.membershipRevenueCents += checkout.amountCents;
+      totals.membershipPurchases += 1;
+    }
+    for (const donation of donations) {
+      const totals = totalsFor(donation.locationId);
+      totals.donationRevenueCents += donation.amountCents;
+      totals.donations += 1;
+    }
+    for (const totals of totalsByLocation.values()) {
+      totals.combinedRevenueCents = totals.ticketCollectedCents + totals.fnbRevenueCents;
+      totals.nonprofitRevenueCents = totals.membershipRevenueCents + totals.donationRevenueCents;
+      totals.totalCollectedCents = totals.combinedRevenueCents + totals.nonprofitRevenueCents;
+    }
     return totalsByLocation;
   }
 
