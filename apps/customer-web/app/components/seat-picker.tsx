@@ -4,6 +4,7 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { TicketCheckout } from "./ticket-checkout";
+import { trackOptionalAnalyticsEvent } from "../lib/optional-analytics";
 
 type AvailabilitySeat = Omit<SeatMapSeat, "state"> & {
   id: string;
@@ -89,6 +90,7 @@ export function SeatPicker({
     try {
       await apiFetch(`/cinema/showtimes/${showtimeId}/waitlist`, { method: "POST", headers: { "Idempotency-Key": waitlistAttemptRef.current.requestId }, body: JSON.stringify({ email }) });
       waitlistAttemptRef.current = null;
+      trackOptionalAnalyticsEvent("Waitlist Joined");
       setWaitlistMessage("You're on the waitlist. We'll email you if tickets return before showtime.");
     } catch (reason) {
       if (reason instanceof ApiRequestError && reason.status < 500) waitlistAttemptRef.current = null;

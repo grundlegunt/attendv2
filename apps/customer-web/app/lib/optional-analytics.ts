@@ -9,6 +9,7 @@ export const OPTIONAL_ANALYTICS_EVENTS = [
   "Donation Checkout Started",
   "Donation Completed",
   "Private Event Inquiry Submitted",
+  "Waitlist Joined",
 ] as const;
 
 export type OptionalAnalyticsEvent = (typeof OPTIONAL_ANALYTICS_EVENTS)[number];
