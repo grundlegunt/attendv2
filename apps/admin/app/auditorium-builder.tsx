@@ -48,6 +48,7 @@ interface AuditoriumSummary {
       }
     >;
   } | null;
+  layoutPropagation?: { updatedShowtimes: number; skippedShowtimes: number };
 }
 
 const defaultLevel = {
@@ -637,6 +638,7 @@ export function AuditoriumBuilder({
             seatMapName: `${name} layout`,
             seats: finalSeats,
             layout: finalLayout,
+            applyToFutureShowtimes: true,
           },
     );
     if (!editingId && createAuditoriumAttemptRef.current?.fingerprint !== body) {
@@ -680,7 +682,7 @@ export function AuditoriumBuilder({
       if (editingId) setEditingVersion(saved.seatMap?.version ?? null);
       await onSaved(
         editingId
-          ? `${name} layout version saved. Existing showtimes keep their original seats.`
+          ? `${name} layout version saved.${saved.layoutPropagation?.updatedShowtimes ? ` Updated ${saved.layoutPropagation.updatedShowtimes} existing future showtime${saved.layoutPropagation.updatedShowtimes === 1 ? "" : "s"}.` : ""}${saved.layoutPropagation?.skippedShowtimes ? ` ${saved.layoutPropagation.skippedShowtimes} future showtime${saved.layoutPropagation.skippedShowtimes === 1 ? " was" : "s were"} kept on the prior layout because its seat labels differ.` : ""}`
           : `${name} created.`,
       );
     } catch (reason) {

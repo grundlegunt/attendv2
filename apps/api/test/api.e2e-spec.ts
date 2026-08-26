@@ -1810,7 +1810,7 @@ describe("Milestone 1 cinema configuration", () => {
     await prisma.showtime.delete({ where: { id: first.body.id } });
   });
 
-  it("versions an advanced layout without changing seats on an existing showtime", async () => {
+  it("versions an advanced layout and applies matching seats to existing future showtimes", async () => {
     const { prisma } = await import("@cinema/database");
     const before = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
     const requestId = crypto.randomUUID();
@@ -1840,7 +1840,12 @@ describe("Milestone 1 cinema configuration", () => {
     expect(res.body.seatMap.version).toBe(2);
     expect(res.body.seatMap.seats.every((seat: { layoutVersion: number }) => seat.layoutVersion === 2)).toBe(true);
     const after = await prisma.showtimeSeat.findMany({ where: { showtimeId: firstShowtimeId }, orderBy: { seatId: "asc" } });
-    expect(after.map((seat) => seat.seatId)).toEqual(before.map((seat) => seat.seatId));
+    expect(after.map((seat) => seat.id).sort()).toEqual(before.map((seat) => seat.id).sort());
+    expect(after.map((seat) => seat.seatId).sort()).toEqual(
+      res.body.seatMap.seats.map((seat: { id: string }) => seat.id).sort(),
+    );
+    expect(after.map((seat) => seat.seatId).sort()).not.toEqual(before.map((seat) => seat.seatId).sort());
+    expect(res.body.layoutPropagation).toEqual({ updatedShowtimes: 1, skippedShowtimes: 0 });
     expect(await prisma.seat.count({ where: { seatMap: { auditoriumId }, layoutVersion: 1, active: false } })).toBe(2);
     expect(await prisma.auditEvent.count({
       where: { action: "auditorium.layout_version_created", entityId: auditoriumId },

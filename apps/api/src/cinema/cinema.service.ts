@@ -88,6 +88,15 @@ function resolvedSeatingStyle(
     : "SINGLE" as const;
 }
 
+export function hasSameSeatLabels(
+  existing: Array<{ label: string }>,
+  replacement: Array<{ label: string }>,
+) {
+  if (existing.length !== replacement.length) return false;
+  const replacementLabels = new Set(replacement.map((seat) => seat.label.toUpperCase()));
+  return replacementLabels.size === replacement.length && existing.every((seat) => replacementLabels.has(seat.label.toUpperCase()));
+}
+
 function addIsoDays(value: string, days: number) {
   const date = new Date(`${value}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -2075,6 +2084,35 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
             },
           },
         });
+        const futureShowtimes = input.applyToFutureShowtimes
+          ? await tx.showtime.findMany({
+              where: { auditoriumId: id, startsAt: { gte: new Date() } },
+              select: { id: true, showtimeSeats: { select: { seatId: true, seat: { select: { label: true } } } } },
+            })
+          : [];
+        const replacementSeats = updated.seatMap?.seats ?? [];
+        const eligibleShowtimes = futureShowtimes.filter((showtime) => hasSameSeatLabels(showtime.showtimeSeats.map((inventory) => inventory.seat), replacementSeats));
+        const replacementByLabel = new Map(replacementSeats.map((seat) => [seat.label.toUpperCase(), seat.id]));
+        const seatReplacements = new Map<string, string>();
+        for (const showtime of eligibleShowtimes) {
+          for (const inventory of showtime.showtimeSeats) {
+            const replacementId = replacementByLabel.get(inventory.seat.label.toUpperCase());
+            if (replacementId && replacementId !== inventory.seatId) seatReplacements.set(inventory.seatId, replacementId);
+          }
+        }
+        if (eligibleShowtimes.length && seatReplacements.size) {
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "showtime_seats" AS inventory
+            SET "seatId" = replacements."newSeatId", "updatedAt" = NOW()
+            FROM (VALUES ${Prisma.join([...seatReplacements].map(([oldSeatId, newSeatId]) => Prisma.sql`(${oldSeatId}::text, ${newSeatId}::text)`))}) AS replacements("oldSeatId", "newSeatId")
+            WHERE inventory."seatId" = replacements."oldSeatId"
+              AND inventory."showtimeId" IN (${Prisma.join(eligibleShowtimes.map((showtime) => showtime.id))})
+          `);
+        }
+        const layoutPropagation = {
+          updatedShowtimes: eligibleShowtimes.length,
+          skippedShowtimes: futureShowtimes.length - eligibleShowtimes.length,
+        };
         await tx.auditEvent.create({
           data: {
             actorType: AuditActorType.EMPLOYEE,
@@ -2092,12 +2130,13 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
               capacity: reservedSeats.length,
               mode: input.layout!.mode,
               seatingMode: "RESERVED",
+              layoutPropagation,
               requestId,
               requestFingerprint,
             },
           },
         });
-        return updated;
+        return { ...updated, layoutPropagation };
       });
     } catch (error) {
       if (
