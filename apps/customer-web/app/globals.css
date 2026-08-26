@@ -603,8 +603,27 @@ html[data-branding-status="loading"] body {
   text-align: center;
 }
 .movie-specials--showtimes h2 {
-  margin: 10px 0 32px;
+  margin: 10px 0 20px;
   font: clamp(2.5rem, 5vw, 4.8rem)/1 var(--font-family-display);
+}
+.showtime-specials-menu-link {
+  display: inline-flex;
+  justify-content: center;
+  margin: 0 0 32px;
+  padding: 12px 22px;
+  border: 1px solid var(--color-text-primary);
+  color: var(--color-text-primary);
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .12em;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+.showtime-specials-menu-link:hover,
+.showtime-specials-menu-link:focus-visible {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  outline: 0;
 }
 .showtime-specials-grid {
   display: grid;
