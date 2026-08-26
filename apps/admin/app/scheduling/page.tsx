@@ -121,6 +121,13 @@ interface ShowtimeSeatInventory {
   >;
   counts: { available: number; held: number; sold: number; blocked: number };
 }
+interface ShowtimeFinancialSnapshot {
+  ticketRevenueCents: number;
+  fnbRevenueCents: number;
+  distributorRevenueCents: number;
+  cinemaRevenueCents: number;
+  unallocatedRevenueCents: number;
+}
 interface Bootstrap {
   location: {
     id: string;
@@ -252,6 +259,8 @@ export default function AdminPage() {
   const [seatInventoryError, setSeatInventoryError] = useState<string | null>(
     null,
   );
+  const [showtimeFinancials, setShowtimeFinancials] =
+    useState<ShowtimeFinancialSnapshot | null>(null);
   const [undoMoves, setUndoMoves] = useState<ShowtimeMoveSnapshot[] | null>(
     null,
   );
@@ -1165,6 +1174,36 @@ export default function AdminPage() {
       canceled = true;
     };
   }, [editingShowtimeId, showtimeEditorOpen, token]);
+
+  const selectedFinancialMovieId = data?.location.organization.movies.find(
+    (movie) => movie.id === movieId,
+  )?.id;
+
+  useEffect(() => {
+    if (!showtimeEditorOpen || !editingShowtimeId || !selectedFinancialMovieId) {
+      setShowtimeFinancials(null);
+      return;
+    }
+    let canceled = false;
+    setShowtimeFinancials(null);
+    apiFetch<{ showtimes: Array<{ showtimeId: string } & ShowtimeFinancialSnapshot> }>(
+      `/reports/movies/${selectedFinancialMovieId}`,
+      { accessToken: token },
+    )
+      .then((report) => {
+        if (!canceled) {
+          setShowtimeFinancials(
+            report.showtimes.find((showtime) => showtime.showtimeId === editingShowtimeId) ?? null,
+          );
+        }
+      })
+      .catch(() => {
+        if (!canceled) setShowtimeFinancials(null);
+      });
+    return () => {
+      canceled = true;
+    };
+  }, [editingShowtimeId, selectedFinancialMovieId, showtimeEditorOpen, token]);
 
   useEffect(() => {
     if (!data || !linkedShowtimeId || linkedShowtimeHandled) return;
@@ -2227,6 +2266,33 @@ export default function AdminPage() {
                               </strong>
                             </div>
                           </div>
+                          {showtimeFinancials && (
+                            <div className="showtime-financial-summary" aria-label="Showtime financial snapshot">
+                              {([
+                                ["Ticket face value", showtimeFinancials.ticketRevenueCents],
+                                ["F&B revenue", showtimeFinancials.fnbRevenueCents],
+                                ["Cinema film share", showtimeFinancials.cinemaRevenueCents],
+                                ["Distributor share", showtimeFinancials.distributorRevenueCents],
+                              ] as const).map(([label, cents]) => (
+                                <div key={label}>
+                                  <span>{label}</span>
+                                  <strong>{new Intl.NumberFormat("en-US", {
+                                    style: "currency",
+                                    currency: seatInventory.showtime.priceTier.currency,
+                                  }).format(cents / 100)}</strong>
+                                </div>
+                              ))}
+                              {showtimeFinancials.unallocatedRevenueCents > 0 && (
+                                <p>
+                                  <strong>{new Intl.NumberFormat("en-US", {
+                                    style: "currency",
+                                    currency: seatInventory.showtime.priceTier.currency,
+                                  }).format(showtimeFinancials.unallocatedRevenueCents / 100)}</strong>{" "}
+                                  awaits distributor terms.
+                                </p>
+                              )}
+                            </div>
+                          )}
                           <SeatMap
                             seats={seatInventory.seats.map((seat) => ({
                               ...seat,

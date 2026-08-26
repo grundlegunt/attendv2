@@ -307,6 +307,11 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-operating-summary div { display: grid; gap: 4px; padding: 9px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
 .showtime-operating-summary span { color: #ad9fa7; font-size: .58rem; letter-spacing: .05em; text-transform: uppercase; }
 .showtime-operating-summary strong { font-size: .85rem; }
+.showtime-financial-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 10px 0; border-top: 1px solid #654d5c; border-left: 1px solid #654d5c; }
+.showtime-financial-summary div { display: grid; gap: 4px; padding: 9px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; }
+.showtime-financial-summary span { color: #ad9fa7; font-size: .58rem; letter-spacing: .05em; text-transform: uppercase; }
+.showtime-financial-summary strong { font-size: .85rem; }
+.showtime-financial-summary p { grid-column: 1 / -1; margin: 0; padding: 9px; border-right: 1px solid #654d5c; border-bottom: 1px solid #654d5c; color: #ad9fa7; font-size: .68rem; }
 .showtime-inspector-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; }
 .showtime-inspector-fields label { min-width: 0; margin: 0; }
 .showtime-inspector-fields input, .showtime-inspector-fields select { width: 100%; min-width: 0; margin-bottom: 0; }
