@@ -54,6 +54,7 @@ export interface MembershipReceiptDelivery {
   membershipNumber: string;
   expiresAt: Date | null;
   amountCents: number;
+  taxDeductibleAmountCents: number;
   currency: string;
 }
 

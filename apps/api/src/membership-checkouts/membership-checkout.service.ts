@@ -20,6 +20,7 @@ export const membershipExpiration = (months: number, currentExpiration: Date | n
   base.setUTCDate(Math.min(day, lastDay));
   return base;
 };
+export const membershipDeductibleAmount = (priceCents: number, benefitsFairMarketValueCents: number) => Math.max(0, priceCents - benefitsFairMarketValueCents);
 
 @Injectable()
 export class MembershipCheckoutService {
@@ -28,7 +29,7 @@ export class MembershipCheckoutService {
   async config(locationId?: string) {
     const location = await prisma.location.findFirst({ where: { ...(locationId ? { id: locationId } : {}), active: true, organization: { active: true } }, orderBy: { createdAt: "asc" }, include: { organization: true } });
     if (!location) throw AppError.notFound("Location was not found.");
-    const plans = await prisma.membershipPlan.findMany({ where: { organizationId: location.organizationId, active: true }, select: { id: true, name: true, description: true, priceCents: true, durationMonths: true, benefits: true }, orderBy: [{ priceCents: "asc" }, { name: "asc" }] });
+    const plans = await prisma.membershipPlan.findMany({ where: { organizationId: location.organizationId, active: true }, select: { id: true, name: true, description: true, priceCents: true, benefitsFairMarketValueCents: true, durationMonths: true, benefits: true }, orderBy: [{ priceCents: "asc" }, { name: "asc" }] });
     const env = loadEnv();
     return { locationId: location.id, organizationName: location.organization.name, currency: location.currency, plans, payment: { ready: Boolean(env.PAYMENT_PROVIDER === "stripe" && env.STRIPE_PUBLISHABLE_KEY && env.STRIPE_SECRET_KEY && location.organization.stripeConnectedAccountId), publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, connectedAccountId: location.organization.stripeConnectedAccountId } };
   }
@@ -46,7 +47,7 @@ export class MembershipCheckoutService {
     if (customer?.memberships[0]?.status === "SUSPENDED") throw AppError.conflict("This membership is suspended. Contact the cinema before renewing it.");
     let checkout: Checkout;
     try {
-      checkout = await prisma.membershipCheckout.create({ data: { organization: { connect: { id: location.organizationId } }, location: { connect: { id: location.id } }, plan: { connect: { id: plan.id } }, memberName: input.memberName, memberEmail: email, planName: plan.name, planDescription: plan.description, planBenefits: plan.benefits as Prisma.InputJsonValue, durationMonths: plan.durationMonths, amountCents: plan.priceCents, currency: location.currency, idempotencyKey: input.idempotencyKey, payment: { create: { purpose: PaymentPurpose.MEMBERSHIP, amountCents: plan.priceCents, currency: location.currency, status: PaymentStatus.CREATED, idempotencyKey: `membership:${input.idempotencyKey}`, provider: this.provider.name } } }, include: includeCheckout });
+      checkout = await prisma.membershipCheckout.create({ data: { organization: { connect: { id: location.organizationId } }, location: { connect: { id: location.id } }, plan: { connect: { id: plan.id } }, memberName: input.memberName, memberEmail: email, planName: plan.name, planDescription: plan.description, planBenefits: plan.benefits as Prisma.InputJsonValue, durationMonths: plan.durationMonths, amountCents: plan.priceCents, taxDeductibleAmountCents: membershipDeductibleAmount(plan.priceCents, plan.benefitsFairMarketValueCents), currency: location.currency, idempotencyKey: input.idempotencyKey, payment: { create: { purpose: PaymentPurpose.MEMBERSHIP, amountCents: plan.priceCents, currency: location.currency, status: PaymentStatus.CREATED, idempotencyKey: `membership:${input.idempotencyKey}`, provider: this.provider.name } } }, include: includeCheckout });
     } catch (error) {
       if (!isUnique(error)) throw error;
       checkout = await prisma.membershipCheckout.findUniqueOrThrow({ where: { idempotencyKey: input.idempotencyKey }, include: includeCheckout }); this.assertReplay(checkout, input);
@@ -110,7 +111,7 @@ export class MembershipCheckoutService {
 
   private async sendReceipt(checkout: Checkout) {
     if (checkout.receiptSentAt || !checkout.membership) return;
-    try { const sent = await this.email.sendMembershipReceipt({ to: checkout.memberEmail, memberName: checkout.memberName, organizationName: checkout.location.organization.name, planName: checkout.planName, membershipNumber: checkout.membership.membershipNumber, expiresAt: checkout.membership.expiresAt, amountCents: checkout.amountCents, currency: checkout.currency }); await prisma.membershipCheckout.update({ where: { id: checkout.id }, data: { receiptMessageId: sent.messageId, receiptSentAt: new Date(), receiptError: null } }); }
+    try { const sent = await this.email.sendMembershipReceipt({ to: checkout.memberEmail, memberName: checkout.memberName, organizationName: checkout.location.organization.name, planName: checkout.planName, membershipNumber: checkout.membership.membershipNumber, expiresAt: checkout.membership.expiresAt, amountCents: checkout.amountCents, taxDeductibleAmountCents: checkout.taxDeductibleAmountCents, currency: checkout.currency }); await prisma.membershipCheckout.update({ where: { id: checkout.id }, data: { receiptMessageId: sent.messageId, receiptSentAt: new Date(), receiptError: null } }); }
     catch (error) { await prisma.membershipCheckout.update({ where: { id: checkout.id }, data: { receiptError: error instanceof Error ? error.message : "Receipt delivery failed." } }); }
   }
   private assertReplay(checkout: Checkout, input: Input) { if (checkout.locationId !== input.locationId || checkout.planId !== input.planId || checkout.memberName !== input.memberName || checkout.memberEmail !== input.memberEmail.toLowerCase()) throw AppError.conflict("The membership idempotency key was already used with different details."); }

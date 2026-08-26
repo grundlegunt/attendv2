@@ -1398,6 +1398,7 @@ model MembershipPlan {
   name           String
   description    String?
   priceCents     Int
+  benefitsFairMarketValueCents Int @default(0)
   durationMonths Int
   benefits       Json
   autoRenew      Boolean              @default(false)
@@ -1464,6 +1465,7 @@ model MembershipCheckout {
   planBenefits     Json
   durationMonths   Int
   amountCents      Int
+  taxDeductibleAmountCents Int @default(0)
   currency         String
   idempotencyKey   String                   @unique
   status           MembershipCheckoutStatus @default(PENDING)
