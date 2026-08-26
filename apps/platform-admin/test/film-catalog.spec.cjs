@@ -13,7 +13,7 @@ test("Master film catalog supports discovery and lifecycle management", () => {
   assert.match(source, /\/platform\/film-catalog\?\$\{params\}/);
   assert.match(source, /includeInactive/);
   assert.match(source, /Needs review/);
-  assert.match(source, /Verified by Attend/);
+  assert.match(source, /Verified by Ringo/);
   assert.match(source, /Active and searchable by operators/);
 });
 

@@ -2355,6 +2355,7 @@ describe("Milestone 1 cinema configuration", () => {
       address: current.body.address,
       timezone: current.body.timezone,
       ticketTaxRateBasisPoints: 925,
+      ticketFeesTaxable: true,
       preShowBufferMinutes: 25,
       cleaningBufferMinutes: 20,
       checkDropMinutesBeforeEnd: 35,
@@ -2386,6 +2387,7 @@ describe("Milestone 1 cinema configuration", () => {
       .set("Authorization", `Bearer ${ownerAccessToken}`)
       .send({
         ticketTaxRateBasisPoints: current.body.ticketTaxRateBasisPoints,
+        ticketFeesTaxable: current.body.ticketFeesTaxable,
         preShowBufferMinutes: current.body.preShowBufferMinutes,
         cleaningBufferMinutes: current.body.cleaningBufferMinutes,
         checkDropMinutesBeforeEnd: current.body.checkDropMinutesBeforeEnd,
@@ -3520,6 +3522,36 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       payment: { providerPaymentId: string };
     };
   }
+
+  it("taxes ticket service fees when the location enables fee taxability", async () => {
+    const { prisma } = await import("@cinema/database");
+    const holderKey = `taxable-fee-${crypto.randomUUID()}`;
+    const { hold } = await holdAvailableSeat(holderKey);
+    const showtime = await prisma.showtime.findUniqueOrThrow({
+      where: { id: showtimeId },
+      select: { auditorium: { select: { locationId: true } }, priceTier: { select: { ticketPriceMinor: true, feeMinor: true } } },
+    });
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: showtime.auditorium.locationId } });
+    const config = await request(app.getHttpServer()).get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`).expect(200);
+    const ticketType = config.body.ticketTypes.find((item: { priceAdjustmentMinor: number }) => item.priceAdjustmentMinor === 0);
+    await prisma.location.update({ where: { id: location.id }, data: { ticketTaxRateBasisPoints: 975, ticketFeesTaxable: true } });
+    try {
+      const checkout = await request(app.getHttpServer())
+        .post("/api/v1/ticketing/checkouts")
+        .set("Idempotency-Key", `checkout-${holderKey}`)
+        .send({
+          holdTokens: [hold.holdToken],
+          holderKey,
+          ticketTypeId: ticketType.id,
+          email: `${holderKey}@example.test`,
+          diningAuthorizationRequested: true,
+        })
+        .expect(201);
+      expect(checkout.body.taxCents).toBe(Math.round((showtime.priceTier.ticketPriceMinor + showtime.priceTier.feeMinor) * 0.0975));
+    } finally {
+      await prisma.location.update({ where: { id: location.id }, data: { ticketTaxRateBasisPoints: location.ticketTaxRateBasisPoints, ticketFeesTaxable: location.ticketFeesTaxable } });
+    }
+  });
 
   it("keeps public receipt details from overwriting an existing customer profile", async () => {
     const { prisma } = await import("@cinema/database");
