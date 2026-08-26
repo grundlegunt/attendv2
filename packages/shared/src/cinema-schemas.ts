@@ -297,6 +297,7 @@ export const updateAuditoriumLayoutRequestSchema = z
     seatMapName: z.string().trim().min(1).max(80).optional(),
     seats: z.array(seatInputSchema).max(500).optional(),
     layout: seatMapLayoutSchema.optional(),
+    applyToFutureShowtimes: z.boolean().default(true),
   })
   .superRefine((value, context) => {
     if (

@@ -15,6 +15,8 @@ test("auditorium layout saves retain a stable retry identity and version", () =>
   assert.match(source, /updateAuditoriumAttemptRef = useRef/);
   assert.match(source, /"Idempotency-Key": updateAuditoriumAttemptRef\.current\.requestId/);
   assert.match(source, /"If-Match": String\(editingVersion\)/);
+  assert.match(source, /applyToFutureShowtimes: true/);
+  assert.match(source, /Updated \$\{saved\.layoutPropagation\.updatedShowtimes\} existing future showtime/);
 });
 
 test("auditorium duplication retains a stable retry identity", () => {

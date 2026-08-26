@@ -1,8 +1,20 @@
 import {
   CinemaService,
+  hasSameSeatLabels,
   privateEventPreferredDate,
   schedulePlanWeekWindow,
 } from "./cinema.service";
+
+describe("future showtime layout propagation", () => {
+  it("allows metadata-only layout changes when seat labels are unchanged", () => {
+    expect(hasSameSeatLabels([{ label: "A1" }, { label: "A2" }], [{ label: "a2" }, { label: "a1" }])).toBe(true);
+  });
+
+  it("protects showtimes whose sellable seat labels changed", () => {
+    expect(hasSameSeatLabels([{ label: "A1" }, { label: "A2" }], [{ label: "A1" }, { label: "A3" }])).toBe(false);
+    expect(hasSameSeatLabels([{ label: "A1" }], [{ label: "A1" }, { label: "A2" }])).toBe(false);
+  });
+});
 
 describe("private-event preferred dates", () => {
   it("resolves calendar dates inside the cinema-local day across DST", () => {
