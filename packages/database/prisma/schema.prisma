@@ -1428,7 +1428,7 @@ model Membership {
   expiresAt        DateTime?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
-  checkout         MembershipCheckout?
+  checkouts        MembershipCheckout[]
 
   @@unique([organizationId, membershipNumber])
   @@unique([organizationId, customerId])
@@ -1455,7 +1455,7 @@ model MembershipCheckout {
   plan             MembershipPlan           @relation(fields: [planId], references: [id], onDelete: Restrict)
   paymentId        String                   @unique
   payment          Payment                  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  membershipId     String?                  @unique
+  membershipId     String?
   membership       Membership?              @relation(fields: [membershipId], references: [id], onDelete: SetNull)
   memberName       String
   memberEmail      String
@@ -1476,6 +1476,7 @@ model MembershipCheckout {
   @@index([organizationId, createdAt])
   @@index([locationId, createdAt])
   @@index([planId, createdAt])
+  @@index([membershipId, createdAt])
   @@index([status, updatedAt])
   @@map("membership_checkouts")
 }

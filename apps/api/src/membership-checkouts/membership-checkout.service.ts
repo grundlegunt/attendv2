@@ -11,7 +11,15 @@ import { EMAIL_PROVIDER } from "../notifications/notifications.module";
 const status = (value: string) => value === "SUCCEEDED" ? PaymentStatus.SUCCEEDED : value === "PROCESSING" ? PaymentStatus.PROCESSING : value === "REQUIRES_ACTION" ? PaymentStatus.REQUIRES_ACTION : value === "FAILED" ? PaymentStatus.FAILED : PaymentStatus.REQUIRES_PAYMENT_METHOD;
 const attempt = (value: string) => value === "SUCCEEDED" ? PaymentAttemptStatus.SUCCEEDED : value === "PROCESSING" ? PaymentAttemptStatus.PROCESSING : value === "REQUIRES_ACTION" ? PaymentAttemptStatus.REQUIRES_ACTION : value === "FAILED" ? PaymentAttemptStatus.FAILED : PaymentAttemptStatus.CREATED;
 const isUnique = (error: unknown) => error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
-const expiresAt = (months: number, from = new Date()) => { const date = new Date(from); date.setUTCMonth(date.getUTCMonth() + months); return date; };
+export const membershipExpiration = (months: number, currentExpiration: Date | null = null, now = new Date()) => {
+  const base = currentExpiration && currentExpiration > now ? new Date(currentExpiration) : new Date(now);
+  const day = base.getUTCDate();
+  base.setUTCDate(1);
+  base.setUTCMonth(base.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0)).getUTCDate();
+  base.setUTCDate(Math.min(day, lastDay));
+  return base;
+};
 
 @Injectable()
 export class MembershipCheckoutService {
@@ -34,8 +42,8 @@ export class MembershipCheckoutService {
     const plan = await prisma.membershipPlan.findFirst({ where: { id: input.planId, organizationId: location.organizationId, active: true } });
     if (!plan) throw AppError.validationFailed("Membership plan is not available.");
     const email = input.memberEmail.toLowerCase();
-    const customer = await prisma.customer.findUnique({ where: { email }, select: { memberships: { where: { organizationId: location.organizationId }, select: { id: true } } } });
-    if (customer?.memberships.length) throw AppError.conflict("This email already has a membership. Contact the cinema to renew or change it.");
+    const customer = await prisma.customer.findUnique({ where: { email }, select: { memberships: { where: { organizationId: location.organizationId }, select: { status: true } } } });
+    if (customer?.memberships[0]?.status === "SUSPENDED") throw AppError.conflict("This membership is suspended. Contact the cinema before renewing it.");
     let checkout: Checkout;
     try {
       checkout = await prisma.membershipCheckout.create({ data: { organization: { connect: { id: location.organizationId } }, location: { connect: { id: location.id } }, plan: { connect: { id: plan.id } }, memberName: input.memberName, memberEmail: email, planName: plan.name, planDescription: plan.description, planBenefits: plan.benefits as Prisma.InputJsonValue, durationMonths: plan.durationMonths, amountCents: plan.priceCents, currency: location.currency, idempotencyKey: input.idempotencyKey, payment: { create: { purpose: PaymentPurpose.MEMBERSHIP, amountCents: plan.priceCents, currency: location.currency, status: PaymentStatus.CREATED, idempotencyKey: `membership:${input.idempotencyKey}`, provider: this.provider.name } } }, include: includeCheckout });
@@ -76,12 +84,16 @@ export class MembershipCheckoutService {
       const locked = await tx.membershipCheckout.findUniqueOrThrow({ where: { id: checkout.id } });
       if (locked.membershipId) return tx.membershipCheckout.findUniqueOrThrow({ where: { id: checkout.id }, include: includeCheckout });
       const customer = await tx.customer.upsert({ where: { email: checkout.memberEmail }, create: { email: checkout.memberEmail, name: checkout.memberName, isGuest: true }, update: { name: checkout.memberName } });
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "memberships" WHERE "organizationId" = ${checkout.organizationId} AND "customerId" = ${customer.id} FOR UPDATE`);
       const prior = await tx.membership.findUnique({ where: { organizationId_customerId: { organizationId: checkout.organizationId, customerId: customer.id } } });
-      if (prior) throw AppError.conflict("This email already has a membership. Contact the cinema for assistance; your payment requires review.");
-      const membership = await tx.membership.create({ data: { organizationId: checkout.organizationId, customerId: customer.id, planId: checkout.planId, membershipNumber: `MEM-${randomBytes(6).toString("hex").toUpperCase()}`, tier: checkout.planName, status: "ACTIVE", expiresAt: expiresAt(checkout.durationMonths) } });
+      if (prior?.status === "SUSPENDED") throw AppError.conflict("This membership was suspended after checkout began. Contact the cinema; the payment requires review.");
+      const nextExpiration = membershipExpiration(checkout.durationMonths, prior?.expiresAt);
+      const membership = prior
+        ? await tx.membership.update({ where: { id: prior.id }, data: { planId: checkout.planId, tier: checkout.planName, status: "ACTIVE", expiresAt: nextExpiration } })
+        : await tx.membership.create({ data: { organizationId: checkout.organizationId, customerId: customer.id, planId: checkout.planId, membershipNumber: `MEM-${randomBytes(6).toString("hex").toUpperCase()}`, tier: checkout.planName, status: "ACTIVE", expiresAt: nextExpiration } });
       await tx.payment.update({ where: { id: checkout.paymentId }, data: { status: "SUCCEEDED" } });
       await tx.membershipCheckout.update({ where: { id: checkout.id }, data: { membershipId: membership.id, status: "PAID" } });
-      await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: checkout.locationId, action: "membership.online_issued", entityType: "Membership", entityId: membership.id, afterState: { checkoutId: checkout.id, planId: checkout.planId, amountCents: checkout.amountCents, expiresAt: membership.expiresAt } } });
+      await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: checkout.locationId, action: prior ? "membership.online_renewed" : "membership.online_issued", entityType: "Membership", entityId: membership.id, beforeState: prior ? { planId: prior.planId, tier: prior.tier, status: prior.status, expiresAt: prior.expiresAt } : undefined, afterState: { checkoutId: checkout.id, planId: checkout.planId, amountCents: checkout.amountCents, expiresAt: membership.expiresAt } } });
       return tx.membershipCheckout.findUniqueOrThrow({ where: { id: checkout.id }, include: includeCheckout });
     });
     await this.sendReceipt(settled); return this.confirmation(settled);
