@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { loadStripeScript } from "../lib/stripe-loader";
+import { trackOptionalAnalyticsEvent } from "../lib/optional-analytics";
 
 type Config = { locationId: string; organizationName: string; currency: string; campaigns: Array<{ id: string; name: string; description: string | null; goalAmountCents: number | null }>; payment: { ready: boolean; publishableKey: string | null; connectedAccountId: string | null } };
 type Checkout = { checkoutId: string; amountCents: number; currency: string; donorEmail: string; payment: { status: string; clientSecret?: string } };
@@ -29,6 +30,8 @@ export default function DonatePage() {
   const paymentRef = useRef<HTMLDivElement>(null);
   const checkoutKey = useRef<string | null>(null);
   const resumeAttempted = useRef(false);
+  const completionTracked = useRef(false);
+  function trackCompletion() { if (completionTracked.current) return; completionTracked.current = true; trackOptionalAnalyticsEvent("Donation Completed"); }
 
   useEffect(() => { apiFetch<Config>("/donation-checkouts/config").then(setConfig).catch(() => setError("Online contributions are temporarily unavailable.")); }, []);
   useEffect(() => { if (!elements || !paymentRef.current) return; const element = elements.create("payment"); element.on("ready", () => setPaymentReady(true)); element.mount(paymentRef.current); return () => element.unmount(); }, [elements]);
@@ -43,6 +46,7 @@ export default function DonatePage() {
         setDonorEmail(resumed.donorEmail);
         if (resumed.payment.status === "SUCCEEDED") {
           setConfirmation(await apiFetch<Confirmation>(`/donation-checkouts/${resumed.checkoutId}/finalize`, { method: "POST", headers: { "Idempotency-Key": key }, body: "{}" }));
+          trackCompletion();
           window.sessionStorage.removeItem(STORAGE_KEY); return;
         }
         if (!resumed.payment.clientSecret) throw new Error("A secure payment session could not be resumed.");
@@ -62,6 +66,7 @@ export default function DonatePage() {
       if (!created.payment.clientSecret) throw new Error("A secure payment session could not be created.");
       await loadStripeScript(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
       setCheckout(created); setElements(factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined }).elements({ clientSecret: created.payment.clientSecret, appearance: { theme: "night" } }));
+      trackOptionalAnalyticsEvent("Donation Checkout Started");
     } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
   }
   async function pay(event: FormEvent) {
@@ -71,7 +76,7 @@ export default function DonatePage() {
       const result = await stripe.confirmPayment({ elements, redirect: "if_required", confirmParams: { receipt_email: donorEmail } });
       if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
       const confirmed = await apiFetch<Confirmation>(`/donation-checkouts/${checkout.checkoutId}/finalize`, { method: "POST", headers: { "Idempotency-Key": checkoutKey.current! }, body: "{}" });
-      setConfirmation(confirmed); window.sessionStorage.removeItem(STORAGE_KEY);
+      setConfirmation(confirmed); trackCompletion(); window.sessionStorage.removeItem(STORAGE_KEY);
     } catch (reason) { setError(failure(reason)); } finally { setPending(false); }
   }
 
