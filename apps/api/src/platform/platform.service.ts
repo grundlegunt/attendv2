@@ -404,6 +404,91 @@ export class PlatformService {
     };
   }
 
+  async distributorPortfolio() {
+    const now = new Date();
+    const movies = await prisma.movie.findMany({
+      where: { distributorName: { not: null } },
+      orderBy: [{ distributorName: "asc" }, { title: "asc" }],
+      select: {
+        id: true,
+        title: true,
+        distributorName: true,
+        distributorTerms: true,
+        catalogEntryId: true,
+        organization: { select: { id: true, name: true } },
+        showtimes: {
+          select: {
+            id: true,
+            startsAt: true,
+            auditorium: { select: { location: { select: { id: true, name: true } } } },
+            showtimeSeats: { select: { tickets: {
+              where: { status: { notIn: ["REFUNDED", "CANCELED"] } },
+              select: { priceCentsPaid: true },
+            } } },
+          },
+        },
+      },
+    });
+    const grouped = new Map<string, {
+      name: string;
+      operators: Set<string>;
+      locations: Set<string>;
+      films: Set<string>;
+      shows: number;
+      upcomingShows: number;
+      ticketsSold: number;
+      ticketFaceValueCents: number;
+      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "UPCOMING" | "PAST" | "UNSCHEDULED"; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; terms: Prisma.JsonValue | null }>;
+    }>();
+    for (const movie of movies) {
+      const name = movie.distributorName?.trim();
+      if (!name) continue;
+      const key = name.toLocaleLowerCase();
+      let distributor = grouped.get(key);
+      if (!distributor) {
+        distributor = { name, operators: new Set(), locations: new Set(), films: new Set(), shows: 0, upcomingShows: 0, ticketsSold: 0, ticketFaceValueCents: 0, deals: [] };
+        grouped.set(key, distributor);
+      }
+      const locations = [...new Map(movie.showtimes.map((showtime) => [showtime.auditorium.location.id, showtime.auditorium.location.name])).values()];
+      const upcomingShows = movie.showtimes.filter((showtime) => showtime.startsAt >= now).length;
+      const tickets = movie.showtimes.flatMap((showtime) => showtime.showtimeSeats.flatMap((seat) => seat.tickets));
+      const ticketFaceValueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
+      distributor.operators.add(movie.organization.id);
+      for (const showtime of movie.showtimes) distributor.locations.add(showtime.auditorium.location.id);
+      distributor.films.add(movie.catalogEntryId ?? movie.id);
+      distributor.shows += movie.showtimes.length;
+      distributor.upcomingShows += upcomingShows;
+      distributor.ticketsSold += tickets.length;
+      distributor.ticketFaceValueCents += ticketFaceValueCents;
+      distributor.deals.push({
+        movieId: movie.id,
+        catalogEntryId: movie.catalogEntryId,
+        title: movie.title,
+        organization: movie.organization,
+        locations,
+        status: upcomingShows > 0 ? "UPCOMING" : movie.showtimes.length > 0 ? "PAST" : "UNSCHEDULED",
+        showtimes: movie.showtimes.length,
+        ticketsSold: tickets.length,
+        ticketFaceValueCents,
+        terms: movie.distributorTerms,
+      });
+    }
+    return {
+      generatedAt: now.toISOString(),
+      distributors: [...grouped.values()].map((distributor) => ({
+        name: distributor.name,
+        operators: distributor.operators.size,
+        locations: distributor.locations.size,
+        films: distributor.films.size,
+        shows: distributor.shows,
+        upcomingShows: distributor.upcomingShows,
+        ticketsSold: distributor.ticketsSold,
+        ticketFaceValueCents: distributor.ticketFaceValueCents,
+        deals: distributor.deals.sort((left, right) => (left.status === "UPCOMING" ? -1 : 1) - (right.status === "UPCOMING" ? -1 : 1) || right.ticketFaceValueCents - left.ticketFaceValueCents),
+      })).sort((left, right) => right.ticketFaceValueCents - left.ticketFaceValueCents || left.name.localeCompare(right.name)),
+    };
+  }
+
   private filmCatalogAuditState(entry: {
     title: string;
     synopsis: string | null;
