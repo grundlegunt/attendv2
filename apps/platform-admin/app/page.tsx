@@ -213,6 +213,7 @@ export default function PlatformDashboard() {
         <Link className="active" href="/">Dashboard</Link>
         <Link href="/clients">Clients</Link>
         <Link href="/films">Films</Link>
+        <Link href="/analytics">Audience</Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
         <Link href="/content">Content</Link>

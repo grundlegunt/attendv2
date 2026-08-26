@@ -229,6 +229,12 @@ export class PlatformController {
     return this.platform.revenue({ from, to, organizationId });
   }
 
+  @Get("audience-analytics")
+  @UseGuards(PlatformAuthGuard)
+  audienceAnalytics(@Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
+    return this.platform.audienceAnalytics({ from, to, organizationId });
+  }
+
   @Get("revenue.csv")
   @UseGuards(PlatformAuthGuard)
   async revenueCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
