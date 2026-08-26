@@ -210,6 +210,14 @@ export class PlatformController {
     return this.platform.createFilmCatalogEntry({ actorId: actor.sub, ...filmCatalogCreateSchema.parse(body) });
   }
 
+  @Post("film-catalog/sync")
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  syncFilmCatalog(@CurrentActor() actor: RequestActor) {
+    return this.platform.syncOperatorFilmCatalog(actor.sub);
+  }
+
   @Patch("film-catalog/:entryId")
   @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)

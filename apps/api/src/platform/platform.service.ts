@@ -189,6 +189,61 @@ export class PlatformService {
     };
   }
 
+  async syncOperatorFilmCatalog(actorId: string) {
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('platform-film-catalog-sync'))`;
+      const movies = await tx.movie.findMany({
+        where: { catalogEntryId: null },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      });
+      let createdEntries = 0;
+      let linkedMovies = 0;
+
+      for (const movie of movies) {
+        let entry = await tx.filmCatalogEntry.findFirst({
+          where: {
+            title: { equals: movie.title.trim(), mode: "insensitive" },
+            releaseYear: movie.releaseYear,
+            runtimeMinutes: movie.runtimeMinutes,
+          },
+          orderBy: [{ verified: "desc" }, { createdAt: "asc" }],
+        });
+        if (!entry) {
+          entry = await tx.filmCatalogEntry.create({
+            data: {
+              title: movie.title.trim(),
+              synopsis: movie.synopsis,
+              runtimeMinutes: movie.runtimeMinutes,
+              rating: movie.rating,
+              releaseYear: movie.releaseYear,
+              director: movie.director,
+              starring: movie.starring,
+              posterUrl: movie.posterUrl,
+              detailPosterUrl: movie.detailPosterUrl,
+              trailerUrl: movie.trailerUrl,
+              primaryDistributorName: movie.distributorName,
+            },
+          });
+          createdEntries += 1;
+        }
+        await tx.movie.update({ where: { id: movie.id }, data: { catalogEntryId: entry.id } });
+        linkedMovies += 1;
+      }
+
+      if (createdEntries || linkedMovies) {
+        await this.audit.record({
+          actorType: "PLATFORM",
+          actorId,
+          action: "platform.film_catalog_synced",
+          entityType: "FilmCatalogEntry",
+          entityId: "operator-libraries",
+          afterState: { createdEntries, linkedMovies },
+        }, tx);
+      }
+      return { createdEntries, linkedMovies };
+    });
+  }
+
   async createFilmCatalogEntry(input: {
     actorId: string;
     title: string;
