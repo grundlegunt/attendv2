@@ -2,6 +2,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { useCinemaContent } from "../components/customer-branding";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { trackOptionalAnalyticsEvent } from "../lib/optional-analytics";
 
 export default function PrivateEventsPage() {
   const { privateEvents } = useCinemaContent();
@@ -10,7 +11,7 @@ export default function PrivateEventsPage() {
   const [pending, setPending] = useState(false);
   const pendingRef = useRef(false);
   const inquiryAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
-  async function submit(event: FormEvent) { event.preventDefault(); if (pendingRef.current) return; pendingRef.current = true; setNotice(""); const payload = { ...draft, preferredDate: draft.preferredDate || undefined, guestCount: draft.guestCount ? Number(draft.guestCount) : undefined }; const fingerprint = JSON.stringify(payload); if (inquiryAttemptRef.current?.fingerprint !== fingerprint) inquiryAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() }; setPending(true); try { await apiFetch("/cinema/private-event-inquiries", { method: "POST", headers: { "Idempotency-Key": inquiryAttemptRef.current.requestId }, body: fingerprint }); inquiryAttemptRef.current = null; setNotice("Thanks — our team will follow up about your event."); setDraft({ name: "", email: "", phone: "", eventType: "Private screening", preferredDate: "", guestCount: "", message: "" }); } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) inquiryAttemptRef.current = null; setNotice(reason instanceof ApiRequestError ? reason.body.message : "Your inquiry could not be sent."); } finally { pendingRef.current = false; setPending(false); } }
+  async function submit(event: FormEvent) { event.preventDefault(); if (pendingRef.current) return; pendingRef.current = true; setNotice(""); const payload = { ...draft, preferredDate: draft.preferredDate || undefined, guestCount: draft.guestCount ? Number(draft.guestCount) : undefined }; const fingerprint = JSON.stringify(payload); if (inquiryAttemptRef.current?.fingerprint !== fingerprint) inquiryAttemptRef.current = { fingerprint, requestId: crypto.randomUUID() }; setPending(true); try { await apiFetch("/cinema/private-event-inquiries", { method: "POST", headers: { "Idempotency-Key": inquiryAttemptRef.current.requestId }, body: fingerprint }); inquiryAttemptRef.current = null; trackOptionalAnalyticsEvent("Private Event Inquiry Submitted"); setNotice("Thanks — our team will follow up about your event."); setDraft({ name: "", email: "", phone: "", eventType: "Private screening", preferredDate: "", guestCount: "", message: "" }); } catch (reason) { if (reason instanceof ApiRequestError && reason.status < 500) inquiryAttemptRef.current = null; setNotice(reason instanceof ApiRequestError ? reason.body.message : "Your inquiry could not be sent."); } finally { pendingRef.current = false; setPending(false); } }
   return (
     <main className="cinema-shell route-page">
       <section className="route-heading">

@@ -10,6 +10,7 @@ const account = fs.readFileSync(path.join(__dirname, "../app/account/page.tsx"),
 const giftCards = fs.readFileSync(path.join(__dirname, "../app/gift-cards/page.tsx"), "utf8");
 const membership = fs.readFileSync(path.join(__dirname, "../app/membership/page.tsx"), "utf8");
 const donations = fs.readFileSync(path.join(__dirname, "../app/donate/page.tsx"), "utf8");
+const privateEvents = fs.readFileSync(path.join(__dirname, "../app/private-events/page.tsx"), "utf8");
 
 test("optional analytics is disabled without configuration and explicit consent", () => {
   assert.match(component, /if \(!scriptUrl\) return/);
@@ -35,14 +36,17 @@ test("anonymous conversion events are connected to successful customer actions",
   assert.match(ticketCheckout, /checkoutCompletedTrackedRef/);
   assert.match(account, /trackOptionalAnalyticsEvent\("Account Created"\)/);
   assert.match(giftCards, /trackOptionalAnalyticsEvent\("Gift Card Started"\)/);
+  assert.match(giftCards, /trackOptionalAnalyticsEvent\("Gift Card Purchased"\)/);
+  assert.match(giftCards, /purchaseCompletedTrackedRef/);
   assert.match(membership, /trackOptionalAnalyticsEvent\("Membership Checkout Started"\)/);
   assert.match(membership, /trackOptionalAnalyticsEvent\("Membership Activated"\)/);
   assert.match(donations, /trackOptionalAnalyticsEvent\("Donation Checkout Started"\)/);
   assert.match(donations, /trackOptionalAnalyticsEvent\("Donation Completed"\)/);
+  assert.match(privateEvents, /trackOptionalAnalyticsEvent\("Private Event Inquiry Submitted"\)/);
 });
 
 test("conversion tracking does not send customer or order properties", () => {
-  for (const source of [ticketCheckout, account, giftCards, membership, donations]) {
+  for (const source of [ticketCheckout, account, giftCards, membership, donations, privateEvents]) {
     assert.doesNotMatch(source, /trackOptionalAnalyticsEvent\([^\n]+,\s*\{/);
   }
 });
