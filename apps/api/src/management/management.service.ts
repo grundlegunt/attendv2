@@ -276,6 +276,27 @@ export class ManagementService {
     };
   }
 
+  donationExportRows(locationId: string, filters: { campaignId?: string; from?: Date; to?: Date }) {
+    return prisma.donation.findMany({
+      where: { locationId, campaignId: filters.campaignId, receivedAt: { gte: filters.from, lt: filters.to } },
+      include: { campaign: { select: { name: true } }, customer: { select: { name: true, email: true } } },
+      orderBy: { receivedAt: "desc" },
+      take: 10_000,
+    });
+  }
+
+  donationsCsv(rows: Awaited<ReturnType<ManagementService["donationExportRows"]>>) {
+    const cell = (value: unknown) => {
+      const raw = String(value ?? "");
+      const safe = /^[\t\r ]*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    return [
+      "Received,Status,Campaign,Donor name,Donor email,Payment method,External reference,Amount cents,Tax-deductible cents,Notes",
+      ...rows.map((row) => [row.receivedAt.toISOString(), row.status, row.campaign?.name ?? "General support", row.customer?.name ?? row.donorName, row.customer?.email ?? row.donorEmail, row.paymentMethod, row.externalReference, row.amountCents, row.taxDeductibleAmountCents, row.notes].map(cell).join(",")),
+    ].join("\n");
+  }
+
   async createDonationCampaign(input: { locationId: string; employeeId: string; requestId: string; name: string; description?: string | null; goalAmountCents?: number | null; startsAt?: Date | null; endsAt?: Date | null; active: boolean }) {
     this.assertUuidRequest(input.requestId);
     const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });

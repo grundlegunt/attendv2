@@ -290,6 +290,14 @@ export class ManagementController {
   @Get("donations") @RequirePermissions(Permission.ReportsViewFinancial)
   donations(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(donationDirectorySchema)) query: unknown) { return this.management.donations(this.location(actor), donationDirectorySchema.parse(query)); }
 
+  @Get("donations.csv") @RequirePermissions(Permission.ReportsViewFinancial)
+  async donationsCsv(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(donationDirectorySchema)) query: unknown, @Res() response: Response) {
+    const rows = await this.management.donationExportRows(this.location(actor), donationDirectorySchema.parse(query));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="donations.csv"');
+    response.send(this.management.donationsCsv(rows));
+  }
+
   @Post("donations") @RequirePermissions(Permission.ReportsViewFinancial)
   recordDonation(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(donationSchema)) body: unknown) { return this.management.recordDonation({ ...donationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
