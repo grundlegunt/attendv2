@@ -12,10 +12,10 @@ describe("membership directory", () => {
     const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
     const memberships = jest.spyOn(prisma.membership, "findMany").mockResolvedValue([]);
     try {
-      await new ManagementService().memberships("location-1", { query: "Jane", status: "ACTIVE" });
+      await new ManagementService().memberships("location-1", { query: "Jane", status: "ACTIVE", planId: "plan-1" });
       expect(location).toHaveBeenCalledWith({ where: { id: "location-1" }, select: { organizationId: true } });
       expect(memberships).toHaveBeenCalledWith(expect.objectContaining({
-        where: expect.objectContaining({ organizationId: "organization-1", status: "ACTIVE", OR: expect.any(Array) }),
+        where: expect.objectContaining({ organizationId: "organization-1", planId: "plan-1", status: "ACTIVE", OR: expect.any(Array) }),
         take: 500,
       }));
     } finally {

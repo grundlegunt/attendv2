@@ -100,6 +100,7 @@ const membershipDirectorySchema = z.object({
   query: z.string().trim().max(100).optional(),
   status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]).optional(),
   lifecycle: z.enum(["EXPIRING", "LAPSED"]).optional(),
+  planId: z.string().uuid().optional(),
 }).strict();
 const membershipPlanSchema = z.object({
   name: z.string().trim().min(1).max(100),
