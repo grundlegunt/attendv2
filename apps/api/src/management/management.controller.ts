@@ -91,6 +91,7 @@ const globalSearchSchema = z.object({ query: z.string().trim().min(2).max(100) }
 const customerHistorySchema = z.object({ ticketOffset: z.coerce.number().int().min(0).max(10_000).default(0), diningOffset: z.coerce.number().int().min(0).max(10_000).default(0) }).strict();
 const membershipSchema = z.object({
   membershipNumber: z.string().trim().min(1).max(100),
+  planId: z.string().uuid().nullable().optional(),
   tier: z.string().trim().min(1).max(100),
   status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]),
   expiresAt: z.coerce.date().nullable(),
@@ -99,6 +100,16 @@ const membershipDirectorySchema = z.object({
   query: z.string().trim().max(100).optional(),
   status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]).optional(),
 }).strict();
+const membershipPlanSchema = z.object({
+  name: z.string().trim().min(1).max(100),
+  description: z.string().trim().max(1000).nullable().optional(),
+  priceCents: z.number().int().min(0).max(1_000_000),
+  durationMonths: z.number().int().min(1).max(120),
+  benefits: z.array(z.string().trim().min(1).max(200)).max(25),
+  autoRenew: z.boolean().default(false),
+  active: z.boolean().default(true),
+}).strict();
+const membershipPlanUpdateSchema = membershipPlanSchema.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one plan change.");
 const donationCampaignFields = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).nullable().optional(),
@@ -242,6 +253,15 @@ export class ManagementController {
 
   @Get("memberships") @RequirePermissions(Permission.TicketPriceEdit)
   memberships(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipDirectorySchema)) query: unknown) { return this.management.memberships(this.location(actor), membershipDirectorySchema.parse(query)); }
+
+  @Get("membership-plans") @RequirePermissions(Permission.TicketPriceEdit)
+  membershipPlans(@CurrentActor() actor: RequestActor) { return this.management.membershipPlans(this.location(actor)); }
+
+  @Post("membership-plans") @RequirePermissions(Permission.TicketPriceEdit)
+  createMembershipPlan(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(membershipPlanSchema)) body: unknown) { return this.management.createMembershipPlan({ ...membershipPlanSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
+
+  @Patch("membership-plans/:planId") @RequirePermissions(Permission.TicketPriceEdit)
+  updateMembershipPlan(@CurrentActor() actor: RequestActor, @Param("planId") planId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(membershipPlanUpdateSchema)) body: unknown) { return this.management.updateMembershipPlan({ ...membershipPlanUpdateSchema.parse(body), planId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Get("customers/:customerId/history.csv") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   async customerHistoryCsv(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Res() response: Response) {

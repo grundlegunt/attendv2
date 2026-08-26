@@ -160,9 +160,59 @@ export class ManagementService {
           { customer: { phone: { contains: query } } },
         ] } : {}),
       },
-      select: { id: true, membershipNumber: true, tier: true, status: true, expiresAt: true, createdAt: true, updatedAt: true, customer: { select: { id: true, name: true, email: true, phone: true } } },
+      select: { id: true, membershipNumber: true, tier: true, status: true, expiresAt: true, createdAt: true, updatedAt: true, plan: { select: { id: true, name: true } }, customer: { select: { id: true, name: true, email: true, phone: true } } },
       orderBy: [{ status: "asc" }, { updatedAt: "desc" }],
       take: 500,
+    });
+  }
+
+  async membershipPlans(locationId: string) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
+    return prisma.membershipPlan.findMany({ where: { organizationId: location.organizationId }, include: { _count: { select: { memberships: true } } }, orderBy: [{ active: "desc" }, { name: "asc" }] });
+  }
+
+  async createMembershipPlan(input: { locationId: string; employeeId: string; requestId: string; name: string; description?: string | null; priceCents: number; durationMonths: number; benefits: string[]; autoRenew: boolean; active: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const fingerprint = createHash("sha256").update(JSON.stringify({ name: input.name, description: input.description ?? null, priceCents: input.priceCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "membership.plan_created", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { fingerprint?: string } | null;
+        if (state?.fingerprint !== fingerprint) throw AppError.conflict("The membership-plan idempotency key was already used with different details.");
+        return tx.membershipPlan.findUniqueOrThrow({ where: { id: replay.entityId }, include: { _count: { select: { memberships: true } } } });
+      }
+      const duplicate = await tx.membershipPlan.findFirst({ where: { organizationId: location.organizationId, name: { equals: input.name, mode: "insensitive" } } });
+      if (duplicate) throw AppError.conflict("A membership plan with this name already exists.");
+      const plan = await tx.membershipPlan.create({ data: { organizationId: location.organizationId, name: input.name, description: input.description, priceCents: input.priceCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active }, include: { _count: { select: { memberships: true } } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "membership.plan_created", entityType: "MembershipPlan", entityId: plan.id, afterState: { requestId: input.requestId, fingerprint, name: plan.name, priceCents: plan.priceCents, durationMonths: plan.durationMonths, benefits: input.benefits, autoRenew: plan.autoRenew, active: plan.active } } });
+      return plan;
+    });
+  }
+
+  async updateMembershipPlan(input: { locationId: string; employeeId: string; planId: string; requestId: string; name?: string; description?: string | null; priceCents?: number; durationMonths?: number; benefits?: string[]; autoRenew?: boolean; active?: boolean }) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+    const changes = { name: input.name, description: input.description, priceCents: input.priceCents, durationMonths: input.durationMonths, benefits: input.benefits, autoRenew: input.autoRenew, active: input.active };
+    const fingerprint = createHash("sha256").update(JSON.stringify({ planId: input.planId, ...changes })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${location.organizationId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "membership.plan_updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { fingerprint?: string } | null;
+        if (state?.fingerprint !== fingerprint) throw AppError.conflict("The membership-plan idempotency key was already used with different details.");
+        return tx.membershipPlan.findUniqueOrThrow({ where: { id: replay.entityId }, include: { _count: { select: { memberships: true } } } });
+      }
+      const before = await tx.membershipPlan.findFirst({ where: { id: input.planId, organizationId: location.organizationId } });
+      if (!before) throw AppError.notFound("Membership plan was not found.");
+      if (input.name && input.name.toLowerCase() !== before.name.toLowerCase()) {
+        const duplicate = await tx.membershipPlan.findFirst({ where: { organizationId: location.organizationId, id: { not: before.id }, name: { equals: input.name, mode: "insensitive" } } });
+        if (duplicate) throw AppError.conflict("A membership plan with this name already exists.");
+      }
+      const plan = await tx.membershipPlan.update({ where: { id: before.id }, data: changes, include: { _count: { select: { memberships: true } } } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "membership.plan_updated", entityType: "MembershipPlan", entityId: plan.id, beforeState: { name: before.name, priceCents: before.priceCents, durationMonths: before.durationMonths, benefits: before.benefits, autoRenew: before.autoRenew, active: before.active }, afterState: { requestId: input.requestId, fingerprint, name: plan.name, priceCents: plan.priceCents, durationMonths: plan.durationMonths, benefits: plan.benefits, autoRenew: plan.autoRenew, active: plan.active } } });
+      return plan;
     });
   }
 
@@ -1028,10 +1078,10 @@ export class ManagementService {
     };
   }
 
-  async updateCustomerMembership(input: { locationId: string; employeeId: string; customerId: string; requestId: string; membershipNumber: string; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: Date | null }) {
+  async updateCustomerMembership(input: { locationId: string; employeeId: string; customerId: string; requestId: string; membershipNumber: string; planId?: string | null; tier: string; status: "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED"; expiresAt: Date | null }) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(input.requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
     const membershipNumber = canonicalMembershipNumber(input.membershipNumber);
-    const requestFingerprint = createHash("sha256").update(JSON.stringify({ customerId: input.customerId, membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt?.toISOString() ?? null })).digest("hex");
+    const requestFingerprint = createHash("sha256").update(JSON.stringify({ customerId: input.customerId, membershipNumber, planId: input.planId ?? null, tier: input.tier, status: input.status, expiresAt: input.expiresAt?.toISOString() ?? null })).digest("hex");
     try {
       return await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
@@ -1043,6 +1093,7 @@ export class ManagementService {
         }
         const location = await tx.location.findUnique({ where: { id: input.locationId }, select: { organizationId: true } });
         if (!location) throw AppError.notFound("Location was not found.");
+        if (input.planId && !(await tx.membershipPlan.findFirst({ where: { id: input.planId, organizationId: location.organizationId, active: true }, select: { id: true } }))) throw AppError.validationFailed("Membership plan is not available.");
         const customer = await tx.customer.findFirst({
           where: {
             id: input.customerId,
@@ -1058,10 +1109,10 @@ export class ManagementService {
         const before = await tx.membership.findUnique({ where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } } });
         const membership = await tx.membership.upsert({
           where: { organizationId_customerId: { organizationId: location.organizationId, customerId: customer.id } },
-          create: { organizationId: location.organizationId, customerId: customer.id, membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
-          update: { membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
+          create: { organizationId: location.organizationId, customerId: customer.id, planId: input.planId, membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
+          update: { planId: input.planId, membershipNumber, tier: input.tier, status: input.status, expiresAt: input.expiresAt },
         });
-        const state = (value: typeof membership) => ({ membershipNumber: value.membershipNumber, tier: value.tier, status: value.status, expiresAt: value.expiresAt });
+        const state = (value: typeof membership) => ({ membershipNumber: value.membershipNumber, planId: value.planId, tier: value.tier, status: value.status, expiresAt: value.expiresAt });
         await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "customer.membership_updated", entityType: "Membership", entityId: membership.id, beforeState: before ? state(before) : undefined, afterState: { ...state(membership), requestId: input.requestId, requestFingerprint } } });
         return membership;
       });

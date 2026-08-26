@@ -821,6 +821,16 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .admin-route-page { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
 .standalone-film-library { display: grid; gap: 32px; }
 .membership-directory-page { display: grid; gap: 24px; }
+.membership-plan-layout { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(420px, 1.1fr); gap: 24px; align-items: start; }
+.membership-plan-form, .membership-plan-list { display: grid; gap: 16px; }
+.membership-plan-form label { display: grid; gap: 8px; }
+.membership-plan-form input, .membership-plan-form textarea { width: 100%; }
+.membership-plan-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.membership-plan-list article { display: flex; justify-content: space-between; gap: 18px; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.membership-plan-list article:last-of-type { border-bottom: 0; }
+.membership-plan-list small { display: block; margin-top: 4px; color: var(--muted); }
+.membership-plan-list p { margin: 8px 0; color: var(--muted); }
+.membership-plan-list ul { margin: 8px 0 0; padding-left: 20px; }
 .membership-directory-filters { display: grid; grid-template-columns: minmax(280px, 2fr) minmax(180px, 1fr); gap: 16px; }
 .membership-directory-filters label { display: grid; gap: 8px; }
 .membership-directory-filters input, .membership-directory-filters select { width: 100%; }
@@ -831,7 +841,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .membership-directory-table > a:hover { color: var(--color-accent); }
 .membership-directory-table span { min-width: 0; }
 .membership-directory-table small { display: block; margin-top: 3px; color: var(--muted); }
-@media (max-width: 700px) { .membership-directory-filters { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .membership-plan-layout { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .membership-directory-filters, .membership-plan-fields { grid-template-columns: 1fr; } }
 .donations-page { display: grid; gap: 24px; }
 .donation-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .donation-metrics article { display: grid; gap: 8px; }

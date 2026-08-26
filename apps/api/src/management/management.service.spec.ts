@@ -24,6 +24,19 @@ describe("membership directory", () => {
   });
 });
 
+describe("membership plans", () => {
+  it("loads only the signed-in cinema organization's plan catalog", async () => {
+    const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
+    const plans = jest.spyOn(prisma.membershipPlan, "findMany").mockResolvedValue([]);
+    try {
+      await new ManagementService().membershipPlans("location-1");
+      expect(plans).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: "organization-1" }, include: { _count: { select: { memberships: true } } } }));
+    } finally {
+      location.mockRestore(); plans.mockRestore();
+    }
+  });
+});
+
 describe("ManagementService private-event inquiry export", () => {
   it("keeps inquiry searches location-scoped and applies the selected status", async () => {
     const findMany = jest.spyOn(prisma.privateEventInquiry, "findMany").mockResolvedValue([]);
