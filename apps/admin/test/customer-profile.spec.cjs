@@ -42,10 +42,21 @@ test("customer profiles reuse authenticated history, pagination, and export endp
   assert.match(profile, /apiFetch<Customer>\(`\/management\/customers\/\$\{id\}`/);
   assert.match(profile, /ticketOffset/);
   assert.match(profile, /diningOffset/);
+  assert.match(profile, /donationOffset/);
   assert.match(profile, /apiDownload\(`\/management\/customers\/\$\{id\}\/history\.csv`/);
-  for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Ticket order history", "Food &amp; drink history"]) assert.ok(profile.includes(label));
+  for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Giving", "Ticket order history", "Food &amp; drink history", "Donation history"]) assert.ok(profile.includes(label));
   assert.match(profile, /Expires \$\{date\(customer\.membership\.expiresAt\)\}/);
   assert.match(profile, /No expiration/);
+});
+
+test("registered donors use the existing customer profile and retain location-scoped giving history", () => {
+  const donations = readFileSync(resolve(__dirname, "../app/donations/page.tsx"), "utf8");
+  const campaign = readFileSync(resolve(__dirname, "../app/donations/[id]/page.tsx"), "utf8");
+  assert.match(donations, /href=\{`\/customers\/\$\{donation\.customer\.id\}`\}/);
+  assert.match(campaign, /href=\{`\/customers\/\$\{donation\.customer\.id\}`\}/);
+  assert.match(managementService, /donations: \{\s*where: \{ locationId \}/);
+  assert.match(managementService, /prisma\.donation\.aggregate\(\{ where: \{ customerId, locationId, status: "SETTLED" \}/);
+  assert.match(managementService, /const donationRows = customer\.donations\.map/);
 });
 
 test("refund workflows preserve authoritative customer IDs and link to profiles", () => {
