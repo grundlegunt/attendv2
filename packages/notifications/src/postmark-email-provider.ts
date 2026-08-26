@@ -3,6 +3,7 @@ import {
   EmailProvider,
   GiftCardDelivery,
   DonationReceiptDelivery,
+  MembershipReceiptDelivery,
   RestaurantPaymentFailedNotice,
   RestaurantReceiptDelivery,
   TicketReceipt,
@@ -188,6 +189,15 @@ export class PostmarkEmailProvider implements EmailProvider {
     const response = await fetch("https://api.postmarkapp.com/email", { method: "POST", signal: AbortSignal.timeout(8_000), headers: { Accept: "application/json", "Content-Type": "application/json", "X-Postmark-Server-Token": this.serverToken }, body: JSON.stringify({ From: this.from, To: receipt.to, Subject: `Thank you for supporting ${receipt.organizationName}`, HtmlBody: `<p>Hi ${escapeHtml(receipt.donorName?.trim() || "there")},</p><p>Thank you for your ${escapeHtml(total)} contribution${escapeHtml(campaign)} to ${escapeHtml(receipt.organizationName)}.</p><p>Contribution reference: <strong>${escapeHtml(receipt.donationId)}</strong></p><p>Please retain this email for your records. The organization can provide any additional tax documentation that applies.</p>`, TextBody: `Thank you for your ${total} contribution${campaign} to ${receipt.organizationName}. Contribution reference: ${receipt.donationId}. Please retain this email for your records.`, MessageStream: "outbound" }) });
     const body = await readPostmarkResponse(response);
     if (!response.ok || !body.MessageID) throw new Error(`Postmark rejected the donation receipt: ${body.Message ?? response.statusText}`);
+    return { messageId: body.MessageID };
+  }
+
+  async sendMembershipReceipt(receipt: MembershipReceiptDelivery): Promise<{ messageId: string }> {
+    const total = new Intl.NumberFormat("en-US", { style: "currency", currency: receipt.currency }).format(receipt.amountCents / 100);
+    const expiration = receipt.expiresAt ? receipt.expiresAt.toLocaleDateString("en-US", { dateStyle: "long", timeZone: "UTC" }) : "No expiration";
+    const response = await fetch("https://api.postmarkapp.com/email", { method: "POST", signal: AbortSignal.timeout(8_000), headers: { Accept: "application/json", "Content-Type": "application/json", "X-Postmark-Server-Token": this.serverToken }, body: JSON.stringify({ From: this.from, To: receipt.to, Subject: `Welcome to ${receipt.organizationName}`, HtmlBody: `<p>Hi ${escapeHtml(receipt.memberName)},</p><p>Your ${escapeHtml(receipt.planName)} membership with ${escapeHtml(receipt.organizationName)} is active.</p><p>Member number: <strong>${escapeHtml(receipt.membershipNumber)}</strong><br>Valid through: ${escapeHtml(expiration)}<br>Amount paid: ${escapeHtml(total)}</p>`, TextBody: `Your ${receipt.planName} membership with ${receipt.organizationName} is active. Member number: ${receipt.membershipNumber}. Valid through: ${expiration}. Amount paid: ${total}.`, MessageStream: "outbound" }) });
+    const body = await readPostmarkResponse(response);
+    if (!response.ok || !body.MessageID) throw new Error(`Postmark rejected the membership receipt: ${body.Message ?? response.statusText}`);
     return { messageId: body.MessageID };
   }
 

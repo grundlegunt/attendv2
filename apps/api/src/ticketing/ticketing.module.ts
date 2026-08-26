@@ -12,9 +12,10 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { OptionalCustomerAuthGuard } from "../auth/guards/optional-customer-auth.guard";
 import { SmsTicketReconciliationService } from "./sms-ticket-reconciliation.service";
 import { DonationCheckoutModule } from "../donation-checkouts/donation-checkout.module";
+import { MembershipCheckoutModule } from "../membership-checkouts/membership-checkout.module";
 
 @Module({
-  imports: [PaymentsModule, NotificationsModule, GiftCardPurchaseModule, DonationCheckoutModule],
+  imports: [PaymentsModule, NotificationsModule, GiftCardPurchaseModule, DonationCheckoutModule, MembershipCheckoutModule],
   controllers: [TicketingController],
   providers: [TicketingService, RefundReconciliationService, TicketReceiptReconciliationService, SmsTicketReconciliationService, ScanRateLimitGuard, RequestRateLimitGuard, JwtAuthGuard, OptionalCustomerAuthGuard],
 })

@@ -9,6 +9,7 @@ const publicRoutes = [
   "/afterglow",
   "/gift-cards",
   "/donate",
+  "/membership",
   "/private-events",
   "/directions",
   "/about",

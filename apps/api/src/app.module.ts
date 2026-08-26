@@ -13,9 +13,10 @@ import { ManagementModule } from "./management/management.module";
 import { PlatformModule } from "./platform/platform.module";
 import { GiftCardPurchaseModule } from "./gift-card-purchases/gift-card-purchase.module";
 import { DonationCheckoutModule } from "./donation-checkouts/donation-checkout.module";
+import { MembershipCheckoutModule } from "./membership-checkouts/membership-checkout.module";
 
 @Module({
-  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule, PlatformModule, GiftCardPurchaseModule, DonationCheckoutModule],
+  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule, PlatformModule, GiftCardPurchaseModule, DonationCheckoutModule, MembershipCheckoutModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

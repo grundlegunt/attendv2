@@ -66,6 +66,12 @@ export default function AboutPage() {
           <p>Make a secure contribution to general operations or a current fundraising campaign.</p>
           <Link className="primary-link" href="/donate">Make a contribution</Link>
         </article>
+        <article className="content-panel" id="membership">
+          <span className="eyebrow">MEMBERSHIP</span>
+          <h2>Join the cinema</h2>
+          <p>Choose a membership plan, support the cinema, and receive member benefits throughout the year.</p>
+          <Link className="primary-link" href="/membership">View membership plans</Link>
+        </article>
         <article className="content-panel" id="private-events">
           <span className="eyebrow">PRIVATE EVENTS</span>
           <h2>Make the cinema yours</h2>
