@@ -60,6 +60,7 @@ export const defaultPlatformBrandSettings = {
   masterTheme: { accentColor: "#7c9cff", backgroundColor: "#0a0b0d", surfaceColor: "#13151a", textColor: "#f5f2ea", mutedTextColor: "#989faa" },
   masterSignIn: { eyebrow: "PLATFORM OPERATIONS", title: "Run every cinema from one place.", description: "Oversee clients, revenue, onboarding, payments, and access before entering a cinema workspace.", formTitle: "Company sign in", formDescription: "Use your Ringo company credentials." },
   adminSignIn: { accentColor: "#ffbf00", backgroundColor: "#080808", surfaceColor: "#1a1a1a", textColor: "#f7f4ed", mutedTextColor: "#aaa7a0", eyebrow: "RINGO ADMIN", title: "Cinema operations", description: "Programming, ticketing, restaurant, staff, and reporting tools in one secure workspace.", formEyebrow: "MANAGER ACCESS", formTitle: "Sign in", formDescription: "Use the staff credentials issued by your manager.", securityNote: "Authorized staff only · Sessions expire automatically" },
+  analytics: { enabled: false, provider: "PLAUSIBLE" as const },
 };
 
 type PlatformBrandSettingsInput = typeof defaultPlatformBrandSettings;
@@ -94,6 +95,7 @@ export class PlatformService {
       masterTheme: settings.masterTheme as PlatformBrandSettingsInput["masterTheme"],
       masterSignIn: settings.masterSignIn as PlatformBrandSettingsInput["masterSignIn"],
       adminSignIn: settings.adminSignIn as PlatformBrandSettingsInput["adminSignIn"],
+      analytics: settings.analytics as PlatformBrandSettingsInput["analytics"],
     };
   }
 

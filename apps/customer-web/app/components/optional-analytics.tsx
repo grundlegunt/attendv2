@@ -3,8 +3,12 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { trackOptionalPageview } from "../lib/optional-analytics";
+import { apiFetch } from "../lib/api-client";
 
 const SCRIPT_ID = "attend-optional-analytics";
+const PLAUSIBLE_SCRIPT_URL = "https://plausible.io/js/script.manual.js";
+
+type PublicAnalyticsSettings = { analytics?: { enabled?: boolean; provider?: string } };
 
 function configuredScriptUrl() {
   const value = process.env.NEXT_PUBLIC_PLAUSIBLE_SCRIPT_URL?.trim();
@@ -51,10 +55,26 @@ function installPlausible(scriptUrl: string, onReady: () => void) {
 export function OptionalAnalytics() {
   const pathname = usePathname();
   const lastTrackedPath = useRef<string | null>(null);
+  const scriptUrlRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
-    const scriptUrl = configuredScriptUrl();
-    if (!scriptUrl) return;
+    let cancelled = false;
+    apiFetch<PublicAnalyticsSettings>("/platform/branding/public")
+      .then((settings) => {
+        if (cancelled) return;
+        const masterEnabled = settings.analytics?.enabled === true && settings.analytics.provider === "PLAUSIBLE";
+        scriptUrlRef.current = configuredScriptUrl() ?? (masterEnabled ? PLAUSIBLE_SCRIPT_URL : null);
+        window.dispatchEvent(new CustomEvent("attend:analytics-configuration-ready"));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        scriptUrlRef.current = configuredScriptUrl();
+        window.dispatchEvent(new CustomEvent("attend:analytics-configuration-ready"));
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
 
     const track = () => {
       if (lastTrackedPath.current === pathname) return;
@@ -65,15 +85,22 @@ export function OptionalAnalytics() {
     };
     const handleConsent = (event: Event) => {
       const choice = (event as CustomEvent<{ choice?: string }>).detail?.choice;
-      if (choice === "analytics") installPlausible(scriptUrl, track);
+      const scriptUrl = scriptUrlRef.current;
+      if (choice === "analytics" && scriptUrl) installPlausible(scriptUrl, track);
       else lastTrackedPath.current = null;
+    };
+    const handleConfiguration = () => {
+      const scriptUrl = scriptUrlRef.current;
+      if (scriptUrl && document.documentElement.dataset.analyticsConsent === "analytics") installPlausible(scriptUrl, track);
     };
 
     window.addEventListener("attend:analytics-consent", handleConsent);
-    if (document.documentElement.dataset.analyticsConsent === "analytics") {
-      installPlausible(scriptUrl, track);
-    }
-    return () => window.removeEventListener("attend:analytics-consent", handleConsent);
+    window.addEventListener("attend:analytics-configuration-ready", handleConfiguration);
+    handleConfiguration();
+    return () => {
+      window.removeEventListener("attend:analytics-consent", handleConsent);
+      window.removeEventListener("attend:analytics-configuration-ready", handleConfiguration);
+    };
   }, [pathname]);
 
   return null;

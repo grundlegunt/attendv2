@@ -122,6 +122,10 @@ const platformBrandSettingsSchema = z.object({
     formDescription: z.string().trim().min(1).max(300),
     securityNote: z.string().trim().min(1).max(200),
   }).strict(),
+  analytics: z.object({
+    enabled: z.boolean(),
+    provider: z.literal("PLAUSIBLE"),
+  }).strict(),
 }).strict();
 
 const filmCatalogFields = {

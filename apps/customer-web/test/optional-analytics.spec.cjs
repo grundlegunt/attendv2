@@ -14,9 +14,15 @@ const privateEvents = fs.readFileSync(path.join(__dirname, "../app/private-event
 const seatPicker = fs.readFileSync(path.join(__dirname, "../app/components/seat-picker.tsx"), "utf8");
 
 test("optional analytics is disabled without configuration and explicit consent", () => {
-  assert.match(component, /if \(!scriptUrl\) return/);
+  assert.match(component, /masterEnabled \? PLAUSIBLE_SCRIPT_URL : null/);
   assert.match(component, /analyticsConsent === "analytics"/);
   assert.match(tracker, /dataset\.analyticsConsent === "analytics"/);
+});
+
+test("Master can enable a fixed trusted analytics provider at runtime", () => {
+  assert.match(component, /platform\/branding\/public/);
+  assert.match(component, /https:\/\/plausible\.io\/js\/script\.manual\.js/);
+  assert.doesNotMatch(component, /settings\.analytics\?\.scriptUrl/);
 });
 
 test("analytics uses manual pageviews so withdrawing consent stops future tracking", () => {
