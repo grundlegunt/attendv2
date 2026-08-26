@@ -8,6 +8,7 @@ import { apiFetch, ApiRequestError } from "../lib/api-client";
 type Status = "" | "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED";
 type Membership = { id: string; membershipNumber: string; tier: string; status: Exclude<Status, "">; expiresAt: string | null; updatedAt: string; customer: { id: string; name: string | null; email: string | null; phone: string | null } };
 type Plan = { id: string; name: string; description: string | null; priceCents: number; durationMonths: number; benefits: unknown; autoRenew: boolean; active: boolean; _count: { memberships: number } };
+type Summary = { active: number; expiringSoon: number; lapsed: number; recentEnrollments: number; collectedAmountCents: number; paidEnrollments: number; currency: string };
 
 export default function MembershipsPage() {
   const { accessToken, employee } = useAdminSession();
@@ -17,6 +18,7 @@ export default function MembershipsPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [planName, setPlanName] = useState("");
   const [planDescription, setPlanDescription] = useState("");
   const [planPrice, setPlanPrice] = useState("50.00");
@@ -25,7 +27,10 @@ export default function MembershipsPage() {
   const [planSaving, setPlanSaving] = useState(false);
 
   const loadPlans = () => apiFetch<Plan[]>("/management/membership-plans", { accessToken }).then(setPlans);
-  useEffect(() => { void loadPlans().catch((reason) => setError(reason instanceof ApiRequestError ? reason.body.message : "Membership plans could not be loaded.")); }, [accessToken]);
+  useEffect(() => {
+    void Promise.all([loadPlans(), apiFetch<Summary>("/management/memberships/summary", { accessToken }).then(setSummary)])
+      .catch((reason) => setError(reason instanceof ApiRequestError ? reason.body.message : "Membership information could not be loaded."));
+  }, [accessToken]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -43,7 +48,7 @@ export default function MembershipsPage() {
   }, [accessToken, query, status]);
 
   const date = (value: string) => new Date(value).toLocaleDateString([], { timeZone: employee.timezone, month: "short", day: "numeric", year: "numeric" });
-  const money = (cents: number) => new Intl.NumberFormat(undefined, { style: "currency", currency: "USD" }).format(cents / 100);
+  const money = (cents: number, currency = "USD") => new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
   async function createPlan(event: FormEvent) {
     event.preventDefault(); if (planSaving) return; setPlanSaving(true); setError(null);
     try {
@@ -58,6 +63,7 @@ export default function MembershipsPage() {
   }
   return <main className="admin-route-page membership-directory-page">
     <header className="admin-page-heading"><div><p className="kicker">CUSTOMER PROGRAMS</p><h1>Memberships</h1><p>Configure cinema membership plans and maintain member records.</p></div><Link href="/search" className="primary">Find a customer</Link></header>
+    <section className="dashboard-metrics" aria-label="Membership program summary"><article className="dashboard-metric"><span>Active members</span><strong>{summary?.active ?? "—"}</strong><small>{summary?.recentEnrollments ?? "—"} enrolled in the last 30 days</small></article><article className="dashboard-metric"><span>Expiring soon</span><strong>{summary?.expiringSoon ?? "—"}</strong><small>Active memberships ending within 30 days</small></article><article className="dashboard-metric"><span>Lapsed</span><strong>{summary?.lapsed ?? "—"}</strong><small>Expired records requiring renewal outreach</small></article><article className="dashboard-metric"><span>Online membership revenue</span><strong>{summary ? money(summary.collectedAmountCents, summary.currency) : "—"}</strong><small>{summary?.paidEnrollments ?? "—"} completed online enrollments</small></article></section>
     <section className="membership-plan-layout">
       <form className="panel membership-plan-form" onSubmit={createPlan}><div><p className="kicker">PLANS</p><h2>Create a membership plan</h2></div><label>Name<input required maxLength={100} value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Supporting Member" /></label><label>Description<textarea maxLength={1000} value={planDescription} onChange={(event) => setPlanDescription(event.target.value)} /></label><div className="membership-plan-fields"><label>Price<input type="number" min="0" max="10000" step="0.01" required value={planPrice} onChange={(event) => setPlanPrice(event.target.value)} /></label><label>Duration (months)<input type="number" min="1" max="120" required value={planDuration} onChange={(event) => setPlanDuration(event.target.value)} /></label></div><label>Benefits, one per line<textarea maxLength={5000} value={planBenefits} onChange={(event) => setPlanBenefits(event.target.value)} placeholder={'Two free tickets\nMember pricing\nInvitations to member events'} /></label><button className="primary" disabled={planSaving}>{planSaving ? "Creating…" : "Create plan"}</button></form>
       <section className="panel membership-plan-list"><div><p className="kicker">CATALOG</p><h2>Available plans</h2></div>{plans.map((plan) => <article key={plan.id}><div><strong>{plan.name}</strong><small>{money(plan.priceCents)} · {plan.durationMonths} months · {plan._count.memberships} members</small>{plan.description && <p>{plan.description}</p>}<ul>{Array.isArray(plan.benefits) && plan.benefits.map((benefit) => typeof benefit === "string" ? <li key={benefit}>{benefit}</li> : null)}</ul></div><button className="secondary" type="button" onClick={() => void togglePlan(plan)}>{plan.active ? "Deactivate" : "Reactivate"}</button></article>)}{!plans.length && <p className="dashboard-empty">No membership plans have been configured.</p>}</section>
