@@ -1123,6 +1123,80 @@ export class PlatformService {
       organizations.flatMap((organization) => organization.locations.map((location) => location.id)),
       { from, to },
     );
+    const locationIds = organizations.flatMap((organization) => organization.locations.map((location) => location.id));
+    const filmTickets = locationIds.length
+      ? await prisma.ticket.findMany({
+          where: {
+            status: { notIn: ["REFUNDED", "CANCELED"] },
+            showtimeSeat: {
+              showtime: {
+                startsAt: { gte: from, lt: to },
+                auditorium: { locationId: { in: locationIds } },
+              },
+            },
+          },
+          select: {
+            priceCentsPaid: true,
+            showtimeSeat: {
+              select: {
+                showtime: {
+                  select: {
+                    id: true,
+                    movie: { select: { id: true, catalogEntryId: true, title: true } },
+                    auditorium: {
+                      select: {
+                        location: { select: { id: true, organizationId: true } },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+      : [];
+    const filmTotals = new Map<string, {
+      id: string;
+      catalogEntryId: string | null;
+      title: string;
+      organizationIds: Set<string>;
+      locationIds: Set<string>;
+      showtimeIds: Set<string>;
+      ticketsSold: number;
+      ticketRevenueCents: number;
+    }>();
+    for (const ticket of filmTickets) {
+      const showtime = ticket.showtimeSeat.showtime;
+      const key = showtime.movie.catalogEntryId ?? showtime.movie.id;
+      const current = filmTotals.get(key) ?? {
+        id: key,
+        catalogEntryId: showtime.movie.catalogEntryId,
+        title: showtime.movie.title,
+        organizationIds: new Set<string>(),
+        locationIds: new Set<string>(),
+        showtimeIds: new Set<string>(),
+        ticketsSold: 0,
+        ticketRevenueCents: 0,
+      };
+      current.organizationIds.add(showtime.auditorium.location.organizationId);
+      current.locationIds.add(showtime.auditorium.location.id);
+      current.showtimeIds.add(showtime.id);
+      current.ticketsSold += 1;
+      current.ticketRevenueCents += ticket.priceCentsPaid;
+      filmTotals.set(key, current);
+    }
+    const films = [...filmTotals.values()]
+      .map((film) => ({
+        id: film.id,
+        catalogEntryId: film.catalogEntryId,
+        title: film.title,
+        operators: film.organizationIds.size,
+        locations: film.locationIds.size,
+        showtimes: film.showtimeIds.size,
+        ticketsSold: film.ticketsSold,
+        ticketRevenueCents: film.ticketRevenueCents,
+      }))
+      .sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || right.ticketsSold - left.ticketsSold || left.title.localeCompare(right.title));
     const clients = organizations.map((organization) => {
         const totals = zero();
         for (const location of organization.locations) {
@@ -1147,6 +1221,7 @@ export class PlatformService {
       range: { from: from.toISOString(), to: to.toISOString() },
       totals,
       clients,
+      films,
     };
   }
 
