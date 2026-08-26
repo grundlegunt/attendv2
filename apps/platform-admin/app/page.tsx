@@ -41,6 +41,7 @@ interface OrganizationOverview {
 
 interface Overview {
   generatedAt: string;
+  deliveryReadiness: Record<"email" | "sms" | "appleWallet" | "googleWallet", { ready: boolean; provider: string }>;
   organizations: OrganizationOverview[];
 }
 
@@ -227,6 +228,32 @@ export default function PlatformDashboard() {
         <article><span>Locations</span><strong>{metrics.locations}</strong><small>{metrics.activeLocations} active</small></article>
         <article><span>Stripe ready</span><strong>{metrics.connectedClients}</strong><small>clients accepting payments</small></article>
         <article className={metrics.attentionClients.length ? "attention" : ""}><span>Needs attention</span><strong>{metrics.attentionClients.length}</strong><small>incomplete payment setup</small></article>
+      </section>
+      <section className="dashboard-panel delivery-readiness">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">TICKET DELIVERY</p>
+            <h2>Platform readiness</h2>
+            <p className="muted">Deployment-level delivery services used by every cinema workspace.</p>
+          </div>
+          <Link href="/diagnostics">Open diagnostics</Link>
+        </div>
+        {!overview && <p className="muted">Loading ticket-delivery readiness…</p>}
+        {overview && <div className="delivery-readiness-grid">
+          {([
+            ["email", "Email tickets"],
+            ["sms", "SMS tickets"],
+            ["appleWallet", "Apple Wallet"],
+            ["googleWallet", "Google Wallet"],
+          ] as const).map(([key, label]) => {
+            const service = overview.deliveryReadiness[key];
+            return <article key={key} className={service.ready ? "ready" : "not-ready"}>
+              <span>{label}</span>
+              <strong>{service.ready ? "Ready" : "Not configured"}</strong>
+              <small>Provider: {statusLabel(service.provider)}</small>
+            </article>;
+          })}
+        </div>}
       </section>
       <section className="dashboard-panel platform-revenue">
         <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="revenue-actions"><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}</div><button className="quiet" disabled={revenueLoading || !revenue} onClick={() => void downloadRevenue()}>Export CSV</button></div></div>

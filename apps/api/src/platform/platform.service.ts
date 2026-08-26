@@ -791,6 +791,7 @@ export class PlatformService {
   }
 
   async overview(forceRefresh = false) {
+    const env = loadEnv();
     const now = new Date();
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },
@@ -866,6 +867,12 @@ export class PlatformService {
 
     return {
       generatedAt: new Date().toISOString(),
+      deliveryReadiness: {
+        email: { ready: env.EMAIL_PROVIDER === "postmark", provider: env.EMAIL_PROVIDER },
+        sms: { ready: env.SMS_PROVIDER === "twilio", provider: env.SMS_PROVIDER },
+        appleWallet: { ready: env.APPLE_WALLET_PROVIDER === "passkit", provider: env.APPLE_WALLET_PROVIDER },
+        googleWallet: { ready: env.GOOGLE_WALLET_PROVIDER === "google", provider: env.GOOGLE_WALLET_PROVIDER },
+      },
       organizations: await Promise.all(
         organizations.map(async (organization) => {
           const health = healthByOrganization.get(organization.id)!;
