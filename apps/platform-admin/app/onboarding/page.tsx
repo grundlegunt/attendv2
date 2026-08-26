@@ -165,7 +165,7 @@ export default function PlatformOnboarding() {
         <div className="identity">{session.user.role !== "VIEWER" && <Link className="quiet link-button" href="/clients?create=1">+ Start client</Link>}<span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
       <nav className="platform-nav" aria-label="Ringo Master">
-        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
+        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link href="/analytics">Audience</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
       </nav>
       {error && <div className="error">{error}</div>}
       <section className="onboarding-summary">

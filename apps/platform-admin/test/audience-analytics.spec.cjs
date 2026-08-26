@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { readFileSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 
 const root = join(__dirname, "../../..");
@@ -18,6 +18,24 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(page, /Memberships/);
   assert.match(page, /Private events/);
   assert.match(page, /Top pages/);
+  assert.match(page, /Daily customer activity/);
+});
+
+test("Audience is reachable from every Master navigation bar", () => {
+  const app = join(root, "apps/platform-admin/app");
+  const pages = [];
+  function collect(directory) {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const path = join(directory, entry.name);
+      if (entry.isDirectory()) collect(path);
+      else if (entry.name.endsWith(".tsx")) pages.push(path);
+    }
+  }
+  collect(app);
+  for (const path of pages) {
+    const source = readFileSync(path, "utf8");
+    if (source.includes('className="platform-nav"')) assert.match(source, /href="\/analytics"/, path);
+  }
 });
 
 test("Master dashboard links to audience analytics", () => {

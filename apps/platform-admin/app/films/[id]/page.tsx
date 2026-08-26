@@ -205,6 +205,7 @@ export default function FilmPerformancePage() {
         <Link className="active" href="/films">
           Films
         </Link>
+        <Link href="/analytics">Audience</Link>
         <Link href="/onboarding">Onboarding</Link>
         <Link href="/payments">Payments</Link>
         <Link href="/content">Content</Link>
