@@ -2384,6 +2384,74 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  async filmCatalog(actor: RequestActor, query?: string) {
+    const locationId = this.requireLocation(actor);
+    const location = await prisma.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+    if (!location) throw AppError.notFound("Location not found.");
+    const search = query?.trim().slice(0, 200);
+    const entries = await prisma.filmCatalogEntry.findMany({
+      where: {
+        active: true,
+        ...(search ? { OR: [
+          { title: { contains: search, mode: "insensitive" } },
+          { director: { contains: search, mode: "insensitive" } },
+          { starring: { contains: search, mode: "insensitive" } },
+          { primaryDistributorName: { contains: search, mode: "insensitive" } },
+          { imdbId: { equals: search, mode: "insensitive" } },
+          { eidrId: { equals: search, mode: "insensitive" } },
+        ] } : {}),
+      },
+      orderBy: [{ verified: "desc" }, { title: "asc" }, { releaseYear: "desc" }],
+      take: 50,
+      include: { operatorMovies: { where: { organizationId: location.organizationId }, select: { id: true } } },
+    });
+    return { entries: entries.map(({ operatorMovies, ...entry }) => ({
+      ...entry,
+      importedMovieId: operatorMovies[0]?.id ?? null,
+      createdAt: entry.createdAt.toISOString(),
+      updatedAt: entry.updatedAt.toISOString(),
+    })) };
+  }
+
+  async importCatalogMovie(actor: RequestActor, catalogEntryId: string) {
+    const locationId = this.requireLocation(actor);
+    return prisma.$transaction(async (tx) => {
+      const location = await tx.location.findUnique({ where: { id: locationId }, select: { organizationId: true } });
+      if (!location) throw AppError.notFound("Location not found.");
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${location.organizationId}:${catalogEntryId}`}))`;
+      const catalog = await tx.filmCatalogEntry.findFirst({ where: { id: catalogEntryId, active: true } });
+      if (!catalog) throw AppError.notFound("Catalog film not found.");
+      const existing = await tx.movie.findFirst({ where: { organizationId: location.organizationId, catalogEntryId } });
+      if (existing) throw AppError.conflict("This film is already in the cinema library.");
+      const movie = await tx.movie.create({ data: {
+        organizationId: location.organizationId,
+        catalogEntryId: catalog.id,
+        title: catalog.title,
+        synopsis: catalog.synopsis,
+        runtimeMinutes: catalog.runtimeMinutes,
+        rating: catalog.rating,
+        posterUrl: catalog.posterUrl,
+        detailPosterUrl: catalog.detailPosterUrl,
+        director: catalog.director,
+        starring: catalog.starring,
+        trailerUrl: catalog.trailerUrl,
+        releaseYear: catalog.releaseYear,
+        distributorName: catalog.primaryDistributorName,
+        distributorTerms: [],
+      } });
+      await tx.auditEvent.create({ data: {
+        actorType: AuditActorType.EMPLOYEE,
+        actorId: actor.sub,
+        locationId,
+        action: "movie.catalog_imported",
+        entityType: "Movie",
+        entityId: movie.id,
+        afterState: { catalogEntryId: catalog.id, title: movie.title },
+      } });
+      return movie;
+    });
+  }
+
   async archiveMovie(
     actor: RequestActor,
     id: string,

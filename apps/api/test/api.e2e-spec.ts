@@ -1069,6 +1069,58 @@ describe("Attend platform authentication boundary", () => {
     ]));
   });
 
+  it("lets cinema operators import shared film facts without shared deal terms", async () => {
+    const cinemaLogin = await loginOwner();
+    const platformLogin = await loginPlatformOwner();
+    expect(cinemaLogin.status).toBe(200);
+    expect(platformLogin.status).toBe(200);
+    const cinemaToken = cinemaLogin.body.accessToken as string;
+    const masterToken = platformLogin.body.accessToken as string;
+    const created = await request(app.getHttpServer())
+      .post("/api/v1/platform/film-catalog")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .send({
+        title: "Shared Import Test Film",
+        synopsis: "Canonical synopsis",
+        runtimeMinutes: 104,
+        releaseYear: 2026,
+        primaryDistributorName: "Private Terms Distribution",
+        imdbId: "tt987654321",
+        verified: true,
+      })
+      .expect(201);
+
+    const catalog = await request(app.getHttpServer())
+      .get("/api/v1/cinema/film-catalog?q=Shared%20Import")
+      .set("Authorization", `Bearer ${cinemaToken}`)
+      .expect(200);
+    expect(catalog.body.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: created.body.id, importedMovieId: null, verified: true }),
+    ]));
+
+    const imported = await request(app.getHttpServer())
+      .post(`/api/v1/cinema/film-catalog/${created.body.id}/import`)
+      .set("Authorization", `Bearer ${cinemaToken}`)
+      .expect(201);
+    expect(imported.body).toEqual(expect.objectContaining({
+      catalogEntryId: created.body.id,
+      title: "Shared Import Test Film",
+      synopsis: "Canonical synopsis",
+      distributorName: "Private Terms Distribution",
+      distributorTerms: [],
+    }));
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/cinema/film-catalog/${created.body.id}/import`)
+      .set("Authorization", `Bearer ${cinemaToken}`)
+      .expect(409);
+    const refreshed = await request(app.getHttpServer())
+      .get("/api/v1/cinema/film-catalog?q=Shared%20Import")
+      .set("Authorization", `Bearer ${cinemaToken}`)
+      .expect(200);
+    expect(refreshed.body.entries[0].importedMovieId).toBe(imported.body.id);
+  });
+
   it("lets Attend operators add and revoke company team access safely", async () => {
     await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${ownerAccessToken}`).expect(403);
     const initial = await request(app.getHttpServer()).get("/api/v1/platform/team").set("Authorization", `Bearer ${platformAccessToken}`).expect(200);
