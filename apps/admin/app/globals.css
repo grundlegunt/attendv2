@@ -821,6 +821,8 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .admin-route-page { width: min(1600px, 100%); margin: 0 auto; padding: 24px; }
 .standalone-film-library { display: grid; gap: 32px; }
 .membership-directory-page { display: grid; gap: 24px; }
+.membership-queue-card { cursor: pointer; text-align: left; font: inherit; }
+.membership-queue-card.active { border-color: var(--color-accent); box-shadow: inset 4px 0 0 var(--color-accent); }
 .membership-plan-layout { display: grid; grid-template-columns: minmax(320px, .9fr) minmax(420px, 1.1fr); gap: 24px; align-items: start; }
 .membership-plan-form, .membership-plan-list { display: grid; gap: 16px; }
 .membership-plan-form label { display: grid; gap: 8px; }

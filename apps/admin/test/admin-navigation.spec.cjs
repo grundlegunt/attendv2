@@ -118,6 +118,8 @@ describe("admin navigation", () => {
     assert.match(membershipsSource, /\/management\/memberships/);
     assert.match(membershipsSource, /`\/customers\/\$\{membership\.customer\.id\}`/);
     assert.match(membershipsSource, /All statuses/);
+    assert.match(membershipsSource, /lifecycle/);
+    assert.match(membershipsSource, /View memberships ending within 30 days/);
   });
 
   it("keeps the external merchandise shop editor discoverable under Extras", () => {
