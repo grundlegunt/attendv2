@@ -11,6 +11,8 @@ test("signed-in customers can review memberships and settled renewal history", (
   assert.match(auth, /checkouts: \{\s*where: \{ status: "PAID" \}/);
   assert.match(page, /My memberships/);
   assert.match(page, /Enrollment &amp; renewal history/);
+  assert.match(auth, /taxDeductibleAmountCents: true/);
+  assert.match(page, /potentially tax-deductible/);
   assert.match(page, /membership\.purchases\.map/);
   assert.match(page, /View membership options/);
 });
