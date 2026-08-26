@@ -1008,6 +1008,32 @@ describe("Attend platform authentication boundary", () => {
       .set("Authorization", `Bearer ${cinemaToken}`)
       .expect(403);
 
+    await request(app.getHttpServer())
+      .post("/api/v1/platform/film-catalog/sync")
+      .set("Authorization", `Bearer ${cinemaToken}`)
+      .expect(403);
+
+    const synchronized = await request(app.getHttpServer())
+      .post("/api/v1/platform/film-catalog/sync")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(synchronized.body.createdEntries).toBeGreaterThan(0);
+    expect(synchronized.body.linkedMovies).toBeGreaterThan(0);
+
+    const repeatedSync = await request(app.getHttpServer())
+      .post("/api/v1/platform/film-catalog/sync")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(repeatedSync.body).toEqual({ createdEntries: 0, linkedMovies: 0 });
+
+    const synchronizedSearch = await request(app.getHttpServer())
+      .get("/api/v1/platform/film-catalog?limit=100")
+      .set("Authorization", `Bearer ${masterToken}`)
+      .expect(200);
+    expect(synchronizedSearch.body.entries.some(
+      (entry: { operatorMovieCount: number }) => entry.operatorMovieCount > 0,
+    )).toBe(true);
+
     const created = await request(app.getHttpServer())
       .post("/api/v1/platform/film-catalog")
       .set("Authorization", `Bearer ${masterToken}`)
