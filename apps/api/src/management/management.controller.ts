@@ -270,6 +270,14 @@ export class ManagementController {
     response.send(this.management.membershipsCsv(rows));
   }
 
+  @Get("membership-payments.csv") @RequirePermissions(Permission.TicketPriceEdit)
+  async membershipPaymentsCsv(@CurrentActor() actor: RequestActor, @Res() response: Response) {
+    const rows = await this.management.membershipPaymentExportRows(this.location(actor));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="membership-payments.csv"');
+    response.send(this.management.membershipPaymentsCsv(rows));
+  }
+
   @Get("memberships/summary") @RequirePermissions(Permission.TicketPriceEdit)
   membershipSummary(@CurrentActor() actor: RequestActor) { return this.management.membershipSummary(this.location(actor)); }
 
