@@ -99,6 +99,33 @@ const membershipDirectorySchema = z.object({
   query: z.string().trim().max(100).optional(),
   status: z.enum(["ACTIVE", "EXPIRED", "SUSPENDED", "CANCELED"]).optional(),
 }).strict();
+const donationCampaignFields = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).nullable().optional(),
+  goalAmountCents: z.number().int().positive().max(1_000_000_000).nullable().optional(),
+  startsAt: z.coerce.date().nullable().optional(),
+  endsAt: z.coerce.date().nullable().optional(),
+  active: z.boolean().default(true),
+}).strict();
+const donationCampaignSchema = donationCampaignFields.refine((value) => !value.startsAt || !value.endsAt || value.startsAt < value.endsAt, "Campaign end date must be after its start date.");
+const donationCampaignUpdateSchema = donationCampaignFields.partial().refine((value) => Object.keys(value).length > 0, "Provide at least one campaign change.");
+const donationSchema = z.object({
+  campaignId: z.string().uuid().nullable().optional(),
+  customerId: z.string().uuid().nullable().optional(),
+  donorName: z.string().trim().max(120).nullable().optional(),
+  donorEmail: z.string().trim().email().max(320).nullable().optional(),
+  amountCents: z.number().int().positive().max(100_000_000),
+  taxDeductibleAmountCents: z.number().int().min(0).max(100_000_000),
+  paymentMethod: z.enum(["CASH", "CHECK", "EXTERNAL"]),
+  externalReference: z.string().trim().max(200).nullable().optional(),
+  receivedAt: z.coerce.date(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+}).strict().refine((value) => value.taxDeductibleAmountCents <= value.amountCents, "Tax-deductible amount cannot exceed the donation amount.");
+const donationDirectorySchema = z.object({
+  campaignId: z.string().uuid().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+}).strict().refine((value) => !value.from || !value.to || value.from < value.to, "End date must be after start date.");
 const dashboardWidget = z.enum(["metrics", "topFilms", "schedule", "setup", "activity", "quickActions"]);
 const dashboardPreferencesSchema = z.object({
   hidden: z.array(dashboardWidget).max(6),
@@ -228,6 +255,18 @@ export class ManagementController {
   updateCustomerMembership(@CurrentActor() actor: RequestActor, @Param("customerId") customerId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(membershipSchema)) body: unknown) {
     return this.management.updateCustomerMembership({ ...membershipSchema.parse(body), customerId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() });
   }
+
+  @Get("donations") @RequirePermissions(Permission.ReportsViewFinancial)
+  donations(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(donationDirectorySchema)) query: unknown) { return this.management.donations(this.location(actor), donationDirectorySchema.parse(query)); }
+
+  @Post("donations") @RequirePermissions(Permission.ReportsViewFinancial)
+  recordDonation(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(donationSchema)) body: unknown) { return this.management.recordDonation({ ...donationSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
+
+  @Post("donation-campaigns") @RequirePermissions(Permission.TicketPriceEdit)
+  createDonationCampaign(@CurrentActor() actor: RequestActor, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(donationCampaignSchema)) body: unknown) { return this.management.createDonationCampaign({ ...donationCampaignSchema.parse(body), locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
+
+  @Patch("donation-campaigns/:campaignId") @RequirePermissions(Permission.TicketPriceEdit)
+  updateDonationCampaign(@CurrentActor() actor: RequestActor, @Param("campaignId") campaignId: string, @Headers("idempotency-key") requestId: string | undefined, @Body(new ZodValidationPipe(donationCampaignUpdateSchema)) body: unknown) { return this.management.updateDonationCampaign({ ...donationCampaignUpdateSchema.parse(body), campaignId, locationId: this.location(actor), employeeId: actor.sub, requestId: requestId ?? randomUUID() }); }
 
   @Get("payment-methods/:paymentMethodId") @RequirePermissions(Permission.PaymentViewDisplaySafe)
   paymentMethod(@CurrentActor() actor: RequestActor, @Param("paymentMethodId") paymentMethodId: string) { return this.management.paymentMethod(this.location(actor), paymentMethodId); }

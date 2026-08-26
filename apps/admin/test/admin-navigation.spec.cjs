@@ -12,6 +12,7 @@ const dashboardSource = readFileSync(resolve(__dirname, "../app/admin-dashboard.
 const schedulingSource = readFileSync(resolve(__dirname, "../app/scheduling/page.tsx"), "utf8");
 const filmLibrarySource = readFileSync(resolve(__dirname, "../app/films/page.tsx"), "utf8");
 const membershipsSource = readFileSync(resolve(__dirname, "../app/memberships/page.tsx"), "utf8");
+const donationsSource = readFileSync(resolve(__dirname, "../app/donations/page.tsx"), "utf8");
 const merchSource = readFileSync(resolve(__dirname, "../app/merch/page.tsx"), "utf8");
 const globalStylesSource = readFileSync(resolve(__dirname, "../app/globals.css"), "utf8");
 const source = readFileSync(navigationPath, "utf8");
@@ -125,9 +126,17 @@ describe("admin navigation", () => {
     assert.match(merchSource, /section="merch"/);
   });
 
+  it("exposes nonprofit donation campaigns and auditable offline contributions", () => {
+    const extras = adminNavigation.find((group) => group.label === "Extras");
+    assert.equal(extras.items.some((item) => item.href === "/donations"), true);
+    assert.match(donationsSource, /\/management\/donation-campaigns/);
+    assert.match(donationsSource, /Record a settled donation/);
+    assert.match(donationsSource, /Tax-deductible amount/);
+  });
+
   it("shows distributor and financial reporting tools only with financial reporting permission", () => {
     const links = visibleAdminNavigation(["reports.view.financial"]).flatMap((group) => group.items);
-    assert.deepEqual(links.map((item) => item.href), ["/", "/distributors", "/reports", "/expenses"]);
+    assert.deepEqual(links.map((item) => item.href), ["/", "/distributors", "/reports", "/expenses", "/donations"]);
   });
 
   it("does not expose financial operations without payment-refund permission", () => {
