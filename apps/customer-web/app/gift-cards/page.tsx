@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { loadStripeScript } from "../lib/stripe-loader";
+import { trackOptionalAnalyticsEvent } from "../lib/optional-analytics";
 
 type Balance = { codeLast4: string; balanceCents: number; currency: string };
 type Config = { locationId: string; currency: string; payment: { ready: boolean; publishableKey: string | null; connectedAccountId: string | null } };
@@ -114,6 +115,7 @@ export default function GiftCardsPage() {
       if (!created.payment.clientSecret) throw new Error("A secure payment session could not be created.");
       await loadStripeScript(); const factory = stripeFactory(); if (!factory || !config.payment.publishableKey) throw new Error("Stripe payments are not configured.");
       const stripe = factory(config.payment.publishableKey, { stripeAccount: config.payment.connectedAccountId ?? undefined });
+      trackOptionalAnalyticsEvent("Gift Card Started");
       setPurchase(created); setElements(stripe.elements({ clientSecret: created.payment.clientSecret, appearance: { theme: "night" } }));
     } catch (reason) { setError(failure(reason)); } finally { purchaseActionPendingRef.current = false; setPending(false); }
   }

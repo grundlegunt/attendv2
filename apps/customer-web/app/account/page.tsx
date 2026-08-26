@@ -13,6 +13,7 @@ import { LiveRestaurantTab } from "../components/live-restaurant-tab";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import { useCinemaContent } from "../components/customer-branding";
 import { downloadTicketCalendar } from "../lib/ticket-calendar";
+import { trackOptionalAnalyticsEvent } from "../lib/optional-analytics";
 
 type Mode = "login" | "register" | "forgot" | "reset";
 function money(cents: number, currency: string) {
@@ -205,6 +206,7 @@ export default function AccountPage() {
     const requestId = ++sessionRequestRef.current;
     setError(null);
     setLoading(true);
+    const creatingAccount = mode === "register";
     try {
       const path =
         mode === "login" ? "/auth/customers/login" : "/auth/customers/register";
@@ -220,7 +222,10 @@ export default function AccountPage() {
         body: fingerprint,
       });
       if (requestId !== sessionRequestRef.current) return;
-      if (mode === "register") registrationAttemptRef.current = null;
+      if (creatingAccount) {
+        registrationAttemptRef.current = null;
+        trackOptionalAnalyticsEvent("Account Created");
+      }
       setSession(response.customer);
       setAccountLoading(true);
       const nextAccount = await requestAccount(false);
