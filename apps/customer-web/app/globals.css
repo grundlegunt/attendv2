@@ -1915,6 +1915,8 @@ body:has(.signage-shell) .site-header { display: none; }
 .mobile-ticket-wallet__cards .confirmation-card {
   margin: 0;
 }
+.mobile-ticket-wallet__actions { display: flex; flex-wrap: wrap; gap: 10px; grid-column: 1 / -1; }
+.mobile-ticket-wallet__actions button { min-height: 42px; }
 .mobile-ticket-wallet__total,
 .mobile-ticket-status {
   margin-top: 24px;

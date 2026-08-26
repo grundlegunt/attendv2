@@ -19,7 +19,7 @@ import {
   ProviderRefundStatus,
   VerifiedProviderEvent,
 } from "@cinema/payments";
-import { DisabledSmsProvider, EmailProvider, SmsProvider, TicketReceipt } from "@cinema/notifications";
+import { DisabledSmsProvider, EmailProvider, SmsProvider, TicketReceipt, WalletPassArtifact, WalletPassProvider } from "@cinema/notifications";
 import { TicketingError } from "./ticketing-error";
 import { createTicketCredential } from "./qr-credential";
 import {
@@ -1129,6 +1129,49 @@ export class TicketingService {
       timeZone: order.location.timezone,
       tickets: confirmation.tickets,
     };
+  }
+
+  async redeemMobileTicketWalletPass(
+    orderId: string,
+    ticketId: string,
+    token: string,
+    provider: WalletPassProvider,
+  ): Promise<WalletPassArtifact> {
+    if (!provider.available) throw TicketingError.notFound("Wallet passes are not available.");
+    const ticket = await this.prisma.ticket.findFirst({
+      where: {
+        id: ticketId,
+        status: { in: ["ISSUED", "ADMITTED"] },
+        ticketOrder: {
+          id: orderId,
+          mobileAccessTokenHash: mobileAccessTokenHash(token),
+          mobileAccessExpiresAt: { gt: new Date() },
+          mobileAccessRevokedAt: null,
+          status: { in: [TicketOrderStatus.PAID, TicketOrderStatus.EXCHANGED] },
+        },
+      },
+      include: {
+        ticketType: true,
+        ticketOrder: { include: { location: { select: { name: true, timezone: true } } } },
+        showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } },
+      },
+    });
+    if (!ticket) throw TicketingError.notFound("Mobile ticket was not found or has expired.");
+    const artifact = await provider.issueTicketPass({
+      ticketId: ticket.id,
+      orderNumber: ticket.ticketOrder.orderNumber,
+      credential: ticket.qrToken,
+      venueName: ticket.ticketOrder.location.name,
+      movieTitle: ticket.showtimeSeat.showtime.movie.title,
+      auditoriumName: ticket.showtimeSeat.showtime.auditorium.name,
+      seatLabel: ticket.showtimeSeat.showtime.auditorium.seatingMode === "GENERAL_ADMISSION" ? "General admission" : ticket.showtimeSeat.seat.label,
+      ticketTypeName: ticket.ticketType.name,
+      startsAt: ticket.showtimeSeat.showtime.startsAt,
+      endsAt: ticket.showtimeSeat.showtime.endsAt,
+      timeZone: ticket.ticketOrder.location.timezone,
+    });
+    if (!artifact) throw TicketingError.notFound("Wallet pass is not available.");
+    return artifact;
   }
 
   async reconcileFailedReceipts(limit = 25) {

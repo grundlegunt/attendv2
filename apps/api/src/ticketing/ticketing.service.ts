@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
-import { EmailProvider, SmsProvider } from "@cinema/notifications";
+import { EmailProvider, SmsProvider, WalletPlatform, WalletPassArtifact, WalletPassProvider } from "@cinema/notifications";
 import {
   CreateTicketCheckoutInput,
   TicketingError,
@@ -10,7 +10,7 @@ import {
 } from "@cinema/ticketing";
 import { AppError } from "../common/app-error";
 import { PAYMENT_PROVIDER } from "../payments/payments.module";
-import { EMAIL_PROVIDER, SMS_PROVIDER } from "../notifications/notifications.module";
+import { APPLE_WALLET_PROVIDER, EMAIL_PROVIDER, GOOGLE_WALLET_PROVIDER, SMS_PROVIDER } from "../notifications/notifications.module";
 import { loadEnv } from "@cinema/config/env";
 import { createHash } from "node:crypto";
 import { GiftCardPurchaseService } from "../gift-card-purchases/gift-card-purchase.service";
@@ -25,6 +25,8 @@ export class TicketingService {
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
     @Inject(EMAIL_PROVIDER) emailProvider: EmailProvider,
     @Inject(SMS_PROVIDER) smsProvider: SmsProvider,
+    @Inject(APPLE_WALLET_PROVIDER) private readonly appleWalletProvider: WalletPassProvider,
+    @Inject(GOOGLE_WALLET_PROVIDER) private readonly googleWalletProvider: WalletPassProvider,
     private readonly giftCardPurchases: GiftCardPurchaseService,
     private readonly donationCheckouts: DonationCheckoutService,
     private readonly membershipCheckouts: MembershipCheckoutService,
@@ -171,8 +173,14 @@ export class TicketingService {
     return this.wrap(() => this.domain.resendGuestSmsTickets(orderId, holderKey, requestId));
   }
 
-  redeemMobileTicketAccess(orderId: string, token: string) {
-    return this.wrap(() => this.domain.redeemMobileTicketAccess(orderId, token));
+  async redeemMobileTicketAccess(orderId: string, token: string) {
+    const tickets = await this.wrap(() => this.domain.redeemMobileTicketAccess(orderId, token));
+    return { ...tickets, walletAvailability: { apple: this.appleWalletProvider.available, google: this.googleWalletProvider.available } };
+  }
+
+  redeemMobileTicketWalletPass(orderId: string, ticketId: string, token: string, platform: WalletPlatform): Promise<WalletPassArtifact> {
+    const provider = platform === "apple" ? this.appleWalletProvider : this.googleWalletProvider;
+    return this.wrap(() => this.domain.redeemMobileTicketWalletPass(orderId, ticketId, token, provider));
   }
 
   reconcileFailedReceipts(limit?: number) {
