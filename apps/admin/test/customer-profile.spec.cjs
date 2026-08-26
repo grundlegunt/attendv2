@@ -50,6 +50,8 @@ test("customer profiles reuse authenticated history, pagination, and export endp
   assert.match(profile, /No expiration/);
   assert.match(profile, /customer\.membership\?\.checkouts\.map/);
   assert.match(profile, /membershipSpendCents/);
+  assert.match(profile, /membershipTaxDeductibleAmountCents/);
+  assert.match(profile, /purchase\.taxDeductibleAmountCents/);
 });
 
 test("registered donors use the existing customer profile and retain location-scoped giving history", () => {
