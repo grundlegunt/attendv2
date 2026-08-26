@@ -1113,6 +1113,7 @@ export class ManagementService {
                 id: true,
                 planName: true,
                 amountCents: true,
+                taxDeductibleAmountCents: true,
                 currency: true,
                 createdAt: true,
                 receiptSentAt: true,
@@ -1225,6 +1226,7 @@ export class ManagementService {
         donationCurrency: customer.donations[0]?.location.currency ?? "USD",
         membershipPurchaseCount: membershipPurchases.length,
         membershipSpendCents: membershipPurchases.reduce((total, purchase) => total + purchase.amountCents, 0),
+        membershipTaxDeductibleAmountCents: membershipPurchases.reduce((total, purchase) => total + purchase.taxDeductibleAmountCents, 0),
         membershipCurrency: membershipPurchases[0]?.currency ?? "USD",
       },
       historyWindow: {
