@@ -22,6 +22,11 @@ test("Master film catalog supports discovery and lifecycle management", () => {
   assert.match(source, /cannot see any operator film records/);
   assert.match(source, /Confirm Master and Admin use the same API and database/);
   assert.match(source, /All.*catalog records are inactive/);
+  assert.match(source, /operator film records linked/);
+  assert.match(source, /active catalog films/);
+  assert.match(source, /waiting to synchronize/);
+  assert.match(serviceSource, /syncStatus: \{/);
+  assert.match(serviceSource, /unlinkedOperatorMovieCount: operatorMovieCount - linkedOperatorMovieCount/);
 });
 
 test("Master film catalog keeps viewers read-only", () => {
