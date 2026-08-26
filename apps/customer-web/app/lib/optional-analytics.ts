@@ -1,3 +1,5 @@
+import { apiFetch } from "./api-client";
+
 export const OPTIONAL_ANALYTICS_EVENTS = [
   "Checkout Started",
   "Checkout Completed",
@@ -40,15 +42,22 @@ export function analyticsPath(pathname: string): string {
 }
 
 function analyticsAllowed() {
-  return typeof document !== "undefined" && document.documentElement.dataset.analyticsConsent === "analytics";
+  return typeof document !== "undefined" && document.documentElement.dataset.analyticsConsent === "analytics" && document.documentElement.dataset.analyticsEnabled === "true";
+}
+
+function recordFirstParty(event: OptionalAnalyticsEvent | "Pageview", path?: string) {
+  void apiFetch<{ accepted: boolean }>("/cinema/analytics/events", { method: "POST", body: JSON.stringify({ event, ...(path ? { path } : {}) }) }).catch(() => undefined);
 }
 
 export function trackOptionalAnalyticsEvent(event: OptionalAnalyticsEvent) {
   if (!analyticsAllowed()) return;
   window.plausible?.(event);
+  recordFirstParty(event);
 }
 
 export function trackOptionalPageview(pathname: string) {
   if (!analyticsAllowed()) return;
-  window.plausible?.("pageview", { url: `${window.location.origin}${analyticsPath(pathname)}` });
+  const path = analyticsPath(pathname);
+  window.plausible?.("pageview", { url: `${window.location.origin}${path}` });
+  recordFirstParty("Pageview", path);
 }

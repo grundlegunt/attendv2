@@ -25,6 +25,13 @@ test("Master can enable a fixed trusted analytics provider at runtime", () => {
   assert.doesNotMatch(component, /settings\.analytics\?\.scriptUrl/);
 });
 
+test("consented activity is also recorded as privacy-safe first-party aggregates", () => {
+  assert.match(component, /dataset\.analyticsEnabled/);
+  assert.match(tracker, /cinema\/analytics\/events/);
+  assert.match(tracker, /recordFirstParty\("Pageview", path\)/);
+  assert.match(tracker, /JSON\.stringify\(\{ event, \.\.\.\(path \? \{ path \} : \{\}\) \}\)/);
+});
+
 test("analytics uses manual pageviews so withdrawing consent stops future tracking", () => {
   assert.match(component, /autoCapturePageviews: false/);
   assert.match(component, /attend:analytics-consent/);

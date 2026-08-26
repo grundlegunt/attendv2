@@ -64,11 +64,13 @@ export function OptionalAnalytics() {
         if (cancelled) return;
         const masterEnabled = settings.analytics?.enabled === true && settings.analytics.provider === "PLAUSIBLE";
         scriptUrlRef.current = configuredScriptUrl() ?? (masterEnabled ? PLAUSIBLE_SCRIPT_URL : null);
+        document.documentElement.dataset.analyticsEnabled = scriptUrlRef.current ? "true" : "false";
         window.dispatchEvent(new CustomEvent("attend:analytics-configuration-ready"));
       })
       .catch(() => {
         if (cancelled) return;
         scriptUrlRef.current = configuredScriptUrl();
+        document.documentElement.dataset.analyticsEnabled = scriptUrlRef.current ? "true" : "false";
         window.dispatchEvent(new CustomEvent("attend:analytics-configuration-ready"));
       });
     return () => { cancelled = true; };
