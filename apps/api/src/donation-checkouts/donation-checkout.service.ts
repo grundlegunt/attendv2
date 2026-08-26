@@ -83,10 +83,14 @@ export class DonationCheckoutService {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "donation_checkouts" WHERE "id" = ${checkout.id} FOR UPDATE`);
       const locked = await tx.donationCheckout.findUniqueOrThrow({ where: { id: checkout.id } });
       if (locked.donationId) return tx.donationCheckout.findUniqueOrThrow({ where: { id: checkout.id }, include: { payment: true, location: { include: { organization: true } }, campaign: true } });
-      const donation = await tx.donation.create({ data: { locationId: checkout.locationId, campaignId: checkout.campaignId, donorName: checkout.donorName, donorEmail: checkout.donorEmail, amountCents: checkout.amountCents, taxDeductibleAmountCents: checkout.amountCents, paymentMethod: "ONLINE", status: "SETTLED", externalReference: intent.id, receivedAt: new Date() } });
+      const customer = await tx.customer.findFirst({
+        where: { email: checkout.donorEmail, deletedAt: null },
+        select: { id: true },
+      });
+      const donation = await tx.donation.create({ data: { locationId: checkout.locationId, campaignId: checkout.campaignId, customerId: customer?.id, donorName: checkout.donorName, donorEmail: checkout.donorEmail, amountCents: checkout.amountCents, taxDeductibleAmountCents: checkout.amountCents, paymentMethod: "ONLINE", status: "SETTLED", externalReference: intent.id, receivedAt: new Date() } });
       await tx.payment.update({ where: { id: checkout.paymentId }, data: { status: "SUCCEEDED" } });
       await tx.donationCheckout.update({ where: { id: checkout.id }, data: { donationId: donation.id, status: "PAID" } });
-      await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: checkout.locationId, action: "donation.online_settled", entityType: "Donation", entityId: donation.id, afterState: { checkoutId: checkout.id, campaignId: checkout.campaignId, amountCents: checkout.amountCents } } });
+      await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: checkout.locationId, action: "donation.online_settled", entityType: "Donation", entityId: donation.id, afterState: { checkoutId: checkout.id, campaignId: checkout.campaignId, customerId: customer?.id ?? null, amountCents: checkout.amountCents } } });
       return tx.donationCheckout.findUniqueOrThrow({ where: { id: checkout.id }, include: { payment: true, location: { include: { organization: true } }, campaign: true } });
     });
     await this.sendReceipt(settled);

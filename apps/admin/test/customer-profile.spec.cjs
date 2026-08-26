@@ -9,6 +9,7 @@ const managementControls = readFileSync(resolve(__dirname, "../app/management-co
 const refundService = readFileSync(resolve(__dirname, "../../api/src/management/management-refund.service.ts"), "utf8");
 const managementService = readFileSync(resolve(__dirname, "../../api/src/management/management.service.ts"), "utf8");
 const attention = readFileSync(resolve(__dirname, "../app/attention/page.tsx"), "utf8");
+const donationCheckoutService = readFileSync(resolve(__dirname, "../../api/src/donation-checkouts/donation-checkout.service.ts"), "utf8");
 
 test("customer search links to durable customer profiles", () => {
   assert.match(search, /href=\{`\/customers\/\$\{encodeURIComponent\(customer\.id\)\}`\}/);
@@ -57,6 +58,12 @@ test("registered donors use the existing customer profile and retain location-sc
   assert.match(managementService, /donations: \{\s*where: \{ locationId \}/);
   assert.match(managementService, /prisma\.donation\.aggregate\(\{ where: \{ customerId, locationId, status: "SETTLED" \}/);
   assert.match(managementService, /const donationRows = customer\.donations\.map/);
+});
+
+test("settled online donations attach to an existing exact-email customer identity", () => {
+  assert.match(donationCheckoutService, /tx\.customer\.findFirst\(\{\s*where: \{ email: checkout\.donorEmail, deletedAt: null \}/);
+  assert.match(donationCheckoutService, /customerId: customer\?\.id/);
+  assert.match(donationCheckoutService, /customerId: customer\?\.id \?\? null/);
 });
 
 test("refund workflows preserve authoritative customer IDs and link to profiles", () => {
