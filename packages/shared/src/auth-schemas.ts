@@ -158,5 +158,15 @@ export interface CustomerTicketOrderSummary {
 export interface CustomerAccountResponse {
   customer: AuthenticatedCustomer;
   orders: CustomerTicketOrderSummary[];
+  memberships: Array<{
+    id: string;
+    organizationName: string;
+    membershipNumber: string;
+    tier: string;
+    status: string;
+    expiresAt: string | null;
+    plan: { id: string; name: string; description: string | null; benefits: unknown } | null;
+    purchases: Array<{ id: string; planName: string; amountCents: number; currency: string; purchasedAt: string; locationName: string }>;
+  }>;
   walletAvailability: { apple: boolean; google: boolean };
 }

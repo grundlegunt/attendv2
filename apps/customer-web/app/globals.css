@@ -206,6 +206,16 @@ html[data-branding-status="loading"] body {
   display: grid;
   gap: 16px;
 }
+.account-memberships { display: grid; gap: 16px; }
+.account-membership { display: grid; gap: 20px; }
+.account-membership > header { display: flex; justify-content: space-between; gap: 18px; align-items: start; }
+.account-membership > header h3 { margin: 5px 0; font: clamp(1.6rem, 3vw, 2.4rem) var(--font-family-display); }
+.account-membership__details p { margin: 0 0 10px; }
+.account-membership__details ul { margin: 0; padding-left: 20px; color: var(--color-text-secondary); }
+.account-membership__history { display: grid; gap: 8px; padding-top: 16px; border-top: 1px solid var(--color-border); }
+.account-membership__history h4 { margin: 0 0 4px; }
+.account-membership__history p { display: flex; justify-content: space-between; gap: 20px; margin: 0; color: var(--color-text-secondary); }
+.account-membership > a { justify-self: start; }
 .account-empty {
   color: var(--color-text-secondary);
 }

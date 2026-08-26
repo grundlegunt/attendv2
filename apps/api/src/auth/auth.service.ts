@@ -679,6 +679,18 @@ export class AuthService {
       where: { id: customerId },
       include: {
         authAccount: true,
+        memberships: {
+          orderBy: { updatedAt: "desc" },
+          include: {
+            organization: { select: { name: true } },
+            plan: { select: { id: true, name: true, description: true, benefits: true } },
+            checkouts: {
+              where: { status: "PAID" },
+              orderBy: { createdAt: "desc" },
+              select: { id: true, planName: true, amountCents: true, currency: true, createdAt: true, location: { select: { name: true } } },
+            },
+          },
+        },
         ticketOrders: {
           where: { status: { not: "CART" } },
           orderBy: { createdAt: "desc" },
@@ -709,6 +721,23 @@ export class AuthService {
         apple: this.appleWalletProvider.available,
         google: this.googleWalletProvider.available,
       },
+      memberships: customer.memberships.map((membership) => ({
+        id: membership.id,
+        organizationName: membership.organization.name,
+        membershipNumber: membership.membershipNumber,
+        tier: membership.tier,
+        status: membership.status,
+        expiresAt: membership.expiresAt?.toISOString() ?? null,
+        plan: membership.plan,
+        purchases: membership.checkouts.map((checkout) => ({
+          id: checkout.id,
+          planName: checkout.planName,
+          amountCents: checkout.amountCents,
+          currency: checkout.currency,
+          purchasedAt: checkout.createdAt.toISOString(),
+          locationName: checkout.location.name,
+        })),
+      })),
       orders: customer.ticketOrders.map((order) => ({
         id: order.id,
         orderNumber: order.orderNumber,
