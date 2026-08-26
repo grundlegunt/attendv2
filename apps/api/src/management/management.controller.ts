@@ -20,6 +20,7 @@ const locationSchema = z.object({
   timezone: z.string().trim().min(1).max(100).optional(),
   timeClockEnabled: z.boolean().optional(),
   ticketTaxRateBasisPoints: z.number().int().min(0).max(10_000).optional(),
+  ticketFeesTaxable: z.boolean().optional(),
   preShowBufferMinutes: z.number().int().min(0).max(240).optional(),
   cleaningBufferMinutes: z.number().int().min(15).max(240).optional(),
   checkDropMinutesBeforeEnd: z.number().int().min(0).max(240).optional(),

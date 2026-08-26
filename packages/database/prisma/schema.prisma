@@ -143,6 +143,9 @@ model Location {
   // location's tax treatment has been confirmed; the application never
   // invents a jurisdictional tax rate.
   ticketTaxRateBasisPoints    Int       @default(0)
+  // Some jurisdictions tax customer-facing ticket service/booking fees.
+  // Keep this explicit per location instead of assuming one treatment.
+  ticketFeesTaxable           Boolean   @default(false)
 
   // Turnover scheduling config — see /docs/DATA_MODEL.md "Showtime scheduling
   // & turnover". Used from Milestone 1 onward; defined here now since it's a

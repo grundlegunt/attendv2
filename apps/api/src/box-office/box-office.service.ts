@@ -183,7 +183,8 @@ export class BoxOfficeService {
     if (promotion?.maximumRedemptions != null && promotion.ticketOrders.length >= promotion.maximumRedemptions) throw AppError.conflict("Promotion redemption limit has been reached.");
     const discountCents = !promotion ? 0 : promotion.type === "COMP" ? subtotalCents : promotion.type === "FIXED_AMOUNT" ? Math.min(subtotalCents, promotion.amountCents ?? 0) : Math.min(subtotalCents, Math.round(subtotalCents * (promotion.percentageBasisPoints ?? 0) / 10_000));
     const taxableSubtotal = subtotalCents - discountCents;
-    const taxCents = Math.round(taxableSubtotal * location.ticketTaxRateBasisPoints / 10_000);
+    const ticketTaxableBaseCents = taxableSubtotal + (location.ticketFeesTaxable ? feesCents : 0);
+    const taxCents = Math.round(ticketTaxableBaseCents * location.ticketTaxRateBasisPoints / 10_000);
     return {
       showtimeId: holds[0]!.showtimeSeat.showtimeId,
       seats: holds.map((hold) => ({ id: hold.showtimeSeat.seatId, label: hold.showtimeSeat.seat.label })),

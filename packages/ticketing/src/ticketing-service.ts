@@ -340,8 +340,9 @@ export class TicketingService {
           ? Math.min(subtotalCents, promotion.amountCents ?? 0)
           : Math.min(subtotalCents, Math.round(subtotalCents * (promotion.percentageBasisPoints ?? 0) / 10_000));
     const taxableSubtotal = subtotalCents - discountCents;
+    const ticketTaxableBaseCents = taxableSubtotal + (location.ticketFeesTaxable ? feesCents : 0);
     const taxCents = Math.round(
-      (taxableSubtotal * location.ticketTaxRateBasisPoints) / 10_000,
+      (ticketTaxableBaseCents * location.ticketTaxRateBasisPoints) / 10_000,
     );
     const totalCents = taxableSubtotal + feesCents + taxCents + orderAheadQuote.totalCents;
     let giftCard: { id: string; balanceCents: number; currency: string } | null = null;
