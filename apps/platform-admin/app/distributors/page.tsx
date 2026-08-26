@@ -1,0 +1,36 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { CompanySignIn } from "../company-sign-in";
+import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
+const STORAGE_KEY = "attend-platform-session";
+interface Session { accessToken: string; user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" } }
+interface Deal { movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "UPCOMING" | "PAST" | "UNSCHEDULED"; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; terms: unknown }
+interface Distributor { name: string; operators: number; locations: number; films: number; shows: number; upcomingShows: number; ticketsSold: number; ticketFaceValueCents: number; deals: Deal[] }
+interface Portfolio { generatedAt: string; distributors: Distributor[] }
+function request<T>(path: string, init?: RequestInit, accessToken?: string) { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
+function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
+
+export default function DistributorsPage() {
+  const [session, setSession] = useState<Session | null>(null); const [restored, setRestored] = useState(false); const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [selectedName, setSelectedName] = useState<string | null>(null); const [query, setQuery] = useState(""); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState<string | null>(null); const requestRef = useRef(0);
+  useEffect(() => { setSession(readPlatformSession(STORAGE_KEY)); setRestored(true); }, []);
+  useEffect(() => { if (!session) return; const id = ++requestRef.current; setError(null); void request<Portfolio>("/platform/distributors", undefined, session.accessToken).then((result) => { if (id === requestRef.current) { setPortfolio(result); setSelectedName((current) => current ?? result.distributors[0]?.name ?? null); } }).catch((reason) => { if (id === requestRef.current) setError(reason instanceof Error ? reason.message : "Could not load distributor intelligence."); }); return () => { requestRef.current += 1; }; }, [session]);
+  const filtered = useMemo(() => portfolio?.distributors.filter((distributor) => distributor.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())) ?? [], [portfolio, query]);
+  const selected = portfolio?.distributors.find((distributor) => distributor.name === selectedName) ?? filtered[0] ?? null;
+  async function login(event: FormEvent) { event.preventDefault(); setError(null); try { const result = await request<Session>("/platform/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result)); setSession(result); setPassword(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Sign in failed."); } }
+  function signOut() { requestRef.current += 1; void revokePlatformSession(API_BASE_URL, session?.accessToken); window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setPortfolio(null); }
+  if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
+  if (!session) return <CompanySignIn email={email} password={password} error={error} onEmailChange={setEmail} onPasswordChange={setPassword} onSubmit={login} />;
+  return <main className="shell"><header><div><p className="eyebrow">DISTRIBUTOR INTELLIGENCE</p><h1>Distributors</h1><p className="muted">Cross-operator booking relationships, film performance, and saved deal terms.</p></div><div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>
+    <nav className="platform-nav" aria-label="Ringo Master"><Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link className="active" href="/distributors">Distributors</Link><Link href="/analytics">Audience</Link><Link href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link></nav>
+    {error && <div className="error">{error}</div>}
+    <section className="catalog-toolbar distributor-toolbar"><label>Search distributors<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Distributor name" /></label><span><strong>{filtered.length}</strong> distributor{filtered.length === 1 ? "" : "s"}</span></section>
+    <section className="distributor-layout"><div className="distributor-list">{!portfolio && <p className="muted">Loading distributor intelligence…</p>}{portfolio && filtered.length === 0 && <p className="empty-state">No distributors match this search.</p>}{filtered.map((distributor) => <button className={selected?.name === distributor.name ? "selected" : ""} key={distributor.name} onClick={() => setSelectedName(distributor.name)}><strong>{distributor.name}</strong><span>{distributor.films} films · {distributor.operators} operators</span><span>{money(distributor.ticketFaceValueCents)} face value</span></button>)}</div>
+      {selected && <div className="distributor-detail"><div className="panel-heading"><div><p className="eyebrow">PORTFOLIO</p><h2>{selected.name}</h2></div><strong>{money(selected.ticketFaceValueCents)}</strong></div><div className="film-intelligence-metrics"><article><span>Films</span><strong>{selected.films}</strong><small>Across {selected.operators} operators</small></article><article><span>Shows</span><strong>{selected.shows}</strong><small>{selected.upcomingShows} upcoming</small></article><article><span>Tickets sold</span><strong>{selected.ticketsSold}</strong><small>{selected.locations} cinema locations</small></article><article><span>Ticket face value</span><strong>{money(selected.ticketFaceValueCents)}</strong><small>Before distributor allocation</small></article></div><div className="distributor-deals"><div><strong>Film / operator</strong><span>Status</span><span>Shows</span><span>Tickets</span><span>Face value</span><span>Terms</span></div>{selected.deals.map((deal) => <article key={`${deal.organization.id}-${deal.movieId}`}><strong>{deal.catalogEntryId ? <Link href={`/films/${deal.catalogEntryId}`}>{deal.title}</Link> : deal.title}<small>{deal.organization.name}{deal.locations.length ? ` · ${deal.locations.join(", ")}` : ""}</small></strong><span>{deal.status.toLowerCase()}</span><span>{deal.showtimes}</span><span>{deal.ticketsSold}</span><span>{money(deal.ticketFaceValueCents)}</span><span>{deal.terms ? "Saved" : "Missing"}</span></article>)}</div></div>}
+    </section>
+  </main>;
+}

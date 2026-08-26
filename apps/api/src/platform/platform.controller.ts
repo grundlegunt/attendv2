@@ -231,6 +231,12 @@ export class PlatformController {
     return this.platform.filmCatalogPerformance({ entryId, from, to });
   }
 
+  @Get("distributors")
+  @UseGuards(PlatformAuthGuard)
+  distributors() {
+    return this.platform.distributorPortfolio();
+  }
+
   @Get("revenue")
   @UseGuards(PlatformAuthGuard)
   revenue(@Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
