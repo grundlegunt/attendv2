@@ -192,6 +192,7 @@ export class PlatformService {
   async syncOperatorFilmCatalog(actorId: string) {
     return prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('platform-film-catalog-sync'))`;
+      const operatorMovieCount = await tx.movie.count();
       const movies = await tx.movie.findMany({
         where: { catalogEntryId: null },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -240,7 +241,20 @@ export class PlatformService {
           afterState: { createdEntries, linkedMovies },
         }, tx);
       }
-      return { createdEntries, linkedMovies };
+      const [linkedOperatorMovieCount, activeCatalogEntryCount, inactiveCatalogEntryCount] = await Promise.all([
+        tx.movie.count({ where: { catalogEntryId: { not: null } } }),
+        tx.filmCatalogEntry.count({ where: { active: true } }),
+        tx.filmCatalogEntry.count({ where: { active: false } }),
+      ]);
+      return {
+        createdEntries,
+        linkedMovies,
+        operatorMovieCount,
+        linkedOperatorMovieCount,
+        unlinkedOperatorMovieCount: operatorMovieCount - linkedOperatorMovieCount,
+        activeCatalogEntryCount,
+        inactiveCatalogEntryCount,
+      };
     });
   }
 
