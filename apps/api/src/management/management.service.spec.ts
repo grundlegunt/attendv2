@@ -58,6 +58,23 @@ describe("membership plans", () => {
   });
 });
 
+describe("donation reporting", () => {
+  it("keeps exports location scoped and applies reporting filters", async () => {
+    const rows = jest.spyOn(prisma.donation, "findMany").mockResolvedValue([]);
+    try {
+      const from = new Date("2026-01-01T00:00:00.000Z"); const to = new Date("2027-01-01T00:00:00.000Z");
+      await new ManagementService().donationExportRows("location-1", { campaignId: "campaign-1", from, to });
+      expect(rows).toHaveBeenCalledWith(expect.objectContaining({ where: { locationId: "location-1", campaignId: "campaign-1", receivedAt: { gte: from, lt: to } }, take: 10_000 }));
+    } finally { rows.mockRestore(); }
+  });
+
+  it("exports deductible values and neutralizes spreadsheet formulas", () => {
+    const csv = new ManagementService().donationsCsv([{ receivedAt: new Date("2026-08-25T00:00:00.000Z"), status: "SETTLED", campaign: { name: "Annual fund" }, customer: null, donorName: "=2+2", donorEmail: "donor@example.com", paymentMethod: "CHECK", externalReference: "check-1", amountCents: 10000, taxDeductibleAmountCents: 7500, notes: "Thank you" }] as never);
+    expect(csv).toContain('"Annual fund","\'=2+2","donor@example.com"');
+    expect(csv).toContain('"10000","7500"');
+  });
+});
+
 describe("ManagementService private-event inquiry export", () => {
   it("keeps inquiry searches location-scoped and applies the selected status", async () => {
     const findMany = jest.spyOn(prisma.privateEventInquiry, "findMany").mockResolvedValue([]);
