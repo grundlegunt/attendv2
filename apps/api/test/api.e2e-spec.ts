@@ -1019,12 +1019,23 @@ describe("Attend platform authentication boundary", () => {
       .expect(200);
     expect(synchronized.body.createdEntries).toBeGreaterThan(0);
     expect(synchronized.body.linkedMovies).toBeGreaterThan(0);
+    expect(synchronized.body.operatorMovieCount).toBeGreaterThan(0);
+    expect(synchronized.body.linkedOperatorMovieCount).toBe(synchronized.body.operatorMovieCount);
+    expect(synchronized.body.unlinkedOperatorMovieCount).toBe(0);
+    expect(synchronized.body.activeCatalogEntryCount).toBeGreaterThan(0);
 
     const repeatedSync = await request(app.getHttpServer())
       .post("/api/v1/platform/film-catalog/sync")
       .set("Authorization", `Bearer ${masterToken}`)
       .expect(200);
-    expect(repeatedSync.body).toEqual({ createdEntries: 0, linkedMovies: 0 });
+    expect(repeatedSync.body).toEqual(expect.objectContaining({
+      createdEntries: 0,
+      linkedMovies: 0,
+      operatorMovieCount: synchronized.body.operatorMovieCount,
+      linkedOperatorMovieCount: synchronized.body.operatorMovieCount,
+      unlinkedOperatorMovieCount: 0,
+      activeCatalogEntryCount: synchronized.body.activeCatalogEntryCount,
+    }));
 
     const synchronizedSearch = await request(app.getHttpServer())
       .get("/api/v1/platform/film-catalog?limit=100")
