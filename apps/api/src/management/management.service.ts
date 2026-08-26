@@ -1049,7 +1049,7 @@ export class ManagementService {
     });
   }
 
-  async customer(locationId: string, customerId: string, page: { ticketOffset: number; diningOffset: number; pageSize?: number } = { ticketOffset: 0, diningOffset: 0 }) {
+  async customer(locationId: string, customerId: string, page: { ticketOffset: number; diningOffset: number; donationOffset: number; pageSize?: number } = { ticketOffset: 0, diningOffset: 0, donationOffset: 0 }) {
     const pageSize = page.pageSize ?? 50;
     const customer = await prisma.customer.findFirst({
       where: {
@@ -1057,6 +1057,7 @@ export class ManagementService {
         OR: [
           { ticketOrders: { some: { locationId } } },
           { restaurantTabs: { some: { locationId } } },
+          { donations: { some: { locationId } } },
           { memberships: { some: { organization: { locations: { some: { id: locationId } } } } } },
         ],
       },
@@ -1123,15 +1124,34 @@ export class ManagementService {
             },
           },
         },
+        donations: {
+          where: { locationId },
+          orderBy: { receivedAt: "desc" },
+          skip: page.donationOffset,
+          take: pageSize,
+          select: {
+            id: true,
+            status: true,
+            amountCents: true,
+            taxDeductibleAmountCents: true,
+            paymentMethod: true,
+            externalReference: true,
+            receivedAt: true,
+            campaign: { select: { id: true, name: true } },
+            location: { select: { currency: true } },
+          },
+        },
       },
     });
     if (!customer) throw AppError.notFound("Customer was not found.");
-    const [orderCount, ticketCount, ticketSpend, diningVisitCount, diningSpend] = await Promise.all([
+    const [orderCount, ticketCount, ticketSpend, diningVisitCount, diningSpend, donationActivityCount, donationSummary] = await Promise.all([
       prisma.ticketOrder.count({ where: { customerId, locationId } }),
       prisma.ticket.count({ where: { ticketOrder: { customerId, locationId } } }),
       prisma.ticketOrder.aggregate({ where: { customerId, locationId, status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } }),
       prisma.restaurantTab.count({ where: { primaryCustomerId: customerId, locationId } }),
       prisma.restaurantTab.aggregate({ where: { primaryCustomerId: customerId, locationId, status: "CLOSED" }, _sum: { totalCents: true } }),
+      prisma.donation.count({ where: { customerId, locationId } }),
+      prisma.donation.aggregate({ where: { customerId, locationId, status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true } }),
     ]);
     const { memberships, ...customerRecord } = customer;
     return {
@@ -1145,12 +1165,18 @@ export class ManagementService {
         diningVisitCount,
         diningSpendCents: diningSpend._sum.totalCents ?? 0,
         diningCurrency: customer.restaurantTabs[0]?.location.currency ?? "USD",
+        donationCount: donationSummary._count._all,
+        donationAmountCents: donationSummary._sum.amountCents ?? 0,
+        donationTaxDeductibleAmountCents: donationSummary._sum.taxDeductibleAmountCents ?? 0,
+        donationCurrency: customer.donations[0]?.location.currency ?? "USD",
       },
       historyWindow: {
         ticketOrdersShown: Math.min(orderCount, page.ticketOffset + customer.ticketOrders.length),
         ticketOrdersTotal: orderCount,
         diningVisitsShown: Math.min(diningVisitCount, page.diningOffset + customer.restaurantTabs.length),
         diningVisitsTotal: diningVisitCount,
+        donationsShown: Math.min(donationActivityCount, page.donationOffset + customer.donations.length),
+        donationsTotal: donationActivityCount,
       },
     };
   }
@@ -1202,8 +1228,8 @@ export class ManagementService {
   }
 
   async customerHistoryCsv(locationId: string, customerId: string) {
-    const customer = await this.customer(locationId, customerId, { ticketOffset: 0, diningOffset: 0, pageSize: 10_000 });
-    if (customer.historyWindow.ticketOrdersTotal > 10_000 || customer.historyWindow.diningVisitsTotal > 10_000) {
+    const customer = await this.customer(locationId, customerId, { ticketOffset: 0, diningOffset: 0, donationOffset: 0, pageSize: 10_000 });
+    if (customer.historyWindow.ticketOrdersTotal > 10_000 || customer.historyWindow.diningVisitsTotal > 10_000 || customer.historyWindow.donationsTotal > 10_000) {
       throw AppError.validationFailed("Customer history is too large for a single CSV export.");
     }
     const cell = (value: unknown) => {
@@ -1222,9 +1248,13 @@ export class ManagementService {
       item.menuItem.name, item.quantity, tab.seats.map((seat) => seat.showtimeSeat.seat.label).join(" "), tab.showtime?.auditorium.name ?? "Counter",
       "", tab.location.currency, ...identity,
     ])));
+    const donationRows = customer.donations.map((donation) => [
+      "Donation", donation.receivedAt.toISOString(), donation.externalReference ?? donation.id, donation.status, donation.campaign?.name ?? "General support",
+      "Contribution", 1, "", donation.paymentMethod, donation.amountCents, donation.location.currency, ...identity,
+    ]);
     return [
       "Activity,Date,Reference,Status,Film,Item or ticket type,Quantity,Seat,Auditorium or channel,Amount cents,Currency,Customer name,Customer email,Customer phone",
-      ...[...ticketRows, ...diningRows].sort((a, b) => String(b[1]).localeCompare(String(a[1]))).map((row) => row.map(cell).join(",")),
+      ...[...ticketRows, ...diningRows, ...donationRows].sort((a, b) => String(b[1]).localeCompare(String(a[1]))).map((row) => row.map(cell).join(",")),
     ].join("\n");
   }
 

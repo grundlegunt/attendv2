@@ -88,7 +88,7 @@ const rolePermissionsSchema = z.object({ permissionKeys: z.array(z.string()).max
 const refundSchema = z.object({ requestId: z.string().uuid(), reason: z.string().trim().min(1).max(500), cashDrawerId: z.string().uuid().optional() }).strict();
 const refundHistorySchema = z.object({ query: z.string().trim().max(200).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional() }).refine((value) => !value.from || !value.to || value.from < value.to, "Refund-history end date must be after its start date.");
 const globalSearchSchema = z.object({ query: z.string().trim().min(2).max(100) }).strict();
-const customerHistorySchema = z.object({ ticketOffset: z.coerce.number().int().min(0).max(10_000).default(0), diningOffset: z.coerce.number().int().min(0).max(10_000).default(0) }).strict();
+const customerHistorySchema = z.object({ ticketOffset: z.coerce.number().int().min(0).max(10_000).default(0), diningOffset: z.coerce.number().int().min(0).max(10_000).default(0), donationOffset: z.coerce.number().int().min(0).max(10_000).default(0) }).strict();
 const membershipSchema = z.object({
   membershipNumber: z.string().trim().min(1).max(100),
   planId: z.string().uuid().nullable().optional(),

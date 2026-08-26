@@ -167,12 +167,15 @@ describe("ManagementService customer history", () => {
         { id: "tab-1", status: "CLOSED", totalCents: 3200, location: { currency: "USD" } },
         { id: "tab-2", status: "OPEN", totalCents: 900, location: { currency: "USD" } },
       ],
+      donations: [{ id: "donation-1", status: "SETTLED", amountCents: 5000, taxDeductibleAmountCents: 5000, paymentMethod: "ONLINE", receivedAt: new Date(), location: { currency: "USD" } }],
     } as never);
     const orderCount = jest.spyOn(prisma.ticketOrder, "count").mockResolvedValue(72);
     const ticketCount = jest.spyOn(prisma.ticket, "count").mockResolvedValue(118);
     const ticketSpend = jest.spyOn(prisma.ticketOrder, "aggregate").mockResolvedValue({ _sum: { totalCents: 125_000 } } as never);
     const diningVisitCount = jest.spyOn(prisma.restaurantTab, "count").mockResolvedValue(64);
     const diningSpend = jest.spyOn(prisma.restaurantTab, "aggregate").mockResolvedValue({ _sum: { totalCents: 83_500 } } as never);
+    const donationCount = jest.spyOn(prisma.donation, "count").mockResolvedValue(3);
+    const donationSummary = jest.spyOn(prisma.donation, "aggregate").mockResolvedValue({ _count: { _all: 2 }, _sum: { amountCents: 15_000, taxDeductibleAmountCents: 12_500 } } as never);
     try {
       const customer = await new ManagementService().customer("location-1", "customer-1");
       expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
@@ -181,6 +184,7 @@ describe("ManagementService customer history", () => {
           OR: [
             { ticketOrders: { some: { locationId: "location-1" } } },
             { restaurantTabs: { some: { locationId: "location-1" } } },
+            { donations: { some: { locationId: "location-1" } } },
             { memberships: { some: { organization: { locations: { some: { id: "location-1" } } } } } },
           ],
         },
@@ -188,9 +192,10 @@ describe("ManagementService customer history", () => {
       }));
       expect(ticketSpend).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } });
       expect(diningSpend).toHaveBeenCalledWith({ where: { primaryCustomerId: "customer-1", locationId: "location-1", status: "CLOSED" }, _sum: { totalCents: true } });
-      expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD" });
+      expect(donationSummary).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true } });
+      expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD", donationCount: 2, donationAmountCents: 15_000, donationTaxDeductibleAmountCents: 12_500, donationCurrency: "USD" });
       expect(customer.membership).toBeNull();
-      expect(customer.historyWindow).toEqual({ ticketOrdersShown: 2, ticketOrdersTotal: 72, diningVisitsShown: 2, diningVisitsTotal: 64 });
+      expect(customer.historyWindow).toEqual({ ticketOrdersShown: 2, ticketOrdersTotal: 72, diningVisitsShown: 2, diningVisitsTotal: 64, donationsShown: 1, donationsTotal: 3 });
     } finally {
       findFirst.mockRestore();
       orderCount.mockRestore();
@@ -198,6 +203,8 @@ describe("ManagementService customer history", () => {
       ticketSpend.mockRestore();
       diningVisitCount.mockRestore();
       diningSpend.mockRestore();
+      donationCount.mockRestore();
+      donationSummary.mockRestore();
     }
   });
 
@@ -206,11 +213,13 @@ describe("ManagementService customer history", () => {
       id: "customer-1", name: "=Jane", email: "jane@example.com", phone: null, isGuest: false, createdAt: new Date(), summary: {} as never, historyWindow: {} as never,
       ticketOrders: [{ id: "order-1", orderNumber: "AT-1", status: "PAID", channel: "ONLINE", totalCents: 1200, currency: "USD", guestName: null, guestEmail: null, createdAt: new Date("2026-08-20T12:00:00Z"), tickets: [{ id: "ticket-1", status: "ISSUED", priceCentsPaid: 1200, ticketType: { name: "Standard" }, showtimeSeat: { seat: { label: "A1" }, showtime: { startsAt: new Date(), movie: { title: "Film, One" }, auditorium: { name: "Theater 1" } } } }] }],
       restaurantTabs: [{ id: "tab-1", label: "Bar", status: "CLOSED", fulfillmentMode: "COUNTER_PICKUP", totalCents: 900, prepaidCents: 0, openedAt: new Date("2026-08-21T12:00:00Z"), closedAt: new Date(), location: { currency: "USD" }, showtime: null, seats: [], orders: [{ items: [{ quantity: 1, menuItem: { name: "Popcorn" } }] }] }],
+      donations: [{ id: "donation-1", status: "SETTLED", amountCents: 5000, taxDeductibleAmountCents: 5000, paymentMethod: "CHECK", externalReference: "check-1", receivedAt: new Date("2026-08-22T12:00:00Z"), campaign: { id: "campaign-1", name: "Annual fund" }, location: { currency: "USD" } }],
     } as never);
     try {
       const csv = await new ManagementService().customerHistoryCsv("location-1", "customer-1");
-      expect(customer).toHaveBeenCalledWith("location-1", "customer-1", { ticketOffset: 0, diningOffset: 0, pageSize: 10_000 });
+      expect(customer).toHaveBeenCalledWith("location-1", "customer-1", { ticketOffset: 0, diningOffset: 0, donationOffset: 0, pageSize: 10_000 });
       expect(csv).toContain('"Film, One"');
+      expect(csv).toContain('"Donation","2026-08-22T12:00:00.000Z","check-1","SETTLED","Annual fund"');
       expect(csv).toContain('"\'=Jane"');
       expect(csv.indexOf('"Dining"')).toBeLessThan(csv.indexOf('"Ticket"'));
     } finally { customer.mockRestore(); }
