@@ -120,12 +120,12 @@ export async function seedDatabase(
   const passwordHash = await hashPassword(SEED_PASSWORD);
   const pinHash = await hashPin("1234");
 
-  log("Seeding Attend platform operator...");
+  log("Seeding Ringo platform operator...");
   await prisma.platformUser.upsert({
     where: { email: PLATFORM_SEED_EMAIL },
     update: { active: true },
     create: {
-      name: "Attend Operator",
+      name: "Ringo Operator",
       email: PLATFORM_SEED_EMAIL,
       passwordHash,
     },

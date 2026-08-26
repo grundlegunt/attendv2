@@ -51,7 +51,7 @@ export async function downloadScheduleWorkbook({
 }: ExportScheduleOptions) {
   const { Workbook } = await import("exceljs");
   const workbook = new Workbook();
-  workbook.creator = "Attend";
+  workbook.creator = "Ringo";
   workbook.title = `${locationName} schedule`;
   workbook.subject = view === "week" ? "Weekly cinema schedule" : "Daily cinema schedule";
   workbook.created = new Date();

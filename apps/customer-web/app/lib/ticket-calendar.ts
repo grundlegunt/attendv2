@@ -41,7 +41,7 @@ export function ticketCalendar(orderNumber: string, tickets: CalendarTicket[]) {
     ].join("\r\n");
   });
 
-  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Attend//Cinema Tickets//EN", "CALSCALE:GREGORIAN", ...events, "END:VCALENDAR", ""].join("\r\n");
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Ringo//Cinema Tickets//EN", "CALSCALE:GREGORIAN", ...events, "END:VCALENDAR", ""].join("\r\n");
 }
 
 export function downloadTicketCalendar(orderNumber: string, tickets: CalendarTicket[]) {
