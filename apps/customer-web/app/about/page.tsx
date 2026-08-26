@@ -60,6 +60,12 @@ export default function AboutPage() {
           <p>Purchase a digital gift card for someone special, or check the balance of an existing card.</p>
           <Link className="primary-link" href="/gift-cards">Purchase or check a gift card</Link>
         </article>
+        <article className="content-panel" id="support">
+          <span className="eyebrow">SUPPORT</span>
+          <h2>Support independent cinema</h2>
+          <p>Make a secure contribution to general operations or a current fundraising campaign.</p>
+          <Link className="primary-link" href="/donate">Make a contribution</Link>
+        </article>
         <article className="content-panel" id="private-events">
           <span className="eyebrow">PRIVATE EVENTS</span>
           <h2>Make the cinema yours</h2>

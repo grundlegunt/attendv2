@@ -14,6 +14,7 @@ import { EMAIL_PROVIDER, SMS_PROVIDER } from "../notifications/notifications.mod
 import { loadEnv } from "@cinema/config/env";
 import { createHash } from "node:crypto";
 import { GiftCardPurchaseService } from "../gift-card-purchases/gift-card-purchase.service";
+import { DonationCheckoutService } from "../donation-checkouts/donation-checkout.service";
 
 @Injectable()
 export class TicketingService {
@@ -24,6 +25,7 @@ export class TicketingService {
     @Inject(EMAIL_PROVIDER) emailProvider: EmailProvider,
     @Inject(SMS_PROVIDER) smsProvider: SmsProvider,
     private readonly giftCardPurchases: GiftCardPurchaseService,
+    private readonly donationCheckouts: DonationCheckoutService,
   ) {
     this.domain = new TicketingDomainService(
       prisma,
@@ -290,6 +292,9 @@ export class TicketingService {
     }
     if (event.metadata?.giftCardPurchaseId) {
       return this.wrap(() => this.giftCardPurchases.processVerifiedWebhook(event));
+    }
+    if (event.metadata?.donationCheckoutId) {
+      return this.wrap(() => this.donationCheckouts.processVerifiedWebhook(event));
     }
     return this.wrap(() => this.domain.processVerifiedWebhook(event));
   }

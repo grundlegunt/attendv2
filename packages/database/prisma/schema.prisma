@@ -45,6 +45,7 @@ model Organization {
   giftCardPurchases GiftCardPurchase[]
   memberships       Membership[]
   donationCampaigns DonationCampaign[]
+  donationCheckouts DonationCheckout[]
 
   @@map("organizations")
 }
@@ -176,6 +177,7 @@ model Location {
   giftCardPurchases     GiftCardPurchase[]
   schedulePlans         SchedulePlan[]
   donations             Donation[]
+  donationCheckouts     DonationCheckout[]
 
   @@map("locations")
 }
@@ -717,6 +719,7 @@ enum PaymentPurpose {
   TICKET_ORDER
   RESTAURANT_TAB
   GIFT_CARD_PURCHASE
+  DONATION
 }
 
 enum PaymentStatus {
@@ -1056,6 +1059,7 @@ model Payment {
   attempts         PaymentAttempt[]
   refunds          Refund[]
   giftCardPurchase GiftCardPurchase?
+  donationCheckout DonationCheckout?
 
   @@index([status, createdAt])
   @@index([restaurantTabId, status])
@@ -1415,6 +1419,12 @@ enum DonationStatus {
   REFUNDED
 }
 
+enum DonationCheckoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
 // Campaigns are organization-wide so multi-location nonprofits can report on
 // one appeal while each settled contribution remains attributed to a location.
 model DonationCampaign {
@@ -1430,10 +1440,44 @@ model DonationCampaign {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   donations      Donation[]
+  checkouts      DonationCheckout[]
 
   @@unique([organizationId, name])
   @@index([organizationId, active, startsAt])
   @@map("donation_campaigns")
+}
+
+// Kept separate from Donation so abandoned or failed payments never appear
+// in settled contribution reporting.
+model DonationCheckout {
+  id               String                 @id @default(uuid())
+  organizationId   String
+  organization     Organization           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  locationId       String
+  location         Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  campaignId       String?
+  campaign         DonationCampaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  paymentId        String                 @unique
+  payment          Payment                @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  donationId       String?                @unique
+  donation         Donation?              @relation(fields: [donationId], references: [id], onDelete: SetNull)
+  donorName        String?
+  donorEmail       String
+  amountCents      Int
+  currency         String
+  idempotencyKey   String                 @unique
+  status           DonationCheckoutStatus @default(PENDING)
+  receiptMessageId String?
+  receiptSentAt    DateTime?
+  receiptError     String?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([locationId, createdAt])
+  @@index([campaignId, createdAt])
+  @@index([status, updatedAt])
+  @@map("donation_checkouts")
 }
 
 model Donation {
@@ -1455,6 +1499,7 @@ model Donation {
   notes                   String?
   createdAt               DateTime              @default(now())
   updatedAt               DateTime              @updatedAt
+  checkout                DonationCheckout?
 
   @@index([locationId, receivedAt])
   @@index([campaignId, receivedAt])

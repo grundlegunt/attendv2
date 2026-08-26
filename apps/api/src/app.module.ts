@@ -12,9 +12,10 @@ import { ReportingModule } from "./reporting/reporting.module";
 import { ManagementModule } from "./management/management.module";
 import { PlatformModule } from "./platform/platform.module";
 import { GiftCardPurchaseModule } from "./gift-card-purchases/gift-card-purchase.module";
+import { DonationCheckoutModule } from "./donation-checkouts/donation-checkout.module";
 
 @Module({
-  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule, PlatformModule, GiftCardPurchaseModule],
+  imports: [HealthModule, AuthModule, AuditModule, CinemaModule, TicketingModule, RestaurantModule, WorkforceModule, BoxOfficeModule, ReportingModule, ManagementModule, PlatformModule, GiftCardPurchaseModule, DonationCheckoutModule],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

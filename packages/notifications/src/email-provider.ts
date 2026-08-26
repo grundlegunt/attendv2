@@ -36,6 +36,16 @@ export interface GiftCardDelivery {
   message?: string | null;
 }
 
+export interface DonationReceiptDelivery {
+  to: string;
+  donorName?: string | null;
+  organizationName: string;
+  campaignName?: string | null;
+  amountCents: number;
+  currency: string;
+  donationId: string;
+}
+
 export interface RestaurantPaymentFailedNotice {
   to: string;
   customerName?: string | null;
@@ -91,6 +101,7 @@ export interface EmailProvider {
   readonly name: string;
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
   sendGiftCardDelivery(delivery: GiftCardDelivery): Promise<{ messageId: string }>;
+  sendDonationReceipt(receipt: DonationReceiptDelivery): Promise<{ messageId: string }>;
   sendRestaurantPaymentFailed(
     notice: RestaurantPaymentFailedNotice,
   ): Promise<{ messageId: string }>;

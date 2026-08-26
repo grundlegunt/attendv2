@@ -26,6 +26,7 @@ const CUSTOMER_API_NAMESPACES = new Set([
   "cinema",
   "customer",
   "gift-card-purchases",
+  "donation-checkouts",
   "public",
   "ticketing",
 ]);

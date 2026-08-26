@@ -11,9 +11,10 @@ import { TicketReceiptReconciliationService } from "./ticket-receipt-reconciliat
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { OptionalCustomerAuthGuard } from "../auth/guards/optional-customer-auth.guard";
 import { SmsTicketReconciliationService } from "./sms-ticket-reconciliation.service";
+import { DonationCheckoutModule } from "../donation-checkouts/donation-checkout.module";
 
 @Module({
-  imports: [PaymentsModule, NotificationsModule, GiftCardPurchaseModule],
+  imports: [PaymentsModule, NotificationsModule, GiftCardPurchaseModule, DonationCheckoutModule],
   controllers: [TicketingController],
   providers: [TicketingService, RefundReconciliationService, TicketReceiptReconciliationService, SmsTicketReconciliationService, ScanRateLimitGuard, RequestRateLimitGuard, JwtAuthGuard, OptionalCustomerAuthGuard],
 })
