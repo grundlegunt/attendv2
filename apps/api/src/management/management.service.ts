@@ -276,6 +276,33 @@ export class ManagementService {
     };
   }
 
+  async donationCampaign(locationId: string, campaignId: string, filters: { from?: Date; to?: Date }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true, name: true, timezone: true, currency: true } });
+    const campaign = await prisma.donationCampaign.findFirst({ where: { id: campaignId, organizationId: location.organizationId } });
+    if (!campaign) throw AppError.notFound("Donation campaign was not found.");
+    const period = { locationId, campaignId, receivedAt: { gte: filters.from, lt: filters.to } };
+    const [settled, refunded, recent] = await prisma.$transaction([
+      prisma.donation.aggregate({ where: { ...period, status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true }, _avg: { amountCents: true } }),
+      prisma.donation.aggregate({ where: { ...period, status: "REFUNDED" }, _count: { _all: true }, _sum: { amountCents: true } }),
+      prisma.donation.findMany({ where: period, include: { customer: { select: { id: true, name: true, email: true } } }, orderBy: { receivedAt: "desc" }, take: 250 }),
+    ]);
+    const raisedAmountCents = settled._sum.amountCents ?? 0;
+    return {
+      campaign,
+      location,
+      totals: {
+        contributions: settled._count._all,
+        raisedAmountCents,
+        taxDeductibleAmountCents: settled._sum.taxDeductibleAmountCents ?? 0,
+        averageContributionCents: Math.round(settled._avg.amountCents ?? 0),
+        refundedContributions: refunded._count._all,
+        refundedAmountCents: refunded._sum.amountCents ?? 0,
+        goalProgressPercent: campaign.goalAmountCents ? Math.round((raisedAmountCents / campaign.goalAmountCents) * 10_000) / 100 : null,
+      },
+      donations: recent,
+    };
+  }
+
   donationExportRows(locationId: string, filters: { campaignId?: string; from?: Date; to?: Date }) {
     return prisma.donation.findMany({
       where: { locationId, campaignId: filters.campaignId, receivedAt: { gte: filters.from, lt: filters.to } },

@@ -137,6 +137,10 @@ const donationDirectorySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
 }).strict().refine((value) => !value.from || !value.to || value.from < value.to, "End date must be after start date.");
+const donationCampaignReportSchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+}).strict().refine((value) => !value.from || !value.to || value.from < value.to, "End date must be after start date.");
 const dashboardWidget = z.enum(["metrics", "topFilms", "schedule", "setup", "activity", "quickActions"]);
 const dashboardPreferencesSchema = z.object({
   hidden: z.array(dashboardWidget).max(6),
@@ -296,6 +300,11 @@ export class ManagementController {
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="donations.csv"');
     response.send(this.management.donationsCsv(rows));
+  }
+
+  @Get("donation-campaigns/:campaignId") @RequirePermissions(Permission.ReportsViewFinancial)
+  donationCampaign(@CurrentActor() actor: RequestActor, @Param("campaignId") campaignId: string, @Query(new ZodValidationPipe(donationCampaignReportSchema)) query: unknown) {
+    return this.management.donationCampaign(this.location(actor), z.string().uuid().parse(campaignId), donationCampaignReportSchema.parse(query));
   }
 
   @Post("donations") @RequirePermissions(Permission.ReportsViewFinancial)
