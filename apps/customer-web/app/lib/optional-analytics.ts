@@ -3,6 +3,10 @@ export const OPTIONAL_ANALYTICS_EVENTS = [
   "Checkout Completed",
   "Account Created",
   "Gift Card Started",
+  "Membership Checkout Started",
+  "Membership Activated",
+  "Donation Checkout Started",
+  "Donation Completed",
 ] as const;
 
 export type OptionalAnalyticsEvent = (typeof OPTIONAL_ANALYTICS_EVENTS)[number];
