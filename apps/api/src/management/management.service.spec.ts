@@ -61,12 +61,15 @@ describe("membership directory", () => {
 describe("membership plans", () => {
   it("loads only the signed-in cinema organization's plan catalog", async () => {
     const location = jest.spyOn(prisma.location, "findUniqueOrThrow").mockResolvedValue({ organizationId: "organization-1" } as never);
-    const plans = jest.spyOn(prisma.membershipPlan, "findMany").mockResolvedValue([]);
+    const plans = jest.spyOn(prisma.membershipPlan, "findMany").mockResolvedValue([{ id: "plan-1", _count: { memberships: 4 } }] as never);
+    const totals = jest.spyOn(prisma.membershipCheckout, "groupBy").mockResolvedValue([{ planId: "plan-1", _sum: { amountCents: 12500 }, _count: { _all: 3 } }] as never);
     try {
-      await new ManagementService().membershipPlans("location-1");
-      expect(plans).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: "organization-1" }, include: { _count: { select: { memberships: true } } } }));
+      const now = new Date("2026-08-26T12:00:00.000Z");
+      await expect(new ManagementService().membershipPlans("location-1", now)).resolves.toEqual([{ id: "plan-1", _count: { memberships: 4 }, activeMemberCount: 4, paidPurchaseCount: 3, paidRevenueCents: 12500 }]);
+      expect(plans).toHaveBeenCalledWith(expect.objectContaining({ where: { organizationId: "organization-1" }, include: { _count: { select: { memberships: { where: { status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } } } } } }));
+      expect(totals).toHaveBeenCalledWith({ by: ["planId"], where: { organizationId: "organization-1", status: "PAID" }, _sum: { amountCents: true }, _count: { _all: true } });
     } finally {
-      location.mockRestore(); plans.mockRestore();
+      location.mockRestore(); plans.mockRestore(); totals.mockRestore();
     }
   });
 });

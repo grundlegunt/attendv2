@@ -203,9 +203,28 @@ export class ManagementService {
     ].join("\n");
   }
 
-  async membershipPlans(locationId: string) {
+  async membershipPlans(locationId: string, now = new Date()) {
     const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
-    return prisma.membershipPlan.findMany({ where: { organizationId: location.organizationId }, include: { _count: { select: { memberships: true } } }, orderBy: [{ active: "desc" }, { name: "asc" }] });
+    const [plans, checkoutTotals] = await Promise.all([
+      prisma.membershipPlan.findMany({
+        where: { organizationId: location.organizationId },
+        include: { _count: { select: { memberships: { where: { status: "ACTIVE", OR: [{ expiresAt: null }, { expiresAt: { gt: now } }] } } } } },
+        orderBy: [{ active: "desc" }, { name: "asc" }],
+      }),
+      prisma.membershipCheckout.groupBy({
+        by: ["planId"],
+        where: { organizationId: location.organizationId, status: "PAID" },
+        _sum: { amountCents: true },
+        _count: { _all: true },
+      }),
+    ]);
+    const totalsByPlan = new Map(checkoutTotals.map((total) => [total.planId, total]));
+    return plans.map((plan) => ({
+      ...plan,
+      activeMemberCount: plan._count.memberships,
+      paidPurchaseCount: totalsByPlan.get(plan.id)?._count._all ?? 0,
+      paidRevenueCents: totalsByPlan.get(plan.id)?._sum.amountCents ?? 0,
+    }));
   }
 
   async createMembershipPlan(input: { locationId: string; employeeId: string; requestId: string; name: string; description?: string | null; priceCents: number; durationMonths: number; benefits: string[]; autoRenew: boolean; active: boolean }) {
