@@ -46,7 +46,11 @@ function analyticsAllowed() {
 }
 
 function recordFirstParty(event: OptionalAnalyticsEvent | "Pageview", path?: string) {
-  void apiFetch<{ accepted: boolean }>("/cinema/analytics/events", { method: "POST", body: JSON.stringify({ event, ...(path ? { path } : {}) }) }).catch(() => undefined);
+  void apiFetch<{ accepted: boolean }>("/cinema/analytics/events", {
+    method: "POST",
+    body: JSON.stringify({ event, ...(path ? { path } : {}) }),
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export function trackOptionalAnalyticsEvent(event: OptionalAnalyticsEvent) {
