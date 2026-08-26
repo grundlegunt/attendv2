@@ -832,6 +832,28 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .membership-directory-table span { min-width: 0; }
 .membership-directory-table small { display: block; margin-top: 3px; color: var(--muted); }
 @media (max-width: 700px) { .membership-directory-filters { grid-template-columns: 1fr; } }
+.donations-page { display: grid; gap: 24px; }
+.donation-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.donation-metrics article { display: grid; gap: 8px; }
+.donation-metrics span { color: var(--muted); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.donation-metrics strong { font-family: var(--font-serif); font-size: clamp(1.75rem, 3vw, 2.6rem); }
+.donation-workspace { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, .85fr); gap: 24px; align-items: start; }
+.donation-campaign-list { display: grid; }
+.donation-campaign-list article { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.donation-campaign-list article > div { display: grid; gap: 4px; }
+.donation-campaign-list article > div:last-child { text-align: right; }
+.donation-campaign-list span, .donation-history-table small { color: var(--muted); }
+.donation-form { display: grid; gap: 14px; margin-top: 20px; }
+.donation-form h2, .donation-form h3, .donation-form p { margin: 0; }
+.donation-form label { display: grid; gap: 7px; font-weight: 800; }
+.donation-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.donation-history { display: grid; gap: 16px; }
+.donation-history-table { display: grid; overflow-x: auto; }
+.donation-history-table > header, .donation-history-table > div { display: grid; grid-template-columns: .75fr 1.3fr 1.2fr .8fr .8fr .8fr; gap: 14px; min-width: 860px; padding: 13px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.donation-history-table > header { color: var(--muted); font-size: .75rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.donation-history-table small { display: block; margin-top: 3px; }
+@media (max-width: 900px) { .donation-workspace { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .donation-metrics, .donation-form-row { grid-template-columns: 1fr; } }
 .standalone-film-library > section { display: grid; gap: 16px; }
 .film-library-index-search { display: grid; gap: 8px; max-width: 620px; font-weight: 800; }
 .film-library-heading-actions { display: flex; flex-wrap: wrap; gap: 10px; }.film-library-heading-actions button { margin: 0; }.film-library-heading-actions a { display: inline-flex; align-items: center; text-decoration: none; }.shared-film-catalog { margin-bottom: 24px; padding: 22px; }.shared-film-catalog .dashboard-section-heading p { max-width: 720px; }.shared-film-catalog > label { display: grid; gap: 7px; max-width: 720px; margin: 18px 0; font-weight: 800; }.shared-film-catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.shared-film-catalog-grid article { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 14px; align-items: center; min-width: 0; padding: 12px; border: 1px solid var(--color-border); }.shared-film-catalog-grid img, .shared-film-catalog-grid article > div:first-child > span { display: grid; width: 72px; height: 92px; place-items: center; object-fit: cover; background: #0c0d0b; color: var(--color-accent); font-family: Georgia, serif; font-size: 2rem; }.shared-film-catalog-grid article > div:nth-child(2) { display: grid; justify-items: start; gap: 5px; min-width: 0; }.shared-film-catalog-grid h3, .shared-film-catalog-grid p { margin: 0; }.shared-film-catalog-grid small { color: #aaa99f; }.shared-film-catalog-grid button { margin: 0; }.shared-film-catalog-grid a { color: var(--color-accent); font-weight: 800; white-space: nowrap; }

@@ -166,6 +166,107 @@ export class ManagementService {
     });
   }
 
+  async donations(locationId: string, filters: { campaignId?: string; from?: Date; to?: Date }) {
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: locationId }, select: { organizationId: true } });
+    const [campaigns, donations] = await prisma.$transaction([
+      prisma.donationCampaign.findMany({
+        where: { organizationId: location.organizationId },
+        include: { _count: { select: { donations: { where: { locationId, status: "SETTLED" } } } }, donations: { where: { locationId, status: "SETTLED" }, select: { amountCents: true, taxDeductibleAmountCents: true } } },
+        orderBy: [{ active: "desc" }, { createdAt: "desc" }],
+      }),
+      prisma.donation.findMany({
+        where: { locationId, campaignId: filters.campaignId, receivedAt: { gte: filters.from, lt: filters.to } },
+        include: { campaign: { select: { id: true, name: true } }, customer: { select: { id: true, name: true, email: true } } },
+        orderBy: { receivedAt: "desc" }, take: 250,
+      }),
+    ]);
+    const presentedCampaigns = campaigns.map(({ donations: settled, ...campaign }) => ({
+      ...campaign,
+      raisedAmountCents: settled.reduce((sum, donation) => sum + donation.amountCents, 0),
+      taxDeductibleAmountCents: settled.reduce((sum, donation) => sum + donation.taxDeductibleAmountCents, 0),
+    }));
+    const settled = donations.filter((donation) => donation.status === "SETTLED");
+    return {
+      campaigns: presentedCampaigns,
+      donations,
+      summary: {
+        count: settled.length,
+        amountCents: settled.reduce((sum, donation) => sum + donation.amountCents, 0),
+        taxDeductibleAmountCents: settled.reduce((sum, donation) => sum + donation.taxDeductibleAmountCents, 0),
+      },
+    };
+  }
+
+  async createDonationCampaign(input: { locationId: string; employeeId: string; requestId: string; name: string; description?: string | null; goalAmountCents?: number | null; startsAt?: Date | null; endsAt?: Date | null; active: boolean }) {
+    this.assertUuidRequest(input.requestId);
+    const location = await prisma.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+    const fingerprint = createHash("sha256").update(JSON.stringify({ name: input.name, description: input.description ?? null, goalAmountCents: input.goalAmountCents ?? null, startsAt: input.startsAt?.toISOString() ?? null, endsAt: input.endsAt?.toISOString() ?? null, active: input.active })).digest("hex");
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+        const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "donation_campaign.created", afterState: { path: ["requestId"], equals: input.requestId } } });
+        if (replay) {
+          const state = replay.afterState as { requestFingerprint?: string } | null;
+          if (state?.requestFingerprint !== fingerprint) throw AppError.conflict("The campaign idempotency key was already used with different details.");
+          return tx.donationCampaign.findUniqueOrThrow({ where: { id: replay.entityId } });
+        }
+        const campaign = await tx.donationCampaign.create({ data: { organizationId: location.organizationId, name: input.name, description: input.description, goalAmountCents: input.goalAmountCents, startsAt: input.startsAt, endsAt: input.endsAt, active: input.active } });
+        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "donation_campaign.created", entityType: "DonationCampaign", entityId: campaign.id, afterState: { requestId: input.requestId, requestFingerprint: fingerprint, name: campaign.name, goalAmountCents: campaign.goalAmountCents, active: campaign.active } } });
+        return campaign;
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw AppError.conflict("A donation campaign with that name already exists.");
+      throw error;
+    }
+  }
+
+  async updateDonationCampaign(input: { locationId: string; employeeId: string; campaignId: string; requestId: string; name?: string; description?: string | null; goalAmountCents?: number | null; startsAt?: Date | null; endsAt?: Date | null; active?: boolean }) {
+    this.assertUuidRequest(input.requestId);
+    const fingerprint = createHash("sha256").update(JSON.stringify({ ...input, employeeId: undefined, requestId: undefined })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "donation_campaign.updated", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== fingerprint) throw AppError.conflict("The campaign idempotency key was already used with different details.");
+        return tx.donationCampaign.findUniqueOrThrow({ where: { id: replay.entityId } });
+      }
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      const before = await tx.donationCampaign.findFirst({ where: { id: input.campaignId, organizationId: location.organizationId } });
+      if (!before) throw AppError.notFound("Donation campaign was not found.");
+      const startsAt = input.startsAt === undefined ? before.startsAt : input.startsAt;
+      const endsAt = input.endsAt === undefined ? before.endsAt : input.endsAt;
+      if (startsAt && endsAt && startsAt >= endsAt) throw AppError.validationFailed("Campaign end date must be after its start date.");
+      const campaign = await tx.donationCampaign.update({ where: { id: before.id }, data: { name: input.name, description: input.description, goalAmountCents: input.goalAmountCents, startsAt, endsAt, active: input.active } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "donation_campaign.updated", entityType: "DonationCampaign", entityId: campaign.id, beforeState: { name: before.name, active: before.active, goalAmountCents: before.goalAmountCents }, afterState: { requestId: input.requestId, requestFingerprint: fingerprint, name: campaign.name, active: campaign.active, goalAmountCents: campaign.goalAmountCents } } });
+      return campaign;
+    });
+  }
+
+  async recordDonation(input: { locationId: string; employeeId: string; requestId: string; campaignId?: string | null; customerId?: string | null; donorName?: string | null; donorEmail?: string | null; amountCents: number; taxDeductibleAmountCents: number; paymentMethod: "CASH" | "CHECK" | "EXTERNAL"; externalReference?: string | null; receivedAt: Date; notes?: string | null }) {
+    this.assertUuidRequest(input.requestId);
+    const fingerprint = createHash("sha256").update(JSON.stringify({ ...input, employeeId: undefined, requestId: undefined, receivedAt: input.receivedAt.toISOString() })).digest("hex");
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.requestId}))`;
+      const replay = await tx.auditEvent.findFirst({ where: { locationId: input.locationId, action: "donation.recorded", afterState: { path: ["requestId"], equals: input.requestId } } });
+      if (replay) {
+        const state = replay.afterState as { requestFingerprint?: string } | null;
+        if (state?.requestFingerprint !== fingerprint) throw AppError.conflict("The donation idempotency key was already used with different details.");
+        return tx.donation.findUniqueOrThrow({ where: { id: replay.entityId } });
+      }
+      const location = await tx.location.findUniqueOrThrow({ where: { id: input.locationId }, select: { organizationId: true } });
+      if (input.campaignId && !(await tx.donationCampaign.findFirst({ where: { id: input.campaignId, organizationId: location.organizationId }, select: { id: true } }))) throw AppError.notFound("Donation campaign was not found.");
+      if (input.customerId && !(await tx.customer.findFirst({ where: { id: input.customerId, OR: [{ memberships: { some: { organizationId: location.organizationId } } }, { ticketOrders: { some: { locationId: input.locationId } } }, { restaurantTabs: { some: { locationId: input.locationId } } }] }, select: { id: true } }))) throw AppError.notFound("Customer was not found for this cinema.");
+      const donation = await tx.donation.create({ data: { locationId: input.locationId, campaignId: input.campaignId, customerId: input.customerId, donorName: input.donorName, donorEmail: input.donorEmail, amountCents: input.amountCents, taxDeductibleAmountCents: input.taxDeductibleAmountCents, paymentMethod: input.paymentMethod, externalReference: input.externalReference, receivedAt: input.receivedAt, notes: input.notes } });
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "donation.recorded", entityType: "Donation", entityId: donation.id, afterState: { requestId: input.requestId, requestFingerprint: fingerprint, amountCents: donation.amountCents, taxDeductibleAmountCents: donation.taxDeductibleAmountCents, paymentMethod: donation.paymentMethod, campaignId: donation.campaignId } } });
+      return donation;
+    });
+  }
+
+  private assertUuidRequest(requestId: string) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId)) throw AppError.validationFailed("Idempotency key must be a UUID.");
+  }
+
   async settings(locationId: string) {
     const location = await prisma.location.findUniqueOrThrow({
       where: { id: locationId },

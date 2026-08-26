@@ -44,6 +44,7 @@ model Organization {
   giftCards         GiftCard[]
   giftCardPurchases GiftCardPurchase[]
   memberships       Membership[]
+  donationCampaigns DonationCampaign[]
 
   @@map("organizations")
 }
@@ -174,6 +175,7 @@ model Location {
   giftCardTransactions  GiftCardTransaction[]
   giftCardPurchases     GiftCardPurchase[]
   schedulePlans         SchedulePlan[]
+  donations             Donation[]
 
   @@map("locations")
 }
@@ -1368,6 +1370,7 @@ model Customer {
   consents         CustomerConsent[]
   restaurantTabs   RestaurantTab[]
   memberships      Membership[]
+  donations        Donation[]
 
   @@map("customers")
 }
@@ -1398,6 +1401,65 @@ model Membership {
   @@unique([organizationId, customerId])
   @@index([customerId, status])
   @@map("memberships")
+}
+
+enum DonationPaymentMethod {
+  CASH
+  CHECK
+  EXTERNAL
+  ONLINE
+}
+
+enum DonationStatus {
+  SETTLED
+  REFUNDED
+}
+
+// Campaigns are organization-wide so multi-location nonprofits can report on
+// one appeal while each settled contribution remains attributed to a location.
+model DonationCampaign {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  goalAmountCents Int?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  active         Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  donations      Donation[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, active, startsAt])
+  @@map("donation_campaigns")
+}
+
+model Donation {
+  id                      String                @id @default(uuid())
+  locationId              String
+  location                Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  campaignId              String?
+  campaign                DonationCampaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  customerId              String?
+  customer                Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  donorName               String?
+  donorEmail              String?
+  amountCents             Int
+  taxDeductibleAmountCents Int
+  paymentMethod           DonationPaymentMethod
+  status                  DonationStatus        @default(SETTLED)
+  externalReference       String?
+  receivedAt              DateTime
+  notes                   String?
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  @@index([locationId, receivedAt])
+  @@index([campaignId, receivedAt])
+  @@index([customerId, receivedAt])
+  @@map("donations")
 }
 
 model CustomerConsent {
