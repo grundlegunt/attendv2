@@ -175,7 +175,9 @@ describe("ManagementService customer history", () => {
     const diningVisitCount = jest.spyOn(prisma.restaurantTab, "count").mockResolvedValue(64);
     const diningSpend = jest.spyOn(prisma.restaurantTab, "aggregate").mockResolvedValue({ _sum: { totalCents: 83_500 } } as never);
     const donationCount = jest.spyOn(prisma.donation, "count").mockResolvedValue(3);
-    const donationSummary = jest.spyOn(prisma.donation, "aggregate").mockResolvedValue({ _count: { _all: 2 }, _sum: { amountCents: 15_000, taxDeductibleAmountCents: 12_500 } } as never);
+    const firstGift = new Date("2025-12-01T12:00:00Z");
+    const lastGift = new Date("2026-08-22T12:00:00Z");
+    const donationSummary = jest.spyOn(prisma.donation, "aggregate").mockResolvedValue({ _count: { _all: 2 }, _sum: { amountCents: 15_000, taxDeductibleAmountCents: 12_500 }, _avg: { amountCents: 7500 }, _min: { receivedAt: firstGift }, _max: { receivedAt: lastGift } } as never);
     try {
       const customer = await new ManagementService().customer("location-1", "customer-1");
       expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({
@@ -192,8 +194,8 @@ describe("ManagementService customer history", () => {
       }));
       expect(ticketSpend).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } }, _sum: { totalCents: true } });
       expect(diningSpend).toHaveBeenCalledWith({ where: { primaryCustomerId: "customer-1", locationId: "location-1", status: "CLOSED" }, _sum: { totalCents: true } });
-      expect(donationSummary).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true } });
-      expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD", donationCount: 2, donationAmountCents: 15_000, donationTaxDeductibleAmountCents: 12_500, donationCurrency: "USD" });
+      expect(donationSummary).toHaveBeenCalledWith({ where: { customerId: "customer-1", locationId: "location-1", status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true }, _avg: { amountCents: true }, _min: { receivedAt: true }, _max: { receivedAt: true } });
+      expect(customer.summary).toEqual({ orderCount: 72, ticketCount: 118, lifetimeSpendCents: 125_000, currency: "USD", diningVisitCount: 64, diningSpendCents: 83_500, diningCurrency: "USD", donationCount: 2, donationAmountCents: 15_000, donationTaxDeductibleAmountCents: 12_500, donationAverageAmountCents: 7500, donationFirstReceivedAt: firstGift, donationLastReceivedAt: lastGift, donationCurrency: "USD" });
       expect(customer.membership).toBeNull();
       expect(customer.historyWindow).toEqual({ ticketOrdersShown: 2, ticketOrdersTotal: 72, diningVisitsShown: 2, diningVisitsTotal: 64, donationsShown: 1, donationsTotal: 3 });
     } finally {

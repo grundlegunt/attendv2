@@ -45,7 +45,7 @@ test("customer profiles reuse authenticated history, pagination, and export endp
   assert.match(profile, /diningOffset/);
   assert.match(profile, /donationOffset/);
   assert.match(profile, /apiDownload\(`\/management\/customers\/\$\{id\}\/history\.csv`/);
-  for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Giving", "Ticket order history", "Food &amp; drink history", "Donation history"]) assert.ok(profile.includes(label));
+  for (const label of ["Customer type", "Membership", "Ticket orders", "Ticket spend", "Dining visits", "Giving", "Giving history", "Repeat donor", "One-time donor", "Ticket order history", "Food &amp; drink history", "Donation history"]) assert.ok(profile.includes(label));
   assert.match(profile, /Expires \$\{date\(customer\.membership\.expiresAt\)\}/);
   assert.match(profile, /No expiration/);
 });
