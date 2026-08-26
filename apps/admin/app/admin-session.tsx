@@ -8,7 +8,7 @@ type Session = { employee: AuthenticatedEmployee; accessToken: string; refreshTo
 type StaffLoginResponse = AuthTokenResponse & { employee: AuthenticatedEmployee };
 type PublicAdminBranding = { name: string; logoUrl: string | null; accentColor: string | null; accentMutedColor: string | null; backgroundColor: string | null; surfaceColor: string | null; textColor: string | null; mutedTextColor: string | null; ui?: AdminUiConfig | null };
 type PlatformBranding = { companyName: string; adminSignIn: { accentColor: string; backgroundColor: string; surfaceColor: string; textColor: string; mutedTextColor: string; eyebrow: string; title: string; description: string; formEyebrow: string; formTitle: string; formDescription: string; securityNote: string } };
-type AdminSessionValue = Session & { signOut: () => void };
+type AdminSessionValue = Session & { companyName: string; signOut: () => void };
 const STORAGE_KEY = "attend-admin-session";
 const AdminSessionContext = createContext<AdminSessionValue | null>(null);
 const AdminUiContext = createContext<AdminUiConfig>(adminUiDefaults);
@@ -153,11 +153,11 @@ export function AdminSessionProvider({ children }: { children: React.ReactNode }
     } catch (reason) { if (requestId === sessionRequestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : "The password could not be changed."); }
   }
 
-  const value = useMemo(() => session ? { ...session, signOut: () => {
+  const value = useMemo(() => session ? { ...session, companyName: platformBranding?.companyName ?? "Ringo", signOut: () => {
     sessionRequestRef.current += 1;
     if (!session.supportSession) void apiFetch("/auth/staff/logout", { accessToken: session.accessToken, method: "POST" }).catch(() => undefined);
     window.sessionStorage.removeItem(STORAGE_KEY); setSession(null);
-  } } : null, [session]);
+  } } : null, [platformBranding?.companyName, session]);
   // The company controls the unauthenticated identity. A cinema's own Admin
   // palette takes over only after staff have established their location.
   const signInBrand = platformBranding?.adminSignIn;

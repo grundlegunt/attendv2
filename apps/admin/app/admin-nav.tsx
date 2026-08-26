@@ -11,7 +11,7 @@ import { markAdminNavigationStart } from "./lib/request-diagnostics";
 
 export function AdminNav() {
   const pathname = usePathname();
-  const { employee, signOut } = useAdminSession();
+  const { employee, companyName, signOut } = useAdminSession();
   const groups = useMemo(() => visibleAdminNavigation(employee.permissions), [employee.permissions]);
   const operationalSites = useMemo(() => visibleOperationalSites(employee.permissions), [employee.permissions]);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -35,14 +35,14 @@ export function AdminNav() {
 
   return <>
     <header className="admin-mobile-bar">
-      <Link href="/" className="admin-brand"><span>ATTEND</span><strong>Admin</strong></Link>
+      <Link href="/" className="admin-brand"><span>{companyName.toUpperCase()}</span><strong>Admin</strong></Link>
       <button type="button" className="admin-menu-toggle" aria-expanded={mobileOpen} aria-controls="admin-sidebar" onClick={() => setMobileOpen((open) => !open)}>
         <span aria-hidden="true">☰</span><span>{mobileOpen ? "Close" : "Menu"}</span>
       </button>
     </header>
     {mobileOpen && <button type="button" className="admin-sidebar-backdrop" aria-label="Dismiss navigation" onClick={() => setMobileOpen(false)} />}
     <aside id="admin-sidebar" className={`admin-sidebar ${mobileOpen ? "open" : ""} ${sidebarCollapsed ? "collapsed" : ""}`} aria-label="Admin navigation">
-      <div className="admin-sidebar-header"><Link href="/" className="admin-brand"><span>ATTEND</span><strong>Admin</strong></Link><button type="button" className="admin-sidebar-collapse" aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} aria-pressed={sidebarCollapsed} onClick={toggleSidebar}>{sidebarCollapsed ? "›" : "‹"}</button><button type="button" className="admin-sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}>×</button></div>
+      <div className="admin-sidebar-header"><Link href="/" className="admin-brand"><span>{companyName.toUpperCase()}</span><strong>Admin</strong></Link><button type="button" className="admin-sidebar-collapse" aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"} aria-pressed={sidebarCollapsed} onClick={toggleSidebar}>{sidebarCollapsed ? "›" : "‹"}</button><button type="button" className="admin-sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}>×</button></div>
       {sidebarCollapsed && <button type="button" className="admin-sidebar-rail-button" onClick={toggleSidebar}><span aria-hidden="true">☰</span><span className="sr-only">Expand navigation</span></button>}
       <nav className="admin-nav" aria-label="Admin sections">
         {groups.map((group) => {

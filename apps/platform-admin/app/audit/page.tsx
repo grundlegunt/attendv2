@@ -141,7 +141,7 @@ export default function PlatformAuditLog() {
         {!loading && events.length === 0 && <p className="empty-state">No platform events match these filters.</p>}
         {events.map((event) => {
           const summary = stateSummary(event.afterState) ?? stateSummary(event.beforeState);
-          return <article key={event.id}><time>{new Date(event.occurredAt).toLocaleString()}</time><div><strong>{event.action.replaceAll("_", " ")}</strong><span>{event.actor?.name ?? "Unknown operator"} · {event.organization?.name ?? "Attend"}{event.location ? ` / ${event.location.name}` : ""}</span>{summary && <small>{summary}</small>}</div><span className="status">{event.entityType}</span></article>;
+          return <article key={event.id}><time>{new Date(event.occurredAt).toLocaleString()}</time><div><strong>{event.action.replaceAll("_", " ")}</strong><span>{event.actor?.name ?? "Unknown operator"} · {event.organization?.name ?? "Ringo"}{event.location ? ` / ${event.location.name}` : ""}</span>{summary && <small>{summary}</small>}</div><span className="status">{event.entityType}</span></article>;
         })}
       </section>
     </main>

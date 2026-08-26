@@ -1654,7 +1654,7 @@ export default function AdminPage() {
     <main className="admin-shell">
       <header>
         <div>
-          <p className="kicker">ATTEND · CINEMA CONFIG</p>
+          <p className="kicker">RINGO · CINEMA CONFIG</p>
           <h1>{data?.location.name ?? "Loading…"}</h1>
         </div>
         <span>{employee.name}</span>
@@ -2345,7 +2345,7 @@ export default function AdminPage() {
                   </label>
                 </div>
                 <div className="calculation-note">
-                  Attend includes {data.location.preShowBufferMinutes} minutes
+                  Ringo includes {data.location.preShowBufferMinutes} minutes
                   of pre-show, the film runtime, and at least 15 minutes of
                   cleaning. Conflicting placements are rejected.
                 </div>

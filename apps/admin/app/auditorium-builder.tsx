@@ -1359,7 +1359,7 @@ export function AuditoriumBuilder({
         )}
       </div>
       <p className="compliance-note">
-        Attend models the layout supplied by the operator. It does not certify
+        Ringo models the layout supplied by the operator. It does not certify
         ADA, fire, egress, or building-code compliance.
       </p>
     </form>
