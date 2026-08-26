@@ -254,6 +254,14 @@ export class ManagementController {
   @Get("memberships") @RequirePermissions(Permission.TicketPriceEdit)
   memberships(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipDirectorySchema)) query: unknown) { return this.management.memberships(this.location(actor), membershipDirectorySchema.parse(query)); }
 
+  @Get("memberships.csv") @RequirePermissions(Permission.TicketPriceEdit)
+  async membershipsCsv(@CurrentActor() actor: RequestActor, @Query(new ZodValidationPipe(membershipDirectorySchema)) query: unknown, @Res() response: Response) {
+    const rows = await this.management.memberships(this.location(actor), membershipDirectorySchema.parse(query));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="memberships.csv"');
+    response.send(this.management.membershipsCsv(rows));
+  }
+
   @Get("memberships/summary") @RequirePermissions(Permission.TicketPriceEdit)
   membershipSummary(@CurrentActor() actor: RequestActor) { return this.management.membershipSummary(this.location(actor)); }
 

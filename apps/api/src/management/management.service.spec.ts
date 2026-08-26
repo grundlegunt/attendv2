@@ -36,6 +36,13 @@ describe("membership directory", () => {
       location.mockRestore(); count.mockRestore(); aggregate.mockRestore();
     }
   });
+
+  it("exports filtered membership records without allowing spreadsheet formulas", () => {
+    const service = new ManagementService();
+    const csv = service.membershipsCsv([{ id: "membership-1", membershipNumber: "MEM-1", tier: "Supporter", status: "ACTIVE", expiresAt: new Date("2027-08-25T00:00:00.000Z"), createdAt: new Date("2026-08-25T00:00:00.000Z"), updatedAt: new Date("2026-08-25T01:00:00.000Z"), plan: { id: "plan-1", name: "Annual" }, customer: { id: "customer-1", name: "=2+2", email: "member@example.com", phone: null } }]);
+    expect(csv).toContain('"MEM-1","\'=2+2","member@example.com"');
+    expect(csv).toContain('"Annual","Supporter","ACTIVE","2027-08-25T00:00:00.000Z"');
+  });
 });
 
 describe("membership plans", () => {

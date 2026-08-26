@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useAdminSession } from "../admin-session";
-import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 
 type Status = "" | "ACTIVE" | "EXPIRED" | "SUSPENDED" | "CANCELED";
 type Membership = { id: string; membershipNumber: string; tier: string; status: Exclude<Status, "">; expiresAt: string | null; updatedAt: string; customer: { id: string; name: string | null; email: string | null; phone: string | null } };
@@ -61,8 +61,20 @@ export default function MembershipsPage() {
     try { await apiFetch(`/management/membership-plans/${plan.id}`, { method: "PATCH", accessToken, headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ active: !plan.active }) }); await loadPlans(); }
     catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "Membership plan could not be updated."); }
   }
+  async function exportCsv() {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    if (status) params.set("status", status);
+    setError(null);
+    try {
+      const blob = await apiDownload(`/management/memberships.csv${params.size ? `?${params}` : ""}`, { accessToken });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = "memberships.csv"; anchor.click(); URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof ApiRequestError ? reason.body.message : "The membership export could not be downloaded."); }
+  }
   return <main className="admin-route-page membership-directory-page">
-    <header className="admin-page-heading"><div><p className="kicker">CUSTOMER PROGRAMS</p><h1>Memberships</h1><p>Configure cinema membership plans and maintain member records.</p></div><Link href="/search" className="primary">Find a customer</Link></header>
+    <header className="admin-page-heading"><div><p className="kicker">CUSTOMER PROGRAMS</p><h1>Memberships</h1><p>Configure cinema membership plans and maintain member records.</p></div><div className="film-library-heading-actions"><button className="secondary" type="button" onClick={() => void exportCsv()}>Export filtered CSV</button><Link href="/search" className="primary">Find a customer</Link></div></header>
     <section className="dashboard-metrics" aria-label="Membership program summary"><article className="dashboard-metric"><span>Active members</span><strong>{summary?.active ?? "—"}</strong><small>{summary?.recentEnrollments ?? "—"} enrolled in the last 30 days</small></article><article className="dashboard-metric"><span>Expiring soon</span><strong>{summary?.expiringSoon ?? "—"}</strong><small>Active memberships ending within 30 days</small></article><article className="dashboard-metric"><span>Lapsed</span><strong>{summary?.lapsed ?? "—"}</strong><small>Expired records requiring renewal outreach</small></article><article className="dashboard-metric"><span>Online membership revenue</span><strong>{summary ? money(summary.collectedAmountCents, summary.currency) : "—"}</strong><small>{summary?.paidEnrollments ?? "—"} completed online enrollments</small></article></section>
     <section className="membership-plan-layout">
       <form className="panel membership-plan-form" onSubmit={createPlan}><div><p className="kicker">PLANS</p><h2>Create a membership plan</h2></div><label>Name<input required maxLength={100} value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Supporting Member" /></label><label>Description<textarea maxLength={1000} value={planDescription} onChange={(event) => setPlanDescription(event.target.value)} /></label><div className="membership-plan-fields"><label>Price<input type="number" min="0" max="10000" step="0.01" required value={planPrice} onChange={(event) => setPlanPrice(event.target.value)} /></label><label>Duration (months)<input type="number" min="1" max="120" required value={planDuration} onChange={(event) => setPlanDuration(event.target.value)} /></label></div><label>Benefits, one per line<textarea maxLength={5000} value={planBenefits} onChange={(event) => setPlanBenefits(event.target.value)} placeholder={'Two free tickets\nMember pricing\nInvitations to member events'} /></label><button className="primary" disabled={planSaving}>{planSaving ? "Creating…" : "Create plan"}</button></form>
