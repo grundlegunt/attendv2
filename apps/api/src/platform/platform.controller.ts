@@ -237,6 +237,15 @@ export class PlatformController {
     return this.platform.distributorPortfolio();
   }
 
+  @Get("distributors.csv")
+  @UseGuards(PlatformAuthGuard)
+  async distributorsCsv(@Res() response: Response) {
+    const portfolio = await this.platform.distributorPortfolio();
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-master-distributor-settlements.csv"');
+    response.send(this.platform.distributorPortfolioCsv(portfolio));
+  }
+
   @Get("revenue")
   @UseGuards(PlatformAuthGuard)
   revenue(@Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {

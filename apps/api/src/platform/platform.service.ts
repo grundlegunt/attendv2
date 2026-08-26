@@ -508,6 +508,22 @@ export class PlatformService {
     };
   }
 
+  distributorPortfolioCsv(portfolio: Awaited<ReturnType<PlatformService["distributorPortfolio"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const columns = ["Distributor", "Film", "Operator", "Locations", "Engagement status", "Shows", "Tickets sold", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "Deal terms"];
+    return [
+      row(["Generated at", portfolio.generatedAt]),
+      "",
+      row(columns),
+      ...portfolio.distributors.flatMap((distributor) => distributor.deals.map((deal) => row([
+        distributor.name, deal.title, deal.organization.name, deal.locations.join("; "), deal.status,
+        deal.showtimes, deal.ticketsSold, deal.ticketFaceValueCents, deal.distributorRevenueCents,
+        deal.cinemaRevenueCents, deal.unallocatedRevenueCents, deal.terms ? "SAVED" : "MISSING",
+      ]))),
+    ].join("\n");
+  }
+
   private filmCatalogAuditState(entry: {
     title: string;
     synopsis: string | null;

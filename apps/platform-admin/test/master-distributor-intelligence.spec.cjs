@@ -32,3 +32,12 @@ test("Master distributor workspace shows portfolios, performance, and terms read
   assert.match(page, /deal\.terms \? "Saved" : "Missing"/);
   assert.match(page, /href=\{`\/films\/\$\{deal\.catalogEntryId\}`\}/);
 });
+
+test("Master exports engagement-level distributor settlements", () => {
+  assert.match(controller, /@Get\("distributors\.csv"\)/);
+  assert.match(service, /distributorPortfolioCsv/);
+  assert.match(service, /"Distributor share \(cents\)"/);
+  assert.match(service, /"Unallocated \(cents\)"/);
+  assert.match(page, /Export settlements/);
+  assert.match(page, /platformDownload\(API_BASE_URL, STORAGE_KEY, "\/platform\/distributors\.csv"/);
+});
