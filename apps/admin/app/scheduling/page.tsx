@@ -9,6 +9,7 @@ import {
   type SeatMapLayout,
 } from "@cinema/shared";
 import { SeatMap, type SeatMapSeat } from "@cinema/ui";
+import Link from "next/link";
 import { apiFetch, ApiRequestError } from "../lib/api-client";
 import {
   SchedulingCalendar,
@@ -106,6 +107,11 @@ interface ShowtimeSeatInventory {
   showtime: {
     auditorium: {
       seatingStyle: "SINGLE" | "PAIR" | "LOVESEAT" | "TABLE_2" | "TABLE_4" | "BENCH";
+    };
+    priceTier: {
+      ticketPriceMinor: number;
+      feeMinor: number;
+      currency: string;
     };
   };
   seats: Array<
@@ -2144,13 +2150,18 @@ export default function AdminPage() {
                           {selectedMovie.rating || "Not rated"} ·{" "}
                           {selectedMovie.runtimeMinutes} min
                         </span>
-                        <button
-                          type="button"
-                          className="film-details-button"
-                          onClick={() => openMovieEditor(selectedMovie)}
-                        >
-                          Edit film details &amp; poster URL
-                        </button>
+                        <div className="selected-film-actions">
+                          <Link href={`/films/${encodeURIComponent(selectedMovie.id)}`}>
+                            View film performance
+                          </Link>
+                          <button
+                            type="button"
+                            className="film-details-button"
+                            onClick={() => openMovieEditor(selectedMovie)}
+                          >
+                            Edit film details &amp; poster URL
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -2183,6 +2194,38 @@ export default function AdminPage() {
                             <span>
                               <b>{seatInventory.counts.blocked}</b> blocked
                             </span>
+                          </div>
+                          <div className="showtime-operating-summary">
+                            <div>
+                              <span>Occupancy</span>
+                              <strong>
+                                {seatInventory.seats.length
+                                  ? Math.round((seatInventory.counts.sold / seatInventory.seats.length) * 100)
+                                  : 0}%
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Sellable now</span>
+                              <strong>{seatInventory.counts.available}</strong>
+                            </div>
+                            <div>
+                              <span>Base ticket</span>
+                              <strong>
+                                {new Intl.NumberFormat("en-US", {
+                                  style: "currency",
+                                  currency: seatInventory.showtime.priceTier.currency,
+                                }).format(seatInventory.showtime.priceTier.ticketPriceMinor / 100)}
+                              </strong>
+                            </div>
+                            <div>
+                              <span>Service fee</span>
+                              <strong>
+                                {new Intl.NumberFormat("en-US", {
+                                  style: "currency",
+                                  currency: seatInventory.showtime.priceTier.currency,
+                                }).format(seatInventory.showtime.priceTier.feeMinor / 100)}
+                              </strong>
+                            </div>
                           </div>
                           <SeatMap
                             seats={seatInventory.seats.map((seat) => ({
