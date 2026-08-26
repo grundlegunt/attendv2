@@ -46,6 +46,17 @@ export interface DonationReceiptDelivery {
   donationId: string;
 }
 
+export interface MembershipReceiptDelivery {
+  to: string;
+  memberName: string;
+  organizationName: string;
+  planName: string;
+  membershipNumber: string;
+  expiresAt: Date | null;
+  amountCents: number;
+  currency: string;
+}
+
 export interface RestaurantPaymentFailedNotice {
   to: string;
   customerName?: string | null;
@@ -102,6 +113,7 @@ export interface EmailProvider {
   sendTicketReceipt(receipt: TicketReceipt): Promise<{ messageId: string }>;
   sendGiftCardDelivery(delivery: GiftCardDelivery): Promise<{ messageId: string }>;
   sendDonationReceipt(receipt: DonationReceiptDelivery): Promise<{ messageId: string }>;
+  sendMembershipReceipt(receipt: MembershipReceiptDelivery): Promise<{ messageId: string }>;
   sendRestaurantPaymentFailed(
     notice: RestaurantPaymentFailedNotice,
   ): Promise<{ messageId: string }>;

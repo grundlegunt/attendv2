@@ -15,6 +15,7 @@ import { loadEnv } from "@cinema/config/env";
 import { createHash } from "node:crypto";
 import { GiftCardPurchaseService } from "../gift-card-purchases/gift-card-purchase.service";
 import { DonationCheckoutService } from "../donation-checkouts/donation-checkout.service";
+import { MembershipCheckoutService } from "../membership-checkouts/membership-checkout.service";
 
 @Injectable()
 export class TicketingService {
@@ -26,6 +27,7 @@ export class TicketingService {
     @Inject(SMS_PROVIDER) smsProvider: SmsProvider,
     private readonly giftCardPurchases: GiftCardPurchaseService,
     private readonly donationCheckouts: DonationCheckoutService,
+    private readonly membershipCheckouts: MembershipCheckoutService,
   ) {
     this.domain = new TicketingDomainService(
       prisma,
@@ -295,6 +297,9 @@ export class TicketingService {
     }
     if (event.metadata?.donationCheckoutId) {
       return this.wrap(() => this.donationCheckouts.processVerifiedWebhook(event));
+    }
+    if (event.metadata?.membershipCheckoutId) {
+      return this.wrap(() => this.membershipCheckouts.processVerifiedWebhook(event));
     }
     return this.wrap(() => this.domain.processVerifiedWebhook(event));
   }

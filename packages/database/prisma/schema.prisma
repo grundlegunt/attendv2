@@ -35,18 +35,19 @@ model Organization {
   createdAt                DateTime                @default(now())
   updatedAt                DateTime                @updatedAt
 
-  locations         Location[]
-  roles             Role[]
-  movies            Movie[]
-  filmSeries        FilmSeries[]
-  priceTiers        PriceTier[]
-  paymentCustomers  PaymentCustomer[]
-  giftCards         GiftCard[]
-  giftCardPurchases GiftCardPurchase[]
-  memberships       Membership[]
-  membershipPlans   MembershipPlan[]
-  donationCampaigns DonationCampaign[]
-  donationCheckouts DonationCheckout[]
+  locations           Location[]
+  roles               Role[]
+  movies              Movie[]
+  filmSeries          FilmSeries[]
+  priceTiers          PriceTier[]
+  paymentCustomers    PaymentCustomer[]
+  giftCards           GiftCard[]
+  giftCardPurchases   GiftCardPurchase[]
+  memberships         Membership[]
+  membershipPlans     MembershipPlan[]
+  donationCampaigns   DonationCampaign[]
+  donationCheckouts   DonationCheckout[]
+  membershipCheckouts MembershipCheckout[]
 
   @@map("organizations")
 }
@@ -179,6 +180,7 @@ model Location {
   schedulePlans         SchedulePlan[]
   donations             Donation[]
   donationCheckouts     DonationCheckout[]
+  membershipCheckouts   MembershipCheckout[]
 
   @@map("locations")
 }
@@ -500,9 +502,9 @@ model FilmCatalogEntry {
 }
 
 model Movie {
-  id             String       @id @default(uuid())
+  id             String            @id @default(uuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   catalogEntryId String?
   catalogEntry   FilmCatalogEntry? @relation(fields: [catalogEntryId], references: [id], onDelete: SetNull)
 
@@ -721,6 +723,7 @@ enum PaymentPurpose {
   RESTAURANT_TAB
   GIFT_CARD_PURCHASE
   DONATION
+  MEMBERSHIP
 }
 
 enum PaymentStatus {
@@ -872,7 +875,7 @@ model TicketOrder {
   guestEmail                   String?
   guestName                    String?
   guestPhone                   String?
-  smsTicketsRequested          Boolean             @default(false)
+  smsTicketsRequested          Boolean            @default(false)
   smsDeliveryClaimedAt         DateTime?
   smsDeliverySentAt            DateTime?
   smsDeliveryMessageId         String?
@@ -882,7 +885,7 @@ model TicketOrder {
   receiptEmailSentAt           DateTime?
   receiptEmailMessageId        String?
   receiptEmailError            String?
-  mobileAccessTokenHash        String?              @unique
+  mobileAccessTokenHash        String?            @unique
   mobileAccessExpiresAt        DateTime?
   mobileAccessRevokedAt        DateTime?
   receiptResendRequestId       String?
@@ -1057,10 +1060,11 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  attempts         PaymentAttempt[]
-  refunds          Refund[]
-  giftCardPurchase GiftCardPurchase?
-  donationCheckout DonationCheckout?
+  attempts           PaymentAttempt[]
+  refunds            Refund[]
+  giftCardPurchase   GiftCardPurchase?
+  donationCheckout   DonationCheckout?
+  membershipCheckout MembershipCheckout?
 
   @@index([status, createdAt])
   @@index([restaurantTabId, status])
@@ -1388,47 +1392,92 @@ enum MembershipStatus {
 }
 
 model MembershipPlan {
-  id             String       @id @default(uuid())
+  id             String               @id @default(uuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   description    String?
   priceCents     Int
   durationMonths Int
   benefits       Json
-  autoRenew      Boolean      @default(false)
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  autoRenew      Boolean              @default(false)
+  active         Boolean              @default(true)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
   memberships    Membership[]
+  checkouts      MembershipCheckout[]
 
   @@unique([organizationId, name])
   @@index([organizationId, active])
   @@map("membership_plans")
 }
 
-// Read-only representation of a membership issued by the cinema or an
-// external membership system. Attend does not sell or renew memberships.
+// Memberships may be issued by staff, imported from an external system, or
+// created after authoritative settlement of a public membership checkout.
 model Membership {
-  id               String           @id @default(uuid())
+  id               String              @id @default(uuid())
   organizationId   String
-  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   customerId       String
-  customer         Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customer         Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
   planId           String?
-  plan             MembershipPlan?  @relation(fields: [planId], references: [id], onDelete: SetNull)
+  plan             MembershipPlan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
   membershipNumber String
   tier             String
-  status           MembershipStatus @default(ACTIVE)
+  status           MembershipStatus    @default(ACTIVE)
   expiresAt        DateTime?
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  checkout         MembershipCheckout?
 
   @@unique([organizationId, membershipNumber])
   @@unique([organizationId, customerId])
   @@index([customerId, status])
   @@index([planId, status])
   @@map("memberships")
+}
+
+enum MembershipCheckoutStatus {
+  PENDING
+  PAID
+  FAILED
+}
+
+// Pending payment is separate from Membership so abandoned payments never
+// grant benefits or appear in the active-member ledger.
+model MembershipCheckout {
+  id               String                   @id @default(uuid())
+  organizationId   String
+  organization     Organization             @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  locationId       String
+  location         Location                 @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  planId           String
+  plan             MembershipPlan           @relation(fields: [planId], references: [id], onDelete: Restrict)
+  paymentId        String                   @unique
+  payment          Payment                  @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  membershipId     String?                  @unique
+  membership       Membership?              @relation(fields: [membershipId], references: [id], onDelete: SetNull)
+  memberName       String
+  memberEmail      String
+  planName         String
+  planDescription  String?
+  planBenefits     Json
+  durationMonths   Int
+  amountCents      Int
+  currency         String
+  idempotencyKey   String                   @unique
+  status           MembershipCheckoutStatus @default(PENDING)
+  receiptMessageId String?
+  receiptSentAt    DateTime?
+  receiptError     String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  @@index([organizationId, createdAt])
+  @@index([locationId, createdAt])
+  @@index([planId, createdAt])
+  @@index([status, updatedAt])
+  @@map("membership_checkouts")
 }
 
 enum DonationPaymentMethod {
@@ -1452,19 +1501,19 @@ enum DonationCheckoutStatus {
 // Campaigns are organization-wide so multi-location nonprofits can report on
 // one appeal while each settled contribution remains attributed to a location.
 model DonationCampaign {
-  id             String       @id @default(uuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  description    String?
+  id              String             @id @default(uuid())
+  organizationId  String
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name            String
+  description     String?
   goalAmountCents Int?
-  startsAt       DateTime?
-  endsAt         DateTime?
-  active         Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  donations      Donation[]
-  checkouts      DonationCheckout[]
+  startsAt        DateTime?
+  endsAt          DateTime?
+  active          Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  donations       Donation[]
+  checkouts       DonationCheckout[]
 
   @@unique([organizationId, name])
   @@index([organizationId, active, startsAt])
@@ -1505,25 +1554,25 @@ model DonationCheckout {
 }
 
 model Donation {
-  id                      String                @id @default(uuid())
-  locationId              String
-  location                Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  campaignId              String?
-  campaign                DonationCampaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
-  customerId              String?
-  customer                Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  donorName               String?
-  donorEmail              String?
-  amountCents             Int
+  id                       String                @id @default(uuid())
+  locationId               String
+  location                 Location              @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  campaignId               String?
+  campaign                 DonationCampaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  customerId               String?
+  customer                 Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  donorName                String?
+  donorEmail               String?
+  amountCents              Int
   taxDeductibleAmountCents Int
-  paymentMethod           DonationPaymentMethod
-  status                  DonationStatus        @default(SETTLED)
-  externalReference       String?
-  receivedAt              DateTime
-  notes                   String?
-  createdAt               DateTime              @default(now())
-  updatedAt               DateTime              @updatedAt
-  checkout                DonationCheckout?
+  paymentMethod            DonationPaymentMethod
+  status                   DonationStatus        @default(SETTLED)
+  externalReference        String?
+  receivedAt               DateTime
+  notes                    String?
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  checkout                 DonationCheckout?
 
   @@index([locationId, receivedAt])
   @@index([campaignId, receivedAt])
