@@ -41,6 +41,13 @@ export default function GiftCardsPage() {
   const resumeAttempted = useRef(false);
   const balanceRequestRef = useRef<AbortController | null>(null);
   const purchaseActionPendingRef = useRef(false);
+  const purchaseCompletedTrackedRef = useRef(false);
+
+  function trackPurchaseCompleted() {
+    if (purchaseCompletedTrackedRef.current) return;
+    purchaseCompletedTrackedRef.current = true;
+    trackOptionalAnalyticsEvent("Gift Card Purchased");
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -81,6 +88,7 @@ export default function GiftCardsPage() {
         setBuyerEmail(resumed.buyerEmail); setRecipientEmail(resumed.recipientEmail);
         if (resumed.payment.status === "SUCCEEDED") {
           setConfirmation(await finalizePurchase(resumed.purchaseId, storedKey));
+          trackPurchaseCompleted();
           window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY);
           return;
         }
@@ -130,6 +138,7 @@ export default function GiftCardsPage() {
       const result = await stripe.confirmPayment({ elements, redirect: "if_required", confirmParams: { receipt_email: buyerEmail } });
       if (result.error) throw new Error(result.error.message ?? "Payment was declined.");
       setConfirmation(await finalizePurchase(purchase.purchaseId, purchaseKey.current!));
+      trackPurchaseCompleted();
       window.sessionStorage.removeItem(PURCHASE_STORAGE_KEY);
     } catch (reason) { setError(failure(reason)); } finally { purchaseActionPendingRef.current = false; setPending(false); }
   }
