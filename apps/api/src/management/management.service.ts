@@ -1151,7 +1151,7 @@ export class ManagementService {
       prisma.restaurantTab.count({ where: { primaryCustomerId: customerId, locationId } }),
       prisma.restaurantTab.aggregate({ where: { primaryCustomerId: customerId, locationId, status: "CLOSED" }, _sum: { totalCents: true } }),
       prisma.donation.count({ where: { customerId, locationId } }),
-      prisma.donation.aggregate({ where: { customerId, locationId, status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true } }),
+      prisma.donation.aggregate({ where: { customerId, locationId, status: "SETTLED" }, _count: { _all: true }, _sum: { amountCents: true, taxDeductibleAmountCents: true }, _avg: { amountCents: true }, _min: { receivedAt: true }, _max: { receivedAt: true } }),
     ]);
     const { memberships, ...customerRecord } = customer;
     return {
@@ -1168,6 +1168,9 @@ export class ManagementService {
         donationCount: donationSummary._count._all,
         donationAmountCents: donationSummary._sum.amountCents ?? 0,
         donationTaxDeductibleAmountCents: donationSummary._sum.taxDeductibleAmountCents ?? 0,
+        donationAverageAmountCents: Math.round(donationSummary._avg.amountCents ?? 0),
+        donationFirstReceivedAt: donationSummary._min.receivedAt,
+        donationLastReceivedAt: donationSummary._max.receivedAt,
         donationCurrency: customer.donations[0]?.location.currency ?? "USD",
       },
       historyWindow: {
