@@ -41,6 +41,10 @@ interface Totals {
   distributorRevenueCents: number;
   cinemaRevenueCents: number;
   unallocatedRevenueCents: number;
+  discountCents: number;
+  complimentaryTickets: number;
+  refundedTickets: number;
+  refundedTicketValueCents: number;
 }
 interface Performance {
   film: {
@@ -83,6 +87,8 @@ interface Performance {
   admissionTypes: Array<{ name: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   salesChannels: Array<{ channel: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
+  promotions: Array<{ code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>;
+  fnbItems: Array<{ name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>;
   operators: Array<{
     organization: { id: string; name: string };
     location: { id: string; name: string };
@@ -345,6 +351,9 @@ export default function FilmPerformancePage() {
               <strong>{money(totals.unallocatedRevenueCents)}</strong>
               <small>Unallocated face value</small>
             </article>
+            <article><span>Discounts</span><strong>{money(totals.discountCents)}</strong><small>Across completed ticket orders</small></article>
+            <article><span>Complimentary</span><strong>{totals.complimentaryTickets}</strong><small>Tickets issued through comp promotions</small></article>
+            <article><span>Refunded tickets</span><strong>{totals.refundedTickets}</strong><small>{money(totals.refundedTicketValueCents)} face value</small></article>
           </section>
           <section className="film-operator-table">
             <div>
@@ -421,6 +430,10 @@ export default function FilmPerformancePage() {
               <article><h3>Sales channels</h3>{performance.salesChannels.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.salesChannels.map((row) => <div key={row.channel}><strong>{row.channel === "BOX_OFFICE" ? "Box office" : "Online"}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{money(row.ticketRevenueCents)}</span></div>)}</div>}</article>
               <article><h3>Advance purchase timing</h3>{performance.advanceSales.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.advanceSales.map((row) => <div key={row.key}><strong>{row.label}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{row.averageLeadHours}h avg lead</span></div>)}</div>}</article>
             </div>
+          </section>
+          <section className="film-commercial-insights">
+            <article><div className="panel-heading"><div><p className="eyebrow">CONCESSIONS</p><h2>Top F&amp;B items</h2><p className="muted">Item sales connected to this film across operators.</p></div></div>{performance.fnbItems.length === 0 ? <p className="empty-state">No linked F&amp;B sales in this period.</p> : <div className="commercial-list">{performance.fnbItems.slice(0, 10).map((item) => <div key={`${item.chargeCategory}:${item.name}`}><strong>{item.name}<small>{item.chargeCategory.toLowerCase()} · {item.orderAheadUnits} ahead · {item.serviceUnits} in service</small></strong><span>{item.unitsSold} units</span><span>{money(item.salesCents)}</span></div>)}</div>}</article>
+            <article><div className="panel-heading"><div><p className="eyebrow">PROMOTIONS</p><h2>Offer performance</h2><p className="muted">Promotions used for this film across operators.</p></div></div>{performance.promotions.length === 0 ? <p className="empty-state">No promotions were used in this period.</p> : <div className="commercial-list">{performance.promotions.map((promotion) => <div key={promotion.code}><strong>{promotion.code}<small>{promotion.name} · {promotion.type.toLowerCase()}</small></strong><span>{promotion.tickets} tickets</span><span>{money(promotion.discountCents)}</span></div>)}</div>}</article>
           </section>
           <p className="detail-note">
             Ringo Master shows calculated performance allocations. Each
