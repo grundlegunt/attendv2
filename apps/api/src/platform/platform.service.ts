@@ -390,6 +390,24 @@ export class PlatformService {
       report: await this.reporting.moviePerformance(location.id, movie.id, range),
     }))));
     const locations = reports.map(({ organization, location, localMovieId, report }) => ({ organization, location, localMovieId, totals: report.totals }));
+    const showtimePerformance = reports.flatMap(({ organization, location, localMovieId, report }) => report.showtimes.map((showtime) => ({
+      organization,
+      location,
+      localMovieId,
+      showtimeId: showtime.showtimeId,
+      startsAt: showtime.startsAt,
+      auditorium: showtime.auditorium,
+      filmSeries: showtime.filmSeries,
+      theatricalWeek: showtime.theatricalWeek,
+      ticketsSold: showtime.ticketsSold,
+      capacity: showtime.capacity,
+      attendancePercent: showtime.capacity ? Math.round((showtime.ticketsSold / showtime.capacity) * 1000) / 10 : 0,
+      ticketRevenueCents: showtime.ticketRevenueCents,
+      fnbRevenueCents: showtime.fnbRevenueCents,
+      distributorRevenueCents: showtime.distributorRevenueCents,
+      cinemaRevenueCents: showtime.cinemaRevenueCents,
+      unallocatedRevenueCents: showtime.unallocatedRevenueCents,
+    }))).sort((left, right) => right.startsAt.getTime() - left.startsAt.getTime());
     const weeklyPerformance = new Map<number, {
       theatricalWeek: number;
       firstShowtime: Date;
@@ -563,6 +581,7 @@ export class PlatformService {
         .sort((left, right) => right.averageLeadHours - left.averageLeadHours),
       promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || right.tickets - left.tickets || left.code.localeCompare(right.code)),
       fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
+      showtimePerformance,
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
@@ -600,6 +619,7 @@ export class PlatformService {
       row(columns),
       metricRow("TOTAL", performance.film.title, performance.film.primaryDistributorName ?? "", performance.totals),
       ...performance.operators.map((item) => metricRow("OPERATOR", item.organization.name, item.location.name, item.totals)),
+      ...performance.showtimePerformance.map((item) => metricRow("SHOWTIME", `${item.organization.name} · ${item.location.name}`, `${item.startsAt.toISOString()} · ${item.auditorium.name}`, { showtimes: 1, ...item })),
       ...performance.weeklyPerformance.map((item) => metricRow("WEEK", `Theatrical week ${item.theatricalWeek}`, `${item.firstShowtime.toISOString()} to ${item.lastShowtime.toISOString()}`, item)),
       ...performance.daypartPerformance.map((item) => metricRow("DAYPART", item.label, item.key, item)),
       ...performance.weekdayPerformance.map((item) => metricRow("WEEKDAY", item.label, item.key, item)),
