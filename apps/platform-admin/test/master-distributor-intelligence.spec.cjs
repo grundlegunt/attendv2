@@ -37,9 +37,9 @@ test("Master distributor workspace shows portfolios, performance, and terms read
   assert.match(page, /distributorShareBasisPoints \/ 100/);
   assert.match(page, /Deal schedule/);
   assert.match(page, /href=\{`\/films\/\$\{deal\.catalogEntryId\}`\}/);
-  assert.match(page, /type RangeKey = "30" \| "90" \| "all"/);
+  assert.match(page, /type RangeKey = "30" \| "90" \| "all" \| "custom"/);
   assert.match(page, /Distributor performance range/);
-  assert.match(page, /`\/platform\/distributors\$\{rangeQuery\(range\)\}`/);
+  assert.match(page, /`\/platform\/distributors\$\{queryString\}`/);
 });
 
 test("Master exports engagement-level distributor settlements", () => {
@@ -50,5 +50,5 @@ test("Master exports engagement-level distributor settlements", () => {
   assert.match(service, /"Deal terms \(JSON\)"/);
   assert.match(service, /JSON\.stringify\(deal\.terms\)/);
   assert.match(page, /Export settlements/);
-  assert.match(page, /platformDownload\(API_BASE_URL, STORAGE_KEY, `\/platform\/distributors\.csv\$\{rangeQuery\(range\)\}`/);
+  assert.match(page, /platformDownload\(API_BASE_URL, STORAGE_KEY, `\/platform\/distributors\.csv\$\{queryString\}`/);
 });
