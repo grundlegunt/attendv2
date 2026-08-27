@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
+import { PlatformNav } from "../platform-nav";
 import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 import { PlatformBrandEditor } from "./platform-brand-editor";
 
@@ -197,20 +198,7 @@ export default function BrandingDashboard() {
           </button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Ringo Master">
-        <Link href="/">Dashboard</Link>
-        <Link href="/clients">Clients</Link>
-        <Link href="/films">Films</Link>
-        <Link href="/analytics">Audience</Link>
-        <Link href="/onboarding">Onboarding</Link>
-        <Link href="/payments">Payments</Link>
-        <Link href="/content">Content</Link>
-        <Link className="active" href="/branding">
-          Branding
-        </Link>
-        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
-        <Link href="/audit">Audit Log</Link>
-      </nav>
+      <PlatformNav role={session.user.role} />
       {error && <div className="error">{error}</div>}
       <PlatformBrandEditor accessToken={session.accessToken} canEdit={session.user.role !== "VIEWER"} request={request} />
       <div className="content-toolbar">
