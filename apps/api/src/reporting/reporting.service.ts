@@ -186,6 +186,21 @@ export class ReportingService {
         select: { menuItemId: true, quantity: true, unitPriceCentsSnapshot: true, modifierTotalCents: true, menuItem: { select: { name: true, chargeCategory: true } }, restaurantOrder: { select: { source: true } } },
       }),
     ]);
+    const filmCustomerFirstPurchase = new Map<string, Date>();
+    for (const showtime of showtimes) {
+      for (const ticket of showtime.showtimeSeats.flatMap((seat) => seat.tickets).filter((ticket) => !["REFUNDED", "CANCELED"].includes(ticket.status))) {
+        const customerId = ticket.ticketOrder.customer?.id;
+        if (!customerId) continue;
+        const current = filmCustomerFirstPurchase.get(customerId);
+        if (!current || ticket.ticketOrder.createdAt < current) filmCustomerFirstPurchase.set(customerId, ticket.ticketOrder.createdAt);
+      }
+    }
+    const firstCompletedOrders = filmCustomerFirstPurchase.size ? await prisma.ticketOrder.groupBy({
+      by: ["customerId"],
+      where: { locationId, customerId: { in: [...filmCustomerFirstPurchase.keys()] }, status: { in: ["PAID", "EXCHANGED", "PARTIALLY_REFUNDED"] } },
+      _min: { createdAt: true },
+    }) : [];
+    const customerFirstCompletedPurchase = new Map(firstCompletedOrders.flatMap((order) => order.customerId && order._min.createdAt ? [[order.customerId, order._min.createdAt] as const] : []));
     const admissionTypes = new Map<string, { ticketTypeId: string; name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const promotions = new Map<string, { promotionId: string; code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
@@ -194,6 +209,7 @@ export class ReportingService {
     const audienceOrigins = new Map<string, { zipCode: string; orders: Set<string>; tickets: number }>();
     const audienceOrdersWithZip = new Set<string>();
     const customerSegments = new Map<string, { key: string; label: string; orders: Set<string>; tickets: number; ticketRevenueCents: number }>();
+    const retentionSegments = new Map<string, { key: string; label: string; customers: Set<string>; orders: Set<string>; tickets: number; ticketRevenueCents: number }>();
     const countedOrders = new Set<string>();
     let discountCents = 0; let complimentaryTickets = 0; let refundedTickets = 0; let refundedTicketValueCents = 0;
     const rows = showtimes.map((showtime) => {
@@ -212,6 +228,19 @@ export class ReportingService {
         customerSegment.tickets += 1;
         customerSegment.ticketRevenueCents += ticket.priceCentsPaid;
         customerSegments.set(segment.key, customerSegment);
+        if (customer) {
+          const firstFilmPurchase = filmCustomerFirstPurchase.get(customer.id)!;
+          const firstCompletedPurchase = customerFirstCompletedPurchase.get(customer.id);
+          const retention = firstCompletedPurchase && firstCompletedPurchase < firstFilmPurchase
+            ? { key: "RETURNING", label: "Returning customers" }
+            : { key: "NEW", label: "New customers" };
+          const retentionSegment = retentionSegments.get(retention.key) ?? { ...retention, customers: new Set<string>(), orders: new Set<string>(), tickets: 0, ticketRevenueCents: 0 };
+          retentionSegment.customers.add(customer.id);
+          retentionSegment.orders.add(ticket.ticketOrder.id);
+          retentionSegment.tickets += 1;
+          retentionSegment.ticketRevenueCents += ticket.priceCentsPaid;
+          retentionSegments.set(retention.key, retentionSegment);
+        }
         const zipCode = ticket.ticketOrder.zipCode?.trim().match(/^(\d{5})(?:-\d{4})?$/)?.[1];
         if (zipCode) {
           audienceOrdersWithZip.add(ticket.ticketOrder.id);
@@ -317,6 +346,12 @@ export class ReportingService {
         origins: [...audienceOrigins.values()].map((origin) => ({ zipCode: origin.zipCode, orders: origin.orders.size, tickets: origin.tickets, sharePercent: ticketsWithZip ? Math.round((origin.tickets / ticketsWithZip) * 1000) / 10 : 0 })).sort((left, right) => right.tickets - left.tickets || right.orders - left.orders || left.zipCode.localeCompare(right.zipCode)),
       },
       customerSegments: [...customerSegments.values()].map((segment) => ({ key: segment.key, label: segment.label, orders: segment.orders.size, ticketsSold: segment.tickets, ticketRevenueCents: segment.ticketRevenueCents, percentOfTickets: ticketsSold ? Math.round((segment.tickets / ticketsSold) * 1000) / 10 : 0 })).sort((left, right) => right.ticketsSold - left.ticketsSold || left.label.localeCompare(right.label)),
+      customerRetention: {
+        identifiedCustomers: filmCustomerFirstPurchase.size,
+        returningCustomers: retentionSegments.get("RETURNING")?.customers.size ?? 0,
+        returningPercent: filmCustomerFirstPurchase.size ? Math.round(((retentionSegments.get("RETURNING")?.customers.size ?? 0) / filmCustomerFirstPurchase.size) * 1000) / 10 : 0,
+        segments: [...retentionSegments.values()].map((segment) => ({ key: segment.key, label: segment.label, customers: segment.customers.size, orders: segment.orders.size, ticketsSold: segment.tickets, ticketRevenueCents: segment.ticketRevenueCents })).sort((left, right) => right.customers - left.customers || left.label.localeCompare(right.label)),
+      },
       fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
       auditoriumPerformance: [...auditoriumPerformance.values()].map(finishSlice).sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       daypartPerformance: [...daypartPerformance.values()].map(finishSlice).sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),
