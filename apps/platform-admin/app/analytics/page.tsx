@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
-import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
+import { platformDownload, platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
@@ -48,6 +48,20 @@ export default function AudienceAnalyticsPage() {
     } catch (reason) { if (id === requestRef.current) setError(reason instanceof Error ? reason.message : "Could not load audience analytics."); }
     finally { if (id === requestRef.current) setLoading(false); }
   }
+  async function download() {
+    if (!session || !report || !from || !to || from > to) return;
+    setLoading(true); setError(null);
+    try {
+      const params = new URLSearchParams({ from, to });
+      if (organizationId) params.set("organizationId", organizationId);
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, `/platform/audience-analytics.csv?${params}`, session.accessToken);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `ringo-master-audience-${from}-to-${to}.csv`; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not export audience analytics."); }
+    finally { setLoading(false); }
+  }
   useEffect(() => { if (session) void load(session); return () => { requestRef.current += 1; }; }, [session]);
   async function login(event: FormEvent) { event.preventDefault(); setError(null); try { const result = await request<Session>("/platform/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result)); setSession(result); setPassword(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Sign in failed."); } }
   function signOut() { requestRef.current += 1; void revokePlatformSession(API_BASE_URL, session?.accessToken); window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setReport(null); }
@@ -60,7 +74,7 @@ export default function AudienceAnalyticsPage() {
     <nav className="platform-nav" aria-label="Ringo Master"><Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link className="active" href="/analytics">Audience</Link><Link href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link></nav>
     {error && <div className="error">{error}</div>}
     <section className="dashboard-panel audience-explainer"><strong>Consented interactions, not unique visitors</strong><span>Only customers who allow optional analytics are counted. Ringo stores daily totals—not identities, devices, IP addresses, orders, or tickets.</span></section>
-    <form className="analytics-filters" onSubmit={(event) => { event.preventDefault(); void load(session); }}><label>From<input type="date" value={from} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} onChange={(event) => setTo(event.target.value)} /></label><label>Client<select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}><option value="">All clients</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><button disabled={loading}>{loading ? "Loading…" : "Apply"}</button></form>
+    <form className="analytics-filters" onSubmit={(event) => { event.preventDefault(); void load(session); }}><label>From<input type="date" value={from} max={to} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} /></label><label>Client<select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}><option value="">All clients</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><button disabled={loading || !from || !to || from > to}>{loading ? "Loading…" : "Apply"}</button><button type="button" className="quiet" disabled={loading || !report || !from || !to || from > to} onClick={() => void download()}>Export CSV</button></form>
     {!report && !loading && <p className="muted">No audience activity loaded.</p>}
     {report && <>
       <section className="dashboard-summary audience-summary"><article><span>Pageviews</span><strong>{report.totals.Pageview.toLocaleString()}</strong><small>consented views</small></article><article><span>Checkout completion</span><strong>{rate(report.totals.checkoutCompletionRatePercent)}</strong><small>{report.totals["Checkout Completed"]} completed / {report.totals["Checkout Started"]} started</small></article><article><span>Accounts created</span><strong>{report.totals["Account Created"].toLocaleString()}</strong><small>consented events</small></article><article><span>Waitlist joins</span><strong>{report.totals["Waitlist Joined"].toLocaleString()}</strong><small>consented events</small></article></section>

@@ -19,6 +19,11 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(page, /Private events/);
   assert.match(page, /Top pages/);
   assert.match(page, /Daily customer activity/);
+  assert.match(controller, /@Get\("audience-analytics\.csv"\)/);
+  assert.match(service, /audienceAnalyticsCsv\(/);
+  assert.match(service, /Top page/);
+  assert.match(page, /ringo-master-audience-\$\{from\}-to-\$\{to\}\.csv/);
+  assert.match(page, />Export CSV<\/button>/);
 });
 
 test("Audience is reachable from every Master navigation bar", () => {
