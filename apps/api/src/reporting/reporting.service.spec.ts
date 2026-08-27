@@ -110,6 +110,14 @@ describe("ReportingService audience analytics", () => {
     expect(source).toContain('Payment Form Ready');
     expect(source).not.toContain("organizationId");
   });
+
+  it("exports funnel totals, daily activity, and top pages", () => {
+    const source = new ReportingService().audienceAnalyticsCsv.toString();
+    expect(source).toContain("Seat-to-checkout percent");
+    expect(source).toContain("Payment completion percent");
+    expect(source).toContain("report.daily.map");
+    expect(source).toContain("report.pages.map");
+  });
 });
 
 describe("ReportingService distributor box-office export", () => {
