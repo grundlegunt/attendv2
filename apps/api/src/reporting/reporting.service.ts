@@ -157,7 +157,7 @@ export class ReportingService {
     const [movie, location] = await Promise.all([
       prisma.movie.findFirst({
         where: { id: movieId, organization: { locations: { some: { id: locationId } } } },
-        select: { id: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, director: true, starring: true, releaseYear: true, distributorName: true, distributorTerms: true, active: true },
+        select: { id: true, organizationId: true, title: true, synopsis: true, runtimeMinutes: true, rating: true, posterUrl: true, director: true, starring: true, releaseYear: true, distributorName: true, distributorTerms: true, active: true },
       }),
       prisma.location.findUnique({ where: { id: locationId }, select: { name: true, timezone: true, currency: true } }),
     ]);
@@ -171,7 +171,7 @@ export class ReportingService {
       include: {
         auditorium: { select: { id: true, name: true, capacity: true } },
         filmSeries: { select: { id: true, name: true } },
-        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, createdAt: true, channel: true, zipCode: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
+        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, createdAt: true, channel: true, zipCode: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, customer: { select: { id: true, memberships: { where: { status: "ACTIVE" }, select: { organizationId: true } } } }, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
         restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
       }),
@@ -193,6 +193,7 @@ export class ReportingService {
     const fnbItems = new Map<string, { menuItemId: string; name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>();
     const audienceOrigins = new Map<string, { zipCode: string; orders: Set<string>; tickets: number }>();
     const audienceOrdersWithZip = new Set<string>();
+    const customerSegments = new Map<string, { key: string; label: string; orders: Set<string>; tickets: number; ticketRevenueCents: number }>();
     const countedOrders = new Set<string>();
     let discountCents = 0; let complimentaryTickets = 0; let refundedTickets = 0; let refundedTicketValueCents = 0;
     const rows = showtimes.map((showtime) => {
@@ -201,6 +202,16 @@ export class ReportingService {
       const refunded = allTickets.filter((ticket) => ticket.status === "REFUNDED");
       refundedTickets += refunded.length; refundedTicketValueCents += refunded.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       for (const ticket of tickets) {
+        const customer = ticket.ticketOrder.customer;
+        const segment = customer?.memberships.some((membership) => membership.organizationId === movie.organizationId)
+          ? { key: "ACTIVE_MEMBER", label: "Active members" }
+          : customer ? { key: "IDENTIFIED_CUSTOMER", label: "Identified non-members" }
+          : { key: "GUEST", label: "Guests" };
+        const customerSegment = customerSegments.get(segment.key) ?? { ...segment, orders: new Set<string>(), tickets: 0, ticketRevenueCents: 0 };
+        customerSegment.orders.add(ticket.ticketOrder.id);
+        customerSegment.tickets += 1;
+        customerSegment.ticketRevenueCents += ticket.priceCentsPaid;
+        customerSegments.set(segment.key, customerSegment);
         const zipCode = ticket.ticketOrder.zipCode?.trim().match(/^(\d{5})(?:-\d{4})?$/)?.[1];
         if (zipCode) {
           audienceOrdersWithZip.add(ticket.ticketOrder.id);
@@ -305,6 +316,7 @@ export class ReportingService {
         totals: { completedOrders: countedOrders.size, ordersWithZip: audienceOrdersWithZip.size, ticketsWithZip, coveragePercent: countedOrders.size ? Math.round((audienceOrdersWithZip.size / countedOrders.size) * 100) : 0 },
         origins: [...audienceOrigins.values()].map((origin) => ({ zipCode: origin.zipCode, orders: origin.orders.size, tickets: origin.tickets, sharePercent: ticketsWithZip ? Math.round((origin.tickets / ticketsWithZip) * 1000) / 10 : 0 })).sort((left, right) => right.tickets - left.tickets || right.orders - left.orders || left.zipCode.localeCompare(right.zipCode)),
       },
+      customerSegments: [...customerSegments.values()].map((segment) => ({ key: segment.key, label: segment.label, orders: segment.orders.size, ticketsSold: segment.tickets, ticketRevenueCents: segment.ticketRevenueCents, percentOfTickets: ticketsSold ? Math.round((segment.tickets / ticketsSold) * 1000) / 10 : 0 })).sort((left, right) => right.ticketsSold - left.ticketsSold || left.label.localeCompare(right.label)),
       fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
       auditoriumPerformance: [...auditoriumPerformance.values()].map(finishSlice).sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       daypartPerformance: [...daypartPerformance.values()].map(finishSlice).sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),
