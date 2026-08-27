@@ -131,6 +131,15 @@ function rangeQuery(range: RangeKey) {
   from.setUTCDate(from.getUTCDate() - Number(range));
   return `?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
 }
+function bestOperator(
+  operators: Performance["operators"],
+  value: (operator: Performance["operators"][number]) => number,
+) {
+  return operators.reduce<Performance["operators"][number] | null>(
+    (best, operator) => (!best || value(operator) > value(best) ? operator : best),
+    null,
+  );
+}
 
 export default function FilmPerformancePage() {
   const params = useParams<{ id: string }>();
@@ -246,6 +255,30 @@ export default function FilmPerformancePage() {
       />
     );
   const totals = performance?.totals;
+  const operatorBenchmarks = performance
+    ? [
+        {
+          label: "Best attendance",
+          operator: bestOperator(performance.operators, (row) => row.totals.attendancePercent),
+          value: (row: Performance["operators"][number]) => `${row.totals.attendancePercent}%`,
+        },
+        {
+          label: "Most tickets / show",
+          operator: bestOperator(performance.operators, (row) => row.totals.averageTicketsPerShow),
+          value: (row: Performance["operators"][number]) => `${row.totals.averageTicketsPerShow}`,
+        },
+        {
+          label: "Best ticket revenue / show",
+          operator: bestOperator(performance.operators, (row) => row.totals.showtimes ? row.totals.ticketRevenueCents / row.totals.showtimes : 0),
+          value: (row: Performance["operators"][number]) => money(row.totals.showtimes ? Math.round(row.totals.ticketRevenueCents / row.totals.showtimes) : 0),
+        },
+        {
+          label: "Best F&B / attendee",
+          operator: bestOperator(performance.operators, (row) => row.totals.ticketsSold ? row.totals.fnbRevenueCents / row.totals.ticketsSold : 0),
+          value: (row: Performance["operators"][number]) => money(row.totals.ticketsSold ? Math.round(row.totals.fnbRevenueCents / row.totals.ticketsSold) : 0),
+        },
+      ]
+    : [];
   return (
     <main className="shell">
       <header>
@@ -383,6 +416,26 @@ export default function FilmPerformancePage() {
             <article><span>Complimentary</span><strong>{totals.complimentaryTickets}</strong><small>Tickets issued through comp promotions</small></article>
             <article><span>Refunded tickets</span><strong>{totals.refundedTickets}</strong><small>{money(totals.refundedTicketValueCents)} face value</small></article>
           </section>
+          {performance.operators.length > 0 && (
+            <section className="film-operator-benchmarks">
+              <div className="panel-heading">
+                <div>
+                  <p className="eyebrow">OPERATOR BENCHMARKS</p>
+                  <h2>Where this film performs best</h2>
+                  <p className="muted">Compare cinema results for the selected reporting period.</p>
+                </div>
+              </div>
+              <div>
+                {operatorBenchmarks.map(({ label, operator, value }) => operator && (
+                  <Link key={label} href={`/clients?organizationId=${encodeURIComponent(operator.organization.id)}&locationId=${encodeURIComponent(operator.location.id)}`}>
+                    <span>{label}</span>
+                    <strong>{value(operator)}</strong>
+                    <small>{operator.organization.name} · {operator.location.name}</small>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
           <section className="film-operator-table">
             <div>
               <span>Operator / location</span>
