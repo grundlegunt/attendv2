@@ -47,7 +47,7 @@ test("Master film catalog opens cross-operator film intelligence", () => {
     performanceSource,
     /\/platform\/film-catalog\/\$\{encodeURIComponent\(filmId\)\}\/performance/,
   );
-  assert.match(performanceSource, /\["30", "90", "all"\]/);
+  assert.match(performanceSource, /\["30", "90", "all", "custom"\]/);
   assert.match(performanceSource, /`\$\{value\} days`/);
   assert.match(performanceSource, /All time/);
   assert.match(performanceSource, /Distributor share/);

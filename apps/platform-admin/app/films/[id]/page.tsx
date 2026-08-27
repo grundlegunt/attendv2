@@ -18,7 +18,7 @@ const API_BASE_URL =
     ? "https://zealous-connection-production-0896.up.railway.app/api/v1"
     : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
-type RangeKey = "30" | "90" | "all";
+type RangeKey = "30" | "90" | "all" | "custom";
 interface Session {
   accessToken: string;
   user: {
@@ -180,8 +180,16 @@ function money(cents: number) {
     currency: "USD",
   }).format(cents / 100);
 }
-function rangeQuery(range: RangeKey) {
+function dateInputValue(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+function rangeQuery(range: RangeKey, customFrom: string, customTo: string) {
   if (range === "all") return "";
+  if (range === "custom") {
+    return customFrom && customTo
+      ? `?from=${encodeURIComponent(`${customFrom}T00:00:00.000Z`)}&to=${encodeURIComponent(`${customTo}T23:59:59.999Z`)}`
+      : null;
+  }
   const to = new Date();
   const from = new Date(to);
   from.setUTCDate(from.getUTCDate() - Number(range));
@@ -204,6 +212,11 @@ export default function FilmPerformancePage() {
   const [restored, setRestored] = useState(false);
   const [performance, setPerformance] = useState<Performance | null>(null);
   const [range, setRange] = useState<RangeKey>("90");
+  const defaultTo = dateInputValue(new Date());
+  const defaultFromDate = new Date();
+  defaultFromDate.setUTCDate(defaultFromDate.getUTCDate() - 90);
+  const [customFrom, setCustomFrom] = useState(dateInputValue(defaultFromDate));
+  const [customTo, setCustomTo] = useState(defaultTo);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -219,13 +232,15 @@ export default function FilmPerformancePage() {
     setRestored(true);
   }, []);
   const load = useCallback(
-    async (current: Session, selectedRange: RangeKey) => {
+    async (current: Session, selectedRange: RangeKey, selectedFrom: string, selectedTo: string) => {
+      const queryString = rangeQuery(selectedRange, selectedFrom, selectedTo);
+      if (queryString === null) return;
       const requestId = ++requestRef.current;
       setLoading(true);
       setError(null);
       try {
         const result = await request<Performance>(
-          `/platform/film-catalog/${encodeURIComponent(filmId)}/performance${rangeQuery(selectedRange)}`,
+          `/platform/film-catalog/${encodeURIComponent(filmId)}/performance${queryString}`,
           undefined,
           current.accessToken,
         );
@@ -244,8 +259,8 @@ export default function FilmPerformancePage() {
     [filmId],
   );
   useEffect(() => {
-    if (session && filmId) void load(session, range);
-  }, [session, filmId, range, load]);
+    if (session && filmId) void load(session, range, customFrom, customTo);
+  }, [session, filmId, range, customFrom, customTo, load]);
   async function login(event: FormEvent) {
     event.preventDefault();
     const requestId = ++authRequestRef.current;
@@ -275,13 +290,15 @@ export default function FilmPerformancePage() {
   }
   async function downloadPerformance() {
     if (!session || !filmId) return;
+    const queryString = rangeQuery(range, customFrom, customTo);
+    if (queryString === null) return;
     setExporting(true);
     setError(null);
     try {
       const blob = await platformDownload(
         API_BASE_URL,
         STORAGE_KEY,
-        `/platform/film-catalog/${encodeURIComponent(filmId)}/performance.csv${rangeQuery(range)}`,
+        `/platform/film-catalog/${encodeURIComponent(filmId)}/performance.csv${queryString}`,
         session.accessToken,
       );
       const url = URL.createObjectURL(blob);
@@ -395,14 +412,14 @@ export default function FilmPerformancePage() {
           ← Film catalog
         </Link>
         <div className="performance-range" aria-label="Performance range">
-          {(["30", "90", "all"] as RangeKey[]).map((value) => (
+          {(["30", "90", "all", "custom"] as RangeKey[]).map((value) => (
             <button
               type="button"
               className={range === value ? "quiet active" : "quiet"}
               key={value}
               onClick={() => setRange(value)}
             >
-              {value === "all" ? "All time" : `${value} days`}
+              {value === "all" ? "All time" : value === "custom" ? "Custom" : `${value} days`}
             </button>
           ))}
           <button type="button" className="quiet" disabled={!performance || exporting} onClick={() => void downloadPerformance()}>
@@ -410,6 +427,7 @@ export default function FilmPerformancePage() {
           </button>
         </div>
       </div>
+      {range === "custom" && <div className="custom-range film-custom-range"><label>From<input type="date" value={customFrom} max={customTo} onChange={(event) => setCustomFrom(event.target.value)} /></label><label>To<input type="date" value={customTo} min={customFrom} onChange={(event) => setCustomTo(event.target.value)} /></label></div>}
       {error && <div className="error">{error}</div>}
       {loading && <p className="muted">Loading performance…</p>}
       {performance && totals && (
