@@ -13,12 +13,17 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(service, /customerAnalyticsDaily\.findMany/);
   assert.match(service, /organizationId/);
   assert.match(service, /checkoutCompletionRatePercent/);
+  assert.match(service, /seatToCheckoutRatePercent/);
+  assert.match(service, /paymentFormReadyRatePercent/);
+  assert.match(service, /paymentCompletionRatePercent/);
   assert.match(service, /slice\(0, 20\)/);
   assert.match(page, /Consented interactions, not unique visitors/);
   assert.match(page, /Memberships/);
   assert.match(page, /Private events/);
   assert.match(page, /Top pages/);
   assert.match(page, /Daily customer activity/);
+  assert.match(page, /Seats continued/);
+  assert.match(page, /Payment ready/);
   assert.match(controller, /@Get\("audience-analytics\.csv"\)/);
   assert.match(service, /audienceAnalyticsCsv\(/);
   assert.match(service, /Top page/);

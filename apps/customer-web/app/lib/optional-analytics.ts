@@ -1,7 +1,9 @@
 import { apiFetch } from "./api-client";
 
 export const OPTIONAL_ANALYTICS_EVENTS = [
+  "Seat Selection Continued",
   "Checkout Started",
+  "Payment Form Ready",
   "Checkout Completed",
   "Account Created",
   "Gift Card Started",

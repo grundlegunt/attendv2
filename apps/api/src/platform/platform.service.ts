@@ -1607,7 +1607,7 @@ export class PlatformService {
       },
     });
     const events = [
-      "Pageview", "Checkout Started", "Checkout Completed", "Account Created",
+      "Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created",
       "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started",
       "Membership Activated", "Donation Checkout Started", "Donation Completed",
       "Private Event Inquiry Submitted", "Waitlist Joined",
@@ -1638,6 +1638,9 @@ export class PlatformService {
     const rate = (completed: number, started: number) => started > 0 ? Number((completed / started * 100).toFixed(2)) : null;
     const withRates = (counts: Record<EventName, number>) => ({
       ...counts,
+      seatToCheckoutRatePercent: rate(counts["Checkout Started"], counts["Seat Selection Continued"]),
+      paymentFormReadyRatePercent: rate(counts["Payment Form Ready"], counts["Checkout Started"]),
+      paymentCompletionRatePercent: rate(counts["Checkout Completed"], counts["Payment Form Ready"]),
       checkoutCompletionRatePercent: rate(counts["Checkout Completed"], counts["Checkout Started"]),
       giftCardCompletionRatePercent: rate(counts["Gift Card Purchased"], counts["Gift Card Started"]),
       membershipCompletionRatePercent: rate(counts["Membership Activated"], counts["Membership Checkout Started"]),
@@ -1657,17 +1660,17 @@ export class PlatformService {
   audienceAnalyticsCsv(report: Awaited<ReturnType<PlatformService["audienceAnalytics"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");
-    const eventColumns = ["Pageview", "Checkout Started", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"] as const;
-    const rateColumns = ["checkoutCompletionRatePercent", "giftCardCompletionRatePercent", "membershipCompletionRatePercent", "donationCompletionRatePercent"] as const;
+    const eventColumns = ["Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"] as const;
+    const rateColumns = ["seatToCheckoutRatePercent", "paymentFormReadyRatePercent", "paymentCompletionRatePercent", "checkoutCompletionRatePercent", "giftCardCompletionRatePercent", "membershipCompletionRatePercent", "donationCompletionRatePercent"] as const;
     const eventValues = (value: (typeof report.locations)[number] | typeof report.totals) => [...eventColumns.map((column) => value[column]), ...rateColumns.map((column) => value[column])];
     return [
       row(["Generated at", report.generatedAt]),
       row(["From", report.range.from, "To", report.range.to]),
       "",
-      row(["Scope", ...eventColumns, "Checkout completion percent", "Gift-card completion percent", "Membership completion percent", "Donation completion percent"]),
+      row(["Scope", ...eventColumns, "Seat-to-checkout percent", "Payment-form-ready percent", "Payment completion percent", "Checkout completion percent", "Gift-card completion percent", "Membership completion percent", "Donation completion percent"]),
       row(["All selected clients", ...eventValues(report.totals)]),
       "",
-      row(["Client", "Location", ...eventColumns, "Checkout completion percent", "Gift-card completion percent", "Membership completion percent", "Donation completion percent"]),
+      row(["Client", "Location", ...eventColumns, "Seat-to-checkout percent", "Payment-form-ready percent", "Payment completion percent", "Checkout completion percent", "Gift-card completion percent", "Membership completion percent", "Donation completion percent"]),
       ...report.locations.map((location) => row([location.organization.name, location.location.name, ...eventValues(location)])),
       "",
       row(["Date", ...eventColumns]),

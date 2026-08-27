@@ -50,7 +50,10 @@ test("identifier-bearing customer routes are redacted and query strings are excl
 });
 
 test("anonymous conversion events are connected to successful customer actions", () => {
+  assert.match(seatPicker, /trackOptionalAnalyticsEvent\("Seat Selection Continued"\)/);
   assert.match(ticketCheckout, /trackOptionalAnalyticsEvent\("Checkout Started"\)/);
+  assert.match(ticketCheckout, /trackOptionalAnalyticsEvent\("Payment Form Ready"\)/);
+  assert.match(ticketCheckout, /paymentFormReadyTrackedRef/);
   assert.match(ticketCheckout, /trackOptionalAnalyticsEvent\("Checkout Completed"\)/);
   assert.match(ticketCheckout, /checkoutCompletedTrackedRef/);
   assert.match(account, /trackOptionalAnalyticsEvent\("Account Created"\)/);

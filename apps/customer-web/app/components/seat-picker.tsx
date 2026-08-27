@@ -406,7 +406,10 @@ export function SeatPicker({
         <button
           className="primary"
           disabled={!mySeats.length || remainingSeconds <= 0 || Object.keys(pendingSeatIds).length > 0}
-          onClick={() => setCheckoutOpen(true)}
+          onClick={() => {
+            trackOptionalAnalyticsEvent("Seat Selection Continued");
+            setCheckoutOpen(true);
+          }}
         >
           Continue to tickets
         </button>
