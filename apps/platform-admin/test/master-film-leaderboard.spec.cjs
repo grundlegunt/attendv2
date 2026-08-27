@@ -22,3 +22,14 @@ test("Master dashboard shows the cross-cinema film leaderboard for its selected 
   assert.match(dashboard, /film\.ticketRevenueCents/);
   assert.match(dashboard, /href=\{`\/films\/\$\{encodeURIComponent\(film\.catalogEntryId\)\}`\}/);
 });
+
+test("Master dashboard supports custom inclusive reporting dates", () => {
+  assert.match(dashboard, /type RevenueRange = [\s\S]*?\| "custom"/);
+  assert.match(dashboard, /`\$\{customFrom\}T00:00:00\.000Z`/);
+  assert.match(dashboard, /`\$\{customTo\}T23:59:59\.999Z`/);
+  assert.match(dashboard, /customFrom > customTo/);
+  assert.match(dashboard, /<button className=\{revenueRangeKey === "custom"/);
+  assert.match(dashboard, /type="date" value=\{customFrom\}/);
+  assert.match(dashboard, /type="date" value=\{customTo\}/);
+  assert.match(dashboard, /revenueRange\(revenueRangeKey, customFrom, customTo, "csv"\)/);
+});
