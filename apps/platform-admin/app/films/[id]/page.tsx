@@ -87,6 +87,11 @@ interface Performance {
   daypartPerformance: ProgrammingSlice[];
   weekdayPerformance: ProgrammingSlice[];
   formatPerformance: ProgrammingSlice[];
+  seriesPerformance: Array<ProgrammingSlice & {
+    organization: { id: string; name: string };
+    location: { id: string; name: string };
+    series: { id: string; name: string };
+  }>;
   admissionTypes: Array<{ name: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   salesChannels: Array<{ channel: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
@@ -629,6 +634,19 @@ export default function FilmPerformancePage() {
                 {rows.map((row) => <div key={row.key}><strong>{row.label}</strong><span>{row.showtimes}</span><span>{row.ticketsSold}</span><span>{row.averageTicketsPerShow}</span><span>{row.attendancePercent}%</span><span>{money(row.averageTicketRevenuePerShowCents)}</span><span>{money(row.averageFnbPerShowCents)}</span></div>)}
               </div>}
             </article>)}
+          </section>
+          <section className="film-series-context">
+            <div className="panel-heading">
+              <div><p className="eyebrow">CURATED PROGRAMS</p><h2>Performance inside film series</h2><p className="muted">See which operator programs include this film and how those screenings perform.</p></div>
+            </div>
+            {performance.seriesPerformance.length === 0 ? <p className="empty-state">This film has not appeared in a film series during this period.</p> : <div className="film-series-context-table">
+              <div><span>Series</span><span>Operator / location</span><span>Shows</span><span>Tickets</span><span>Avg / show</span><span>Attendance</span><span>Ticket revenue</span><span>F&amp;B</span></div>
+              {performance.seriesPerformance.map((row) => <article key={row.key}>
+                <strong>{row.series.name}</strong>
+                <Link href={`/clients?organizationId=${encodeURIComponent(row.organization.id)}&locationId=${encodeURIComponent(row.location.id)}`}>{row.organization.name}<small>{row.location.name}</small></Link>
+                <span>{row.showtimes}</span><span>{row.ticketsSold}</span><span>{row.averageTicketsPerShow}</span><span>{row.attendancePercent}%</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span>
+              </article>)}
+            </div>}
           </section>
           <section className="film-sales-insights">
             <div className="panel-heading"><div><p className="eyebrow">AUDIENCE &amp; SALES</p><h2>How customers buy this film</h2><p className="muted">Combined ticket mix across every operator using the canonical title.</p></div></div>

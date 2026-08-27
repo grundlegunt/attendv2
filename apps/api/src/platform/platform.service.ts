@@ -448,6 +448,11 @@ export class PlatformService {
     const daypartPerformance = new Map<string, ProgrammingSlice>();
     const weekdayPerformance = new Map<string, ProgrammingSlice>();
     const formatPerformance = new Map<string, ProgrammingSlice>();
+    const seriesPerformance = new Map<string, ProgrammingSlice & {
+      organization: { id: string; name: string };
+      location: { id: string; name: string };
+      series: { id: string; name: string };
+    }>();
     const admissionTypes = new Map<string, { name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const advanceSales = new Map<string, { key: string; label: string; ticketsSold: number; ticketRevenueCents: number; weightedLeadHours: number }>();
@@ -467,7 +472,18 @@ export class PlatformService {
       current.fnbRevenueCents += slice.fnbRevenueCents;
       target.set(slice.key, current);
     };
-    for (const { report } of reports) {
+    for (const { organization, location, report } of reports) {
+      for (const showtime of report.showtimes) {
+        if (!showtime.filmSeries) continue;
+        const key = `${organization.id}:${location.id}:${showtime.filmSeries.id}`;
+        const current = seriesPerformance.get(key) ?? { key, label: showtime.filmSeries.name, organization, location, series: showtime.filmSeries, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
+        current.showtimes += 1;
+        current.ticketsSold += showtime.ticketsSold;
+        current.capacity += showtime.capacity;
+        current.ticketRevenueCents += showtime.ticketRevenueCents;
+        current.fnbRevenueCents += showtime.fnbRevenueCents;
+        seriesPerformance.set(key, current);
+      }
       for (const week of report.weeklyPerformance) {
         const current = weeklyPerformance.get(week.theatricalWeek) ?? {
           theatricalWeek: week.theatricalWeek,
@@ -561,7 +577,7 @@ export class PlatformService {
         retentionSegments.set(segment.key, current);
       }
     }
-    const finishProgrammingSlice = (slice: ProgrammingSlice) => ({
+    const finishProgrammingSlice = <T extends ProgrammingSlice>(slice: T) => ({
       ...slice,
       attendancePercent: slice.capacity ? Math.round((slice.ticketsSold / slice.capacity) * 1000) / 10 : 0,
       averageTicketsPerShow: slice.showtimes ? Math.round((slice.ticketsSold / slice.showtimes) * 10) / 10 : 0,
@@ -615,6 +631,9 @@ export class PlatformService {
         .map(finishProgrammingSlice)
         .sort((left, right) => ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(left.key) - ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(right.key)),
       formatPerformance: [...formatPerformance.values()]
+        .map(finishProgrammingSlice)
+        .sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
+      seriesPerformance: [...seriesPerformance.values()]
         .map(finishProgrammingSlice)
         .sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       admissionTypes: [...admissionTypes.values()]
@@ -683,6 +702,7 @@ export class PlatformService {
       ...performance.daypartPerformance.map((item) => metricRow("DAYPART", item.label, item.key, item)),
       ...performance.weekdayPerformance.map((item) => metricRow("WEEKDAY", item.label, item.key, item)),
       ...performance.formatPerformance.map((item) => metricRow("SCREENING FORMAT", item.label, item.key, item)),
+      ...performance.seriesPerformance.map((item) => metricRow("FILM SERIES", `${item.organization.name} · ${item.location.name}`, item.series.name, item)),
       ...performance.admissionTypes.map((item) => metricRow("ADMISSION", item.name, `${item.percentOfTickets}% of tickets`, item)),
       ...performance.salesChannels.map((item) => metricRow("SALES CHANNEL", item.channel, `${item.percentOfTickets}% of tickets`, item)),
       ...performance.advanceSales.map((item) => metricRow("ADVANCE SALE", item.label, `${item.averageLeadHours} average lead hours`, item)),
