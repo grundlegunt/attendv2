@@ -1654,6 +1654,30 @@ export class PlatformService {
     };
   }
 
+  audienceAnalyticsCsv(report: Awaited<ReturnType<PlatformService["audienceAnalytics"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const eventColumns = ["Pageview", "Checkout Started", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"] as const;
+    const rateColumns = ["checkoutCompletionRatePercent", "giftCardCompletionRatePercent", "membershipCompletionRatePercent", "donationCompletionRatePercent"] as const;
+    const eventValues = (value: (typeof report.locations)[number] | typeof report.totals) => [...eventColumns.map((column) => value[column]), ...rateColumns.map((column) => value[column])];
+    return [
+      row(["Generated at", report.generatedAt]),
+      row(["From", report.range.from, "To", report.range.to]),
+      "",
+      row(["Scope", ...eventColumns, "Checkout completion percent", "Gift-card completion percent", "Membership completion percent", "Donation completion percent"]),
+      row(["All selected clients", ...eventValues(report.totals)]),
+      "",
+      row(["Client", "Location", ...eventColumns, "Checkout completion percent", "Gift-card completion percent", "Membership completion percent", "Donation completion percent"]),
+      ...report.locations.map((location) => row([location.organization.name, location.location.name, ...eventValues(location)])),
+      "",
+      row(["Date", ...eventColumns]),
+      ...report.daily.map((day) => row([day.date, ...eventColumns.map((column) => day[column])])),
+      "",
+      row(["Top page", "Consented pageviews"]),
+      ...report.pages.map((page) => row([page.path, page.count])),
+    ].join("\n");
+  }
+
   revenueCsv(report: Awaited<ReturnType<PlatformService["revenue"]>>) {
     const quote = (value: unknown) =>
       `"${String(value ?? "").replaceAll('"', '""')}"`;

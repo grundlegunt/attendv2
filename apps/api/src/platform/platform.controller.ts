@@ -281,6 +281,15 @@ export class PlatformController {
     return this.platform.audienceAnalytics({ from, to, organizationId });
   }
 
+  @Get("audience-analytics.csv")
+  @UseGuards(PlatformAuthGuard)
+  async audienceAnalyticsCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
+    const report = await this.platform.audienceAnalytics({ from, to, organizationId });
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-master-audience-analytics.csv"');
+    response.send(this.platform.audienceAnalyticsCsv(report));
+  }
+
   @Get("revenue.csv")
   @UseGuards(PlatformAuthGuard)
   async revenueCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
