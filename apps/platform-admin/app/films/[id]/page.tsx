@@ -78,12 +78,27 @@ interface Performance {
     cinemaRevenueCents: number;
     unallocatedRevenueCents: number;
   }>;
+  daypartPerformance: ProgrammingSlice[];
+  weekdayPerformance: ProgrammingSlice[];
   operators: Array<{
     organization: { id: string; name: string };
     location: { id: string; name: string };
     localMovieId: string;
     totals: Totals;
   }>;
+}
+interface ProgrammingSlice {
+  key: string;
+  label: string;
+  showtimes: number;
+  ticketsSold: number;
+  capacity: number;
+  attendancePercent: number;
+  averageTicketsPerShow: number;
+  ticketRevenueCents: number;
+  averageTicketRevenuePerShowCents: number;
+  fnbRevenueCents: number;
+  averageFnbPerShowCents: number;
 }
 
 function request<T>(
@@ -383,6 +398,18 @@ export default function FilmPerformancePage() {
                 <span>{money(week.cinemaRevenueCents)}</span>
               </article>)}
             </div>}
+          </section>
+          <section className="film-programming-insights">
+            {([
+              ["Performance by daypart", performance.daypartPerformance],
+              ["Performance by weekday", performance.weekdayPerformance],
+            ] as Array<[string, ProgrammingSlice[]]>).map(([title, rows]) => <article key={title}>
+              <div className="panel-heading"><div><p className="eyebrow">PROGRAMMING MIX</p><h2>{title}</h2></div></div>
+              {rows.length === 0 ? <p className="empty-state">No scheduled performances in this period.</p> : <div className="programming-slice-table">
+                <div><span>Period</span><span>Shows</span><span>Tickets</span><span>Avg / show</span><span>Attendance</span><span>Ticket / show</span><span>F&amp;B / show</span></div>
+                {rows.map((row) => <div key={row.key}><strong>{row.label}</strong><span>{row.showtimes}</span><span>{row.ticketsSold}</span><span>{row.averageTicketsPerShow}</span><span>{row.attendancePercent}%</span><span>{money(row.averageTicketRevenuePerShowCents)}</span><span>{money(row.averageFnbPerShowCents)}</span></div>)}
+              </div>}
+            </article>)}
           </section>
           <p className="detail-note">
             Ringo Master shows calculated performance allocations. Each

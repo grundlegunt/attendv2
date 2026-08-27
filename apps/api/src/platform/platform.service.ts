@@ -403,6 +403,26 @@ export class PlatformService {
       cinemaRevenueCents: number;
       unallocatedRevenueCents: number;
     }>();
+    type ProgrammingSlice = {
+      key: string;
+      label: string;
+      showtimes: number;
+      ticketsSold: number;
+      capacity: number;
+      ticketRevenueCents: number;
+      fnbRevenueCents: number;
+    };
+    const daypartPerformance = new Map<string, ProgrammingSlice>();
+    const weekdayPerformance = new Map<string, ProgrammingSlice>();
+    const addProgrammingSlice = (target: Map<string, ProgrammingSlice>, slice: ProgrammingSlice) => {
+      const current = target.get(slice.key) ?? { key: slice.key, label: slice.label, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
+      current.showtimes += slice.showtimes;
+      current.ticketsSold += slice.ticketsSold;
+      current.capacity += slice.capacity;
+      current.ticketRevenueCents += slice.ticketRevenueCents;
+      current.fnbRevenueCents += slice.fnbRevenueCents;
+      target.set(slice.key, current);
+    };
     for (const { report } of reports) {
       for (const week of report.weeklyPerformance) {
         const current = weeklyPerformance.get(week.theatricalWeek) ?? {
@@ -430,7 +450,16 @@ export class PlatformService {
         current.unallocatedRevenueCents += week.unallocatedRevenueCents;
         weeklyPerformance.set(week.theatricalWeek, current);
       }
+      for (const daypart of report.daypartPerformance) addProgrammingSlice(daypartPerformance, daypart);
+      for (const weekday of report.weekdayPerformance) addProgrammingSlice(weekdayPerformance, weekday);
     }
+    const finishProgrammingSlice = (slice: ProgrammingSlice) => ({
+      ...slice,
+      attendancePercent: slice.capacity ? Math.round((slice.ticketsSold / slice.capacity) * 1000) / 10 : 0,
+      averageTicketsPerShow: slice.showtimes ? Math.round((slice.ticketsSold / slice.showtimes) * 10) / 10 : 0,
+      averageTicketRevenuePerShowCents: slice.showtimes ? Math.round(slice.ticketRevenueCents / slice.showtimes) : 0,
+      averageFnbPerShowCents: slice.showtimes ? Math.round(slice.fnbRevenueCents / slice.showtimes) : 0,
+    });
     const totals = locations.reduce((sum, row) => {
       sum.showtimes += row.totals.showtimes;
       sum.upcomingShowtimes += row.totals.upcomingShowtimes;
@@ -467,6 +496,12 @@ export class PlatformService {
           averageTicketsPerShow: week.showtimes ? Math.round((week.ticketsSold / week.showtimes) * 10) / 10 : 0,
           averageFnbPerShowCents: week.showtimes ? Math.round(week.fnbRevenueCents / week.showtimes) : 0,
         })),
+      daypartPerformance: [...daypartPerformance.values()]
+        .map(finishProgrammingSlice)
+        .sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),
+      weekdayPerformance: [...weekdayPerformance.values()]
+        .map(finishProgrammingSlice)
+        .sort((left, right) => ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(left.key) - ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(right.key)),
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
