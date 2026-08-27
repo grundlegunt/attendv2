@@ -14,9 +14,17 @@ test("the platform dashboard ignores an older revenue-range response", () => {
 });
 
 test("client revenue requests stop updating state after their range changes", () => {
-  const effect = clients.match(/useEffect\(\(\) => \{[\s\S]*?revenuePath\(selectedOrganizationId, revenueDays\)[\s\S]*?\}, \[selectedOrganizationId, session, revenueDays\]\);/);
+  const effect = clients.match(/useEffect\(\(\) => \{[\s\S]*?revenuePath\(selectedOrganizationId, revenueRangeKey, customFrom, customTo\)[\s\S]*?\}, \[selectedOrganizationId, session, revenueRangeKey, customFrom, customTo\]\);/);
   assert.ok(effect);
   assert.match(effect[0], /let active = true/);
   assert.match(effect[0], /if \(active\) setRevenue\(nextRevenue\)/);
   assert.match(effect[0], /return \(\) => \{ active = false; \}/);
+});
+
+test("client revenue supports custom inclusive reporting dates", () => {
+  assert.match(clients, /type RevenueRange = [\s\S]*?\| "custom"/);
+  assert.match(clients, /`\$\{customFrom\}T00:00:00\.000Z`/);
+  assert.match(clients, /`\$\{customTo\}T23:59:59\.999Z`/);
+  assert.match(clients, /customFrom > customTo/);
+  assert.match(clients, /revenuePath\(selectedOrganizationId, revenueRangeKey, customFrom, customTo, "csv"\)/);
 });
