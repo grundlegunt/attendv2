@@ -305,6 +305,15 @@ export class PlatformController {
     return this.platform.auditEvents({ limit, offset, organizationId, action, actorId, from, to });
   }
 
+  @Get("audit-events.csv")
+  @UseGuards(PlatformAuthGuard)
+  async auditEventsCsv(@Res() response: Response, @Query("organizationId") organizationId?: string, @Query("action") action?: string, @Query("actorId") actorId?: string, @Query("from") from?: string, @Query("to") to?: string) {
+    const csv = await this.platform.auditEventsCsv({ organizationId, action, actorId, from, to });
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-master-audit-log.csv"');
+    response.send(csv);
+  }
+
   @Get("team")
   @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
   @RequirePlatformPermission(PLATFORM_TEAM_PERMISSION)

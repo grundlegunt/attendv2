@@ -1856,6 +1856,48 @@ export class PlatformService {
     };
   }
 
+  async auditEventsCsv(input: {
+    organizationId?: string;
+    action?: string;
+    actorId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const events: Awaited<ReturnType<PlatformService["auditEvents"]>>["events"] = [];
+    let offset = 0;
+    while (true) {
+      const page = await this.auditEvents({
+        ...input,
+        limit: "200",
+        offset: String(offset),
+      });
+      events.push(...page.events);
+      offset += page.events.length;
+      if (page.events.length === 0 || offset >= page.total || offset >= 10_000) break;
+    }
+
+    const quote = (value: unknown) => {
+      const text = value == null ? "" : typeof value === "string" ? value : JSON.stringify(value);
+      return `"${text.replaceAll('"', '""')}"`;
+    };
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    return [
+      row(["Occurred at", "Client", "Location", "Operator", "Operator email", "Action", "Entity type", "Entity ID", "Before", "After"]),
+      ...events.map((event) => row([
+        event.occurredAt,
+        event.organization?.name,
+        event.location?.name,
+        event.actor?.name,
+        event.actor?.email,
+        event.action,
+        event.entityType,
+        event.entityId,
+        event.beforeState,
+        event.afterState,
+      ])),
+    ].join("\n");
+  }
+
   async team() {
     const users = await prisma.platformUser.findMany({
       orderBy: [{ active: "desc" }, { name: "asc" }],

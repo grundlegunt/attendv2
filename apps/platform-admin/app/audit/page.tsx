@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
-import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
+import { platformDownload, platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
 const STORAGE_KEY = "attend-platform-session";
@@ -47,6 +47,7 @@ export default function PlatformAuditLog() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +113,32 @@ export default function PlatformAuditLog() {
     if (session) void loadEvents(session);
   }
 
+  async function exportEvents() {
+    if (!session) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      if (organizationId) params.set("organizationId", organizationId);
+      if (actorId) params.set("actorId", actorId);
+      if (action) params.set("action", action);
+      if (from) params.set("from", new Date(`${from}T00:00:00`).toISOString());
+      if (to) params.set("to", new Date(`${to}T23:59:59.999`).toISOString());
+      const query = params.size ? `?${params}` : "";
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, `/platform/audit-events.csv${query}`, session.accessToken);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `ringo-master-audit-${from || "all"}-to-${to || "now"}.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not export the audit log.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function signOut() {
     authRequestRef.current += 1;
     void revokePlatformSession(API_BASE_URL, session?.accessToken);
@@ -134,7 +161,7 @@ export default function PlatformAuditLog() {
         <label>Action<input value={action} onChange={(event) => setAction(event.target.value)} placeholder="e.g. content_published" /></label>
         <label>From<input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} /></label>
         <label>To<input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} /></label>
-        <div className="audit-filter-actions"><button disabled={loading} type="submit">{loading ? "Loading…" : "Apply"}</button><button className="quiet" type="button" onClick={clearFilters}>Clear</button></div>
+        <div className="audit-filter-actions"><button disabled={loading || exporting} type="submit">{loading ? "Loading…" : "Apply"}</button><button className="quiet" type="button" disabled={loading || exporting} onClick={clearFilters}>Clear</button><button className="quiet" type="button" disabled={loading || exporting || total === 0} onClick={() => void exportEvents()}>{exporting ? "Exporting…" : "Export CSV"}</button></div>
       </form>
       <div className="audit-result-heading"><strong>{total}</strong><span>matching platform event{total === 1 ? "" : "s"}{total > 100 ? " · showing latest 100" : ""}</span></div>
       <section className="audit-list">
