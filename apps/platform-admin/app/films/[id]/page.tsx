@@ -119,6 +119,7 @@ interface Performance {
     totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
     origins: Array<{ zipCode: string; orders: number; tickets: number; sharePercent: number }>;
   };
+  customerSegments: Array<{ key: string; label: string; orders: number; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
 }
 interface ProgrammingSlice {
   key: string;
@@ -601,6 +602,12 @@ export default function FilmPerformancePage() {
             <div className="panel-heading"><div><p className="eyebrow">AUDIENCE GEOGRAPHY</p><h2>Where this film draws customers</h2><p className="muted">Aggregated five-digit ZIP data only. {performance.audienceOrigins.totals.coveragePercent}% of completed orders in this period included a valid ZIP.</p></div></div>
             {performance.audienceOrigins.origins.length === 0 ? <p className="empty-state">No ZIP-attributed ticket sales in this period.</p> : <div className="audience-origin-list">
               {performance.audienceOrigins.origins.slice(0, 20).map((origin) => <div key={origin.zipCode}><strong>{origin.zipCode}</strong><span>{origin.tickets} tickets</span><span>{origin.orders} orders</span><span>{origin.sharePercent}%</span></div>)}
+            </div>}
+          </section>
+          <section className="film-customer-segments">
+            <div className="panel-heading"><div><p className="eyebrow">LOYALTY &amp; MEMBERSHIP</p><h2>Who buys tickets for this film</h2><p className="muted">Aggregated by the customer relationship recorded by each operator. No customer identities are shared.</p></div></div>
+            {performance.customerSegments.length === 0 ? <p className="empty-state">No completed ticket sales in this period.</p> : <div className="customer-segment-grid">
+              {performance.customerSegments.map((segment) => <article key={segment.key}><span>{segment.label}</span><strong>{segment.ticketsSold}</strong><small>{segment.percentOfTickets}% of tickets · {segment.orders} orders · {money(segment.ticketRevenueCents)}</small></article>)}
             </div>}
           </section>
           <section className="film-commercial-insights">

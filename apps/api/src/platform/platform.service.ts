@@ -439,6 +439,7 @@ export class PlatformService {
     const fnbItems = new Map<string, { name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>();
     const audienceOrigins = new Map<string, { zipCode: string; orders: number; tickets: number }>();
     const audienceTotals = { completedOrders: 0, ordersWithZip: 0, ticketsWithZip: 0 };
+    const customerSegments = new Map<string, { key: string; label: string; orders: number; ticketsSold: number; ticketRevenueCents: number }>();
     const addProgrammingSlice = (target: Map<string, ProgrammingSlice>, slice: ProgrammingSlice) => {
       const current = target.get(slice.key) ?? { key: slice.key, label: slice.label, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
       current.showtimes += slice.showtimes;
@@ -523,6 +524,13 @@ export class PlatformService {
         current.tickets += origin.tickets;
         audienceOrigins.set(origin.zipCode, current);
       }
+      for (const segment of report.customerSegments) {
+        const current = customerSegments.get(segment.key) ?? { key: segment.key, label: segment.label, orders: 0, ticketsSold: 0, ticketRevenueCents: 0 };
+        current.orders += segment.orders;
+        current.ticketsSold += segment.ticketsSold;
+        current.ticketRevenueCents += segment.ticketRevenueCents;
+        customerSegments.set(segment.key, current);
+      }
     }
     const finishProgrammingSlice = (slice: ProgrammingSlice) => ({
       ...slice,
@@ -596,6 +604,7 @@ export class PlatformService {
         totals: { ...audienceTotals, coveragePercent: audienceTotals.completedOrders ? Math.round((audienceTotals.ordersWithZip / audienceTotals.completedOrders) * 100) : 0 },
         origins: [...audienceOrigins.values()].map((origin) => ({ ...origin, sharePercent: audienceTotals.ticketsWithZip ? Math.round((origin.tickets / audienceTotals.ticketsWithZip) * 1000) / 10 : 0 })).sort((left, right) => right.tickets - left.tickets || right.orders - left.orders || left.zipCode.localeCompare(right.zipCode)),
       },
+      customerSegments: [...customerSegments.values()].map((segment) => ({ ...segment, percentOfTickets: totals.ticketsSold ? Math.round((segment.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0 })).sort((left, right) => right.ticketsSold - left.ticketsSold || left.label.localeCompare(right.label)),
       showtimePerformance,
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
@@ -644,6 +653,7 @@ export class PlatformService {
       ...performance.promotions.map((item) => metricRow("PROMOTION", item.code, `${item.name} (${item.type})`, item)),
       ...performance.fnbItems.map((item) => metricRow("F&B ITEM", item.name, item.chargeCategory, item)),
       ...performance.audienceOrigins.origins.map((item) => metricRow("AUDIENCE ZIP", item.zipCode, `${item.sharePercent}% of ZIP-attributed tickets`, { ticketsSold: item.tickets, orders: item.orders })),
+      ...performance.customerSegments.map((item) => metricRow("CUSTOMER SEGMENT", item.label, `${item.percentOfTickets}% of tickets`, item)),
     ].join("\n");
   }
 
