@@ -784,7 +784,7 @@ export class PlatformService {
       distributorRevenueCents: number;
       cinemaRevenueCents: number;
       unallocatedRevenueCents: number;
-      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "UPCOMING" | "PAST" | "UNSCHEDULED"; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; terms: Prisma.JsonValue | null }>;
+      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "CURRENT" | "UPCOMING" | "PAST" | "UNSCHEDULED"; firstShowtime: Date | null; lastShowtime: Date | null; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; terms: Prisma.JsonValue | null }>;
     }>();
     for (const movie of movies) {
       const name = movie.distributorName?.trim();
@@ -799,6 +799,7 @@ export class PlatformService {
       }
       const locations = [...new Map(reportingShowtimes.map((showtime) => [showtime.auditorium.location.id, showtime.auditorium.location.name])).values()];
       const upcomingShows = reportingShowtimes.filter((showtime) => showtime.startsAt >= now).length;
+      const pastShows = reportingShowtimes.length - upcomingShows;
       const tickets = reportingShowtimes.flatMap((showtime) => showtime.showtimeSeats.flatMap((seat) => seat.tickets));
       const ticketFaceValueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       const openingStartsAt = movie.showtimes.reduce<Date | null>((opening, showtime) => !opening || showtime.startsAt < opening ? showtime.startsAt : opening, null);
@@ -826,7 +827,9 @@ export class PlatformService {
         title: movie.title,
         organization: movie.organization,
         locations,
-        status: upcomingShows > 0 ? "UPCOMING" : reportingShowtimes.length > 0 ? "PAST" : "UNSCHEDULED",
+        status: pastShows > 0 && upcomingShows > 0 ? "CURRENT" : upcomingShows > 0 ? "UPCOMING" : pastShows > 0 ? "PAST" : "UNSCHEDULED",
+        firstShowtime: reportingShowtimes[0]?.startsAt ?? null,
+        lastShowtime: reportingShowtimes.at(-1)?.startsAt ?? null,
         showtimes: reportingShowtimes.length,
         ticketsSold: tickets.length,
         ticketFaceValueCents,
@@ -849,7 +852,12 @@ export class PlatformService {
         distributorRevenueCents: distributor.distributorRevenueCents,
         cinemaRevenueCents: distributor.cinemaRevenueCents,
         unallocatedRevenueCents: distributor.unallocatedRevenueCents,
-        deals: distributor.deals.sort((left, right) => (left.status === "UPCOMING" ? -1 : 1) - (right.status === "UPCOMING" ? -1 : 1) || right.ticketFaceValueCents - left.ticketFaceValueCents),
+        currentDeals: distributor.deals.filter((deal) => deal.status === "CURRENT").length,
+        upcomingDeals: distributor.deals.filter((deal) => deal.status === "UPCOMING").length,
+        pastDeals: distributor.deals.filter((deal) => deal.status === "PAST").length,
+        unscheduledDeals: distributor.deals.filter((deal) => deal.status === "UNSCHEDULED").length,
+        dealsMissingTerms: distributor.deals.filter((deal) => !Array.isArray(deal.terms) || deal.terms.length === 0).length,
+        deals: distributor.deals.sort((left, right) => ["CURRENT", "UPCOMING", "PAST", "UNSCHEDULED"].indexOf(left.status) - ["CURRENT", "UPCOMING", "PAST", "UNSCHEDULED"].indexOf(right.status) || right.ticketFaceValueCents - left.ticketFaceValueCents),
       })).sort((left, right) => right.ticketFaceValueCents - left.ticketFaceValueCents || left.name.localeCompare(right.name)),
     };
   }
@@ -857,13 +865,13 @@ export class PlatformService {
   distributorPortfolioCsv(portfolio: Awaited<ReturnType<PlatformService["distributorPortfolio"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");
-    const columns = ["Distributor", "Film", "Operator", "Locations", "Engagement status", "Shows", "Tickets sold", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "Deal terms (JSON)"];
+    const columns = ["Distributor", "Film", "Operator", "Locations", "Engagement status", "First showtime", "Last showtime", "Shows", "Tickets sold", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "Deal terms (JSON)"];
     return [
       row(["Generated at", portfolio.generatedAt]),
       "",
       row(columns),
       ...portfolio.distributors.flatMap((distributor) => distributor.deals.map((deal) => row([
-        distributor.name, deal.title, deal.organization.name, deal.locations.join("; "), deal.status,
+        distributor.name, deal.title, deal.organization.name, deal.locations.join("; "), deal.status, deal.firstShowtime?.toISOString(), deal.lastShowtime?.toISOString(),
         deal.showtimes, deal.ticketsSold, deal.ticketFaceValueCents, deal.distributorRevenueCents,
         deal.cinemaRevenueCents, deal.unallocatedRevenueCents, Array.isArray(deal.terms) && deal.terms.length ? JSON.stringify(deal.terms) : "MISSING",
       ]))),

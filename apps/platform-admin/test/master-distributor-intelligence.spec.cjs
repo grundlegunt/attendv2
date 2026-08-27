@@ -18,7 +18,7 @@ test("Master exposes authenticated cross-operator distributor intelligence", () 
 
 test("distributor reporting excludes refunded tickets and distinguishes deal timing", () => {
   assert.match(service, /status: \{ notIn: \["REFUNDED", "CANCELED"\] \}/);
-  assert.match(service, /status: upcomingShows > 0 \? "UPCOMING" : reportingShowtimes\.length > 0 \? "PAST" : "UNSCHEDULED"/);
+  assert.match(service, /status: pastShows > 0 && upcomingShows > 0 \? "CURRENT" : upcomingShows > 0 \? "UPCOMING" : pastShows > 0 \? "PAST" : "UNSCHEDULED"/);
   assert.match(service, /ticketFaceValueCents/);
   assert.match(service, /allocateDistributorShare\(showtimeRevenueCents, showtime\.startsAt, openingStartsAt, movie\.distributorTerms\)/);
   assert.match(service, /unallocatedRevenueCents/);
