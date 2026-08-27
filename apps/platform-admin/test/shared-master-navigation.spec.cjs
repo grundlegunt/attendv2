@@ -13,3 +13,12 @@ test("shared Master navigation derives active state and protects Team visibility
   assert.match(source, /pathname\.startsWith/);
   assert.match(source, /role === "OWNER"/);
 });
+
+test("audience and distributor workspaces use the shared Master navigation", () => {
+  for (const workspace of ["analytics", "distributors"]) {
+    const page = readFileSync(resolve(__dirname, `../app/${workspace}/page.tsx`), "utf8");
+    assert.match(page, /import \{ PlatformNav \} from "\.\.\/platform-nav"/);
+    assert.match(page, /<PlatformNav role=\{session\.user\.role\} \/>/);
+    assert.doesNotMatch(page, /<nav className="platform-nav"/);
+  }
+});

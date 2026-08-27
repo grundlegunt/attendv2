@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
+import { PlatformNav } from "../platform-nav";
 import { platformDownload, platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
@@ -71,7 +72,7 @@ export default function AudienceAnalyticsPage() {
   const maxDailyActivity = Math.max(1, ...(report?.daily ?? []).map((day) => day.Pageview + day["Checkout Started"] + day["Checkout Completed"]));
   return <main className="shell">
     <header><div><p className="eyebrow platform-master-label" /><h1>Audience</h1><p className="muted">Privacy-safe customer-site engagement across cinema operators.</p></div><div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>
-    <nav className="platform-nav" aria-label="Ringo Master"><Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link className="active" href="/analytics">Audience</Link><Link href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link></nav>
+    <PlatformNav role={session.user.role} />
     {error && <div className="error">{error}</div>}
     <section className="dashboard-panel audience-explainer"><strong>Consented interactions, not unique visitors</strong><span>Only customers who allow optional analytics are counted. Ringo stores daily totals—not identities, devices, IP addresses, orders, or tickets.</span></section>
     <form className="analytics-filters" onSubmit={(event) => { event.preventDefault(); void load(session); }}><label>From<input type="date" value={from} max={to} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} /></label><label>Client<select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}><option value="">All clients</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><button disabled={loading || !from || !to || from > to}>{loading ? "Loading…" : "Apply"}</button><button type="button" className="quiet" disabled={loading || !report || !from || !to || from > to} onClick={() => void download()}>Export CSV</button></form>
