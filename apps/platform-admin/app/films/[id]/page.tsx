@@ -62,6 +62,22 @@ interface Performance {
   };
   range: { from: string; to: string } | null;
   totals: Totals;
+  weeklyPerformance: Array<{
+    theatricalWeek: number;
+    firstShowtime: string;
+    lastShowtime: string;
+    showtimes: number;
+    ticketsSold: number;
+    capacity: number;
+    attendancePercent: number;
+    averageTicketsPerShow: number;
+    ticketRevenueCents: number;
+    fnbRevenueCents: number;
+    averageFnbPerShowCents: number;
+    distributorRevenueCents: number;
+    cinemaRevenueCents: number;
+    unallocatedRevenueCents: number;
+  }>;
   operators: Array<{
     organization: { id: string; name: string };
     location: { id: string; name: string };
@@ -343,6 +359,30 @@ export default function FilmPerformancePage() {
                 No operator has imported this film yet.
               </p>
             )}
+          </section>
+          <section className="film-weekly-performance">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">WEEKLY TREND</p>
+                <h2>Performance by theatrical week</h2>
+                <p className="muted">Combined across every operator and location using this catalog film.</p>
+              </div>
+            </div>
+            {performance.weeklyPerformance.length === 0 ? <p className="empty-state">No scheduled performances in this period.</p> : <div className="film-week-table">
+              <div><span>Week</span><span>Dates</span><span>Shows</span><span>Tickets</span><span>Avg / show</span><span>Attendance</span><span>Ticket revenue</span><span>F&amp;B</span><span>Distributor</span><span>Cinema</span></div>
+              {performance.weeklyPerformance.map((week) => <article key={week.theatricalWeek}>
+                <strong>Week {week.theatricalWeek}</strong>
+                <span>{new Date(week.firstShowtime).toLocaleDateString()}–{new Date(week.lastShowtime).toLocaleDateString()}</span>
+                <span>{week.showtimes}</span>
+                <span>{week.ticketsSold}</span>
+                <span>{week.averageTicketsPerShow}</span>
+                <span>{week.attendancePercent}%</span>
+                <span>{money(week.ticketRevenueCents)}</span>
+                <span>{money(week.fnbRevenueCents)}</span>
+                <span>{money(week.distributorRevenueCents)}</span>
+                <span>{money(week.cinemaRevenueCents)}</span>
+              </article>)}
+            </div>}
           </section>
           <p className="detail-note">
             Ringo Master shows calculated performance allocations. Each

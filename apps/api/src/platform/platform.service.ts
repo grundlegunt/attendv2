@@ -390,6 +390,47 @@ export class PlatformService {
       report: await this.reporting.moviePerformance(location.id, movie.id, range),
     }))));
     const locations = reports.map(({ organization, location, localMovieId, report }) => ({ organization, location, localMovieId, totals: report.totals }));
+    const weeklyPerformance = new Map<number, {
+      theatricalWeek: number;
+      firstShowtime: Date;
+      lastShowtime: Date;
+      showtimes: number;
+      ticketsSold: number;
+      capacity: number;
+      ticketRevenueCents: number;
+      fnbRevenueCents: number;
+      distributorRevenueCents: number;
+      cinemaRevenueCents: number;
+      unallocatedRevenueCents: number;
+    }>();
+    for (const { report } of reports) {
+      for (const week of report.weeklyPerformance) {
+        const current = weeklyPerformance.get(week.theatricalWeek) ?? {
+          theatricalWeek: week.theatricalWeek,
+          firstShowtime: week.firstShowtime,
+          lastShowtime: week.lastShowtime,
+          showtimes: 0,
+          ticketsSold: 0,
+          capacity: 0,
+          ticketRevenueCents: 0,
+          fnbRevenueCents: 0,
+          distributorRevenueCents: 0,
+          cinemaRevenueCents: 0,
+          unallocatedRevenueCents: 0,
+        };
+        current.firstShowtime = week.firstShowtime < current.firstShowtime ? week.firstShowtime : current.firstShowtime;
+        current.lastShowtime = week.lastShowtime > current.lastShowtime ? week.lastShowtime : current.lastShowtime;
+        current.showtimes += week.showtimes;
+        current.ticketsSold += week.ticketsSold;
+        current.capacity += week.capacity;
+        current.ticketRevenueCents += week.ticketRevenueCents;
+        current.fnbRevenueCents += week.fnbRevenueCents;
+        current.distributorRevenueCents += week.distributorRevenueCents;
+        current.cinemaRevenueCents += week.cinemaRevenueCents;
+        current.unallocatedRevenueCents += week.unallocatedRevenueCents;
+        weeklyPerformance.set(week.theatricalWeek, current);
+      }
+    }
     const totals = locations.reduce((sum, row) => {
       sum.showtimes += row.totals.showtimes;
       sum.upcomingShowtimes += row.totals.upcomingShowtimes;
@@ -418,6 +459,14 @@ export class PlatformService {
         averageFnbPerShowCents: totals.showtimes ? Math.round(totals.fnbRevenueCents / totals.showtimes) : 0,
         averageFnbPerTicketCents: totals.ticketsSold ? Math.round(totals.fnbRevenueCents / totals.ticketsSold) : 0,
       },
+      weeklyPerformance: [...weeklyPerformance.values()]
+        .sort((left, right) => left.theatricalWeek - right.theatricalWeek)
+        .map((week) => ({
+          ...week,
+          attendancePercent: week.capacity ? Math.round((week.ticketsSold / week.capacity) * 1000) / 10 : 0,
+          averageTicketsPerShow: week.showtimes ? Math.round((week.ticketsSold / week.showtimes) * 10) / 10 : 0,
+          averageFnbPerShowCents: week.showtimes ? Math.round(week.fnbRevenueCents / week.showtimes) : 0,
+        })),
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
