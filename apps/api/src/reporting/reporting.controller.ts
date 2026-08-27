@@ -125,12 +125,12 @@ export class ReportingController {
 
   @Get("audience-analytics")
   audienceAnalytics(@CurrentActor() actor: RequestActor, @Query("from") from?: string, @Query("to") to?: string) {
-    return this.reporting.audienceAnalytics(this.location(actor), this.range(from, to));
+    return this.reporting.audienceAnalytics(this.location(actor), this.analyticsRange(from, to));
   }
 
   @Get("audience-analytics.csv")
   async audienceAnalyticsCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
-    const report = await this.reporting.audienceAnalytics(this.location(actor), this.range(from, to));
+    const report = await this.reporting.audienceAnalytics(this.location(actor), this.analyticsRange(from, to));
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="ringo-website-analytics.csv"');
     response.send(this.reporting.audienceAnalyticsCsv(report));
@@ -213,6 +213,23 @@ export class ReportingController {
     const end = to ? new Date(to) : new Date();
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) throw AppError.validationFailed("A valid from/to date range is required.");
     if (end.getTime() - start.getTime() > 366 * 24 * 60 * 60 * 1000) throw AppError.validationFailed("Report ranges cannot exceed 366 days.");
+    return { from: start, to: end };
+  }
+
+  private analyticsRange(from?: string, to?: string) {
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultFrom = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const parse = (value: string, field: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw AppError.validationFailed(`${field} must be a calendar date.`);
+      const date = new Date(`${value}T00:00:00.000Z`);
+      if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) throw AppError.validationFailed(`${field} must be a valid calendar date.`);
+      return date;
+    };
+    const start = parse(from ?? defaultFrom, "from");
+    const through = parse(to ?? today, "to");
+    if (start > through || through.getTime() - start.getTime() >= 366 * 24 * 60 * 60 * 1000) throw AppError.validationFailed("A valid audience analytics date range of 366 days or less is required.");
+    const end = new Date(through);
+    end.setUTCDate(end.getUTCDate() + 1);
     return { from: start, to: end };
   }
 }

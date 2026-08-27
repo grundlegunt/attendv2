@@ -118,6 +118,11 @@ describe("ReportingService audience analytics", () => {
     expect(source).toContain("report.daily.map");
     expect(source).toContain("report.pages.map");
   });
+
+  it("queries analytics by an exclusive UTC daily-bucket boundary", () => {
+    const source = new ReportingService().audienceAnalytics.toString();
+    expect(source).toContain("date: { gte: range.from, lt: range.to }");
+  });
 });
 
 describe("ReportingService distributor box-office export", () => {
