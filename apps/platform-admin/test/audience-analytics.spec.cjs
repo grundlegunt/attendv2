@@ -28,6 +28,7 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
 
 test("Audience is reachable from every Master navigation bar", () => {
   const app = join(root, "apps/platform-admin/app");
+  const sharedNav = readFileSync(join(app, "platform-nav.tsx"), "utf8");
   const pages = [];
   function collect(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -37,13 +38,18 @@ test("Audience is reachable from every Master navigation bar", () => {
     }
   }
   collect(app);
+  assert.match(sharedNav, /href, label/);
+  assert.match(sharedNav, /\["\/analytics", "Audience"\]/);
   for (const path of pages) {
     const source = readFileSync(path, "utf8");
-    if (source.includes('className="platform-nav"')) assert.match(source, /href="\/analytics"/, path);
+    if (source.includes('className="platform-nav"') && !path.endsWith("platform-nav.tsx")) {
+      assert.match(source, /href="\/analytics"/, path);
+    }
   }
 });
 
 test("Master dashboard links to audience analytics", () => {
   const dashboard = readFileSync(join(root, "apps/platform-admin/app/page.tsx"), "utf8");
-  assert.match(dashboard, /href="\/analytics">Audience/);
+  assert.match(dashboard, /import \{ PlatformNav \} from "\.\/platform-nav"/);
+  assert.match(dashboard, /<PlatformNav role=\{session\.user\.role\} \/>/);
 });
