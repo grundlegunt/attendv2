@@ -38,6 +38,7 @@ export const adminNavigation: readonly AdminNavGroup[] = [
   ] },
   { label: "Financial Reports", items: [
     { href: "/reports", label: "Revenue Overview", permissions: ["reports.view.financial"] },
+    { href: "/audience", label: "Website Analytics", permissions: ["reports.view"] },
     { href: "/refunds", label: "Refunds", permissions: ["payment.refund"] },
     { href: "/labor", label: "Labor", permissions: ["reports.view"] },
     { href: "/expenses", label: "Expenses", permissions: ["reports.view.financial"] },
