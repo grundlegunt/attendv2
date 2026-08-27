@@ -164,6 +164,7 @@ dl { margin: 0; }dl div { display: flex; justify-content: space-between; gap: 14
 .distributor-toolbar { grid-template-columns: minmax(280px, 1fr) auto auto auto; }
 .distributor-deals .terms-missing { color: #ff8e8e; font-weight: 800; }
 .distributor-deals article > span { display: grid; gap: 4px; }
+.deal-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; }.deal-filter span { margin-left: auto; color: var(--muted); font-size: .72rem; }.deal-filter button { text-transform: capitalize; }.distributor-deals > .empty-state { margin: 0; padding: 22px; }
 .distributor-lifecycle { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 18px; }.distributor-lifecycle span { padding: 8px 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: .72rem; }.distributor-lifecycle strong { color: var(--text); }
 .catalog-sync-status { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr auto; gap: 10px; align-items: baseline; margin-bottom: 18px; padding: 12px 16px; border: 1px solid var(--border); background: var(--surface); }.catalog-sync-status.good { border-left: 3px solid var(--accent); }.catalog-sync-status.warning { border-left: 3px solid #ff8e8e; }.catalog-sync-status span, .catalog-sync-status small { color: var(--muted); }.catalog-sync-status small { text-align: right; }
 @media (max-width: 1000px) { .distributor-layout { grid-template-columns: 1fr; } }
