@@ -92,6 +92,11 @@ interface Performance {
     location: { id: string; name: string };
     series: { id: string; name: string };
   }>;
+  priceTierPerformance: Array<ProgrammingSlice & {
+    organization: { id: string; name: string };
+    location: { id: string; name: string };
+    tier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; registeredFeeMinor: number; currency: string };
+  }>;
   admissionTypes: Array<{ name: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   salesChannels: Array<{ channel: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
@@ -645,6 +650,17 @@ export default function FilmPerformancePage() {
                 <strong>{row.series.name}</strong>
                 <Link href={`/clients?organizationId=${encodeURIComponent(row.organization.id)}&locationId=${encodeURIComponent(row.location.id)}`}>{row.organization.name}<small>{row.location.name}</small></Link>
                 <span>{row.showtimes}</span><span>{row.ticketsSold}</span><span>{row.averageTicketsPerShow}</span><span>{row.attendancePercent}%</span><span>{money(row.ticketRevenueCents)}</span><span>{money(row.fnbRevenueCents)}</span>
+              </article>)}
+            </div>}
+          </section>
+          <section className="film-price-tier-performance">
+            <div className="panel-heading"><div><p className="eyebrow">PRICING STRATEGY</p><h2>Performance by price tier</h2><p className="muted">Compare demand and revenue for each operator-defined admission price.</p></div></div>
+            {performance.priceTierPerformance.length === 0 ? <p className="empty-state">No pricing-tier performance is available in this period.</p> : <div className="film-price-tier-table">
+              <div><span>Tier</span><span>Operator / location</span><span>Listed price</span><span>Shows</span><span>Tickets</span><span>Avg / show</span><span>Attendance</span><span>Ticket revenue</span></div>
+              {performance.priceTierPerformance.map((row) => <article key={`${row.organization.id}:${row.location.id}:${row.tier.id}`}>
+                <strong>{row.tier.name}<small>{money(row.tier.feeMinor)} fee · {money(row.tier.registeredFeeMinor)} member fee</small></strong>
+                <Link href={`/clients?organizationId=${encodeURIComponent(row.organization.id)}&locationId=${encodeURIComponent(row.location.id)}`}>{row.organization.name}<small>{row.location.name}</small></Link>
+                <span>{money(row.tier.ticketPriceMinor)}</span><span>{row.showtimes}</span><span>{row.ticketsSold}</span><span>{row.averageTicketsPerShow}</span><span>{row.attendancePercent}%</span><span>{money(row.ticketRevenueCents)}</span>
               </article>)}
             </div>}
           </section>

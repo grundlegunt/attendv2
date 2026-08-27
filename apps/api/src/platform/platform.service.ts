@@ -453,6 +453,15 @@ export class PlatformService {
       location: { id: string; name: string };
       series: { id: string; name: string };
     }>();
+    const priceTierPerformance: Array<ProgrammingSlice & {
+      organization: { id: string; name: string };
+      location: { id: string; name: string };
+      tier: { id: string; name: string; ticketPriceMinor: number; feeMinor: number; registeredFeeMinor: number; currency: string };
+      attendancePercent: number;
+      averageTicketsPerShow: number;
+      averageTicketRevenuePerShowCents: number;
+      averageFnbPerShowCents: number;
+    }> = [];
     const admissionTypes = new Map<string, { name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const advanceSales = new Map<string, { key: string; label: string; ticketsSold: number; ticketRevenueCents: number; weightedLeadHours: number }>();
@@ -513,6 +522,12 @@ export class PlatformService {
       for (const daypart of report.daypartPerformance) addProgrammingSlice(daypartPerformance, daypart);
       for (const weekday of report.weekdayPerformance) addProgrammingSlice(weekdayPerformance, weekday);
       for (const format of report.formatPerformance) addProgrammingSlice(formatPerformance, format);
+      for (const tier of report.priceTierPerformance) priceTierPerformance.push({
+        ...tier,
+        organization,
+        location,
+        tier: { id: tier.key, name: tier.label, ticketPriceMinor: tier.ticketPriceMinor, feeMinor: tier.feeMinor, registeredFeeMinor: tier.registeredFeeMinor, currency: tier.currency },
+      });
       for (const admission of report.admissionTypes) {
         const key = admission.name.trim().toLocaleLowerCase();
         const current = admissionTypes.get(key) ?? { name: admission.name, ticketsSold: 0, ticketRevenueCents: 0 };
@@ -636,6 +651,7 @@ export class PlatformService {
       seriesPerformance: [...seriesPerformance.values()]
         .map(finishProgrammingSlice)
         .sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
+      priceTierPerformance: priceTierPerformance.sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.tier.name.localeCompare(right.tier.name)),
       admissionTypes: [...admissionTypes.values()]
         .map((admission) => ({ ...admission, percentOfTickets: totals.ticketsSold ? Math.round((admission.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0 }))
         .sort((left, right) => right.ticketsSold - left.ticketsSold || left.name.localeCompare(right.name)),
@@ -703,6 +719,7 @@ export class PlatformService {
       ...performance.weekdayPerformance.map((item) => metricRow("WEEKDAY", item.label, item.key, item)),
       ...performance.formatPerformance.map((item) => metricRow("SCREENING FORMAT", item.label, item.key, item)),
       ...performance.seriesPerformance.map((item) => metricRow("FILM SERIES", `${item.organization.name} · ${item.location.name}`, item.series.name, item)),
+      ...performance.priceTierPerformance.map((item) => metricRow("PRICE TIER", `${item.organization.name} · ${item.location.name}`, `${item.tier.name} · ${item.tier.ticketPriceMinor} ${item.tier.currency} minor units`, item)),
       ...performance.admissionTypes.map((item) => metricRow("ADMISSION", item.name, `${item.percentOfTickets}% of tickets`, item)),
       ...performance.salesChannels.map((item) => metricRow("SALES CHANNEL", item.channel, `${item.percentOfTickets}% of tickets`, item)),
       ...performance.advanceSales.map((item) => metricRow("ADVANCE SALE", item.label, `${item.averageLeadHours} average lead hours`, item)),
