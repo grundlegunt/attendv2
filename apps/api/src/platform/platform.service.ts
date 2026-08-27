@@ -1592,6 +1592,14 @@ export class PlatformService {
       select: { id: true, name: true },
     });
     if (input.organizationId && clients.length === 0) throw AppError.notFound("Cinema client not found.");
+    const scopedLocations = await prisma.location.findMany({
+      where: {
+        active: true,
+        ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+      },
+      orderBy: [{ organization: { name: "asc" } }, { name: "asc" }],
+      select: { id: true, name: true, organization: { select: { id: true, name: true } } },
+    });
     const rows = await prisma.customerAnalyticsDaily.findMany({
       where: {
         date: { gte: from, lte: to },
@@ -1617,6 +1625,14 @@ export class PlatformService {
     const totals = emptyCounts();
     const daily = new Map<string, Record<EventName, number>>();
     const locations = new Map<string, { organization: { id: string; name: string }; location: { id: string; name: string }; events: Record<EventName, number>; sources: Map<string, number> }>();
+    for (const location of scopedLocations) {
+      locations.set(location.id, {
+        organization: location.organization,
+        location: { id: location.id, name: location.name },
+        events: emptyCounts(),
+        sources: new Map<string, number>(),
+      });
+    }
     const pages = new Map<string, number>();
     const sources = new Map<string, number>();
     const sourcesByDay = new Map<string, Map<string, number>>();

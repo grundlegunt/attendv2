@@ -11,6 +11,8 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   const service = readFileSync(join(root, "apps/api/src/platform/platform.service.ts"), "utf8");
   assert.match(controller, /@Get\("audience-analytics"\)/);
   assert.match(service, /customerAnalyticsDaily\.findMany/);
+  assert.match(service, /prisma\.location\.findMany/);
+  assert.match(service, /active: true/);
   assert.match(service, /organizationId/);
   assert.match(service, /checkoutCompletionRatePercent/);
   assert.match(service, /seatToCheckoutRatePercent/);
@@ -18,6 +20,7 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(service, /paymentCompletionRatePercent/);
   assert.match(service, /slice\(0, 20\)/);
   assert.match(page, /Consented interactions, not unique visitors/);
+  assert.match(page, /including locations with no consented activity/);
   assert.match(page, /Memberships/);
   assert.match(page, /Private events/);
   assert.match(page, /Top pages/);
