@@ -2220,7 +2220,13 @@ export class PlatformService {
   async organization(organizationId: string) {
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      include: { locations: { orderBy: { name: "asc" } } },
+      include: {
+        locations: { orderBy: { name: "asc" } },
+        ticketFeeAgreements: {
+          orderBy: { effectiveFrom: "desc" },
+          include: { tiers: { orderBy: { startsAtTicket: "asc" } } },
+        },
+      },
     });
     if (!organization)
       throw AppError.notFound("Cinema organization not found.");
@@ -2235,6 +2241,21 @@ export class PlatformService {
       active: organization.active,
       ticketFeeMinor: organization.ticketFeeMinor,
       registeredTicketFeeMinor: organization.registeredTicketFeeMinor,
+      ticketFeeAgreements: organization.ticketFeeAgreements.map((agreement) => ({
+        id: agreement.id,
+        name: agreement.name,
+        customerFeeMinor: agreement.customerFeeMinor,
+        thresholdPeriod: agreement.thresholdPeriod,
+        effectiveFrom: agreement.effectiveFrom.toISOString(),
+        effectiveTo: agreement.effectiveTo?.toISOString() ?? null,
+        createdAt: agreement.createdAt.toISOString(),
+        tiers: agreement.tiers.map((tier) => ({
+          startsAtTicket: tier.startsAtTicket,
+          endsAtTicket: tier.endsAtTicket,
+          platformShareMinor: tier.platformShareMinor,
+          operatorShareMinor: tier.operatorShareMinor,
+        })),
+      })),
       createdAt: organization.createdAt.toISOString(),
       payments: {
         connected: Boolean(organization.stripeConnectedAccountId),
@@ -2917,6 +2938,68 @@ export class PlatformService {
       );
     });
     return this.organization(input.organizationId);
+  }
+
+  async createTicketFeeAgreement(input: {
+    actorId: string;
+    organizationId: string;
+    name: string;
+    customerFeeMinor: number;
+    thresholdPeriod: "CONTRACT_YEAR" | "CALENDAR_YEAR" | "LIFETIME";
+    effectiveFrom: string;
+    tiers: Array<{ startsAtTicket: number; endsAtTicket: number | null; platformShareMinor: number; operatorShareMinor: number }>;
+  }) {
+    const tiers = [...input.tiers].sort((left, right) => left.startsAtTicket - right.startsAtTicket);
+    if (tiers[0]?.startsAtTicket !== 1)
+      throw AppError.validationFailed("The first ticket-fee tier must start at ticket 1.");
+    for (let index = 0; index < tiers.length; index += 1) {
+      const tier = tiers[index]!;
+      const next = tiers[index + 1];
+      if (tier.platformShareMinor + tier.operatorShareMinor !== input.customerFeeMinor)
+        throw AppError.validationFailed("Every tier's Ringo and operator shares must equal the customer fee.");
+      if (next && (tier.endsAtTicket === null || tier.endsAtTicket + 1 !== next.startsAtTicket))
+        throw AppError.validationFailed("Ticket-fee tiers must be contiguous and may not overlap.");
+      if (!next && tier.endsAtTicket !== null)
+        throw AppError.validationFailed("The final ticket-fee tier must have no upper limit.");
+    }
+    const effectiveFrom = new Date(input.effectiveFrom);
+    return prisma.$transaction(async (tx) => {
+      const organization = await tx.organization.findUnique({ where: { id: input.organizationId }, select: { id: true } });
+      if (!organization) throw AppError.notFound("Cinema organization not found.");
+      const nextAgreement = await tx.ticketFeeAgreement.findFirst({
+        where: { organizationId: input.organizationId, effectiveFrom: { gte: effectiveFrom } },
+        orderBy: { effectiveFrom: "asc" },
+      });
+      if (nextAgreement)
+        throw AppError.conflict("A ticket-fee agreement already begins on or after this effective date.");
+      const previous = await tx.ticketFeeAgreement.findFirst({
+        where: { organizationId: input.organizationId, effectiveFrom: { lt: effectiveFrom } },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      if (previous)
+        await tx.ticketFeeAgreement.update({ where: { id: previous.id }, data: { effectiveTo: effectiveFrom } });
+      const agreement = await tx.ticketFeeAgreement.create({
+        data: {
+          organizationId: input.organizationId,
+          name: input.name,
+          customerFeeMinor: input.customerFeeMinor,
+          thresholdPeriod: input.thresholdPeriod,
+          effectiveFrom,
+          createdById: input.actorId,
+          tiers: { create: tiers },
+        },
+        include: { tiers: { orderBy: { startsAtTicket: "asc" } } },
+      });
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        action: "platform.ticket_fee_agreement_created",
+        entityType: "TicketFeeAgreement",
+        entityId: agreement.id,
+        afterState: { organizationId: input.organizationId, name: input.name, customerFeeMinor: input.customerFeeMinor, thresholdPeriod: input.thresholdPeriod, effectiveFrom: input.effectiveFrom, tiers },
+      }, tx);
+      return agreement;
+    });
   }
 
   async deleteOrganization(input: { actorId: string; organizationId: string }) {
