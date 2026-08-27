@@ -80,6 +80,9 @@ interface Performance {
   }>;
   daypartPerformance: ProgrammingSlice[];
   weekdayPerformance: ProgrammingSlice[];
+  admissionTypes: Array<{ name: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
+  salesChannels: Array<{ channel: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
+  advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
   operators: Array<{
     organization: { id: string; name: string };
     location: { id: string; name: string };
@@ -410,6 +413,14 @@ export default function FilmPerformancePage() {
                 {rows.map((row) => <div key={row.key}><strong>{row.label}</strong><span>{row.showtimes}</span><span>{row.ticketsSold}</span><span>{row.averageTicketsPerShow}</span><span>{row.attendancePercent}%</span><span>{money(row.averageTicketRevenuePerShowCents)}</span><span>{money(row.averageFnbPerShowCents)}</span></div>)}
               </div>}
             </article>)}
+          </section>
+          <section className="film-sales-insights">
+            <div className="panel-heading"><div><p className="eyebrow">AUDIENCE &amp; SALES</p><h2>How customers buy this film</h2><p className="muted">Combined ticket mix across every operator using the canonical title.</p></div></div>
+            <div className="film-sales-grid">
+              <article><h3>Admission types</h3>{performance.admissionTypes.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.admissionTypes.map((row) => <div key={row.name}><strong>{row.name}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{money(row.ticketRevenueCents)}</span></div>)}</div>}</article>
+              <article><h3>Sales channels</h3>{performance.salesChannels.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.salesChannels.map((row) => <div key={row.channel}><strong>{row.channel === "BOX_OFFICE" ? "Box office" : "Online"}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{money(row.ticketRevenueCents)}</span></div>)}</div>}</article>
+              <article><h3>Advance purchase timing</h3>{performance.advanceSales.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.advanceSales.map((row) => <div key={row.key}><strong>{row.label}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{row.averageLeadHours}h avg lead</span></div>)}</div>}</article>
+            </div>
           </section>
           <p className="detail-note">
             Ringo Master shows calculated performance allocations. Each
