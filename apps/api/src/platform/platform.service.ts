@@ -437,6 +437,8 @@ export class PlatformService {
     const advanceSales = new Map<string, { key: string; label: string; ticketsSold: number; ticketRevenueCents: number; weightedLeadHours: number }>();
     const promotions = new Map<string, { code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
     const fnbItems = new Map<string, { name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>();
+    const audienceOrigins = new Map<string, { zipCode: string; orders: number; tickets: number }>();
+    const audienceTotals = { completedOrders: 0, ordersWithZip: 0, ticketsWithZip: 0 };
     const addProgrammingSlice = (target: Map<string, ProgrammingSlice>, slice: ProgrammingSlice) => {
       const current = target.get(slice.key) ?? { key: slice.key, label: slice.label, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
       current.showtimes += slice.showtimes;
@@ -512,6 +514,15 @@ export class PlatformService {
         current.serviceUnits += item.serviceUnits;
         fnbItems.set(key, current);
       }
+      audienceTotals.completedOrders += report.audienceOrigins.totals.completedOrders;
+      audienceTotals.ordersWithZip += report.audienceOrigins.totals.ordersWithZip;
+      audienceTotals.ticketsWithZip += report.audienceOrigins.totals.ticketsWithZip;
+      for (const origin of report.audienceOrigins.origins) {
+        const current = audienceOrigins.get(origin.zipCode) ?? { zipCode: origin.zipCode, orders: 0, tickets: 0 };
+        current.orders += origin.orders;
+        current.tickets += origin.tickets;
+        audienceOrigins.set(origin.zipCode, current);
+      }
     }
     const finishProgrammingSlice = (slice: ProgrammingSlice) => ({
       ...slice,
@@ -581,6 +592,10 @@ export class PlatformService {
         .sort((left, right) => right.averageLeadHours - left.averageLeadHours),
       promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || right.tickets - left.tickets || left.code.localeCompare(right.code)),
       fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
+      audienceOrigins: {
+        totals: { ...audienceTotals, coveragePercent: audienceTotals.completedOrders ? Math.round((audienceTotals.ordersWithZip / audienceTotals.completedOrders) * 100) : 0 },
+        origins: [...audienceOrigins.values()].map((origin) => ({ ...origin, sharePercent: audienceTotals.ticketsWithZip ? Math.round((origin.tickets / audienceTotals.ticketsWithZip) * 1000) / 10 : 0 })).sort((left, right) => right.tickets - left.tickets || right.orders - left.orders || left.zipCode.localeCompare(right.zipCode)),
+      },
       showtimePerformance,
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
@@ -628,6 +643,7 @@ export class PlatformService {
       ...performance.advanceSales.map((item) => metricRow("ADVANCE SALE", item.label, `${item.averageLeadHours} average lead hours`, item)),
       ...performance.promotions.map((item) => metricRow("PROMOTION", item.code, `${item.name} (${item.type})`, item)),
       ...performance.fnbItems.map((item) => metricRow("F&B ITEM", item.name, item.chargeCategory, item)),
+      ...performance.audienceOrigins.origins.map((item) => metricRow("AUDIENCE ZIP", item.zipCode, `${item.sharePercent}% of ZIP-attributed tickets`, { ticketsSold: item.tickets, orders: item.orders })),
     ].join("\n");
   }
 
