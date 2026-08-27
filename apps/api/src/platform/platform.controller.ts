@@ -295,7 +295,7 @@ export class PlatformController {
   async revenueCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
     const report = await this.platform.revenue({ from, to, organizationId });
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
-    response.setHeader("Content-Disposition", 'attachment; filename="attend-master-revenue.csv"');
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-master-revenue.csv"');
     response.send(this.platform.revenueCsv(report));
   }
 
