@@ -65,6 +65,14 @@ export default function AudienceAnalyticsPage() {
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not export audience analytics."); }
     finally { setLoading(false); }
   }
+  function applyPreset(days: 7 | 30 | 90) {
+    if (!session) return;
+    const end = new Date();
+    const nextTo = dateInput(end);
+    const nextFrom = dateInput(new Date(end.getTime() - (days - 1) * 86_400_000));
+    setFrom(nextFrom); setTo(nextTo);
+    void load(session, nextFrom, nextTo);
+  }
   useEffect(() => { if (session) void load(session); return () => { requestRef.current += 1; }; }, [session]);
   async function login(event: FormEvent) { event.preventDefault(); setError(null); try { const result = await request<Session>("/platform/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result)); setSession(result); setPassword(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "Sign in failed."); } }
   function signOut() { requestRef.current += 1; void revokePlatformSession(API_BASE_URL, session?.accessToken); window.sessionStorage.removeItem(STORAGE_KEY); setSession(null); setReport(null); }
@@ -77,6 +85,7 @@ export default function AudienceAnalyticsPage() {
     <PlatformNav role={session.user.role} />
     {error && <div className="error">{error}</div>}
     <section className="dashboard-panel audience-explainer"><strong>Consented interactions, not unique visitors</strong><span>Only customers who allow optional analytics are counted. Ringo stores daily totals—not identities, devices, IP addresses, orders, tickets, raw referrers, or campaign parameters.</span></section>
+    <div className="analytics-presets" aria-label="Reporting period presets"><span>Quick range</span><button type="button" className="quiet" disabled={loading} onClick={() => applyPreset(7)}>7 days</button><button type="button" className="quiet" disabled={loading} onClick={() => applyPreset(30)}>30 days</button><button type="button" className="quiet" disabled={loading} onClick={() => applyPreset(90)}>90 days</button></div>
     <form className="analytics-filters" onSubmit={(event) => { event.preventDefault(); void load(session); }}><label>From<input type="date" value={from} max={to} onChange={(event) => setFrom(event.target.value)} /></label><label>To<input type="date" value={to} min={from} onChange={(event) => setTo(event.target.value)} /></label><label>Client<select value={organizationId} onChange={(event) => setOrganizationId(event.target.value)}><option value="">All clients</option>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><button disabled={loading || !from || !to || from > to}>{loading ? "Loading…" : "Apply"}</button><button type="button" className="quiet" disabled={loading || !report || !from || !to || from > to} onClick={() => void download()}>Export CSV</button></form>
     {!report && !loading && <p className="muted">No audience activity loaded.</p>}
     {report && <>
