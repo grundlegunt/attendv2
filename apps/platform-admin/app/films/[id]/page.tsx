@@ -90,6 +90,24 @@ interface Performance {
   advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
   promotions: Array<{ code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>;
   fnbItems: Array<{ name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>;
+  showtimePerformance: Array<{
+    organization: { id: string; name: string };
+    location: { id: string; name: string };
+    localMovieId: string;
+    showtimeId: string;
+    startsAt: string;
+    auditorium: { id: string; name: string; capacity: number };
+    filmSeries: { id: string; name: string } | null;
+    theatricalWeek: number | null;
+    ticketsSold: number;
+    capacity: number;
+    attendancePercent: number;
+    ticketRevenueCents: number;
+    fnbRevenueCents: number;
+    distributorRevenueCents: number;
+    cinemaRevenueCents: number;
+    unallocatedRevenueCents: number;
+  }>;
   operators: Array<{
     organization: { id: string; name: string };
     location: { id: string; name: string };
@@ -466,6 +484,32 @@ export default function FilmPerformancePage() {
               <p className="empty-state">
                 No operator has imported this film yet.
               </p>
+            )}
+          </section>
+          <section className="film-showtime-performance">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">PERFORMANCE DETAIL</p>
+                <h2>Individual showtimes</h2>
+                <p className="muted">The 100 most recent performances in this period. Export CSV includes every row.</p>
+              </div>
+            </div>
+            {performance.showtimePerformance.length === 0 ? <p className="empty-state">No scheduled performances in this period.</p> : (
+              <div className="film-showtime-table">
+                <div><span>Date &amp; time</span><span>Operator / location</span><span>Room</span><span>Week</span><span>Tickets</span><span>Attendance</span><span>Ticket revenue</span><span>F&amp;B</span></div>
+                {performance.showtimePerformance.slice(0, 100).map((showtime) => (
+                  <article key={showtime.showtimeId}>
+                    <strong>{new Date(showtime.startsAt).toLocaleString()}</strong>
+                    <Link href={`/clients?organizationId=${encodeURIComponent(showtime.organization.id)}&locationId=${encodeURIComponent(showtime.location.id)}`}>{showtime.organization.name}<small>{showtime.location.name}</small></Link>
+                    <span>{showtime.auditorium.name}</span>
+                    <span>{showtime.theatricalWeek ? `Week ${showtime.theatricalWeek}` : "—"}</span>
+                    <span>{showtime.ticketsSold} / {showtime.capacity}</span>
+                    <span>{showtime.attendancePercent}%</span>
+                    <span>{money(showtime.ticketRevenueCents)}</span>
+                    <span>{money(showtime.fnbRevenueCents)}</span>
+                  </article>
+                ))}
+              </div>
             )}
           </section>
           <section className="film-weekly-performance">
