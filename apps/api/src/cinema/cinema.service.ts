@@ -4343,7 +4343,8 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
     const date = new Date(`${part("year")}-${part("month")}-${part("day")}T00:00:00.000Z`);
     const requestedPath = input.path?.trim() || "/";
     const publicAnalyticsPaths = new Set(["/", "/about", "/account", "/afterglow", "/coming-soon", "/dining-bar", "/directions", "/donate", "/film-series", "/film-series/:seriesId", "/gift-cards", "/membership", "/movie/:movieId", "/privacy", "/private-events", "/showtimes", "/signage", "/tickets/:orderId"]);
-    const path = input.event === "Pageview" && publicAnalyticsPaths.has(requestedPath) ? requestedPath : "";
+    const acquisitionSources = new Set(["Direct", "Google", "Bing", "Facebook", "Instagram", "X", "Email", "Other referral", "Other campaign"]);
+    const path = input.event === "Pageview" && publicAnalyticsPaths.has(requestedPath) ? requestedPath : input.event === "Acquisition Source" && acquisitionSources.has(requestedPath) ? requestedPath : "";
     await prisma.customerAnalyticsDaily.upsert({
       where: { locationId_date_event_path: { locationId: location.id, date, event: input.event, path } },
       create: { locationId: location.id, date, event: input.event, path, count: 1 },

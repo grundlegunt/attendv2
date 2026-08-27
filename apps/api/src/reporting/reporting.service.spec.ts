@@ -117,6 +117,7 @@ describe("ReportingService audience analytics", () => {
     expect(source).toContain("Payment completion percent");
     expect(source).toContain("report.daily.map");
     expect(source).toContain("report.pages.map");
+    expect(source).toContain("report.sources.map");
   });
 
   it("queries analytics by an exclusive UTC daily-bucket boundary", () => {

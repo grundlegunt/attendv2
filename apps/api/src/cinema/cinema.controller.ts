@@ -38,7 +38,7 @@ const updateSchedulePlanShowtimeSchema = z.object({
 const publishSchedulePlanSchema = z.object({ expectedUpdatedAt: z.string().datetime() }).strict();
 const joinShowtimeWaitlistSchema = z.object({ email: z.string().trim().email().max(200) }).strict();
 const customerAnalyticsEventSchema = z.object({
-  event: z.enum(["Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"]),
+  event: z.enum(["Pageview", "Acquisition Source", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"]),
   path: z.string().trim().max(160).optional(),
 }).strict();
 const bulkUpdateShowtimesSchema = z.object({

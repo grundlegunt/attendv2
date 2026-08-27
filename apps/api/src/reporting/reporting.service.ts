@@ -473,7 +473,7 @@ export class ReportingService {
 
   async audienceAnalytics(locationId: string, range: ReportRange) {
     const events = [
-      "Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created",
+      "Pageview", "Acquisition Source", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created",
       "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started",
       "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined",
     ] as const;
@@ -493,6 +493,7 @@ export class ReportingService {
       daily.set(date.toISOString().slice(0, 10), emptyCounts());
     }
     const pages = new Map<string, number>();
+    const sources = new Map<string, number>();
     for (const row of rows) {
       if (!events.includes(row.event as EventName)) continue;
       const event = row.event as EventName;
@@ -506,6 +507,7 @@ export class ReportingService {
       day[event] += row.count;
       daily.set(date, day);
       if (event === "Pageview" && row.path) pages.set(row.path, (pages.get(row.path) ?? 0) + row.count);
+      if (event === "Acquisition Source" && row.path) sources.set(row.path, (sources.get(row.path) ?? 0) + row.count);
     }
     const rate = (completed: number, started: number) => started > 0 ? Number((completed / started * 100).toFixed(2)) : null;
     const withRates = (counts: Record<EventName, number>) => ({
@@ -525,13 +527,14 @@ export class ReportingService {
       comparison: { range: comparisonRange, totals: withRates(comparisonTotals) },
       daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
       pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
+      sources: [...sources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
     };
   }
 
   audienceAnalyticsCsv(report: Awaited<ReturnType<ReportingService["audienceAnalytics"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");
-    const eventColumns = ["Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"] as const;
+    const eventColumns = ["Pageview", "Acquisition Source", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"] as const;
     return [
       row(["Generated at", report.generatedAt]),
       row(["From", report.range.from.toISOString(), "To (exclusive)", report.range.to.toISOString()]),
@@ -553,6 +556,9 @@ export class ReportingService {
       "",
       row(["Top page", "Consented pageviews"]),
       ...report.pages.map((page) => row([page.path, page.count])),
+      "",
+      row(["Acquisition source", "Consented sessions"]),
+      ...report.sources.map((source) => row([source.source, source.count])),
     ].join("\n");
   }
 
