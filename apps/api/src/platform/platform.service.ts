@@ -884,6 +884,23 @@ export class PlatformService {
     ].join("\n");
   }
 
+  distributorMissingTermsCsv(portfolio: Awaited<ReturnType<PlatformService["distributorPortfolio"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const columns = ["Distributor", "Film", "Operator", "Locations", "Engagement status", "First showtime", "Last showtime", "Shows", "Tickets sold", "Ticket face value (cents)"];
+    return [
+      row(["Generated at", portfolio.generatedAt]),
+      "",
+      row(columns),
+      ...portfolio.distributors.flatMap((distributor) => distributor.deals
+        .filter((deal) => !Array.isArray(deal.terms) || deal.terms.length === 0)
+        .map((deal) => row([
+          distributor.name, deal.title, deal.organization.name, deal.locations.join("; "), deal.status, deal.firstShowtime?.toISOString(), deal.lastShowtime?.toISOString(),
+          deal.showtimes, deal.ticketsSold, deal.ticketFaceValueCents,
+        ]))),
+    ].join("\n");
+  }
+
   private filmCatalogAuditState(entry: {
     title: string;
     synopsis: string | null;
