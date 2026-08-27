@@ -120,6 +120,7 @@ interface Performance {
     origins: Array<{ zipCode: string; orders: number; tickets: number; sharePercent: number }>;
   };
   customerSegments: Array<{ key: string; label: string; orders: number; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
+  customerRetention: { identifiedCustomers: number; returningCustomers: number; returningPercent: number; segments: Array<{ key: string; label: string; customers: number; orders: number; ticketsSold: number; ticketRevenueCents: number }> };
 }
 interface ProgrammingSlice {
   key: string;
@@ -608,6 +609,12 @@ export default function FilmPerformancePage() {
             <div className="panel-heading"><div><p className="eyebrow">LOYALTY &amp; MEMBERSHIP</p><h2>Who buys tickets for this film</h2><p className="muted">Aggregated by the customer relationship recorded by each operator. No customer identities are shared.</p></div></div>
             {performance.customerSegments.length === 0 ? <p className="empty-state">No completed ticket sales in this period.</p> : <div className="customer-segment-grid">
               {performance.customerSegments.map((segment) => <article key={segment.key}><span>{segment.label}</span><strong>{segment.ticketsSold}</strong><small>{segment.percentOfTickets}% of tickets · {segment.orders} orders · {money(segment.ticketRevenueCents)}</small></article>)}
+            </div>}
+          </section>
+          <section className="film-customer-retention">
+            <div className="panel-heading"><div><p className="eyebrow">CUSTOMER RETENTION</p><h2>Does this film bring customers back?</h2><p className="muted">{performance.customerRetention.returningPercent}% of identified customer relationships had purchased at the cinema before this film. Guests are excluded.</p></div></div>
+            {performance.customerRetention.segments.length === 0 ? <p className="empty-state">No identified customer purchases in this period.</p> : <div className="customer-retention-grid">
+              {performance.customerRetention.segments.map((segment) => <article key={segment.key}><span>{segment.label}</span><strong>{segment.customers}</strong><small>{segment.ticketsSold} tickets · {segment.orders} orders · {money(segment.ticketRevenueCents)}</small></article>)}
             </div>}
           </section>
           <section className="film-commercial-insights">
