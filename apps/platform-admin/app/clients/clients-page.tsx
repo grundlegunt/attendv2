@@ -108,6 +108,7 @@ const revenueRanges = [
   { days: 30, label: "Last 30 days" },
   { days: 365, label: "Last year" },
 ] as const;
+type RevenueRange = (typeof revenueRanges)[number]["days"] | "custom";
 type BrandPalette = {
   accentColor: string | null;
   accentMutedColor: string | null;
@@ -294,17 +295,25 @@ function money(cents: number) {
   }).format(cents / 100);
 }
 function healthRate(value: number | null) { return value === null ? "No activity" : `${value.toFixed(2)}%`; }
+function dateInputValue(date: Date) { return date.toISOString().slice(0, 10); }
 function revenuePath(
   organizationId: string,
-  days: number,
+  range: RevenueRange,
+  customFrom = "",
+  customTo = "",
   format: "json" | "csv" = "json",
 ) {
+  const path = `/platform/revenue${format === "csv" ? ".csv" : ""}`;
+  if (range === "custom") {
+    if (!customFrom || !customTo || customFrom > customTo) return null;
+    return `${path}?from=${encodeURIComponent(`${customFrom}T00:00:00.000Z`)}&to=${encodeURIComponent(`${customTo}T23:59:59.999Z`)}&organizationId=${encodeURIComponent(organizationId)}`;
+  }
   const to = new Date();
   const from =
-    days === 1
+    range === 1
       ? new Date(to.getFullYear(), to.getMonth(), to.getDate())
-      : new Date(to.getTime() - days * 86_400_000);
-  return `/platform/revenue${format === "csv" ? ".csv" : ""}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&organizationId=${encodeURIComponent(organizationId)}`;
+      : new Date(to.getTime() - range * 86_400_000);
+  return `${path}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}&organizationId=${encodeURIComponent(organizationId)}`;
 }
 
 export default function AttendMaster() {
@@ -319,7 +328,9 @@ export default function AttendMaster() {
   );
   const [organizationLoading, setOrganizationLoading] = useState(false);
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
-  const [revenueDays, setRevenueDays] = useState(30);
+  const [revenueRangeKey, setRevenueRangeKey] = useState<RevenueRange>(30);
+  const [customFrom, setCustomFrom] = useState(() => { const date = new Date(); date.setUTCDate(date.getUTCDate() - 30); return dateInputValue(date); });
+  const [customTo, setCustomTo] = useState(() => dateInputValue(new Date()));
   const [revenueLoading, setRevenueLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -463,10 +474,12 @@ export default function AttendMaster() {
       return;
     }
     let active = true;
+    const path = revenuePath(selectedOrganizationId, revenueRangeKey, customFrom, customTo);
+    if (!path) return;
     setRevenueLoading(true);
     setError(null);
     request<RevenueReport>(
-      revenuePath(selectedOrganizationId, revenueDays),
+      path,
       undefined,
       session.accessToken,
     )
@@ -480,17 +493,19 @@ export default function AttendMaster() {
       )
       .finally(() => { if (active) setRevenueLoading(false); });
     return () => { active = false; };
-  }, [selectedOrganizationId, session, revenueDays]);
+  }, [selectedOrganizationId, session, revenueRangeKey, customFrom, customTo]);
 
   async function downloadClientRevenue() {
     if (!session || !selectedOrganizationId || !organization) return;
+    const path = revenuePath(selectedOrganizationId, revenueRangeKey, customFrom, customTo, "csv");
+    if (!path) return;
     setRevenueLoading(true);
     setError(null);
     try {
       const blob = await platformDownload(
         API_BASE_URL,
         STORAGE_KEY,
-        revenuePath(selectedOrganizationId, revenueDays, "csv"),
+        path,
         session.accessToken,
       );
       const url = URL.createObjectURL(blob);
@@ -499,7 +514,7 @@ export default function AttendMaster() {
       anchor.download = `${organization.name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")}-revenue-${revenueDays}-day.csv`;
+        .replace(/(^-|-$)/g, "")}-revenue-${revenueRangeKey === "custom" ? `${customFrom}-to-${customTo}` : `${revenueRangeKey}-day`}.csv`;
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (reason) {
@@ -1764,25 +1779,27 @@ export default function AttendMaster() {
                           type="button"
                           key={range.days}
                           className={
-                            revenueDays === range.days ? "active" : "quiet"
+                            revenueRangeKey === range.days ? "active" : "quiet"
                           }
                           disabled={revenueLoading}
-                          onClick={() => setRevenueDays(range.days)}
+                          onClick={() => setRevenueRangeKey(range.days)}
                         >
                           {range.label}
                         </button>
                       ))}
+                      <button type="button" className={revenueRangeKey === "custom" ? "active" : "quiet"} disabled={revenueLoading} onClick={() => setRevenueRangeKey("custom")}>Custom</button>
                     </div>
                     <button
                       type="button"
                       className="quiet"
-                      disabled={revenueLoading || !revenue}
+                      disabled={revenueLoading || !revenue || (revenueRangeKey === "custom" && (!customFrom || !customTo || customFrom > customTo))}
                       onClick={() => void downloadClientRevenue()}
                     >
                       Export CSV
                     </button>
                   </div>
                 </div>
+                {revenueRangeKey === "custom" && <div className="custom-range film-custom-range"><label>From<input type="date" value={customFrom} max={customTo} onChange={(event) => setCustomFrom(event.target.value)} /></label><label>To<input type="date" value={customTo} min={customFrom} onChange={(event) => setCustomTo(event.target.value)} /></label></div>}
                 {!revenue && <p className="muted">Loading client revenue…</p>}
                 {revenue && (
                   <>
