@@ -260,6 +260,15 @@ export class PlatformController {
     response.send(this.platform.distributorPortfolioCsv(portfolio));
   }
 
+  @Get("distributors/missing-terms.csv")
+  @UseGuards(PlatformAuthGuard)
+  async distributorsMissingTermsCsv(@Res() response: Response, @Query("from") from?: string, @Query("to") to?: string) {
+    const portfolio = await this.platform.distributorPortfolio({ from, to });
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-master-missing-distributor-terms.csv"');
+    response.send(this.platform.distributorMissingTermsCsv(portfolio));
+  }
+
   @Get("revenue")
   @UseGuards(PlatformAuthGuard)
   revenue(@Query("from") from?: string, @Query("to") to?: string, @Query("organizationId") organizationId?: string) {
