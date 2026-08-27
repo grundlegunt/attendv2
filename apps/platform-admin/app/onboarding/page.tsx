@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
+import { PlatformNav } from "../platform-nav";
 import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL =
@@ -194,9 +195,7 @@ export default function PlatformOnboarding() {
         <div><p className="eyebrow platform-master-label" /><h1>Onboarding</h1><p className="muted">Move every cinema client from account creation to selling tickets.</p></div>
         <div className="identity">{session.user.role !== "VIEWER" && <Link className="quiet link-button" href="/clients?create=1">+ Start client</Link>}<span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
-      <nav className="platform-nav" aria-label="Ringo Master">
-        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link href="/analytics">Audience</Link><Link className="active" href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
-      </nav>
+      <PlatformNav role={session.user.role} />
       {error && <div className="error">{error}</div>}
       <section className="onboarding-summary">
         <article><strong>{inProgress}</strong><span>In progress</span></article>
