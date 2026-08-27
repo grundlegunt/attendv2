@@ -11,7 +11,7 @@ test("Master audit log exports its complete filtered result as CSV", () => {
   assert.match(controller, /@Get\("audit-events\.csv"\)/);
   assert.match(controller, /filename="ringo-master-audit-log\.csv"/);
   assert.match(service, /async auditEventsCsv/);
-  assert.match(service, /offset < total && offset < 10_000/);
+  assert.match(service, /offset >= page\.total \|\| offset >= 10_000/);
   assert.match(page, /platformDownload/);
   assert.match(page, /\/platform\/audit-events\.csv/);
   assert.match(page, /Export CSV/);
