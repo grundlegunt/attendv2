@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
 import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
@@ -12,6 +12,7 @@ interface Session { accessToken: string; user: { id: string; name: string; email
 interface TeamUser { id: string; name: string; email: string; role: PlatformRole; active: boolean; createdAt: string; updatedAt: string }
 
 function request<T>(path: string, init?: RequestInit, accessToken?: string): Promise<T> { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
+function csvCell(value: string | boolean) { return `"${String(value).replaceAll('"', '""')}"`; }
 
 export default function PlatformTeam() {
   const [session, setSession] = useState<Session | null>(null);
@@ -21,12 +22,34 @@ export default function PlatformTeam() {
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [workingId, setWorkingId] = useState<string | null>(null); const [creating, setCreating] = useState(false); const [error, setError] = useState<string | null>(null);
   const [credentialDrafts, setCredentialDrafts] = useState<Record<string, string>>({});
+  const [teamQuery, setTeamQuery] = useState("");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [accessFilter, setAccessFilter] = useState("ALL");
   const teamRequestRef = useRef(0);
   const authRequestRef = useRef(0);
 
   useEffect(() => { setSession(readPlatformSession(STORAGE_KEY)); setRestored(true); }, []);
   const loadTeam = useCallback(async (current: Session) => { const requestId = ++teamRequestRef.current; try { const result = await request<{ users: TeamUser[] }>("/platform/team", undefined, current.accessToken); if (requestId === teamRequestRef.current) setUsers(result.users); } catch (reason) { if (requestId === teamRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load the Ringo team."); } }, []);
   useEffect(() => { if (!session) return; void loadTeam(session); return () => { teamRequestRef.current += 1; }; }, [session, loadTeam]);
+  const displayedUsers = useMemo(() => users.filter((user) => {
+    const normalizedQuery = teamQuery.trim().toLowerCase();
+    const matchesQuery = !normalizedQuery || `${user.name} ${user.email}`.toLowerCase().includes(normalizedQuery);
+    const matchesRole = roleFilter === "ALL" || user.role === roleFilter;
+    const matchesAccess = accessFilter === "ALL" || user.active === (accessFilter === "ACTIVE");
+    return matchesQuery && matchesRole && matchesAccess;
+  }), [accessFilter, roleFilter, teamQuery, users]);
+
+  function exportTeamAccess() {
+    const headers = ["Name", "Email", "Role", "Active", "Created at", "Updated at"];
+    const rows = displayedUsers.map((user) => [user.name, user.email, user.role, user.active, user.createdAt, user.updatedAt]);
+    const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-master-team-access-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function login(event: FormEvent) { event.preventDefault(); const requestId = ++authRequestRef.current; setError(null); try { const result = await request<Session>("/platform/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }); if (requestId !== authRequestRef.current) return; window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(result)); setSession(result); setPassword(""); } catch (reason) { if (requestId === authRequestRef.current) setError(reason instanceof Error ? reason.message : "Sign in failed."); } }
   async function addOperator(event: FormEvent) { event.preventDefault(); if (!session) return; setCreating(true); setError(null); try { await request("/platform/team", { method: "POST", body: JSON.stringify({ name, email: newEmail, password: newPassword, role: newRole }) }, session.accessToken); setName(""); setNewEmail(""); setNewPassword(""); setNewRole("OPERATOR"); await loadTeam(session); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add the team member."); } finally { setCreating(false); } }
@@ -44,7 +67,7 @@ export default function PlatformTeam() {
     {error && <div className="error">{error}</div>}
     <section className="team-layout">
       <form className="team-create" onSubmit={addOperator}><p className="eyebrow">ADD TEAM MEMBER</p><h2>New company login</h2><p className="muted">Owners manage team access, Operators manage cinema clients, and Viewers have read-only access.</p><label>Name<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label>Email<input required type="email" maxLength={254} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} /></label><label>Role<select value={newRole} onChange={(event) => setNewRole(event.target.value as PlatformRole)}><option value="OPERATOR">Operator</option><option value="VIEWER">Viewer</option><option value="OWNER">Owner</option></select></label><label>Temporary password<input required type="password" minLength={12} maxLength={200} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><button disabled={creating}>{creating ? "Adding…" : "Add team member"}</button></form>
-      <section className="team-roster"><div className="section-heading"><div><p className="eyebrow">COMPANY ACCESS</p><h2>{users.filter((user) => user.active).length} active team member{users.filter((user) => user.active).length === 1 ? "" : "s"}</h2></div></div>{users.map((user) => <article key={user.id}><div className="team-operator"><strong>{user.name}{user.id === session.user.id ? " (you)" : ""}</strong><span>{user.email}</span><small>Added {new Date(user.createdAt).toLocaleDateString()}</small><div className="team-password-reset"><label>Temporary password<input type="password" minLength={12} maxLength={200} value={credentialDrafts[user.id] ?? ""} onChange={(event) => setCredentialDrafts((current) => ({ ...current, [user.id]: event.target.value }))} /></label><button className="quiet" disabled={workingId === user.id || (credentialDrafts[user.id] ?? "").length < 12} onClick={() => void resetPassword(user)}>Reset password</button></div></div><div><label>Role<select value={user.role} disabled={workingId === user.id || user.id === session.user.id} onChange={(event) => void setRole(user, event.target.value as PlatformRole)}><option value="OWNER">Owner</option><option value="OPERATOR">Operator</option><option value="VIEWER">Viewer</option></select></label><span className={user.active ? "status good" : "status warning"}>{user.active ? "Active" : "Inactive"}</span><button className="quiet" disabled={workingId === user.id || user.id === session.user.id} onClick={() => void setAccess(user)}>{workingId === user.id ? "Saving…" : user.active ? "Deactivate" : "Reactivate"}</button></div></article>)}</section>
+      <section className="team-roster"><div className="section-heading"><div><p className="eyebrow">COMPANY ACCESS</p><h2>{users.filter((user) => user.active).length} active team member{users.filter((user) => user.active).length === 1 ? "" : "s"}</h2></div></div><div className="team-filters" aria-label="Filter company access"><label>Search<input type="search" value={teamQuery} onChange={(event) => setTeamQuery(event.target.value)} placeholder="Name or email" /></label><label>Role<select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)}><option value="ALL">All roles</option><option value="OWNER">Owner</option><option value="OPERATOR">Operator</option><option value="VIEWER">Viewer</option></select></label><label>Access<select value={accessFilter} onChange={(event) => setAccessFilter(event.target.value)}><option value="ALL">Active or inactive</option><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></label><span>{displayedUsers.length} of {users.length}</span><button className="quiet" type="button" disabled={displayedUsers.length === 0} onClick={exportTeamAccess}>Export CSV</button></div>{displayedUsers.length === 0 && <p className="empty-state">No team members match these filters.</p>}{displayedUsers.map((user) => <article key={user.id}><div className="team-operator"><strong>{user.name}{user.id === session.user.id ? " (you)" : ""}</strong><span>{user.email}</span><small>Added {new Date(user.createdAt).toLocaleDateString()}</small><div className="team-password-reset"><label>Temporary password<input type="password" minLength={12} maxLength={200} value={credentialDrafts[user.id] ?? ""} onChange={(event) => setCredentialDrafts((current) => ({ ...current, [user.id]: event.target.value }))} /></label><button className="quiet" disabled={workingId === user.id || (credentialDrafts[user.id] ?? "").length < 12} onClick={() => void resetPassword(user)}>Reset password</button></div></div><div><label>Role<select value={user.role} disabled={workingId === user.id || user.id === session.user.id} onChange={(event) => void setRole(user, event.target.value as PlatformRole)}><option value="OWNER">Owner</option><option value="OPERATOR">Operator</option><option value="VIEWER">Viewer</option></select></label><span className={user.active ? "status good" : "status warning"}>{user.active ? "Active" : "Inactive"}</span><button className="quiet" disabled={workingId === user.id || user.id === session.user.id} onClick={() => void setAccess(user)}>{workingId === user.id ? "Saving…" : user.active ? "Deactivate" : "Reactivate"}</button></div></article>)}</section>
     </section>
   </main>;
 }
