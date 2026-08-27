@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
+import { PlatformNav } from "../platform-nav";
 import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV === "production" ? "https://zealous-connection-production-0896.up.railway.app/api/v1" : "http://localhost:4000/api/v1");
@@ -63,7 +63,7 @@ export default function PlatformTeam() {
 
   return <main className="shell">
     <header><div><p className="eyebrow platform-master-label" /><h1>Team</h1><p className="muted">Manage who can operate Ringo across every cinema client.</p></div><div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div></header>
-    <nav className="platform-nav" aria-label="Ringo Master"><Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link href="/analytics">Audience</Link><Link href="/onboarding">Onboarding</Link><Link href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link><Link className="active" href="/team">Team</Link><Link href="/audit">Audit Log</Link></nav>
+    <PlatformNav role={session.user.role} />
     {error && <div className="error">{error}</div>}
     <section className="team-layout">
       <form className="team-create" onSubmit={addOperator}><p className="eyebrow">ADD TEAM MEMBER</p><h2>New company login</h2><p className="muted">Owners manage team access, Operators manage cinema clients, and Viewers have read-only access.</p><label>Name<input required maxLength={120} value={name} onChange={(event) => setName(event.target.value)} /></label><label>Email<input required type="email" maxLength={254} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} /></label><label>Role<select value={newRole} onChange={(event) => setNewRole(event.target.value as PlatformRole)}><option value="OPERATOR">Operator</option><option value="VIEWER">Viewer</option><option value="OWNER">Owner</option></select></label><label>Temporary password<input required type="password" minLength={12} maxLength={200} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} /></label><button disabled={creating}>{creating ? "Adding…" : "Add team member"}</button></form>
