@@ -1616,7 +1616,7 @@ export class PlatformService {
     const emptyCounts = () => Object.fromEntries(events.map((event) => [event, 0])) as Record<EventName, number>;
     const totals = emptyCounts();
     const daily = new Map<string, Record<EventName, number>>();
-    const locations = new Map<string, { organization: { id: string; name: string }; location: { id: string; name: string }; events: Record<EventName, number> }>();
+    const locations = new Map<string, { organization: { id: string; name: string }; location: { id: string; name: string }; events: Record<EventName, number>; sources: Map<string, number> }>();
     const pages = new Map<string, number>();
     const sources = new Map<string, number>();
     for (const row of rows) {
@@ -1631,11 +1631,15 @@ export class PlatformService {
         organization: row.location.organization,
         location: { id: row.location.id, name: row.location.name },
         events: emptyCounts(),
+        sources: new Map<string, number>(),
       };
       location.events[event] += row.count;
       locations.set(row.location.id, location);
       if (event === "Pageview" && row.path) pages.set(row.path, (pages.get(row.path) ?? 0) + row.count);
-      if (event === "Acquisition Source" && row.path) sources.set(row.path, (sources.get(row.path) ?? 0) + row.count);
+      if (event === "Acquisition Source" && row.path) {
+        sources.set(row.path, (sources.get(row.path) ?? 0) + row.count);
+        location.sources.set(row.path, (location.sources.get(row.path) ?? 0) + row.count);
+      }
     }
     const rate = (completed: number, started: number) => started > 0 ? Number((completed / started * 100).toFixed(2)) : null;
     const withRates = (counts: Record<EventName, number>) => ({
@@ -1656,7 +1660,12 @@ export class PlatformService {
       daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
       pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
       sources: [...sources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
-      locations: [...locations.values()].map((location) => ({ ...location, ...withRates(location.events), events: undefined })).sort((left, right) => left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
+      locations: [...locations.values()].map((location) => ({
+        organization: location.organization,
+        location: location.location,
+        ...withRates(location.events),
+        sources: [...location.sources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
+      })).sort((left, right) => left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
 
@@ -1684,6 +1693,9 @@ export class PlatformService {
       "",
       row(["Acquisition source", "Consented sessions"]),
       ...report.sources.map((source) => row([source.source, source.count])),
+      "",
+      row(["Client", "Location", "Acquisition source", "Consented sessions"]),
+      ...report.locations.flatMap((location) => location.sources.map((source) => row([location.organization.name, location.location.name, source.source, source.count]))),
     ].join("\n");
   }
 
