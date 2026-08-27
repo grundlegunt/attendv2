@@ -121,7 +121,13 @@ describe("ReportingService audience analytics", () => {
 
   it("queries analytics by an exclusive UTC daily-bucket boundary", () => {
     const source = new ReportingService().audienceAnalytics.toString();
-    expect(source).toContain("date: { gte: range.from, lt: range.to }");
+    expect(source).toContain("date: { gte: comparisonRange.from, lt: range.to }");
+  });
+
+  it("compares website activity with the immediately preceding equal-length period", () => {
+    const source = new ReportingService().audienceAnalytics.toString();
+    expect(source).toContain("comparisonRange");
+    expect(source).toContain("comparisonTotals");
   });
 });
 
