@@ -1656,6 +1656,14 @@ export class PlatformService {
       membershipCompletionRatePercent: rate(counts["Membership Activated"], counts["Membership Checkout Started"]),
       donationCompletionRatePercent: rate(counts["Donation Completed"], counts["Donation Checkout Started"]),
     });
+    const sourceBreakdown = (sourceCounts: Map<string, number>) => {
+      const total = [...sourceCounts.values()].reduce((sum, count) => sum + count, 0);
+      return [...sourceCounts.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({
+        source,
+        count,
+        sharePercent: total > 0 ? Number((count / total * 100).toFixed(2)) : 0,
+      }));
+    };
     return {
       generatedAt: now.toISOString(),
       range: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) },
@@ -1663,16 +1671,16 @@ export class PlatformService {
       totals: withRates(totals),
       daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
       pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
-      sources: [...sources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
+      sources: sourceBreakdown(sources),
       sourcesByDay: [...sourcesByDay.entries()].map(([date, daySources]) => ({
         date,
-        sources: [...daySources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
+        sources: sourceBreakdown(daySources),
       })),
       locations: [...locations.values()].map((location) => ({
         organization: location.organization,
         location: location.location,
         ...withRates(location.events),
-        sources: [...location.sources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
+        sources: sourceBreakdown(location.sources),
       })).sort((left, right) => left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
@@ -1699,14 +1707,14 @@ export class PlatformService {
       row(["Top page", "Consented pageviews"]),
       ...report.pages.map((page) => row([page.path, page.count])),
       "",
-      row(["Acquisition source", "Consented sessions"]),
-      ...report.sources.map((source) => row([source.source, source.count])),
+      row(["Acquisition source", "Consented sessions", "Share percent"]),
+      ...report.sources.map((source) => row([source.source, source.count, source.sharePercent])),
       "",
-      row(["Client", "Location", "Acquisition source", "Consented sessions"]),
-      ...report.locations.flatMap((location) => location.sources.map((source) => row([location.organization.name, location.location.name, source.source, source.count]))),
+      row(["Client", "Location", "Acquisition source", "Consented sessions", "Share percent"]),
+      ...report.locations.flatMap((location) => location.sources.map((source) => row([location.organization.name, location.location.name, source.source, source.count, source.sharePercent]))),
       "",
-      row(["Date", "Acquisition source", "Consented sessions"]),
-      ...report.sourcesByDay.flatMap((day) => day.sources.map((source) => row([day.date, source.source, source.count]))),
+      row(["Date", "Acquisition source", "Consented sessions", "Share percent"]),
+      ...report.sourcesByDay.flatMap((day) => day.sources.map((source) => row([day.date, source.source, source.count, source.sharePercent]))),
     ].join("\n");
   }
 
