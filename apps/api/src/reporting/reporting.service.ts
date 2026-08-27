@@ -479,17 +479,24 @@ export class ReportingService {
     ] as const;
     type EventName = (typeof events)[number];
     const emptyCounts = () => Object.fromEntries(events.map((event) => [event, 0])) as Record<EventName, number>;
+    const rangeDuration = range.to.getTime() - range.from.getTime();
+    const comparisonRange = { from: new Date(range.from.getTime() - rangeDuration), to: range.from };
     const rows = await prisma.customerAnalyticsDaily.findMany({
-      where: { locationId, date: { gte: range.from, lt: range.to } },
+      where: { locationId, date: { gte: comparisonRange.from, lt: range.to } },
       orderBy: [{ date: "asc" }, { event: "asc" }],
       select: { date: true, event: true, path: true, count: true },
     });
     const totals = emptyCounts();
+    const comparisonTotals = emptyCounts();
     const daily = new Map<string, Record<EventName, number>>();
     const pages = new Map<string, number>();
     for (const row of rows) {
       if (!events.includes(row.event as EventName)) continue;
       const event = row.event as EventName;
+      if (row.date < range.from) {
+        comparisonTotals[event] += row.count;
+        continue;
+      }
       totals[event] += row.count;
       const date = row.date.toISOString().slice(0, 10);
       const day = daily.get(date) ?? emptyCounts();
@@ -512,6 +519,7 @@ export class ReportingService {
       generatedAt: new Date().toISOString(),
       range,
       totals: withRates(totals),
+      comparison: { range: comparisonRange, totals: withRates(comparisonTotals) },
       daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
       pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
     };
@@ -525,8 +533,8 @@ export class ReportingService {
       row(["Generated at", report.generatedAt]),
       row(["From", report.range.from.toISOString(), "To (exclusive)", report.range.to.toISOString()]),
       "",
-      row(["Metric", "Value"]),
-      ...eventColumns.map((event) => row([event, report.totals[event]])),
+      row(["Metric", "Selected period", "Prior period", "Change"]),
+      ...eventColumns.map((event) => row([event, report.totals[event], report.comparison.totals[event], report.totals[event] - report.comparison.totals[event]])),
       row(["Seat-to-checkout percent", report.totals.seatToCheckoutRatePercent]),
       row(["Payment-form-ready percent", report.totals.paymentFormReadyRatePercent]),
       row(["Payment completion percent", report.totals.paymentCompletionRatePercent]),
@@ -534,6 +542,8 @@ export class ReportingService {
       row(["Gift-card completion percent", report.totals.giftCardCompletionRatePercent]),
       row(["Membership completion percent", report.totals.membershipCompletionRatePercent]),
       row(["Donation completion percent", report.totals.donationCompletionRatePercent]),
+      "",
+      row(["Comparison from", report.comparison.range.from.toISOString(), "Comparison to (exclusive)", report.comparison.range.to.toISOString()]),
       "",
       row(["Date", ...eventColumns]),
       ...report.daily.map((day) => row([day.date, ...eventColumns.map((event) => day[event])])),
