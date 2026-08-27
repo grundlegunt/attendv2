@@ -9,9 +9,9 @@ import {
   type SeatInput,
   type SeatMapLayout,
 } from "@cinema/shared";
-import Link from "next/link";
 import { AdminUiEditor } from "../admin-ui-editor";
 import { CompanySignIn } from "../company-sign-in";
+import { PlatformNav } from "../platform-nav";
 import {
   platformDownload,
   platformRequest,
@@ -1425,20 +1425,7 @@ export default function AttendMaster() {
           </button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Ringo Master">
-        <Link href="/">Dashboard</Link>
-        <Link className="active" href="/clients">
-          Clients
-        </Link>
-        <Link href="/films">Films</Link>
-        <Link href="/analytics">Audience</Link>
-        <Link href="/onboarding">Onboarding</Link>
-        <Link href="/payments">Payments</Link>
-        <Link href="/content">Content</Link>
-        <Link href="/branding">Branding</Link>
-        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
-        <Link href="/audit">Audit Log</Link>
-      </nav>
+      <PlatformNav role={session.user.role} />
       {error && <div className="error">{error}</div>}
       {!selectedOrganizationId && organizationCreateDraft && (
         <form

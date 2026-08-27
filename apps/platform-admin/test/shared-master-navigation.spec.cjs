@@ -22,3 +22,17 @@ test("migrated Master workspaces use the shared navigation", () => {
     assert.doesNotMatch(page, /<nav className="platform-nav"/);
   }
 });
+
+test("Master drill-down workspaces use the shared navigation", () => {
+  const pages = [
+    ["../app/films/[id]/page.tsx", /import \{ PlatformNav \} from "\.\.\/\.\.\/platform-nav"/],
+    ["../app/clients/clients-page.tsx", /import \{ PlatformNav \} from "\.\.\/platform-nav"/],
+  ];
+
+  for (const [path, importPattern] of pages) {
+    const page = readFileSync(resolve(__dirname, path), "utf8");
+    assert.match(page, importPattern);
+    assert.match(page, /<PlatformNav role=\{session\.user\.role\} \/>/);
+    assert.doesNotMatch(page, /<nav className="platform-nav"/);
+  }
+});

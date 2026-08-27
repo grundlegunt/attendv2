@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { SeatMap, type SeatMapSeat, type SeatMapSeatingStyle } from "@cinema/ui";
 import { CompanySignIn } from "../../company-sign-in";
+import { PlatformNav } from "../../platform-nav";
 import {
   platformDownload,
   platformRequest,
@@ -392,21 +393,7 @@ export default function FilmPerformancePage() {
           </button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Ringo Master">
-        <Link href="/">Dashboard</Link>
-        <Link href="/clients">Clients</Link>
-        <Link className="active" href="/films">
-          Films
-        </Link>
-        <Link href="/distributors">Distributors</Link>
-        <Link href="/analytics">Audience</Link>
-        <Link href="/onboarding">Onboarding</Link>
-        <Link href="/payments">Payments</Link>
-        <Link href="/content">Content</Link>
-        <Link href="/branding">Branding</Link>
-        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
-        <Link href="/audit">Audit Log</Link>
-      </nav>
+      <PlatformNav role={session.user.role} />
       <div className="film-intelligence-heading">
         <Link className="back" href="/films">
           ← Film catalog
