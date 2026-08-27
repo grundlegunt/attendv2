@@ -23,3 +23,11 @@ test("Master exposes browser and API latency separately", () => {
   assert.match(diagnosticsSource, /timing\.totalMs >= 1_000/);
   assert.match(diagnosticsSource, /Clear session data/);
 });
+
+test("Master diagnostics requires a company session", () => {
+  assert.match(diagnosticsSource, /readPlatformSession/);
+  assert.match(diagnosticsSource, /<CompanySignIn/);
+  assert.match(diagnosticsSource, /revokePlatformSession/);
+  assert.match(diagnosticsSource, /<PlatformNav role=\{session\.user\.role\} \/>/);
+  assert.doesNotMatch(diagnosticsSource, /<nav className="platform-nav"/);
+});
