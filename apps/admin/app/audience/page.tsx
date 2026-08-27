@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
-import { apiFetch, ApiRequestError } from "../lib/api-client";
+import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
 import { inclusiveReportRange, localDateInputValue } from "../report-range";
 
 type Counts = Record<"Pageview" | "Seat Selection Continued" | "Checkout Started" | "Payment Form Ready" | "Checkout Completed" | "Account Created" | "Gift Card Started" | "Gift Card Purchased" | "Membership Checkout Started" | "Membership Activated" | "Donation Checkout Started" | "Donation Completed" | "Private Event Inquiry Submitted" | "Waitlist Joined", number>;
@@ -32,12 +32,25 @@ export default function AudiencePage() {
       if (requestId === requestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : reason instanceof Error ? reason.message : "Website analytics could not be loaded.");
     } finally { if (requestId === requestRef.current) setLoading(false); }
   }
+  async function download() {
+    setLoading(true); setError(null);
+    try {
+      const params = new URLSearchParams(inclusiveReportRange(from, through, timeZone));
+      const blob = await apiDownload(`/reports/audience-analytics.csv?${params}`, { accessToken });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `ringo-website-analytics-${from}-to-${through}.csv`; anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof ApiRequestError ? reason.body.message : reason instanceof Error ? reason.message : "Website analytics could not be exported.");
+    } finally { setLoading(false); }
+  }
   useEffect(() => { void load(); return () => { requestRef.current += 1; }; }, [accessToken, timeZone]);
   const maxDaily = Math.max(1, ...(report?.daily ?? []).map((day) => day.Pageview + day["Checkout Started"] + day["Checkout Completed"]));
 
   return <main className="admin-shell audience-analytics-page">
     <header className="dashboard-heading"><div><p className="kicker">CUSTOMER WEBSITE</p><h1>Website analytics</h1><p>Privacy-safe activity from customers who allowed optional analytics. Counts are interactions, not unique visitors.</p></div></header>
-    <form className="report-range audience-report-range" onSubmit={(event: FormEvent) => { event.preventDefault(); void load(); }}><label>From<input type="date" required value={from} max={through} onChange={(event) => setFrom(event.target.value)} /></label><label>Through<input type="date" required value={through} min={from} onChange={(event) => setThrough(event.target.value)} /></label><button className="primary" disabled={loading}>{loading ? "Loading…" : "Refresh"}</button></form>
+    <form className="report-range audience-report-range" onSubmit={(event: FormEvent) => { event.preventDefault(); void load(); }}><label>From<input type="date" required value={from} max={through} onChange={(event) => setFrom(event.target.value)} /></label><label>Through<input type="date" required value={through} min={from} onChange={(event) => setThrough(event.target.value)} /></label><button className="primary" disabled={loading}>{loading ? "Loading…" : "Refresh"}</button><button type="button" className="secondary" disabled={loading || !report} onClick={() => void download()}>Export CSV</button></form>
     {error && <div className="error-banner">{error}</div>}
     {report && <>
       <section className="dashboard-metrics audience-overview"><article className="dashboard-metric"><span>Pageviews</span><strong>{report.totals.Pageview.toLocaleString()}</strong><small>consented views</small></article><article className="dashboard-metric"><span>Checkout completion</span><strong>{rate(report.totals.checkoutCompletionRatePercent)}</strong><small>{report.totals["Checkout Completed"]} completed / {report.totals["Checkout Started"]} started</small></article><article className="dashboard-metric"><span>Accounts created</span><strong>{report.totals["Account Created"].toLocaleString()}</strong><small>consented events</small></article><article className="dashboard-metric"><span>Waitlist joins</span><strong>{report.totals["Waitlist Joined"].toLocaleString()}</strong><small>consented events</small></article></section>

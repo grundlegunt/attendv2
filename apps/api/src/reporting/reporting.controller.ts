@@ -128,6 +128,14 @@ export class ReportingController {
     return this.reporting.audienceAnalytics(this.location(actor), this.range(from, to));
   }
 
+  @Get("audience-analytics.csv")
+  async audienceAnalyticsCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {
+    const report = await this.reporting.audienceAnalytics(this.location(actor), this.range(from, to));
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-website-analytics.csv"');
+    response.send(this.reporting.audienceAnalyticsCsv(report));
+  }
+
   @Get("revenue.csv")
   @RequirePermissions(Permission.ReportsViewFinancial)
   async revenueCsv(@CurrentActor() actor: RequestActor, @Query("from") from: string | undefined, @Query("to") to: string | undefined, @Res() response: Response) {

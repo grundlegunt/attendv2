@@ -517,6 +517,32 @@ export class ReportingService {
     };
   }
 
+  audienceAnalyticsCsv(report: Awaited<ReturnType<ReportingService["audienceAnalytics"]>>) {
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const eventColumns = ["Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created", "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started", "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined"] as const;
+    return [
+      row(["Generated at", report.generatedAt]),
+      row(["From", report.range.from.toISOString(), "To (exclusive)", report.range.to.toISOString()]),
+      "",
+      row(["Metric", "Value"]),
+      ...eventColumns.map((event) => row([event, report.totals[event]])),
+      row(["Seat-to-checkout percent", report.totals.seatToCheckoutRatePercent]),
+      row(["Payment-form-ready percent", report.totals.paymentFormReadyRatePercent]),
+      row(["Payment completion percent", report.totals.paymentCompletionRatePercent]),
+      row(["Checkout completion percent", report.totals.checkoutCompletionRatePercent]),
+      row(["Gift-card completion percent", report.totals.giftCardCompletionRatePercent]),
+      row(["Membership completion percent", report.totals.membershipCompletionRatePercent]),
+      row(["Donation completion percent", report.totals.donationCompletionRatePercent]),
+      "",
+      row(["Date", ...eventColumns]),
+      ...report.daily.map((day) => row([day.date, ...eventColumns.map((event) => day[event])])),
+      "",
+      row(["Top page", "Consented pageviews"]),
+      ...report.pages.map((page) => row([page.path, page.count])),
+    ].join("\n");
+  }
+
   summarizeAudienceOrigins(orders: Array<{ zipCode: string | null; _count: { tickets: number } }>) {
     const grouped = new Map<string, { zipCode: string; orders: number; tickets: number }>();
     let ordersWithZip = 0;
