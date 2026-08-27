@@ -91,6 +91,21 @@ interface Performance {
   advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
   promotions: Array<{ code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>;
   fnbItems: Array<{ name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>;
+  auditoriumPerformance: Array<{
+    organization: { id: string; name: string };
+    location: { id: string; name: string };
+    localMovieId: string;
+    auditorium: { id: string; name: string };
+    showtimes: number;
+    ticketsSold: number;
+    capacity: number;
+    attendancePercent: number;
+    averageTicketsPerShow: number;
+    ticketRevenueCents: number;
+    averageTicketRevenuePerShowCents: number;
+    fnbRevenueCents: number;
+    averageFnbPerShowCents: number;
+  }>;
   showtimePerformance: Array<{
     organization: { id: string; name: string };
     location: { id: string; name: string };
@@ -519,6 +534,28 @@ export default function FilmPerformancePage() {
                 No operator has imported this film yet.
               </p>
             )}
+          </section>
+          <section className="film-auditorium-performance">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">PROGRAMMING FIT</p>
+                <h2>Performance by auditorium</h2>
+                <p className="muted">Compare how this film performs in each room across operators and locations.</p>
+              </div>
+            </div>
+            {performance.auditoriumPerformance.length === 0 ? <p className="empty-state">No auditorium performance is available in this period.</p> : <div className="film-auditorium-table">
+              <div><span>Operator / location</span><span>Room</span><span>Shows</span><span>Tickets</span><span>Avg / show</span><span>Attendance</span><span>Ticket / show</span><span>F&amp;B / show</span></div>
+              {performance.auditoriumPerformance.map((room) => <article key={`${room.organization.id}:${room.location.id}:${room.auditorium.id}`}>
+                <Link href={`/clients?organizationId=${encodeURIComponent(room.organization.id)}&locationId=${encodeURIComponent(room.location.id)}`}>{room.organization.name}<small>{room.location.name}</small></Link>
+                <strong>{room.auditorium.name}</strong>
+                <span>{room.showtimes}</span>
+                <span>{room.ticketsSold} / {room.capacity}</span>
+                <span>{room.averageTicketsPerShow}</span>
+                <span>{room.attendancePercent}%</span>
+                <span>{money(room.averageTicketRevenuePerShowCents)}</span>
+                <span>{money(room.averageFnbPerShowCents)}</span>
+              </article>)}
+            </div>}
           </section>
           <section className="film-showtime-performance">
             <div className="panel-heading">

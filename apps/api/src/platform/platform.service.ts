@@ -408,6 +408,21 @@ export class PlatformService {
       cinemaRevenueCents: showtime.cinemaRevenueCents,
       unallocatedRevenueCents: showtime.unallocatedRevenueCents,
     }))).sort((left, right) => right.startsAt.getTime() - left.startsAt.getTime());
+    const auditoriumPerformance = reports.flatMap(({ organization, location, localMovieId, report }) => report.auditoriumPerformance.map((auditorium) => ({
+      organization,
+      location,
+      localMovieId,
+      auditorium: { id: auditorium.key, name: auditorium.label },
+      showtimes: auditorium.showtimes,
+      ticketsSold: auditorium.ticketsSold,
+      capacity: auditorium.capacity,
+      attendancePercent: auditorium.attendancePercent,
+      averageTicketsPerShow: auditorium.averageTicketsPerShow,
+      ticketRevenueCents: auditorium.ticketRevenueCents,
+      averageTicketRevenuePerShowCents: auditorium.averageTicketRevenuePerShowCents,
+      fnbRevenueCents: auditorium.fnbRevenueCents,
+      averageFnbPerShowCents: auditorium.averageFnbPerShowCents,
+    }))).sort((left, right) => right.attendancePercent - left.attendancePercent || right.ticketRevenueCents - left.ticketRevenueCents || left.auditorium.name.localeCompare(right.auditorium.name));
     const weeklyPerformance = new Map<number, {
       theatricalWeek: number;
       firstShowtime: Date;
@@ -618,6 +633,7 @@ export class PlatformService {
       },
       customerSegments: [...customerSegments.values()].map((segment) => ({ ...segment, percentOfTickets: totals.ticketsSold ? Math.round((segment.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0 })).sort((left, right) => right.ticketsSold - left.ticketsSold || left.label.localeCompare(right.label)),
       customerRetention: { ...customerRetention, returningPercent: customerRetention.identifiedCustomers ? Math.round((customerRetention.returningCustomers / customerRetention.identifiedCustomers) * 1000) / 10 : 0, segments: [...retentionSegments.values()].sort((left, right) => right.customers - left.customers || left.label.localeCompare(right.label)) },
+      auditoriumPerformance,
       showtimePerformance,
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
@@ -656,6 +672,7 @@ export class PlatformService {
       row(columns),
       metricRow("TOTAL", performance.film.title, performance.film.primaryDistributorName ?? "", performance.totals),
       ...performance.operators.map((item) => metricRow("OPERATOR", item.organization.name, item.location.name, item.totals)),
+      ...performance.auditoriumPerformance.map((item) => metricRow("AUDITORIUM", `${item.organization.name} · ${item.location.name}`, item.auditorium.name, item)),
       ...performance.showtimePerformance.map((item) => metricRow("SHOWTIME", `${item.organization.name} · ${item.location.name}`, `${item.startsAt.toISOString()} · ${item.auditorium.name}`, { showtimes: 1, ...item })),
       ...performance.weeklyPerformance.map((item) => metricRow("WEEK", `Theatrical week ${item.theatricalWeek}`, `${item.firstShowtime.toISOString()} to ${item.lastShowtime.toISOString()}`, item)),
       ...performance.daypartPerformance.map((item) => metricRow("DAYPART", item.label, item.key, item)),
