@@ -200,3 +200,12 @@ dl { margin: 0; }dl div { display: flex; justify-content: space-between; gap: 14
 .film-auditorium-table article a:hover { color: var(--accent); }
 .film-auditorium-table small { color: var(--muted); }
 .film-auditorium-table article > span { text-align: right; }
+.film-series-context { margin-top: 18px; padding: 20px; border: 1px solid var(--border); background: var(--surface); }
+.film-series-context-table { overflow-x: auto; border: 1px solid var(--border); }
+.film-series-context-table > div, .film-series-context-table > article { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(210px, 1.15fr) repeat(6, minmax(90px, .65fr)); gap: 12px; align-items: center; min-width: 1040px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
+.film-series-context-table > div { color: var(--muted); font-size: .66rem; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.film-series-context-table > *:last-child { border-bottom: 0; }
+.film-series-context-table article a { display: grid; gap: 3px; color: var(--text); text-decoration: none; }
+.film-series-context-table article a:hover { color: var(--accent); }
+.film-series-context-table small { color: var(--muted); }
+.film-series-context-table article > span { text-align: right; }
