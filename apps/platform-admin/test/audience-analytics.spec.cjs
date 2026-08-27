@@ -46,6 +46,10 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(page, /raw referrers, or campaign parameters/);
   assert.match(page, /ringo-master-audience-\$\{from\}-to-\$\{to\}\.csv/);
   assert.match(page, />Export CSV<\/button>/);
+  assert.match(page, /Reporting period presets/);
+  assert.match(page, /applyPreset\(7\)/);
+  assert.match(page, /applyPreset\(30\)/);
+  assert.match(page, /applyPreset\(90\)/);
 });
 
 test("Audience is reachable from every Master navigation bar", () => {
