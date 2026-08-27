@@ -414,6 +414,9 @@ export class PlatformService {
     };
     const daypartPerformance = new Map<string, ProgrammingSlice>();
     const weekdayPerformance = new Map<string, ProgrammingSlice>();
+    const admissionTypes = new Map<string, { name: string; ticketsSold: number; ticketRevenueCents: number }>();
+    const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
+    const advanceSales = new Map<string, { key: string; label: string; ticketsSold: number; ticketRevenueCents: number; weightedLeadHours: number }>();
     const addProgrammingSlice = (target: Map<string, ProgrammingSlice>, slice: ProgrammingSlice) => {
       const current = target.get(slice.key) ?? { key: slice.key, label: slice.label, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
       current.showtimes += slice.showtimes;
@@ -452,6 +455,26 @@ export class PlatformService {
       }
       for (const daypart of report.daypartPerformance) addProgrammingSlice(daypartPerformance, daypart);
       for (const weekday of report.weekdayPerformance) addProgrammingSlice(weekdayPerformance, weekday);
+      for (const admission of report.admissionTypes) {
+        const key = admission.name.trim().toLocaleLowerCase();
+        const current = admissionTypes.get(key) ?? { name: admission.name, ticketsSold: 0, ticketRevenueCents: 0 };
+        current.ticketsSold += admission.ticketsSold;
+        current.ticketRevenueCents += admission.ticketRevenueCents;
+        admissionTypes.set(key, current);
+      }
+      for (const channel of report.salesChannels) {
+        const current = salesChannels.get(channel.channel) ?? { channel: channel.channel, ticketsSold: 0, ticketRevenueCents: 0 };
+        current.ticketsSold += channel.ticketsSold;
+        current.ticketRevenueCents += channel.ticketRevenueCents;
+        salesChannels.set(channel.channel, current);
+      }
+      for (const bucket of report.advanceSales) {
+        const current = advanceSales.get(bucket.key) ?? { key: bucket.key, label: bucket.label, ticketsSold: 0, ticketRevenueCents: 0, weightedLeadHours: 0 };
+        current.ticketsSold += bucket.ticketsSold;
+        current.ticketRevenueCents += bucket.ticketRevenueCents;
+        current.weightedLeadHours += bucket.averageLeadHours * bucket.ticketsSold;
+        advanceSales.set(bucket.key, current);
+      }
     }
     const finishProgrammingSlice = (slice: ProgrammingSlice) => ({
       ...slice,
@@ -502,6 +525,19 @@ export class PlatformService {
       weekdayPerformance: [...weekdayPerformance.values()]
         .map(finishProgrammingSlice)
         .sort((left, right) => ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(left.key) - ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(right.key)),
+      admissionTypes: [...admissionTypes.values()]
+        .map((admission) => ({ ...admission, percentOfTickets: totals.ticketsSold ? Math.round((admission.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0 }))
+        .sort((left, right) => right.ticketsSold - left.ticketsSold || left.name.localeCompare(right.name)),
+      salesChannels: [...salesChannels.values()]
+        .map((channel) => ({ ...channel, percentOfTickets: totals.ticketsSold ? Math.round((channel.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0 }))
+        .sort((left, right) => right.ticketsSold - left.ticketsSold || left.channel.localeCompare(right.channel)),
+      advanceSales: [...advanceSales.values()]
+        .map(({ weightedLeadHours, ...bucket }) => ({
+          ...bucket,
+          percentOfTickets: totals.ticketsSold ? Math.round((bucket.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0,
+          averageLeadHours: bucket.ticketsSold ? Math.round(weightedLeadHours / bucket.ticketsSold) : 0,
+        }))
+        .sort((left, right) => right.averageLeadHours - left.averageLeadHours),
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
