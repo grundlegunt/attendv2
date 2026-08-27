@@ -417,6 +417,8 @@ export class PlatformService {
     const admissionTypes = new Map<string, { name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const advanceSales = new Map<string, { key: string; label: string; ticketsSold: number; ticketRevenueCents: number; weightedLeadHours: number }>();
+    const promotions = new Map<string, { code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
+    const fnbItems = new Map<string, { name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>();
     const addProgrammingSlice = (target: Map<string, ProgrammingSlice>, slice: ProgrammingSlice) => {
       const current = target.get(slice.key) ?? { key: slice.key, label: slice.label, showtimes: 0, ticketsSold: 0, capacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0 };
       current.showtimes += slice.showtimes;
@@ -475,6 +477,23 @@ export class PlatformService {
         current.weightedLeadHours += bucket.averageLeadHours * bucket.ticketsSold;
         advanceSales.set(bucket.key, current);
       }
+      for (const promotion of report.promotions) {
+        const key = promotion.code.trim().toLocaleLowerCase();
+        const current = promotions.get(key) ?? { code: promotion.code, name: promotion.name, type: promotion.type, orders: 0, tickets: 0, discountCents: 0 };
+        current.orders += promotion.orders;
+        current.tickets += promotion.tickets;
+        current.discountCents += promotion.discountCents;
+        promotions.set(key, current);
+      }
+      for (const item of report.fnbItems) {
+        const key = `${item.chargeCategory}:${item.name.trim().toLocaleLowerCase()}`;
+        const current = fnbItems.get(key) ?? { name: item.name, chargeCategory: item.chargeCategory, unitsSold: 0, salesCents: 0, orderAheadUnits: 0, serviceUnits: 0 };
+        current.unitsSold += item.unitsSold;
+        current.salesCents += item.salesCents;
+        current.orderAheadUnits += item.orderAheadUnits;
+        current.serviceUnits += item.serviceUnits;
+        fnbItems.set(key, current);
+      }
     }
     const finishProgrammingSlice = (slice: ProgrammingSlice) => ({
       ...slice,
@@ -494,8 +513,12 @@ export class PlatformService {
       sum.distributorRevenueCents += row.totals.distributorRevenueCents;
       sum.cinemaRevenueCents += row.totals.cinemaRevenueCents;
       sum.unallocatedRevenueCents += row.totals.unallocatedRevenueCents;
+      sum.discountCents += row.totals.discountCents;
+      sum.complimentaryTickets += row.totals.complimentaryTickets;
+      sum.refundedTickets += row.totals.refundedTickets;
+      sum.refundedTicketValueCents += row.totals.refundedTicketValueCents;
       return sum;
-    }, { showtimes: 0, upcomingShowtimes: 0, pastShowtimes: 0, ticketsSold: 0, totalCapacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0 });
+    }, { showtimes: 0, upcomingShowtimes: 0, pastShowtimes: 0, ticketsSold: 0, totalCapacity: 0, ticketRevenueCents: 0, fnbRevenueCents: 0, distributorRevenueCents: 0, cinemaRevenueCents: 0, unallocatedRevenueCents: 0, discountCents: 0, complimentaryTickets: 0, refundedTickets: 0, refundedTicketValueCents: 0 });
     return {
       film: {
         id: catalog.id, title: catalog.title, synopsis: catalog.synopsis, runtimeMinutes: catalog.runtimeMinutes, rating: catalog.rating,
@@ -538,6 +561,8 @@ export class PlatformService {
           averageLeadHours: bucket.ticketsSold ? Math.round(weightedLeadHours / bucket.ticketsSold) : 0,
         }))
         .sort((left, right) => right.averageLeadHours - left.averageLeadHours),
+      promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || right.tickets - left.tickets || left.code.localeCompare(right.code)),
+      fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
       operators: locations.sort((left, right) => right.totals.ticketRevenueCents - left.totals.ticketRevenueCents || left.organization.name.localeCompare(right.organization.name) || left.location.name.localeCompare(right.location.name)),
     };
   }
