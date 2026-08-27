@@ -16,6 +16,11 @@ const funnelChange = (currentCount: number, priorCount: number, currentRate?: nu
   const counts = countChange(currentCount, priorCount);
   return currentRate === undefined || priorRate === undefined ? counts : `${counts} · ${rateChange(currentRate, priorRate)}`;
 };
+const shiftDateKey = (dateKey: string, days: number) => {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
 
 export default function AudiencePage() {
   const { accessToken, employee } = useAdminSession();
@@ -27,16 +32,21 @@ export default function AudiencePage() {
   const [loading, setLoading] = useState(false);
   const requestRef = useRef(0);
 
-  async function load() {
+  async function load(rangeFrom = from, rangeThrough = through) {
     const requestId = ++requestRef.current;
     setLoading(true); setError(null);
     try {
-      const params = new URLSearchParams({ from, to: through });
+      const params = new URLSearchParams({ from: rangeFrom, to: rangeThrough });
       const next = await apiFetch<Report>(`/reports/audience-analytics?${params}`, { accessToken });
       if (requestId === requestRef.current) setReport(next);
     } catch (reason) {
       if (requestId === requestRef.current) setError(reason instanceof ApiRequestError ? reason.body.message : reason instanceof Error ? reason.message : "Website analytics could not be loaded.");
     } finally { if (requestId === requestRef.current) setLoading(false); }
+  }
+  function applyPreset(days: number) {
+    const today = localDateInputValue(new Date(), timeZone);
+    const nextFrom = shiftDateKey(today, -(days - 1));
+    setFrom(nextFrom); setThrough(today); void load(nextFrom, today);
   }
   async function download() {
     setLoading(true); setError(null);
@@ -56,7 +66,7 @@ export default function AudiencePage() {
 
   return <main className="admin-shell audience-analytics-page">
     <header className="dashboard-heading"><div><p className="kicker">CUSTOMER WEBSITE</p><h1>Website analytics</h1><p>Privacy-safe activity from customers who allowed optional analytics. Counts are interactions, not unique visitors.</p></div></header>
-    <form className="report-range audience-report-range" onSubmit={(event: FormEvent) => { event.preventDefault(); void load(); }}><label>From<input type="date" required value={from} max={through} onChange={(event) => setFrom(event.target.value)} /></label><label>Through<input type="date" required value={through} min={from} onChange={(event) => setThrough(event.target.value)} /></label><button className="primary" disabled={loading}>{loading ? "Loading…" : "Refresh"}</button><button type="button" className="secondary" disabled={loading || !report} onClick={() => void download()}>Export CSV</button></form>
+    <form className="report-range audience-report-range" onSubmit={(event: FormEvent) => { event.preventDefault(); void load(); }}><div className="audience-presets" aria-label="Quick date ranges">{[[1, "Today"], [7, "7 days"], [30, "30 days"], [90, "90 days"]].map(([days, label]) => <button type="button" className="secondary" disabled={loading} key={days} onClick={() => applyPreset(Number(days))}>{label}</button>)}</div><label>From<input type="date" required value={from} max={through} onChange={(event) => setFrom(event.target.value)} /></label><label>Through<input type="date" required value={through} min={from} onChange={(event) => setThrough(event.target.value)} /></label><button className="primary" disabled={loading}>{loading ? "Loading…" : "Refresh"}</button><button type="button" className="secondary" disabled={loading || !report} onClick={() => void download()}>Export CSV</button></form>
     {error && <div className="error-banner">{error}</div>}
     {report && <>
       <section className="dashboard-metrics audience-overview"><article className="dashboard-metric"><span>Pageviews</span><strong>{report.totals.Pageview.toLocaleString()}</strong><small>{countChange(report.totals.Pageview, report.comparison.totals.Pageview)}</small></article><article className="dashboard-metric"><span>Checkout completion</span><strong>{rate(report.totals.checkoutCompletionRatePercent)}</strong><small>{rateChange(report.totals.checkoutCompletionRatePercent, report.comparison.totals.checkoutCompletionRatePercent)}</small></article><article className="dashboard-metric"><span>Accounts created</span><strong>{report.totals["Account Created"].toLocaleString()}</strong><small>{countChange(report.totals["Account Created"], report.comparison.totals["Account Created"])}</small></article><article className="dashboard-metric"><span>Waitlist joins</span><strong>{report.totals["Waitlist Joined"].toLocaleString()}</strong><small>{countChange(report.totals["Waitlist Joined"], report.comparison.totals["Waitlist Joined"])}</small></article></section>
