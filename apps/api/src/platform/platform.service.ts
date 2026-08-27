@@ -763,7 +763,7 @@ export class PlatformService {
           select: {
             id: true,
             startsAt: true,
-            auditorium: { select: { location: { select: { id: true, name: true } } } },
+            auditorium: { select: { capacity: true, location: { select: { id: true, name: true } } } },
             showtimeSeats: { select: { tickets: {
               where: { status: { notIn: ["REFUNDED", "CANCELED"] } },
               select: { priceCentsPaid: true },
@@ -784,7 +784,7 @@ export class PlatformService {
       distributorRevenueCents: number;
       cinemaRevenueCents: number;
       unallocatedRevenueCents: number;
-      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "CURRENT" | "UPCOMING" | "PAST" | "UNSCHEDULED"; firstShowtime: Date | null; lastShowtime: Date | null; showtimes: number; ticketsSold: number; ticketFaceValueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; terms: Prisma.JsonValue | null }>;
+      deals: Array<{ movieId: string; catalogEntryId: string | null; title: string; organization: { id: string; name: string }; locations: string[]; status: "CURRENT" | "UPCOMING" | "PAST" | "UNSCHEDULED"; firstShowtime: Date | null; lastShowtime: Date | null; showtimes: number; capacity: number; ticketsSold: number; attendancePercent: number; averageTicketsPerShow: number; averageTicketPriceCents: number; effectiveDistributorSharePercent: number | null; ticketFaceValueCents: number; distributorRevenueCents: number; cinemaRevenueCents: number; unallocatedRevenueCents: number; terms: Prisma.JsonValue | null }>;
     }>();
     for (const movie of movies) {
       const name = movie.distributorName?.trim();
@@ -801,6 +801,7 @@ export class PlatformService {
       const upcomingShows = reportingShowtimes.filter((showtime) => showtime.startsAt >= now).length;
       const pastShows = reportingShowtimes.length - upcomingShows;
       const tickets = reportingShowtimes.flatMap((showtime) => showtime.showtimeSeats.flatMap((seat) => seat.tickets));
+      const capacity = reportingShowtimes.reduce((sum, showtime) => sum + showtime.auditorium.capacity, 0);
       const ticketFaceValueCents = tickets.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       const openingStartsAt = movie.showtimes.reduce<Date | null>((opening, showtime) => !opening || showtime.startsAt < opening ? showtime.startsAt : opening, null);
       const allocation = reportingShowtimes.reduce((totals, showtime) => {
@@ -831,7 +832,12 @@ export class PlatformService {
         firstShowtime: reportingShowtimes[0]?.startsAt ?? null,
         lastShowtime: reportingShowtimes.at(-1)?.startsAt ?? null,
         showtimes: reportingShowtimes.length,
+        capacity,
         ticketsSold: tickets.length,
+        attendancePercent: capacity ? Math.round((tickets.length / capacity) * 1000) / 10 : 0,
+        averageTicketsPerShow: reportingShowtimes.length ? Math.round((tickets.length / reportingShowtimes.length) * 10) / 10 : 0,
+        averageTicketPriceCents: tickets.length ? Math.round(ticketFaceValueCents / tickets.length) : 0,
+        effectiveDistributorSharePercent: ticketFaceValueCents && allocation.unallocatedRevenueCents === 0 ? Math.round((allocation.distributorRevenueCents / ticketFaceValueCents) * 1000) / 10 : null,
         ticketFaceValueCents,
         ...allocation,
         terms: movie.distributorTerms,
@@ -865,14 +871,14 @@ export class PlatformService {
   distributorPortfolioCsv(portfolio: Awaited<ReturnType<PlatformService["distributorPortfolio"]>>) {
     const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const row = (values: unknown[]) => values.map(quote).join(",");
-    const columns = ["Distributor", "Film", "Operator", "Locations", "Engagement status", "First showtime", "Last showtime", "Shows", "Tickets sold", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "Deal terms (JSON)"];
+    const columns = ["Distributor", "Film", "Operator", "Locations", "Engagement status", "First showtime", "Last showtime", "Shows", "Capacity", "Tickets sold", "Attendance percent", "Average tickets per show", "Average ticket price (cents)", "Effective distributor share percent", "Ticket face value (cents)", "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)", "Deal terms (JSON)"];
     return [
       row(["Generated at", portfolio.generatedAt]),
       "",
       row(columns),
       ...portfolio.distributors.flatMap((distributor) => distributor.deals.map((deal) => row([
         distributor.name, deal.title, deal.organization.name, deal.locations.join("; "), deal.status, deal.firstShowtime?.toISOString(), deal.lastShowtime?.toISOString(),
-        deal.showtimes, deal.ticketsSold, deal.ticketFaceValueCents, deal.distributorRevenueCents,
+        deal.showtimes, deal.capacity, deal.ticketsSold, deal.attendancePercent, deal.averageTicketsPerShow, deal.averageTicketPriceCents, deal.effectiveDistributorSharePercent, deal.ticketFaceValueCents, deal.distributorRevenueCents,
         deal.cinemaRevenueCents, deal.unallocatedRevenueCents, Array.isArray(deal.terms) && deal.terms.length ? JSON.stringify(deal.terms) : "MISSING",
       ]))),
     ].join("\n");
