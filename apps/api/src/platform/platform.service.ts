@@ -1619,6 +1619,7 @@ export class PlatformService {
     const locations = new Map<string, { organization: { id: string; name: string }; location: { id: string; name: string }; events: Record<EventName, number>; sources: Map<string, number> }>();
     const pages = new Map<string, number>();
     const sources = new Map<string, number>();
+    const sourcesByDay = new Map<string, Map<string, number>>();
     for (const row of rows) {
       if (!events.includes(row.event as EventName)) continue;
       const event = row.event as EventName;
@@ -1639,6 +1640,9 @@ export class PlatformService {
       if (event === "Acquisition Source" && row.path) {
         sources.set(row.path, (sources.get(row.path) ?? 0) + row.count);
         location.sources.set(row.path, (location.sources.get(row.path) ?? 0) + row.count);
+        const daySources = sourcesByDay.get(date) ?? new Map<string, number>();
+        daySources.set(row.path, (daySources.get(row.path) ?? 0) + row.count);
+        sourcesByDay.set(date, daySources);
       }
     }
     const rate = (completed: number, started: number) => started > 0 ? Number((completed / started * 100).toFixed(2)) : null;
@@ -1660,6 +1664,10 @@ export class PlatformService {
       daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
       pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
       sources: [...sources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
+      sourcesByDay: [...sourcesByDay.entries()].map(([date, daySources]) => ({
+        date,
+        sources: [...daySources.entries()].sort((left, right) => right[1] - left[1]).map(([source, count]) => ({ source, count })),
+      })),
       locations: [...locations.values()].map((location) => ({
         organization: location.organization,
         location: location.location,
@@ -1696,6 +1704,9 @@ export class PlatformService {
       "",
       row(["Client", "Location", "Acquisition source", "Consented sessions"]),
       ...report.locations.flatMap((location) => location.sources.map((source) => row([location.organization.name, location.location.name, source.source, source.count]))),
+      "",
+      row(["Date", "Acquisition source", "Consented sessions"]),
+      ...report.sourcesByDay.flatMap((day) => day.sources.map((source) => row([day.date, source.source, source.count]))),
     ].join("\n");
   }
 
