@@ -181,6 +181,7 @@ export function TicketCheckout({
   const [pending, setPending] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [paymentElementReady, setPaymentElementReady] = useState(false);
+  const paymentFormReadyTrackedRef = useRef(false);
   const [mountableElements, setMountableElements] = useState<{
     payment: StripeElement;
     express: StripeExpressCheckoutElement;
@@ -537,7 +538,13 @@ export function TicketCheckout({
     const paymentElement = elements.create("payment", {
       layout: "tabs",
     });
-    paymentElement.on("ready", () => setPaymentElementReady(true));
+    paymentElement.on("ready", () => {
+      setPaymentElementReady(true);
+      if (!paymentFormReadyTrackedRef.current) {
+        paymentFormReadyTrackedRef.current = true;
+        trackOptionalAnalyticsEvent("Payment Form Ready");
+      }
+    });
     paymentElement.on("loaderror", (event) => {
       setPaymentElementReady(false);
       stripeRef.current = null;
