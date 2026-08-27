@@ -36,3 +36,11 @@ test("ready-to-sell clients without a room open the auditorium builder", () => {
   assert.match(source, /label: "Create auditorium"/);
   assert.match(source, /section=auditorium/);
 });
+
+test("onboarding exports the current filtered pipeline and its blockers", () => {
+  assert.match(source, /function exportOnboardingPipeline/);
+  assert.match(source, /displayedPipeline\.map/);
+  assert.match(source, /Missing steps/);
+  assert.match(source, /ringo-master-onboarding-/);
+  assert.match(source, />Export CSV<\/button>/);
+});

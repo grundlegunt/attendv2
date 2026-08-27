@@ -81,6 +81,10 @@ function nextAction(organization: OrganizationOverview, steps: OnboardingStep[])
   return { label: "Review client", href: `/clients?organizationId=${encodeURIComponent(organization.id)}` };
 }
 
+function csvCell(value: unknown) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
 export default function PlatformOnboarding() {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
@@ -151,6 +155,32 @@ export default function PlatformOnboarding() {
     setError(null);
   }
 
+  function exportOnboardingPipeline() {
+    const columns = ["Client", "Progress", "Completed steps", "Total steps", "Missing steps", "Next action", "Stripe status", "Locations", "Active locations", "Auditoriums", "Staff", "Menu items", "Upcoming showtimes"];
+    const rows = displayedPipeline.map(({ organization, steps, completed, action }) => [
+      organization.name,
+      completed === steps.length ? "Ready to sell" : "In progress",
+      completed,
+      steps.length,
+      steps.filter((step) => !step.complete).map((step) => step.label).join("; "),
+      action.label,
+      organization.payments.onboardingStatus,
+      organization.locations.length,
+      organization.locations.filter((location) => location.active).length,
+      organization.locations.reduce((sum, location) => sum + location.configuration.auditoriums, 0),
+      organization.locations.reduce((sum, location) => sum + location.configuration.employees, 0),
+      organization.locations.reduce((sum, location) => sum + location.configuration.menuItems, 0),
+      organization.locations.reduce((sum, location) => sum + location.configuration.upcomingShowtimes, 0),
+    ]);
+    const blob = new Blob([[columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-master-onboarding-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
@@ -178,6 +208,7 @@ export default function PlatformOnboarding() {
         <label>Progress<select value={progressFilter} onChange={(event) => setProgressFilter(event.target.value)}><option value="ALL">All clients</option><option value="IN_PROGRESS">In progress</option><option value="READY">Ready to sell</option></select></label>
         <span><strong>{displayedPipeline.length}</strong> of {pipeline.length} clients</span>
         <button className="quiet" type="button" disabled={!query && progressFilter === "ALL"} onClick={() => { setQuery(""); setProgressFilter("ALL"); }}>Clear filters</button>
+        <button className="quiet" type="button" disabled={!overview || displayedPipeline.length === 0} onClick={exportOnboardingPipeline}>Export CSV</button>
       </section>
       <section className="onboarding-pipeline">
         {!overview && <p className="muted">Loading onboarding pipeline…</p>}
