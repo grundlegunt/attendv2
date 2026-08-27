@@ -47,12 +47,25 @@ function analyticsAllowed() {
   return typeof document !== "undefined" && document.documentElement.dataset.analyticsConsent === "analytics" && document.documentElement.dataset.analyticsEnabled === "true";
 }
 
-function recordFirstParty(event: OptionalAnalyticsEvent | "Pageview", path?: string) {
+function recordFirstParty(event: OptionalAnalyticsEvent | "Pageview" | "Acquisition Source", path?: string) {
   void apiFetch<{ accepted: boolean }>("/cinema/analytics/events", {
     method: "POST",
     body: JSON.stringify({ event, ...(path ? { path } : {}) }),
     keepalive: true,
   }).catch(() => undefined);
+}
+
+export function analyticsAcquisitionSource(search: string, referrer: string): string {
+  const campaign = new URLSearchParams(search).get("utm_source")?.trim().toLowerCase() ?? "";
+  const source = campaign || (() => { try { return new URL(referrer).hostname.toLowerCase(); } catch { return ""; } })();
+  if (!source) return "Direct";
+  if (source.includes("google")) return "Google";
+  if (source.includes("bing")) return "Bing";
+  if (source.includes("facebook") || source === "fb" || source.includes("fb.com")) return "Facebook";
+  if (source.includes("instagram")) return "Instagram";
+  if (source === "x" || source.includes("x.com") || source.includes("twitter")) return "X";
+  if (source.includes("email") || source.includes("newsletter") || source.includes("mail")) return "Email";
+  return campaign ? "Other campaign" : "Other referral";
 }
 
 export function trackOptionalAnalyticsEvent(event: OptionalAnalyticsEvent) {
@@ -66,4 +79,9 @@ export function trackOptionalPageview(pathname: string) {
   const path = analyticsPath(pathname);
   window.plausible?.("pageview", { url: `${window.location.origin}${path}` });
   recordFirstParty("Pageview", path);
+  const acquisitionKey = "ringo.analytics-acquisition.v1";
+  if (window.sessionStorage.getItem(acquisitionKey) !== "recorded") {
+    recordFirstParty("Acquisition Source", analyticsAcquisitionSource(window.location.search, document.referrer));
+    window.sessionStorage.setItem(acquisitionKey, "recorded");
+  }
 }

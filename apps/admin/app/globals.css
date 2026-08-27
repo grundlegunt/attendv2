@@ -1334,6 +1334,7 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .audience-trend small { color: var(--color-text-secondary); font-size: .65rem; font-weight: 400; }
 .audience-pages > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border); }
 .audience-pages code { overflow-wrap: anywhere; }
+.audience-sources { margin-top: 18px; }
 @media (max-width: 900px) { .audience-funnel > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } .audience-detail-grid { grid-template-columns: 1fr; } }
 @media (max-width: 560px) { .audience-funnel > div { grid-template-columns: 1fr; } .audience-trend > div { grid-template-columns: 52px minmax(60px, 1fr) 58px; } .audience-trend > div strong:last-child { display: none; } }
 .site-copy-editor { margin-top: 24px; }

@@ -42,11 +42,14 @@ test("first-party aggregates do not wait for the third-party script", () => {
   assert.match(tracker, /keepalive: true/);
 });
 
-test("identifier-bearing customer routes are redacted and query strings are excluded", () => {
+test("identifier-bearing routes and acquisition details are reduced to safe categories", () => {
   assert.match(tracker, /\/movie\/:movieId/);
   assert.match(tracker, /\/film-series\/:seriesId/);
   assert.match(tracker, /\/tickets\/:orderId/);
-  assert.doesNotMatch(tracker, /location\.search/);
+  assert.match(tracker, /analyticsAcquisitionSource\(window\.location\.search, document\.referrer\)/);
+  assert.match(tracker, /"Other campaign"/);
+  assert.match(tracker, /"Other referral"/);
+  assert.doesNotMatch(tracker, /recordFirstParty\("Acquisition Source", window\.location/);
 });
 
 test("anonymous conversion events are connected to successful customer actions", () => {
