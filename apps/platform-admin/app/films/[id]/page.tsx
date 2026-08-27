@@ -86,6 +86,7 @@ interface Performance {
   }>;
   daypartPerformance: ProgrammingSlice[];
   weekdayPerformance: ProgrammingSlice[];
+  formatPerformance: ProgrammingSlice[];
   admissionTypes: Array<{ name: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   salesChannels: Array<{ channel: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number }>;
   advanceSales: Array<{ key: string; label: string; ticketsSold: number; ticketRevenueCents: number; percentOfTickets: number; averageLeadHours: number }>;
@@ -620,6 +621,7 @@ export default function FilmPerformancePage() {
             {([
               ["Performance by daypart", performance.daypartPerformance],
               ["Performance by weekday", performance.weekdayPerformance],
+              ["Performance by screening format", performance.formatPerformance],
             ] as Array<[string, ProgrammingSlice[]]>).map(([title, rows]) => <article key={title}>
               <div className="panel-heading"><div><p className="eyebrow">PROGRAMMING MIX</p><h2>{title}</h2></div></div>
               {rows.length === 0 ? <p className="empty-state">No scheduled performances in this period.</p> : <div className="programming-slice-table">

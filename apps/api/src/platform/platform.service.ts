@@ -447,6 +447,7 @@ export class PlatformService {
     };
     const daypartPerformance = new Map<string, ProgrammingSlice>();
     const weekdayPerformance = new Map<string, ProgrammingSlice>();
+    const formatPerformance = new Map<string, ProgrammingSlice>();
     const admissionTypes = new Map<string, { name: string; ticketsSold: number; ticketRevenueCents: number }>();
     const salesChannels = new Map<string, { channel: string; ticketsSold: number; ticketRevenueCents: number }>();
     const advanceSales = new Map<string, { key: string; label: string; ticketsSold: number; ticketRevenueCents: number; weightedLeadHours: number }>();
@@ -495,6 +496,7 @@ export class PlatformService {
       }
       for (const daypart of report.daypartPerformance) addProgrammingSlice(daypartPerformance, daypart);
       for (const weekday of report.weekdayPerformance) addProgrammingSlice(weekdayPerformance, weekday);
+      for (const format of report.formatPerformance) addProgrammingSlice(formatPerformance, format);
       for (const admission of report.admissionTypes) {
         const key = admission.name.trim().toLocaleLowerCase();
         const current = admissionTypes.get(key) ?? { name: admission.name, ticketsSold: 0, ticketRevenueCents: 0 };
@@ -612,6 +614,9 @@ export class PlatformService {
       weekdayPerformance: [...weekdayPerformance.values()]
         .map(finishProgrammingSlice)
         .sort((left, right) => ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(left.key) - ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"].indexOf(right.key)),
+      formatPerformance: [...formatPerformance.values()]
+        .map(finishProgrammingSlice)
+        .sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       admissionTypes: [...admissionTypes.values()]
         .map((admission) => ({ ...admission, percentOfTickets: totals.ticketsSold ? Math.round((admission.ticketsSold / totals.ticketsSold) * 1000) / 10 : 0 }))
         .sort((left, right) => right.ticketsSold - left.ticketsSold || left.name.localeCompare(right.name)),
@@ -677,6 +682,7 @@ export class PlatformService {
       ...performance.weeklyPerformance.map((item) => metricRow("WEEK", `Theatrical week ${item.theatricalWeek}`, `${item.firstShowtime.toISOString()} to ${item.lastShowtime.toISOString()}`, item)),
       ...performance.daypartPerformance.map((item) => metricRow("DAYPART", item.label, item.key, item)),
       ...performance.weekdayPerformance.map((item) => metricRow("WEEKDAY", item.label, item.key, item)),
+      ...performance.formatPerformance.map((item) => metricRow("SCREENING FORMAT", item.label, item.key, item)),
       ...performance.admissionTypes.map((item) => metricRow("ADMISSION", item.name, `${item.percentOfTickets}% of tickets`, item)),
       ...performance.salesChannels.map((item) => metricRow("SALES CHANNEL", item.channel, `${item.percentOfTickets}% of tickets`, item)),
       ...performance.advanceSales.map((item) => metricRow("ADVANCE SALE", item.label, `${item.averageLeadHours} average lead hours`, item)),
