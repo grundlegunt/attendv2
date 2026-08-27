@@ -15,7 +15,7 @@ test("shared Master navigation derives active state and protects Team visibility
 });
 
 test("migrated Master workspaces use the shared navigation", () => {
-  for (const workspace of ["analytics", "distributors", "onboarding", "payments"]) {
+  for (const workspace of ["analytics", "audit", "branding", "distributors", "onboarding", "payments"]) {
     const page = readFileSync(resolve(__dirname, `../app/${workspace}/page.tsx`), "utf8");
     assert.match(page, /import \{ PlatformNav \} from "\.\.\/platform-nav"/);
     assert.match(page, /<PlatformNav role=\{session\.user\.role\} \/>/);
