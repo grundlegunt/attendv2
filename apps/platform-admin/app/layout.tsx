@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import "@cinema/ui/theme.css";
 import "./globals.css";
 import { PlatformBrandProvider } from "./platform-brand";
 

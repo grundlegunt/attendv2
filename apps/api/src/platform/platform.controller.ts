@@ -239,6 +239,12 @@ export class PlatformController {
     response.send(await this.platform.filmCatalogPerformanceCsv({ entryId, from, to }));
   }
 
+  @Get("showtimes/:showtimeId/ticket-map")
+  @UseGuards(PlatformAuthGuard)
+  showtimeTicketMap(@Param("showtimeId") showtimeId: string) {
+    return this.platform.showtimeTicketMap(showtimeId);
+  }
+
   @Get("distributors")
   @UseGuards(PlatformAuthGuard)
   distributors(@Query("from") from?: string, @Query("to") to?: string) {

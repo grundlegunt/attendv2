@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { SeatMap, type SeatMapSeat, type SeatMapSeatingStyle } from "@cinema/ui";
 import { CompanySignIn } from "../../company-sign-in";
 import {
   platformDownload,
@@ -128,6 +129,11 @@ interface ProgrammingSlice {
   fnbRevenueCents: number;
   averageFnbPerShowCents: number;
 }
+interface TicketMap {
+  showtime: { id: string; currency: string; seatingStyle: SeatMapSeatingStyle };
+  seats: Array<Omit<SeatMapSeat, "state"> & { state: "AVAILABLE" | "HELD" | "SOLD" | "BLOCKED"; ticket: { id: string; priceCentsPaid: number; ticketType: { name: string }; ticketOrder: { orderNumber: string; channel: string } } | null }>;
+  counts: { available: number; held: number; sold: number; blocked: number };
+}
 
 function request<T>(
   path: string,
@@ -171,6 +177,9 @@ export default function FilmPerformancePage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [ticketMap, setTicketMap] = useState<TicketMap | null>(null);
+  const [ticketMapShowtimeId, setTicketMapShowtimeId] = useState<string | null>(null);
+  const [ticketMapLoading, setTicketMapLoading] = useState(false);
   const requestRef = useRef(0);
   const authRequestRef = useRef(0);
   useEffect(() => {
@@ -253,6 +262,25 @@ export default function FilmPerformancePage() {
       setError(reason instanceof Error ? reason.message : "Could not export film performance.");
     } finally {
       setExporting(false);
+    }
+  }
+  async function toggleTicketMap(showtimeId: string) {
+    if (ticketMapShowtimeId === showtimeId) {
+      setTicketMapShowtimeId(null);
+      setTicketMap(null);
+      return;
+    }
+    if (!session) return;
+    setTicketMapShowtimeId(showtimeId);
+    setTicketMap(null);
+    setTicketMapLoading(true);
+    setError(null);
+    try {
+      setTicketMap(await request<TicketMap>(`/platform/showtimes/${encodeURIComponent(showtimeId)}/ticket-map`, undefined, session.accessToken));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load the ticket map.");
+    } finally {
+      setTicketMapLoading(false);
     }
   }
   if (!restored)
@@ -496,7 +524,7 @@ export default function FilmPerformancePage() {
             </div>
             {performance.showtimePerformance.length === 0 ? <p className="empty-state">No scheduled performances in this period.</p> : (
               <div className="film-showtime-table">
-                <div><span>Date &amp; time</span><span>Operator / location</span><span>Room</span><span>Week</span><span>Tickets</span><span>Attendance</span><span>Ticket revenue</span><span>F&amp;B</span></div>
+                <div><span>Date &amp; time</span><span>Operator / location</span><span>Room</span><span>Week</span><span>Tickets</span><span>Attendance</span><span>Ticket revenue</span><span>F&amp;B</span><span>Map</span></div>
                 {performance.showtimePerformance.slice(0, 100).map((showtime) => (
                   <article key={showtime.showtimeId}>
                     <strong>{new Date(showtime.startsAt).toLocaleString()}</strong>
@@ -507,10 +535,19 @@ export default function FilmPerformancePage() {
                     <span>{showtime.attendancePercent}%</span>
                     <span>{money(showtime.ticketRevenueCents)}</span>
                     <span>{money(showtime.fnbRevenueCents)}</span>
+                    <button type="button" className="quiet" aria-expanded={ticketMapShowtimeId === showtime.showtimeId} onClick={() => void toggleTicketMap(showtime.showtimeId)}>{ticketMapShowtimeId === showtime.showtimeId ? "Hide" : "View"}</button>
                   </article>
                 ))}
               </div>
             )}
+            {ticketMapShowtimeId && <div className="master-ticket-map" aria-label="Showtime ticket map">
+              {ticketMapLoading && <p className="muted">Loading ticket map…</p>}
+              {ticketMap && <>
+                <SeatMap seats={ticketMap.seats.map((seat) => ({ ...seat, state: seat.state === "SOLD" ? "selected" : seat.state === "AVAILABLE" ? "available" : "unavailable" }))} seatingStyle={ticketMap.showtime.seatingStyle} label="Sold-seat map" />
+                <div className="master-ticket-map-counts"><span>{ticketMap.counts.sold} sold</span><span>{ticketMap.counts.held} held</span><span>{ticketMap.counts.available} available</span><span>{ticketMap.counts.blocked} blocked</span></div>
+                <div className="master-sold-seat-ledger">{ticketMap.seats.filter((seat) => seat.ticket).map((seat) => <div key={seat.id}><strong>{seat.label}</strong><span>{seat.ticket!.ticketType.name} · {money(seat.ticket!.priceCentsPaid)}</span><small>{seat.ticket!.ticketOrder.orderNumber} · {seat.ticket!.ticketOrder.channel.toLowerCase()}</small></div>)}</div>
+              </>}
+            </div>}
           </section>
           <section className="film-weekly-performance">
             <div className="panel-heading">
