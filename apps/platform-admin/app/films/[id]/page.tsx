@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { CompanySignIn } from "../../company-sign-in";
 import {
+  platformDownload,
   platformRequest,
   readPlatformSession,
   revokePlatformSession,
@@ -142,6 +143,7 @@ export default function FilmPerformancePage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const requestRef = useRef(0);
   const authRequestRef = useRef(0);
   useEffect(() => {
@@ -202,6 +204,29 @@ export default function FilmPerformancePage() {
     setSession(null);
     setPerformance(null);
     setError(null);
+  }
+  async function downloadPerformance() {
+    if (!session || !filmId) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const blob = await platformDownload(
+        API_BASE_URL,
+        STORAGE_KEY,
+        `/platform/film-catalog/${encodeURIComponent(filmId)}/performance.csv${rangeQuery(range)}`,
+        session.accessToken,
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "ringo-master-film-performance.csv";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not export film performance.");
+    } finally {
+      setExporting(false);
+    }
   }
   if (!restored)
     return (
@@ -269,6 +294,9 @@ export default function FilmPerformancePage() {
               {value === "all" ? "All time" : `${value} days`}
             </button>
           ))}
+          <button type="button" className="quiet" disabled={!performance || exporting} onClick={() => void downloadPerformance()}>
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
         </div>
       </div>
       {error && <div className="error">{error}</div>}
