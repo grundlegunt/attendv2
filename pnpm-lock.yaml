@@ -273,6 +273,9 @@ importers:
       '@cinema/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@cinema/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       next:
         specifier: ^15.1.4
         version: 15.5.21(@playwright/test@1.62.1)(@types/node@26.2.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)

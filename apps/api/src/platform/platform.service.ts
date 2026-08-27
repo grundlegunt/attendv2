@@ -631,6 +631,15 @@ export class PlatformService {
     ].join("\n");
   }
 
+  async showtimeTicketMap(showtimeId: string) {
+    const showtime = await prisma.showtime.findUnique({
+      where: { id: showtimeId },
+      select: { auditorium: { select: { locationId: true } } },
+    });
+    if (!showtime) throw AppError.notFound("Showtime not found.");
+    return this.reporting.showtimeTicketMap(showtime.auditorium.locationId, showtimeId);
+  }
+
   async distributorPortfolio(input: { from?: string; to?: string } = {}) {
     const now = new Date();
     const from = input.from ? new Date(input.from) : undefined;
