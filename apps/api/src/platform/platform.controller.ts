@@ -231,6 +231,14 @@ export class PlatformController {
     return this.platform.filmCatalogPerformance({ entryId, from, to });
   }
 
+  @Get("film-catalog/:entryId/performance.csv")
+  @UseGuards(PlatformAuthGuard)
+  async filmCatalogPerformanceCsv(@Res() response: Response, @Param("entryId") entryId: string, @Query("from") from?: string, @Query("to") to?: string) {
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-master-film-performance.csv"');
+    response.send(await this.platform.filmCatalogPerformanceCsv({ entryId, from, to }));
+  }
+
   @Get("distributors")
   @UseGuards(PlatformAuthGuard)
   distributors(@Query("from") from?: string, @Query("to") to?: string) {

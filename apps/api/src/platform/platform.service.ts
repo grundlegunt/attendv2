@@ -567,6 +567,50 @@ export class PlatformService {
     };
   }
 
+  async filmCatalogPerformanceCsv(input: { entryId: string; from?: string; to?: string }) {
+    const performance = await this.filmCatalogPerformance(input);
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    const columns = [
+      "Section", "Name", "Detail", "Shows", "Tickets", "Capacity", "Attendance (%)",
+      "Average tickets/show", "Ticket revenue (cents)", "F&B revenue (cents)",
+      "Distributor share (cents)", "Cinema share (cents)", "Unallocated (cents)",
+      "Discount (cents)", "Complimentary tickets", "Refunded tickets", "Refunded value (cents)",
+      "Orders", "Units", "Order-ahead units", "In-service units",
+    ];
+    const metricRow = (section: string, name: string, detail: string, metrics: {
+      showtimes?: number; ticketsSold?: number; capacity?: number; totalCapacity?: number;
+      attendancePercent?: number; averageTicketsPerShow?: number; ticketRevenueCents?: number;
+      fnbRevenueCents?: number; distributorRevenueCents?: number; cinemaRevenueCents?: number;
+      unallocatedRevenueCents?: number; discountCents?: number; complimentaryTickets?: number;
+      refundedTickets?: number; refundedTicketValueCents?: number; orders?: number; unitsSold?: number;
+      orderAheadUnits?: number; serviceUnits?: number;
+    }) => row([
+      section, name, detail, metrics.showtimes, metrics.ticketsSold,
+      metrics.capacity ?? metrics.totalCapacity, metrics.attendancePercent, metrics.averageTicketsPerShow,
+      metrics.ticketRevenueCents, metrics.fnbRevenueCents, metrics.distributorRevenueCents,
+      metrics.cinemaRevenueCents, metrics.unallocatedRevenueCents, metrics.discountCents,
+      metrics.complimentaryTickets, metrics.refundedTickets, metrics.refundedTicketValueCents,
+      metrics.orders, metrics.unitsSold, metrics.orderAheadUnits, metrics.serviceUnits,
+    ]);
+    return [
+      row(["Film", performance.film.title]),
+      row(["Range", performance.range ? `${performance.range.from} to ${performance.range.to}` : "All time"]),
+      "",
+      row(columns),
+      metricRow("TOTAL", performance.film.title, performance.film.primaryDistributorName ?? "", performance.totals),
+      ...performance.operators.map((item) => metricRow("OPERATOR", item.organization.name, item.location.name, item.totals)),
+      ...performance.weeklyPerformance.map((item) => metricRow("WEEK", `Theatrical week ${item.theatricalWeek}`, `${item.firstShowtime.toISOString()} to ${item.lastShowtime.toISOString()}`, item)),
+      ...performance.daypartPerformance.map((item) => metricRow("DAYPART", item.label, item.key, item)),
+      ...performance.weekdayPerformance.map((item) => metricRow("WEEKDAY", item.label, item.key, item)),
+      ...performance.admissionTypes.map((item) => metricRow("ADMISSION", item.name, `${item.percentOfTickets}% of tickets`, item)),
+      ...performance.salesChannels.map((item) => metricRow("SALES CHANNEL", item.channel, `${item.percentOfTickets}% of tickets`, item)),
+      ...performance.advanceSales.map((item) => metricRow("ADVANCE SALE", item.label, `${item.averageLeadHours} average lead hours`, item)),
+      ...performance.promotions.map((item) => metricRow("PROMOTION", item.code, `${item.name} (${item.type})`, item)),
+      ...performance.fnbItems.map((item) => metricRow("F&B ITEM", item.name, item.chargeCategory, item)),
+    ].join("\n");
+  }
+
   async distributorPortfolio(input: { from?: string; to?: string } = {}) {
     const now = new Date();
     const from = input.from ? new Date(input.from) : undefined;
