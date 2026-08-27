@@ -171,7 +171,7 @@ export class ReportingService {
       include: {
         auditorium: { select: { id: true, name: true, capacity: true } },
         filmSeries: { select: { id: true, name: true } },
-        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, createdAt: true, channel: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
+        showtimeSeats: { select: { tickets: { select: { priceCentsPaid: true, status: true, ticketType: { select: { id: true, name: true } }, ticketOrder: { select: { id: true, createdAt: true, channel: true, zipCode: true, discountCents: true, orderAheadSubtotalCents: true, orderAheadTaxCents: true, orderAheadServiceChargeCents: true, promotion: { select: { id: true, code: true, name: true, type: true } } } } } } } },
         restaurantTabs: { where: { status: { in: ["CLOSED", "REFUNDED", "MANAGER_REVIEW"] } }, select: { totalCents: true, prepaidCents: true, status: true, payments: { select: { refunds: { where: { status: "SUCCEEDED" }, select: { amountCents: true } } } } } },
       },
       }),
@@ -191,6 +191,8 @@ export class ReportingService {
     const promotions = new Map<string, { promotionId: string; code: string; name: string; type: string; orders: number; tickets: number; discountCents: number }>();
     const advanceSales = new Map<string, { key: string; label: string; order: number; ticketsSold: number; ticketRevenueCents: number; leadHours: number }>();
     const fnbItems = new Map<string, { menuItemId: string; name: string; chargeCategory: string; unitsSold: number; salesCents: number; orderAheadUnits: number; serviceUnits: number }>();
+    const audienceOrigins = new Map<string, { zipCode: string; orders: Set<string>; tickets: number }>();
+    const audienceOrdersWithZip = new Set<string>();
     const countedOrders = new Set<string>();
     let discountCents = 0; let complimentaryTickets = 0; let refundedTickets = 0; let refundedTicketValueCents = 0;
     const rows = showtimes.map((showtime) => {
@@ -199,6 +201,14 @@ export class ReportingService {
       const refunded = allTickets.filter((ticket) => ticket.status === "REFUNDED");
       refundedTickets += refunded.length; refundedTicketValueCents += refunded.reduce((sum, ticket) => sum + ticket.priceCentsPaid, 0);
       for (const ticket of tickets) {
+        const zipCode = ticket.ticketOrder.zipCode?.trim().match(/^(\d{5})(?:-\d{4})?$/)?.[1];
+        if (zipCode) {
+          audienceOrdersWithZip.add(ticket.ticketOrder.id);
+          const origin = audienceOrigins.get(zipCode) ?? { zipCode, orders: new Set<string>(), tickets: 0 };
+          origin.orders.add(ticket.ticketOrder.id);
+          origin.tickets += 1;
+          audienceOrigins.set(zipCode, origin);
+        }
         const bucket = this.advanceSalesBucket(ticket.ticketOrder.createdAt, showtime.startsAt);
         const pace = advanceSales.get(bucket.key) ?? { key: bucket.key, label: bucket.label, order: bucket.order, ticketsSold: 0, ticketRevenueCents: 0, leadHours: 0 };
         pace.ticketsSold += 1; pace.ticketRevenueCents += ticket.priceCentsPaid; pace.leadHours += bucket.hours; advanceSales.set(bucket.key, pace);
@@ -231,6 +241,7 @@ export class ReportingService {
       fnbItems.set(item.menuItemId, row);
     }
     const ticketsSold = rows.reduce((sum, row) => sum + row.ticketsSold, 0);
+    const ticketsWithZip = [...audienceOrigins.values()].reduce((sum, origin) => sum + origin.tickets, 0);
     const totalCapacity = rows.reduce((sum, row) => sum + row.capacity, 0);
     const ticketRevenueCents = rows.reduce((sum, row) => sum + row.ticketRevenueCents, 0);
     const fnbRevenueCents = rows.reduce((sum, row) => sum + row.fnbRevenueCents, 0);
@@ -290,6 +301,10 @@ export class ReportingService {
       salesChannels: [...salesChannels.values()].sort((left, right) => right.ticketsSold - left.ticketsSold || left.channel.localeCompare(right.channel)),
       promotions: [...promotions.values()].sort((left, right) => right.discountCents - left.discountCents || left.code.localeCompare(right.code)),
       advanceSales: [...advanceSales.values()].sort((left, right) => left.order - right.order).map(({ order: _order, leadHours, ...bucket }) => ({ ...bucket, percentOfTickets: ticketsSold ? Math.round((bucket.ticketsSold / ticketsSold) * 1000) / 10 : 0, averageLeadHours: bucket.ticketsSold ? Math.round(leadHours / bucket.ticketsSold) : 0 })),
+      audienceOrigins: {
+        totals: { completedOrders: countedOrders.size, ordersWithZip: audienceOrdersWithZip.size, ticketsWithZip, coveragePercent: countedOrders.size ? Math.round((audienceOrdersWithZip.size / countedOrders.size) * 100) : 0 },
+        origins: [...audienceOrigins.values()].map((origin) => ({ zipCode: origin.zipCode, orders: origin.orders.size, tickets: origin.tickets, sharePercent: ticketsWithZip ? Math.round((origin.tickets / ticketsWithZip) * 1000) / 10 : 0 })).sort((left, right) => right.tickets - left.tickets || right.orders - left.orders || left.zipCode.localeCompare(right.zipCode)),
+      },
       fnbItems: [...fnbItems.values()].sort((left, right) => right.salesCents - left.salesCents || right.unitsSold - left.unitsSold || left.name.localeCompare(right.name)),
       auditoriumPerformance: [...auditoriumPerformance.values()].map(finishSlice).sort((left, right) => right.ticketRevenueCents - left.ticketRevenueCents || left.label.localeCompare(right.label)),
       daypartPerformance: [...daypartPerformance.values()].map(finishSlice).sort((left, right) => ["MORNING", "AFTERNOON", "EVENING"].indexOf(left.key) - ["MORNING", "AFTERNOON", "EVENING"].indexOf(right.key)),

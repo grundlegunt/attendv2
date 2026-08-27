@@ -115,6 +115,10 @@ interface Performance {
     localMovieId: string;
     totals: Totals;
   }>;
+  audienceOrigins: {
+    totals: { completedOrders: number; ordersWithZip: number; ticketsWithZip: number; coveragePercent: number };
+    origins: Array<{ zipCode: string; orders: number; tickets: number; sharePercent: number }>;
+  };
 }
 interface ProgrammingSlice {
   key: string;
@@ -592,6 +596,12 @@ export default function FilmPerformancePage() {
               <article><h3>Sales channels</h3>{performance.salesChannels.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.salesChannels.map((row) => <div key={row.channel}><strong>{row.channel === "BOX_OFFICE" ? "Box office" : "Online"}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{money(row.ticketRevenueCents)}</span></div>)}</div>}</article>
               <article><h3>Advance purchase timing</h3>{performance.advanceSales.length === 0 ? <p className="empty-state">No ticket sales in this period.</p> : <div className="sales-mix-list">{performance.advanceSales.map((row) => <div key={row.key}><strong>{row.label}</strong><span>{row.ticketsSold} tickets · {row.percentOfTickets}%</span><span>{row.averageLeadHours}h avg lead</span></div>)}</div>}</article>
             </div>
+          </section>
+          <section className="film-audience-origins">
+            <div className="panel-heading"><div><p className="eyebrow">AUDIENCE GEOGRAPHY</p><h2>Where this film draws customers</h2><p className="muted">Aggregated five-digit ZIP data only. {performance.audienceOrigins.totals.coveragePercent}% of completed orders in this period included a valid ZIP.</p></div></div>
+            {performance.audienceOrigins.origins.length === 0 ? <p className="empty-state">No ZIP-attributed ticket sales in this period.</p> : <div className="audience-origin-list">
+              {performance.audienceOrigins.origins.slice(0, 20).map((origin) => <div key={origin.zipCode}><strong>{origin.zipCode}</strong><span>{origin.tickets} tickets</span><span>{origin.orders} orders</span><span>{origin.sharePercent}%</span></div>)}
+            </div>}
           </section>
           <section className="film-commercial-insights">
             <article><div className="panel-heading"><div><p className="eyebrow">CONCESSIONS</p><h2>Top F&amp;B items</h2><p className="muted">Item sales connected to this film across operators.</p></div></div>{performance.fnbItems.length === 0 ? <p className="empty-state">No linked F&amp;B sales in this period.</p> : <div className="commercial-list">{performance.fnbItems.slice(0, 10).map((item) => <div key={`${item.chargeCategory}:${item.name}`}><strong>{item.name}<small>{item.chargeCategory.toLowerCase()} · {item.orderAheadUnits} ahead · {item.serviceUnits} in service</small></strong><span>{item.unitsSold} units</span><span>{money(item.salesCents)}</span></div>)}</div>}</article>
