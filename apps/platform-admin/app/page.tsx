@@ -234,6 +234,7 @@ export default function PlatformDashboard() {
       <nav className="platform-nav" aria-label="Ringo Master">
         <Link className="active" href="/">Dashboard</Link>
         <Link href="/clients">Clients</Link>
+        <Link href="/benchmarks">Benchmarks</Link>
         <Link href="/films">Films</Link>
         <Link href="/distributors">Distributors</Link>
         <Link href="/analytics">Audience</Link>
