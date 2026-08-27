@@ -129,6 +129,12 @@ describe("ReportingService audience analytics", () => {
     expect(source).toContain("comparisonRange");
     expect(source).toContain("comparisonTotals");
   });
+
+  it("includes zero-activity calendar dates in the daily trend", () => {
+    const source = new ReportingService().audienceAnalytics.toString();
+    expect(source).toContain("date.setUTCDate(date.getUTCDate() + 1)");
+    expect(source).toContain("daily.set(date.toISOString().slice(0, 10), emptyCounts())");
+  });
 });
 
 describe("ReportingService distributor box-office export", () => {

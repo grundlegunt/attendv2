@@ -489,6 +489,9 @@ export class ReportingService {
     const totals = emptyCounts();
     const comparisonTotals = emptyCounts();
     const daily = new Map<string, Record<EventName, number>>();
+    for (const date = new Date(range.from); date < range.to; date.setUTCDate(date.getUTCDate() + 1)) {
+      daily.set(date.toISOString().slice(0, 10), emptyCounts());
+    }
     const pages = new Map<string, number>();
     for (const row of rows) {
       if (!events.includes(row.event as EventName)) continue;
