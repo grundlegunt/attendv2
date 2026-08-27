@@ -294,6 +294,9 @@ function money(cents: number) {
     currency: "USD",
   }).format(cents / 100);
 }
+function csvCell(value: string | number | boolean) {
+  return `"${String(value).replaceAll('"', '""')}"`;
+}
 function healthRate(value: number | null) { return value === null ? "No activity" : `${value.toFixed(2)}%`; }
 function dateInputValue(date: Date) { return date.toISOString().slice(0, 10); }
 function revenuePath(
@@ -1343,6 +1346,50 @@ export default function AttendMaster() {
     overview,
     paymentFilter,
   ]);
+
+  function exportClientDirectory() {
+    const headers = [
+      "Client",
+      "Legal name",
+      "Business type",
+      "Timezone",
+      "Active",
+      "Default admission model",
+      "Stripe connected",
+      "Stripe onboarding status",
+      "Locations",
+      "Active locations",
+      "Auditoriums",
+      "Employees",
+      "Menu items",
+      "Upcoming showtimes",
+    ];
+    const rows = filteredOrganizations.map((item) => [
+      item.name,
+      item.legalName ?? "",
+      item.businessTypeLabel ?? "",
+      item.timezone,
+      item.active,
+      item.defaultSeatingMode,
+      item.payments.connected,
+      item.payments.onboardingStatus,
+      item.locations.length,
+      item.locations.filter((location) => location.active).length,
+      item.locations.reduce((sum, location) => sum + location.configuration.auditoriums, 0),
+      item.locations.reduce((sum, location) => sum + location.configuration.employees, 0),
+      item.locations.reduce((sum, location) => sum + location.configuration.menuItems, 0),
+      item.locations.reduce((sum, location) => sum + location.configuration.upcomingShowtimes, 0),
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-master-clients-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (!restored)
     return (
@@ -4007,6 +4054,14 @@ export default function AttendMaster() {
               <strong>{filteredOrganizations.length}</strong>
               <span>of {overview?.organizations.length ?? 0} clients</span>
             </div>
+            <button
+              className="quiet"
+              type="button"
+              disabled={!overview || filteredOrganizations.length === 0}
+              onClick={exportClientDirectory}
+            >
+              Export CSV
+            </button>
           </section>
           <section className="organizations">
             {!overview && !error && (
