@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { platformDownload, platformRequest, readPlatformSession, revokePlatformSession } from "./platform-session";
 import { CompanySignIn } from "./company-sign-in";
+import { PlatformNav } from "./platform-nav";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -231,21 +232,7 @@ export default function PlatformDashboard() {
           <button className="quiet" onClick={signOut}>Sign out</button>
         </div>
       </header>
-      <nav className="platform-nav" aria-label="Ringo Master">
-        <Link className="active" href="/">Dashboard</Link>
-        <Link href="/clients">Clients</Link>
-        <Link href="/benchmarks">Benchmarks</Link>
-        <Link href="/films">Films</Link>
-        <Link href="/distributors">Distributors</Link>
-        <Link href="/analytics">Audience</Link>
-        <Link href="/onboarding">Onboarding</Link>
-        <Link href="/payments">Payments</Link>
-        <Link href="/operations">Operations</Link>
-        <Link href="/content">Content</Link>
-        <Link href="/branding">Branding</Link>
-        {session.user.role === "OWNER" && <Link href="/team">Team</Link>}
-        <Link href="/audit">Audit Log</Link>
-      </nav>
+      <PlatformNav role={session.user.role} />
       {error && <div className="error">{error}</div>}
       <section className="dashboard-summary" aria-label="Platform metrics">
         <article><span>Clients</span><strong>{metrics.clients}</strong><small>theater organizations</small></article>
