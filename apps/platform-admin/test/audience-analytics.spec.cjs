@@ -27,6 +27,10 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(controller, /@Get\("audience-analytics\.csv"\)/);
   assert.match(service, /audienceAnalyticsCsv\(/);
   assert.match(service, /Top page/);
+  assert.match(service, /Acquisition Source/);
+  assert.match(service, /Acquisition source/);
+  assert.match(page, /How customers arrived/);
+  assert.match(page, /raw referrers, or campaign parameters/);
   assert.match(page, /ringo-master-audience-\$\{from\}-to-\$\{to\}\.csv/);
   assert.match(page, />Export CSV<\/button>/);
 });
