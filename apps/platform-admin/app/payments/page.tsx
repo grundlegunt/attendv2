@@ -55,6 +55,10 @@ function percentage(numerator: number, denominator: number) {
   return denominator > 0 ? `${(numerator / denominator * 100).toFixed(2)}%` : "No activity";
 }
 
+function csvCell(value: unknown) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
 export default function PlatformPayments() {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
@@ -197,6 +201,36 @@ export default function PlatformPayments() {
     }
   }
 
+  function exportPaymentOperations() {
+    const columns = ["Client", "Legal name", "Locations", "Stripe status", "Failed payments 24h", "Processing payments", "Payment reviews", "Failed refunds", "Stale payments", "Stale refunds", "Manager-review tabs", "Expired seat holds", "Payment failure rate 7d", "Payment failure rate prior 7d", "Refund rate 7d", "Refund rate prior 7d", "Last successful payment"];
+    const rows = displayedOrganizations.map((organization) => [
+      organization.name,
+      organization.legalName,
+      organization.locations.length,
+      organization.payments.onboardingStatus,
+      organization.health.failedPayments24h,
+      organization.health.processingPayments,
+      organization.health.verificationReviews,
+      organization.health.failedRefunds,
+      organization.health.stalePayments,
+      organization.health.staleRefunds,
+      organization.health.managerReviewTabs,
+      organization.health.expiredHoldBacklog,
+      organization.health.trends.paymentFailure.current.ratePercent,
+      organization.health.trends.paymentFailure.previous.ratePercent,
+      organization.health.trends.refunds.current.ratePercent,
+      organization.health.trends.refunds.previous.ratePercent,
+      organization.health.lastSuccessfulPaymentAt,
+    ]);
+    const blob = new Blob([[columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-master-payment-operations-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
@@ -233,7 +267,7 @@ export default function PlatformPayments() {
         <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
       </section>
-      <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><span>{displayedOrganizations.length} of {overview?.organizations.length ?? 0} clients</span></div>
+      <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><div className="payments-toolbar-actions"><span>{displayedOrganizations.length} of {overview?.organizations.length ?? 0} clients</span><button className="quiet" type="button" disabled={!overview || displayedOrganizations.length === 0} onClick={exportPaymentOperations}>Export CSV</button></div></div>
       <section className="payments-filters" aria-label="Filter payment operations">
         <label>Find client<input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cinema or legal name" /></label>
         <label>Stripe status<select value={onboardingStatus} onChange={(event) => setOnboardingStatus(event.target.value)}><option value="ALL">All statuses</option><option value="COMPLETE">Complete</option><option value="IN_PROGRESS">In progress</option><option value="NOT_STARTED">Not started</option></select></label>
