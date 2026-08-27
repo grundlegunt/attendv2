@@ -34,3 +34,10 @@ test("payment operations can find clients and filter Stripe readiness", () => {
   assert.match(source, /Clear filters/);
   assert.match(source, /organization\.payments\.onboardingStatus !== onboardingStatus/);
 });
+
+test("payment operations exports the current filtered client view", () => {
+  assert.match(source, /function exportPaymentOperations/);
+  assert.match(source, /displayedOrganizations\.map/);
+  assert.match(source, /ringo-master-payment-operations-/);
+  assert.match(source, />Export CSV<\/button>/);
+});
