@@ -65,7 +65,20 @@ const revenueRanges = [
   { days: 365, label: "Last year" },
 ] as const;
 
-function revenueRange(days: number, format: "json" | "csv" = "json") { const to = new Date(); const from = days === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - days * 86_400_000); return `/platform/revenue${format === "csv" ? ".csv" : ""}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`; }
+type RevenueRange = (typeof revenueRanges)[number]["days"] | "custom";
+
+function dateInputValue(date: Date) { return date.toISOString().slice(0, 10); }
+
+function revenueRange(range: RevenueRange, customFrom = "", customTo = "", format: "json" | "csv" = "json") {
+  const path = `/platform/revenue${format === "csv" ? ".csv" : ""}`;
+  if (range === "custom") {
+    if (!customFrom || !customTo || customFrom > customTo) return null;
+    return `${path}?from=${encodeURIComponent(`${customFrom}T00:00:00.000Z`)}&to=${encodeURIComponent(`${customTo}T23:59:59.999Z`)}`;
+  }
+  const to = new Date();
+  const from = range === 1 ? new Date(to.getFullYear(), to.getMonth(), to.getDate()) : new Date(to.getTime() - range * 86_400_000);
+  return `${path}?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+}
 
 export default function PlatformDashboard() {
   const [session, setSession] = useState<Session | null>(null);
@@ -73,7 +86,9 @@ export default function PlatformDashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
   const [revenue, setRevenue] = useState<RevenueReport | null>(null);
-  const [revenueDays, setRevenueDays] = useState(7);
+  const [revenueRangeKey, setRevenueRangeKey] = useState<RevenueRange>(7);
+  const [customFrom, setCustomFrom] = useState(() => { const date = new Date(); date.setUTCDate(date.getUTCDate() - 30); return dateInputValue(date); });
+  const [customTo, setCustomTo] = useState(() => dateInputValue(new Date()));
   const [revenueLoading, setRevenueLoading] = useState(false);
   const overviewRequestRef = useRef(0);
   const revenueRequestRef = useRef(0);
@@ -92,7 +107,7 @@ export default function PlatformDashboard() {
     let active = true;
     const overviewRequestId = ++overviewRequestRef.current;
     const revenueRequestId = ++revenueRequestRef.current;
-    Promise.all([request<Overview>("/platform/overview", undefined, session.accessToken), request<RevenueReport>(revenueRange(7), undefined, session.accessToken)])
+    Promise.all([request<Overview>("/platform/overview", undefined, session.accessToken), request<RevenueReport>(revenueRange(7)!, undefined, session.accessToken)])
       .then(([nextOverview, nextRevenue]) => {
         if (!active) return;
         if (overviewRequestId === overviewRequestRef.current) setOverview(nextOverview);
@@ -106,12 +121,15 @@ export default function PlatformDashboard() {
     };
   }, [session]);
 
-  async function loadRevenue(days: number) {
+  async function loadRevenue(range: RevenueRange, from = customFrom, to = customTo) {
     if (!session) return;
+    const path = revenueRange(range, from, to);
+    setRevenueRangeKey(range);
+    if (!path) return;
     const requestId = ++revenueRequestRef.current;
-    setRevenueDays(days); setRevenueLoading(true); setError(null);
+    setRevenueLoading(true); setError(null);
     try {
-      const nextRevenue = await request<RevenueReport>(revenueRange(days), undefined, session.accessToken);
+      const nextRevenue = await request<RevenueReport>(path, undefined, session.accessToken);
       if (requestId === revenueRequestRef.current) setRevenue(nextRevenue);
     }
     catch (reason) { if (requestId === revenueRequestRef.current) setError(reason instanceof Error ? reason.message : "Could not load platform revenue."); }
@@ -134,12 +152,14 @@ export default function PlatformDashboard() {
 
   async function downloadRevenue() {
     if (!session) return;
+    const path = revenueRange(revenueRangeKey, customFrom, customTo, "csv");
+    if (!path) return;
     setRevenueLoading(true); setError(null);
     try {
-      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, revenueRange(revenueDays, "csv"), session.accessToken);
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, path, session.accessToken);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
-      anchor.href = url; anchor.download = `attend-master-revenue-${revenueDays}-day.csv`; anchor.click();
+      anchor.href = url; anchor.download = `ringo-master-revenue-${revenueRangeKey === "custom" ? `${customFrom}-to-${customTo}` : `${revenueRangeKey}-day`}.csv`; anchor.click();
       URL.revokeObjectURL(url);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not export platform revenue."); }
     finally { setRevenueLoading(false); }
@@ -258,7 +278,8 @@ export default function PlatformDashboard() {
         </div>}
       </section>
       <section className="dashboard-panel platform-revenue">
-        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="revenue-actions"><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueDays === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}</div><button className="quiet" disabled={revenueLoading || !revenue} onClick={() => void downloadRevenue()}>Export CSV</button></div></div>
+        <div className="panel-heading"><div><p className="eyebrow">REVENUE</p><h2>Cross-client activity</h2></div><div className="revenue-actions"><div className="range-toggle" aria-label="Revenue date range">{revenueRanges.map((range) => <button key={range.days} className={revenueRangeKey === range.days ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue(range.days)}>{range.label}</button>)}<button className={revenueRangeKey === "custom" ? "active" : "quiet"} disabled={revenueLoading} onClick={() => void loadRevenue("custom")}>Custom</button></div><button className="quiet" disabled={revenueLoading || !revenue || (revenueRangeKey === "custom" && (!customFrom || !customTo))} onClick={() => void downloadRevenue()}>Export CSV</button></div></div>
+        {revenueRangeKey === "custom" && <div className="custom-range film-custom-range"><label>From<input type="date" value={customFrom} max={customTo} onChange={(event) => { const value = event.target.value; setCustomFrom(value); void loadRevenue("custom", value, customTo); }} /></label><label>To<input type="date" value={customTo} min={customFrom} onChange={(event) => { const value = event.target.value; setCustomTo(value); void loadRevenue("custom", customFrom, value); }} /></label></div>}
         {!revenue && <p className="muted">Loading revenue rollup…</p>}
         {revenue && <><div className="revenue-breakdown"><article><span>Ticket face value</span><strong>{money(revenue.totals.ticketRevenueCents)}</strong></article><article><span>Ringo ticket-fee revenue</span><strong>{money(revenue.totals.ticketFeesCents)}</strong></article><article><span>Ticket tax</span><strong>{money(revenue.totals.ticketTaxCents)}</strong></article><article><span>Ticket total collected</span><strong>{money(revenue.totals.ticketCollectedCents)}</strong></article><article><span>F&amp;B revenue</span><strong>{money(revenue.totals.fnbRevenueCents)}</strong></article><article><span>Cinema net</span><strong>{money(revenue.totals.combinedRevenueCents)}</strong></article><article><span>Memberships</span><strong>{money(revenue.totals.membershipRevenueCents)}</strong><small>{revenue.totals.membershipPurchases.toLocaleString()} purchases</small></article><article><span>Donations</span><strong>{money(revenue.totals.donationRevenueCents)}</strong><small>{revenue.totals.donations.toLocaleString()} contributions</small></article><article><span>All collected</span><strong>{money(revenue.totals.totalCollectedCents)}</strong></article><article><span>Refunds</span><strong>{money(revenue.totals.refundedCents)}</strong></article></div><div className="client-revenue-list"><div><strong>Client</strong><span>Tickets sold</span><span>Cinema net</span><span>Memberships</span><span>Donations</span><span>All collected</span></div>{revenue.clients.map((client) => <Link key={client.id} href={`/clients?organizationId=${encodeURIComponent(client.id)}`}><strong>{client.name}</strong><span>{client.ticketsSold.toLocaleString()}</span><span>{money(client.combinedRevenueCents)}</span><span>{money(client.membershipRevenueCents)}</span><span>{money(client.donationRevenueCents)}</span><span>{money(client.totalCollectedCents)}</span></Link>)}</div><div className="film-revenue-heading"><div><p className="eyebrow">FILM PERFORMANCE</p><h3>Top films across cinemas</h3></div><small>Performance dates follow the selected revenue range.</small></div>{revenue.films.length === 0 ? <p className="empty-state">No ticketed film performances were recorded in this period.</p> : <div className="film-revenue-list"><div><strong>Film</strong><span>Operators</span><span>Locations</span><span>Shows</span><span>Tickets</span><span>Face value</span></div>{revenue.films.slice(0, 10).map((film) => film.catalogEntryId ? <Link key={film.id} href={`/films/${encodeURIComponent(film.catalogEntryId)}`}><strong>{film.title}</strong><span>{film.operators}</span><span>{film.locations}</span><span>{film.showtimes}</span><span>{film.ticketsSold.toLocaleString()}</span><span>{money(film.ticketRevenueCents)}</span></Link> : <div key={film.id} className="unlinked-film"><strong>{film.title}<small>Not linked to catalog</small></strong><span>{film.operators}</span><span>{film.locations}</span><span>{film.showtimes}</span><span>{film.ticketsSold.toLocaleString()}</span><span>{money(film.ticketRevenueCents)}</span></div>)}</div>}</>}
       </section>
