@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { CompanySignIn } from "../company-sign-in";
+import { PlatformNav } from "../platform-nav";
 import { platformRequest, readPlatformSession, revokePlatformSession } from "../platform-session";
 
 const API_BASE_URL =
@@ -244,9 +245,7 @@ export default function PlatformPayments() {
         <div><p className="eyebrow platform-master-label" /><h1>Payments</h1><p className="muted">Stripe Connect readiness across every cinema client.</p></div>
         <div className="identity"><span>{session.user.name}</span><button className="quiet" onClick={signOut}>Sign out</button></div>
       </header>
-      <nav className="platform-nav" aria-label="Ringo Master">
-        <Link href="/">Dashboard</Link><Link href="/clients">Clients</Link><Link href="/films">Films</Link><Link href="/analytics">Audience</Link><Link href="/onboarding">Onboarding</Link><Link className="active" href="/payments">Payments</Link><Link href="/content">Content</Link><Link href="/branding">Branding</Link>{session.user.role === "OWNER" && <Link href="/team">Team</Link>}<Link href="/audit">Audit Log</Link>
-      </nav>
+      <PlatformNav role={session.user.role} />
       {error && <div className="error">{error}</div>}
       <section className="payment-summary" aria-label="Stripe onboarding totals">
         <article><strong>{totals.complete}</strong><span>Complete</span></article>
