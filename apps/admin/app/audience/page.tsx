@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useAdminSession } from "../admin-session";
 import { apiDownload, apiFetch, ApiRequestError } from "../lib/api-client";
-import { inclusiveReportRange, localDateInputValue } from "../report-range";
+import { localDateInputValue } from "../report-range";
 
 type Counts = Record<"Pageview" | "Seat Selection Continued" | "Checkout Started" | "Payment Form Ready" | "Checkout Completed" | "Account Created" | "Gift Card Started" | "Gift Card Purchased" | "Membership Checkout Started" | "Membership Activated" | "Donation Checkout Started" | "Donation Completed" | "Private Event Inquiry Submitted" | "Waitlist Joined", number>;
 type Rates = { seatToCheckoutRatePercent: number | null; paymentFormReadyRatePercent: number | null; paymentCompletionRatePercent: number | null; checkoutCompletionRatePercent: number | null; giftCardCompletionRatePercent: number | null; membershipCompletionRatePercent: number | null; donationCompletionRatePercent: number | null };
@@ -25,7 +25,7 @@ export default function AudiencePage() {
     const requestId = ++requestRef.current;
     setLoading(true); setError(null);
     try {
-      const params = new URLSearchParams(inclusiveReportRange(from, through, timeZone));
+      const params = new URLSearchParams({ from, to: through });
       const next = await apiFetch<Report>(`/reports/audience-analytics?${params}`, { accessToken });
       if (requestId === requestRef.current) setReport(next);
     } catch (reason) {
@@ -35,7 +35,7 @@ export default function AudiencePage() {
   async function download() {
     setLoading(true); setError(null);
     try {
-      const params = new URLSearchParams(inclusiveReportRange(from, through, timeZone));
+      const params = new URLSearchParams({ from, to: through });
       const blob = await apiDownload(`/reports/audience-analytics.csv?${params}`, { accessToken });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
