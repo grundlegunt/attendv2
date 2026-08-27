@@ -1624,6 +1624,9 @@ export class PlatformService {
     const emptyCounts = () => Object.fromEntries(events.map((event) => [event, 0])) as Record<EventName, number>;
     const totals = emptyCounts();
     const daily = new Map<string, Record<EventName, number>>();
+    for (let cursor = new Date(from); cursor <= to; cursor = new Date(cursor.getTime() + 86_400_000)) {
+      daily.set(cursor.toISOString().slice(0, 10), emptyCounts());
+    }
     const locations = new Map<string, { organization: { id: string; name: string }; location: { id: string; name: string }; events: Record<EventName, number>; sources: Map<string, number> }>();
     for (const location of scopedLocations) {
       locations.set(location.id, {

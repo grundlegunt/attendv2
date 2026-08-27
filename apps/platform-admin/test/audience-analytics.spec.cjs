@@ -14,6 +14,8 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(service, /prisma\.location\.findMany/);
   assert.match(service, /active: true/);
   assert.match(service, /organizationId/);
+  assert.match(service, /cursor <= to/);
+  assert.match(service, /daily\.set\(cursor\.toISOString\(\)\.slice\(0, 10\), emptyCounts\(\)\)/);
   assert.match(service, /checkoutCompletionRatePercent/);
   assert.match(service, /seatToCheckoutRatePercent/);
   assert.match(service, /paymentFormReadyRatePercent/);
@@ -25,6 +27,7 @@ test("Master exposes privacy-safe audience analytics with useful funnels", () =>
   assert.match(page, /Private events/);
   assert.match(page, /Top pages/);
   assert.match(page, /Daily customer activity/);
+  assert.match(page, /including dates with no consented activity/);
   assert.match(page, /Seats continued/);
   assert.match(page, /Payment ready/);
   assert.match(controller, /@Get\("audience-analytics\.csv"\)/);
