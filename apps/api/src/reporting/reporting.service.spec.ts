@@ -101,6 +101,17 @@ describe("ReportingService audience origins", () => {
   });
 });
 
+describe("ReportingService audience analytics", () => {
+  it("keeps the operator report location-scoped and privacy-safe", () => {
+    const source = new ReportingService().audienceAnalytics.toString();
+    expect(source).toContain("locationId");
+    expect(source).toContain("customerAnalyticsDaily.findMany");
+    expect(source).toContain('Seat Selection Continued');
+    expect(source).toContain('Payment Form Ready');
+    expect(source).not.toContain("organizationId");
+  });
+});
+
 describe("ReportingService distributor box-office export", () => {
   it("allocates ticket face value by theatrical week and leaves missing terms unallocated", () => {
     const service = new ReportingService();

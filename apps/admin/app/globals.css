@@ -1314,6 +1314,27 @@ form button.secondary { width: 100%; margin-top: 10px; }
 @media (max-width: 900px) { .expense-layout { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .expense-filters { grid-template-columns: 1fr; } .expense-list article { grid-template-columns: 1fr auto; } .expense-list time { grid-column: 1 / -1; } .expense-list article > span { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .distributor-directory-controls, .distributor-film-controls { grid-template-columns: 1fr; } }
+.audience-report-range { margin: 20px 0; }
+.audience-report-range .primary { width: auto; margin: 0; }
+.audience-overview { margin-bottom: 18px; }
+.audience-funnel { margin-bottom: 18px; padding: 24px; border: 1px solid var(--color-border); background: var(--color-bg-elevated); }
+.audience-funnel h2 { margin-top: 0; }
+.audience-funnel > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.audience-funnel article { display: grid; gap: 6px; min-height: 130px; padding: 18px; border: 1px solid var(--color-border); background: var(--color-bg); }
+.audience-funnel article span { color: var(--color-text-secondary); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.audience-funnel article strong { font-family: var(--admin-font-family, inherit); font-size: 2.2rem; }
+.audience-funnel article small { margin-top: auto; color: var(--color-text-secondary); }
+.audience-detail-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, .7fr); gap: 18px; }
+.audience-trend > div { display: grid; grid-template-columns: 58px minmax(80px, 1fr) 78px 78px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--color-border); }
+.audience-trend time { color: var(--color-text-secondary); font-size: .75rem; font-weight: 800; }
+.audience-trend i { height: 7px; overflow: hidden; background: var(--color-bg); }
+.audience-trend i span { display: block; height: 100%; background: var(--color-accent); }
+.audience-trend strong { text-align: right; }
+.audience-trend small { color: var(--color-text-secondary); font-size: .65rem; font-weight: 400; }
+.audience-pages > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border); }
+.audience-pages code { overflow-wrap: anywhere; }
+@media (max-width: 900px) { .audience-funnel > div { grid-template-columns: repeat(2, minmax(0, 1fr)); } .audience-detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { .audience-funnel > div { grid-template-columns: 1fr; } .audience-trend > div { grid-template-columns: 52px minmax(60px, 1fr) 58px; } .audience-trend > div strong:last-child { display: none; } }
 .site-copy-editor { margin-top: 24px; }
 .site-copy-sections { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin: 24px 0; }
 .site-copy-section { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--color-border); background: var(--color-bg); }

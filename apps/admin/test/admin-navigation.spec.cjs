@@ -112,6 +112,11 @@ describe("admin navigation", () => {
     assert.deepEqual(groups.filter((group) => group.items.some((item) => item.href === "/labor")).map((group) => group.label), ["Financial Reports", "Team"]);
   });
 
+  it("gives report viewers access to their cinema's website analytics", () => {
+    const links = visibleAdminNavigation(["reports.view"]).flatMap((group) => group.items);
+    assert.equal(links.some((item) => item.href === "/audience" && item.label === "Website Analytics"), true);
+  });
+
   it("exposes a searchable external-membership directory linked to customer profiles", () => {
     const links = visibleAdminNavigation(["ticket.price.edit"]).flatMap((group) => group.items);
     assert.equal(links.some((item) => item.href === "/memberships"), true);

@@ -471,6 +471,52 @@ export class ReportingService {
     return { range, ...this.summarizeAudienceOrigins(orders) };
   }
 
+  async audienceAnalytics(locationId: string, range: ReportRange) {
+    const events = [
+      "Pageview", "Seat Selection Continued", "Checkout Started", "Payment Form Ready", "Checkout Completed", "Account Created",
+      "Gift Card Started", "Gift Card Purchased", "Membership Checkout Started", "Membership Activated", "Donation Checkout Started",
+      "Donation Completed", "Private Event Inquiry Submitted", "Waitlist Joined",
+    ] as const;
+    type EventName = (typeof events)[number];
+    const emptyCounts = () => Object.fromEntries(events.map((event) => [event, 0])) as Record<EventName, number>;
+    const rows = await prisma.customerAnalyticsDaily.findMany({
+      where: { locationId, date: { gte: range.from, lt: range.to } },
+      orderBy: [{ date: "asc" }, { event: "asc" }],
+      select: { date: true, event: true, path: true, count: true },
+    });
+    const totals = emptyCounts();
+    const daily = new Map<string, Record<EventName, number>>();
+    const pages = new Map<string, number>();
+    for (const row of rows) {
+      if (!events.includes(row.event as EventName)) continue;
+      const event = row.event as EventName;
+      totals[event] += row.count;
+      const date = row.date.toISOString().slice(0, 10);
+      const day = daily.get(date) ?? emptyCounts();
+      day[event] += row.count;
+      daily.set(date, day);
+      if (event === "Pageview" && row.path) pages.set(row.path, (pages.get(row.path) ?? 0) + row.count);
+    }
+    const rate = (completed: number, started: number) => started > 0 ? Number((completed / started * 100).toFixed(2)) : null;
+    const withRates = (counts: Record<EventName, number>) => ({
+      ...counts,
+      seatToCheckoutRatePercent: rate(counts["Checkout Started"], counts["Seat Selection Continued"]),
+      paymentFormReadyRatePercent: rate(counts["Payment Form Ready"], counts["Checkout Started"]),
+      paymentCompletionRatePercent: rate(counts["Checkout Completed"], counts["Payment Form Ready"]),
+      checkoutCompletionRatePercent: rate(counts["Checkout Completed"], counts["Checkout Started"]),
+      giftCardCompletionRatePercent: rate(counts["Gift Card Purchased"], counts["Gift Card Started"]),
+      membershipCompletionRatePercent: rate(counts["Membership Activated"], counts["Membership Checkout Started"]),
+      donationCompletionRatePercent: rate(counts["Donation Completed"], counts["Donation Checkout Started"]),
+    });
+    return {
+      generatedAt: new Date().toISOString(),
+      range,
+      totals: withRates(totals),
+      daily: [...daily.entries()].map(([date, counts]) => ({ date, ...counts })),
+      pages: [...pages.entries()].sort((left, right) => right[1] - left[1]).slice(0, 20).map(([path, count]) => ({ path, count })),
+    };
+  }
+
   summarizeAudienceOrigins(orders: Array<{ zipCode: string | null; _count: { tickets: number } }>) {
     const grouped = new Map<string, { zipCode: string; orders: number; tickets: number }>();
     let ordersWithZip = 0;
