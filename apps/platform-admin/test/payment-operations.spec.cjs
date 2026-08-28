@@ -65,6 +65,8 @@ test("payment operations filters receivables by collection owner", () => {
 test("payment operations supports operator-scoped collections deep links", () => {
   assert.match(source, /setRemittanceOrganizationFilter\(organizationId\)/);
   assert.match(source, /params\.get\("followUp"\)/);
+  assert.match(source, /params\.get\("age"\)/);
+  assert.match(source, /setRemittanceAgingFilter\(age\)/);
   assert.match(source, /remittance\.organizationId !== remittanceOrganizationFilter/);
   assert.match(source, />All operators<\/option>/);
 });

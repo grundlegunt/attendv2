@@ -23,5 +23,9 @@ test("operations queue supports focused resolution workflows", () => {
   assert.match(source, /Resolve →/);
   assert.match(source, /\/payments\?organizationId=/);
   assert.match(source, /followUp=OVERDUE/);
+  assert.match(source, /age=60_PLUS/);
+  assert.match(source, /age=31_60/);
+  assert.match(source, /age=1_30/);
+  assert.match(source, /Critical ticket-fee remittances/);
   assert.match(source, /locationId=/);
 });
