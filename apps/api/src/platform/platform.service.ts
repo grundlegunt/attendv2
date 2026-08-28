@@ -1294,7 +1294,7 @@ export class PlatformService {
       orderBy: { name: "asc" },
       include: {
         locations: { orderBy: { name: "asc" } },
-        ticketFeeRemittances: { orderBy: { periodFrom: "desc" }, take: 24 },
+        ticketFeeRemittances: { orderBy: { periodFrom: "desc" } },
       },
     });
     const locationIds = organizations.flatMap((organization) =>
