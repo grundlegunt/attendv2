@@ -170,6 +170,7 @@ interface OrganizationDetail {
     notes: string | null;
     lastContactedAt: string | null;
     nextFollowUpAt: string | null;
+    collectionOwner: { id: string; name: string; email: string } | null;
     createdAt: string;
   }>;
   createdAt: string;
@@ -933,11 +934,29 @@ export default function AttendMaster() {
           notes: notes.trim() || null,
           lastContactedAt: new Date().toISOString(),
           nextFollowUpAt: followUpDate.trim() ? `${followUpDate.trim()}T23:59:59.999Z` : null,
+          collectionOwnerId: session.user.id,
         }),
       }, session.accessToken);
       setOrganization(await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not log the collection contact.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function assignTicketFeeRemittanceToMe(remittanceId: string) {
+    if (!session || !organization) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request(`/platform/ticket-fee-remittances/${remittanceId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ collectionOwnerId: session.user.id }),
+      }, session.accessToken);
+      setOrganization(await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not assign the remittance.");
     } finally {
       setSaving(false);
     }
@@ -2056,7 +2075,7 @@ export default function AttendMaster() {
                   <div><small>Current tier</small><strong>{organization.ticketFeeSettlement.activeTier.startsAtTicket.toLocaleString()}–{organization.ticketFeeSettlement.activeTier.endsAtTicket?.toLocaleString() ?? "∞"}</strong><em>{organization.ticketFeeSettlement.activeTier.ticketsRemaining === null ? "Final tier" : `${organization.ticketFeeSettlement.activeTier.ticketsRemaining.toLocaleString()} tickets until next tier`}</em></div>
                 </div>}
                 {organization.ticketFeeSettlement?.periodTo && new Date(organization.ticketFeeSettlement.periodTo) <= new Date() && !organization.ticketFeeRemittances.some((remittance) => remittance.agreementId === organization.ticketFeeSettlement?.agreementId && remittance.periodFrom === organization.ticketFeeSettlement?.periodFrom) && <div className="remittance-finalize"><label>Remittance due date<input type="date" value={ticketFeeRemittanceDueDate} onChange={(event) => setTicketFeeRemittanceDueDate(event.target.value)} /></label><div><p>This settlement period is complete and may be locked as an operator remittance receivable.</p><button disabled={saving} onClick={() => void finalizeTicketFeeRemittance()}>Finalize period</button></div></div>}
-                {organization.ticketFeeRemittances.length > 0 && <div className="remittance-ledger"><div className="editor-heading"><div><p className="eyebrow">REMITTANCE LEDGER</p><h4>Operator fee remittances</h4></div></div>{organization.ticketFeeRemittances.map((remittance) => <article key={remittance.id}><div><span className={`status-chip ${remittance.status === "PAID" ? "status-success" : remittance.status === "VOID" ? "status-danger" : ""}`}>{remittance.status}</span><strong>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</strong><small>{remittance.ticketCount.toLocaleString()} tickets · {money(remittance.collectedFeeCents)} customer fees</small>{remittance.notes && <small>Collection note: {remittance.notes}</small>}{remittance.lastContactedAt && <small>Last contacted {new Date(remittance.lastContactedAt).toLocaleDateString()}</small>}{remittance.nextFollowUpAt && <small>Next follow-up {new Date(remittance.nextFollowUpAt).toLocaleDateString()}</small>}</div><div><small>Ringo receivable</small><strong>{money(remittance.platformShareCents)}</strong><em>{remittance.status === "PAID" ? `Paid ${remittance.paidAt ? new Date(remittance.paidAt).toLocaleDateString() : ""}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</em>{remittance.paymentReference && <em>Ref: {remittance.paymentReference}</em>}</div>{session.user.role !== "VIEWER" && <div className="remittance-actions"><button className="quiet" disabled={saving} onClick={() => void editTicketFeeRemittanceNotes(remittance.id, remittance.status, remittance.notes)}>{remittance.notes ? "Edit note" : "Add note"}</button>{remittance.status === "DUE" && <><button className="quiet" disabled={saving} onClick={() => void logTicketFeeRemittanceContact(remittance.id, remittance.notes)}>Log contact</button><button disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "PAID")}>Mark paid</button><button className="danger" disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "VOID")}>Void</button></>}</div>}</article>)}</div>}
+                {organization.ticketFeeRemittances.length > 0 && <div className="remittance-ledger"><div className="editor-heading"><div><p className="eyebrow">REMITTANCE LEDGER</p><h4>Operator fee remittances</h4></div></div>{organization.ticketFeeRemittances.map((remittance) => <article key={remittance.id}><div><span className={`status-chip ${remittance.status === "PAID" ? "status-success" : remittance.status === "VOID" ? "status-danger" : ""}`}>{remittance.status}</span><strong>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</strong><small>{remittance.ticketCount.toLocaleString()} tickets · {money(remittance.collectedFeeCents)} customer fees</small><small>Collection owner: {remittance.collectionOwner?.name ?? "Unassigned"}</small>{remittance.notes && <small>Collection note: {remittance.notes}</small>}{remittance.lastContactedAt && <small>Last contacted {new Date(remittance.lastContactedAt).toLocaleDateString()}</small>}{remittance.nextFollowUpAt && <small>Next follow-up {new Date(remittance.nextFollowUpAt).toLocaleDateString()}</small>}</div><div><small>Ringo receivable</small><strong>{money(remittance.platformShareCents)}</strong><em>{remittance.status === "PAID" ? `Paid ${remittance.paidAt ? new Date(remittance.paidAt).toLocaleDateString() : ""}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</em>{remittance.paymentReference && <em>Ref: {remittance.paymentReference}</em>}</div>{session.user.role !== "VIEWER" && <div className="remittance-actions"><button className="quiet" disabled={saving} onClick={() => void editTicketFeeRemittanceNotes(remittance.id, remittance.status, remittance.notes)}>{remittance.notes ? "Edit note" : "Add note"}</button>{remittance.status === "DUE" && <><button className="quiet" disabled={saving} onClick={() => void assignTicketFeeRemittanceToMe(remittance.id)}>Assign to me</button><button className="quiet" disabled={saving} onClick={() => void logTicketFeeRemittanceContact(remittance.id, remittance.notes)}>Log contact</button><button disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "PAID")}>Mark paid</button><button className="danger" disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "VOID")}>Void</button></>}</div>}</article>)}</div>}
                 {organization.ticketFeeAgreements.length > 0 && <div className="agreement-history">
                   {organization.ticketFeeAgreements.map((agreement, index) => <article key={agreement.id}>
                     <div><span className={`status-chip ${index === 0 && !agreement.effectiveTo ? "status-success" : ""}`}>{index === 0 && !agreement.effectiveTo ? "Current version" : "Historical version"}</span><h4>{agreement.name}</h4><p>{new Date(agreement.effectiveFrom).toLocaleDateString()} – {agreement.effectiveTo ? new Date(agreement.effectiveTo).toLocaleDateString() : "present"} · {agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p></div>

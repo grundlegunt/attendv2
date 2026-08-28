@@ -1294,7 +1294,7 @@ export class PlatformService {
       orderBy: { name: "asc" },
       include: {
         locations: { orderBy: { name: "asc" } },
-        ticketFeeRemittances: { orderBy: { periodFrom: "desc" } },
+        ticketFeeRemittances: { orderBy: { periodFrom: "desc" }, include: { collectionOwner: { select: { id: true, name: true, email: true } } } },
       },
     });
     const locationIds = organizations.flatMap((organization) =>
@@ -1405,6 +1405,7 @@ export class PlatformService {
               notes: remittance.notes,
               lastContactedAt: remittance.lastContactedAt?.toISOString() ?? null,
               nextFollowUpAt: remittance.nextFollowUpAt?.toISOString() ?? null,
+              collectionOwner: remittance.collectionOwner,
             })),
             locations: organization.locations.map((location) => {
               const auditoriums = auditoriumCounts.get(location.id) ?? 0;
@@ -2246,7 +2247,7 @@ export class PlatformService {
           orderBy: { effectiveFrom: "desc" },
           include: { tiers: { orderBy: { startsAtTicket: "asc" } } },
         },
-        ticketFeeRemittances: { orderBy: { periodFrom: "desc" } },
+        ticketFeeRemittances: { orderBy: { periodFrom: "desc" }, include: { collectionOwner: { select: { id: true, name: true, email: true } } } },
       },
     });
     if (!organization)
@@ -2287,6 +2288,7 @@ export class PlatformService {
         paidAt: remittance.paidAt?.toISOString() ?? null,
         lastContactedAt: remittance.lastContactedAt?.toISOString() ?? null,
         nextFollowUpAt: remittance.nextFollowUpAt?.toISOString() ?? null,
+        collectionOwner: remittance.collectionOwner,
         createdAt: remittance.createdAt.toISOString(),
         updatedAt: remittance.updatedAt.toISOString(),
       })),
@@ -2624,6 +2626,7 @@ export class PlatformService {
     notes?: string | null;
     lastContactedAt?: string | null;
     nextFollowUpAt?: string | null;
+    collectionOwnerId?: string | null;
   }) {
     return prisma.$transaction(async (tx) => {
       const before = await tx.ticketFeeRemittance.findUnique({ where: { id: input.remittanceId } });
@@ -2638,6 +2641,7 @@ export class PlatformService {
           notes: input.notes === undefined ? before.notes : input.notes,
           lastContactedAt: input.lastContactedAt === undefined ? before.lastContactedAt : input.lastContactedAt ? new Date(input.lastContactedAt) : null,
           nextFollowUpAt: input.nextFollowUpAt === undefined ? before.nextFollowUpAt : input.nextFollowUpAt ? new Date(input.nextFollowUpAt) : null,
+          collectionOwnerId: input.collectionOwnerId === undefined ? before.collectionOwnerId : input.collectionOwnerId,
         },
       });
       await this.audit.record({

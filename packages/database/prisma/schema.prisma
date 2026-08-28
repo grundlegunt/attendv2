@@ -111,16 +111,19 @@ model TicketFeeRemittance {
   notes                  String?
   lastContactedAt        DateTime?
   nextFollowUpAt         DateTime?
+  collectionOwnerId      String?
   createdById            String
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
 
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   agreement    TicketFeeAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+  collectionOwner PlatformUser?    @relation("TicketFeeRemittanceCollectionOwner", fields: [collectionOwnerId], references: [id], onDelete: SetNull)
 
   @@unique([agreementId, periodFrom])
   @@index([organizationId, status, dueDate])
   @@index([status, nextFollowUpAt])
+  @@index([collectionOwnerId, status])
   @@map("ticket_fee_remittances")
 }
 
@@ -151,6 +154,7 @@ model PlatformUser {
   refreshTokenVersion Int              @default(0)
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
+  collectionRemittances TicketFeeRemittance[] @relation("TicketFeeRemittanceCollectionOwner")
 
   @@map("platform_users")
 }

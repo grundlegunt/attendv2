@@ -55,6 +55,7 @@ const ticketFeeRemittanceUpdateSchema = z.object({
   notes: z.string().trim().max(2000).nullable().optional(),
   lastContactedAt: z.string().datetime().nullable().optional(),
   nextFollowUpAt: z.string().datetime().nullable().optional(),
+  collectionOwnerId: z.string().uuid().nullable().optional(),
 }).strict();
 
 const connectOnboardingSchema = z.object({
