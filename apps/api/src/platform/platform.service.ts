@@ -2620,7 +2620,7 @@ export class PlatformService {
   async updateTicketFeeRemittance(input: {
     actorId: string;
     remittanceId: string;
-    status: "DUE" | "PAID" | "VOID";
+    status?: "DUE" | "PAID" | "VOID";
     paidAt?: string | null;
     paymentReference?: string | null;
     notes?: string | null;
@@ -2631,11 +2631,14 @@ export class PlatformService {
     return prisma.$transaction(async (tx) => {
       const before = await tx.ticketFeeRemittance.findUnique({ where: { id: input.remittanceId } });
       if (!before) throw AppError.notFound("Ticket-fee remittance not found.");
-      const paidAt = input.status === "PAID" ? new Date(input.paidAt ?? Date.now()) : null;
+      const status = input.status ?? before.status;
+      const paidAt = input.status === undefined
+        ? before.paidAt
+        : status === "PAID" ? new Date(input.paidAt ?? before.paidAt ?? Date.now()) : null;
       const remittance = await tx.ticketFeeRemittance.update({
         where: { id: input.remittanceId },
         data: {
-          status: input.status,
+          status,
           paidAt,
           paymentReference: input.paymentReference === undefined ? before.paymentReference : input.paymentReference,
           notes: input.notes === undefined ? before.notes : input.notes,

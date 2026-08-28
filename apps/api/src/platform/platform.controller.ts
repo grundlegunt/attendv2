@@ -49,7 +49,7 @@ const ticketFeeRemittanceCreateSchema = z.object({
 }).strict();
 
 const ticketFeeRemittanceUpdateSchema = z.object({
-  status: z.enum(["DUE", "PAID", "VOID"]),
+  status: z.enum(["DUE", "PAID", "VOID"]).optional(),
   paidAt: z.string().datetime().nullable().optional(),
   paymentReference: z.string().trim().max(200).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
