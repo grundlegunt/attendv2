@@ -109,6 +109,8 @@ model TicketFeeRemittance {
   paidAt                 DateTime?
   paymentReference       String?
   notes                  String?
+  lastContactedAt        DateTime?
+  nextFollowUpAt         DateTime?
   createdById            String
   createdAt              DateTime                  @default(now())
   updatedAt              DateTime                  @updatedAt
@@ -118,6 +120,7 @@ model TicketFeeRemittance {
 
   @@unique([agreementId, periodFrom])
   @@index([organizationId, status, dueDate])
+  @@index([status, nextFollowUpAt])
   @@map("ticket_fee_remittances")
 }
 

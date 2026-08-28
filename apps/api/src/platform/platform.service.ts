@@ -1403,6 +1403,8 @@ export class PlatformService {
               paidAt: remittance.paidAt?.toISOString() ?? null,
               paymentReference: remittance.paymentReference,
               notes: remittance.notes,
+              lastContactedAt: remittance.lastContactedAt?.toISOString() ?? null,
+              nextFollowUpAt: remittance.nextFollowUpAt?.toISOString() ?? null,
             })),
             locations: organization.locations.map((location) => {
               const auditoriums = auditoriumCounts.get(location.id) ?? 0;
@@ -2283,6 +2285,8 @@ export class PlatformService {
         statementAsOf: remittance.statementAsOf.toISOString(),
         dueDate: remittance.dueDate?.toISOString() ?? null,
         paidAt: remittance.paidAt?.toISOString() ?? null,
+        lastContactedAt: remittance.lastContactedAt?.toISOString() ?? null,
+        nextFollowUpAt: remittance.nextFollowUpAt?.toISOString() ?? null,
         createdAt: remittance.createdAt.toISOString(),
         updatedAt: remittance.updatedAt.toISOString(),
       })),
@@ -2618,6 +2622,8 @@ export class PlatformService {
     paidAt?: string | null;
     paymentReference?: string | null;
     notes?: string | null;
+    lastContactedAt?: string | null;
+    nextFollowUpAt?: string | null;
   }) {
     return prisma.$transaction(async (tx) => {
       const before = await tx.ticketFeeRemittance.findUnique({ where: { id: input.remittanceId } });
@@ -2630,6 +2636,8 @@ export class PlatformService {
           paidAt,
           paymentReference: input.paymentReference === undefined ? before.paymentReference : input.paymentReference,
           notes: input.notes === undefined ? before.notes : input.notes,
+          lastContactedAt: input.lastContactedAt === undefined ? before.lastContactedAt : input.lastContactedAt ? new Date(input.lastContactedAt) : null,
+          nextFollowUpAt: input.nextFollowUpAt === undefined ? before.nextFollowUpAt : input.nextFollowUpAt ? new Date(input.nextFollowUpAt) : null,
         },
       });
       await this.audit.record({
