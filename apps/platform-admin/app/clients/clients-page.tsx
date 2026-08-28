@@ -949,13 +949,17 @@ export default function AttendMaster() {
     if (!session || !organization) return;
     const paymentReference = status === "PAID" ? window.prompt("Payment reference (ACH, check, or transfer ID)") : null;
     if (status === "PAID" && paymentReference === null) return;
+    if (status === "PAID" && !paymentReference?.trim()) {
+      setError("Enter a payment reference before marking this remittance paid.");
+      return;
+    }
     if (status === "VOID" && !window.confirm("Void this remittance? The original financial snapshot will remain in the audit trail.")) return;
     setSaving(true);
     setError(null);
     try {
       await request(`/platform/ticket-fee-remittances/${remittanceId}`, {
         method: "PATCH",
-        body: JSON.stringify({ status, paymentReference: paymentReference || null }),
+        body: JSON.stringify({ status, paymentReference: paymentReference?.trim() || null }),
       }, session.accessToken);
       setOrganization(await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken));
     } catch (reason) {

@@ -2638,12 +2638,18 @@ export class PlatformService {
       const paidAt = input.status === undefined
         ? before.paidAt
         : status === "PAID" ? new Date(input.paidAt ?? before.paidAt ?? Date.now()) : null;
+      const paymentReference = input.paymentReference === undefined
+        ? before.paymentReference
+        : input.paymentReference?.trim() || null;
+      if (status === "PAID" && !paymentReference) {
+        throw AppError.validationFailed("A payment reference is required before a ticket-fee remittance can be marked paid.");
+      }
       const remittance = await tx.ticketFeeRemittance.update({
         where: { id: input.remittanceId },
         data: {
           status,
           paidAt,
-          paymentReference: input.paymentReference === undefined ? before.paymentReference : input.paymentReference,
+          paymentReference,
           notes: input.notes === undefined ? before.notes : input.notes,
           lastContactedAt: input.lastContactedAt === undefined ? before.lastContactedAt : input.lastContactedAt ? new Date(input.lastContactedAt) : null,
           nextFollowUpAt: input.nextFollowUpAt === undefined ? before.nextFollowUpAt : input.nextFollowUpAt ? new Date(input.nextFollowUpAt) : null,
