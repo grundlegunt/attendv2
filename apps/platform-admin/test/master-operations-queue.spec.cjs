@@ -57,3 +57,11 @@ test("operations queue exposes priority for rapid triage", () => {
   assert.match(source, />Priority<\/span>/);
   assert.match(source, /operations-priority/);
 });
+
+test("operations summary highlights and opens urgent work", () => {
+  assert.match(source, /const urgentItems = allItems\.filter/);
+  assert.match(source, /Urgent groups/);
+  assert.match(source, /urgentItems\.length/);
+  assert.match(source, /onClick=\{\(\) => setPriority\("Urgent"\)\}/);
+  assert.match(source, /View urgent only →/);
+});
