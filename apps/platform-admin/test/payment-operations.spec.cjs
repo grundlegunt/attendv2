@@ -55,6 +55,13 @@ test("payment operations filters the collections ledger by follow-up status", ()
   assert.match(source, />Not scheduled<\/option>/);
 });
 
+test("payment operations filters receivables by collection owner", () => {
+  assert.match(source, /const collectionOwners = useMemo/);
+  assert.match(source, /remittanceOwnerFilter === "UNASSIGNED"/);
+  assert.match(source, />All owners<\/option>/);
+  assert.match(source, /collectionOwners\.map\(\(owner\)/);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);
