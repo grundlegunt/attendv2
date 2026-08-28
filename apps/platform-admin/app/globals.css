@@ -61,6 +61,15 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .payment-trend-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }.payment-trend-summary article { border: 1px solid var(--border); background: var(--surface); display: grid; gap: 7px; padding: 20px 22px; }.payment-trend-summary span { color: var(--muted); font-size: .7rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }.payment-trend-summary strong { color: var(--accent); font-family: var(--font-serif); font-size: 2rem; }.payment-trend-summary small { color: var(--muted); line-height: 1.4; }
 .payment-health-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .payments-loading { padding: 22px; }
+.remittance-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.remittance-summary article { display: grid; gap: 4px; }
+.remittance-summary small { color: var(--muted); }
+.remittance-master-table { border: 1px solid var(--border); background: var(--surface); }
+.remittance-master-table > div, .remittance-master-table > article { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(190px, 1fr) 90px minmax(150px, .75fr) minmax(130px, .65fr) 120px; gap: 16px; align-items: center; padding: 15px 18px; border-bottom: 1px solid var(--border); }
+.remittance-master-table > div { color: var(--muted); font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.remittance-master-table > article:last-child { border-bottom: 0; }
+.remittance-master-table article > span { display: grid; gap: 3px; }
+.remittance-master-table small { color: var(--muted); }
 .link-button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); color: var(--text); font-size: .78rem; font-weight: 900; text-decoration: none; }
 .onboarding-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }.onboarding-summary article { display: flex; align-items: baseline; gap: 12px; padding: 20px 22px; border: 1px solid var(--border); background: var(--surface); }.onboarding-summary strong { font-size: 2.2rem; }.onboarding-summary span { color: var(--muted); font-size: .75rem; font-weight: 900; text-transform: uppercase; }
 .onboarding-filters { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(180px, .45fr) auto auto auto; gap: 12px; align-items: end; margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--border); background: var(--surface); }.onboarding-filters label { margin: 0; }.onboarding-filters input, .onboarding-filters select { min-height: 42px; }.onboarding-filters > span { display: flex; align-items: baseline; gap: 5px; min-height: 42px; padding: 11px 4px; color: var(--muted); font-size: .72rem; white-space: nowrap; }.onboarding-filters > span strong { color: var(--text); font-size: 1.15rem; }.onboarding-filters button { margin: 0; }
@@ -130,6 +139,7 @@ dl { margin: 0; }dl div { display: flex; justify-content: space-between; gap: 14
 @media (max-width: 1100px) { .pipeline-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .onboarding-filters { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 1100px) { .payments-table-heading { display: none; }.payments-table > article { grid-template-columns: 1fr 1fr; }.payment-health, .payment-actions { grid-column: 1 / -1; } }
+@media (max-width: 1100px) { .remittance-master-table > div { display: none; } .remittance-master-table > article { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 1100px) { .payment-health-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 900px) { .payments-filters { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 1050px) { .readiness-grid { grid-template-columns: 1fr; }.readiness-grid > section { border-right: 0; border-bottom: 1px solid var(--border); }.readiness-grid > section:last-child { border-bottom: 0; } }

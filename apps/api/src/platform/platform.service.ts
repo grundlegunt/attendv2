@@ -1292,7 +1292,10 @@ export class PlatformService {
     const now = new Date();
     const organizations = await prisma.organization.findMany({
       orderBy: { name: "asc" },
-      include: { locations: { orderBy: { name: "asc" } } },
+      include: {
+        locations: { orderBy: { name: "asc" } },
+        ticketFeeRemittances: { orderBy: { periodFrom: "desc" }, take: 24 },
+      },
     });
     const locationIds = organizations.flatMap((organization) =>
       organization.locations.map((location) => location.id),
@@ -1386,6 +1389,20 @@ export class PlatformService {
               onboardingStatus: organization.connectOnboardingStatus,
             },
             health,
+            ticketFeeRemittances: organization.ticketFeeRemittances.map((remittance) => ({
+              id: remittance.id,
+              periodFrom: remittance.periodFrom.toISOString(),
+              periodTo: remittance.periodTo.toISOString(),
+              ticketCount: remittance.ticketCount,
+              collectedFeeCents: remittance.collectedFeeCents,
+              platformShareCents: remittance.platformShareCents,
+              operatorShareCents: remittance.operatorShareCents,
+              varianceCents: remittance.varianceCents,
+              status: remittance.status,
+              dueDate: remittance.dueDate?.toISOString() ?? null,
+              paidAt: remittance.paidAt?.toISOString() ?? null,
+              paymentReference: remittance.paymentReference,
+            })),
             locations: organization.locations.map((location) => {
               const auditoriums = auditoriumCounts.get(location.id) ?? 0;
               const employees = employeesByLocation.get(location.id) ?? 0;
