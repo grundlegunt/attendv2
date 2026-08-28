@@ -65,3 +65,10 @@ test("agreement history distinguishes scheduled, current, and historical version
   assert.match(source, /return "Current version"/);
   assert.match(source, /versionStatus === "Scheduled version" \? "scheduled onward"/);
 });
+
+test("Master staff can cancel a scheduled agreement version", () => {
+  assert.match(source, /async function cancelScheduledTicketFeeAgreement/);
+  assert.match(source, /method: "DELETE"/);
+  assert.match(source, /Cancel scheduled version/);
+  assert.match(source, /versionStatus === "Scheduled version" && session\.user\.role !== "VIEWER"/);
+});

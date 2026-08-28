@@ -865,6 +865,21 @@ export default function AttendMaster() {
     }
   }
 
+  async function cancelScheduledTicketFeeAgreement(agreementId: string, agreementName: string) {
+    if (!session || !organization || !window.confirm(`Cancel the scheduled agreement “${agreementName}”?`)) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await request(`/platform/organizations/${organization.id}/ticket-fee-agreements/${agreementId}`, { method: "DELETE" }, session.accessToken);
+      const refreshed = await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken);
+      setOrganization(refreshed);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not cancel the scheduled ticket-fee agreement.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function downloadTicketFeeSettlement() {
     if (!session || !organization) return;
     setError(null);
@@ -2148,7 +2163,7 @@ export default function AttendMaster() {
                   {organization.ticketFeeAgreements.map((agreement) => {
                     const versionStatus = ticketFeeAgreementVersionStatus(agreement);
                     return <article key={agreement.id}>
-                      <div><span className={`status-chip ${versionStatus === "Current version" ? "status-success" : ""}`}>{versionStatus}</span><h4>{agreement.name}</h4><p>{utcCalendarDate(agreement.effectiveFrom)} – {agreement.effectiveTo ? utcCalendarDate(agreement.effectiveTo) : versionStatus === "Scheduled version" ? "scheduled onward" : "present"} · {agreement.tiers.length === 1 ? "flat split" : agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p></div>
+                      <div><span className={`status-chip ${versionStatus === "Current version" ? "status-success" : ""}`}>{versionStatus}</span><h4>{agreement.name}</h4><p>{utcCalendarDate(agreement.effectiveFrom)} – {agreement.effectiveTo ? utcCalendarDate(agreement.effectiveTo) : versionStatus === "Scheduled version" ? "scheduled onward" : "present"} · {agreement.tiers.length === 1 ? "flat split" : agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p>{versionStatus === "Scheduled version" && session.user.role !== "VIEWER" && <button className="danger agreement-cancel-version" disabled={saving} onClick={() => void cancelScheduledTicketFeeAgreement(agreement.id, agreement.name)}>Cancel scheduled version</button>}</div>
                       <div className="agreement-tiers">{agreement.tiers.map((tier) => <span key={tier.startsAtTicket}><strong>{agreement.tiers.length === 1 ? "Every paid ticket" : `${tier.startsAtTicket.toLocaleString()}–${tier.endsAtTicket?.toLocaleString() ?? "∞"} tickets`}</strong><em>Customer {money(agreement.customerFeeMinor)} · Ringo {money(tier.platformShareMinor)} · Operator {money(tier.operatorShareMinor)}</em></span>)}</div>
                     </article>;
                   })}

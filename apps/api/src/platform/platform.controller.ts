@@ -402,6 +402,13 @@ export class PlatformController {
     return this.platform.createTicketFeeAgreement({ actorId: actor.sub, organizationId, ...ticketFeeAgreementCreateSchema.parse(body) });
   }
 
+  @Delete("organizations/:organizationId/ticket-fee-agreements/:agreementId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  cancelScheduledTicketFeeAgreement(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Param("agreementId") agreementId: string) {
+    return this.platform.cancelScheduledTicketFeeAgreement({ actorId: actor.sub, organizationId, agreementId });
+  }
+
   @Get("organizations/:organizationId/ticket-fee-settlement.csv")
   @UseGuards(PlatformAuthGuard)
   async ticketFeeSettlementCsv(@Res() response: Response, @Param("organizationId") organizationId: string, @Query(new ZodValidationPipe(ticketFeeSettlementQuerySchema)) query: unknown) {

@@ -3233,6 +3233,51 @@ export class PlatformService {
     });
   }
 
+  async cancelScheduledTicketFeeAgreement(input: { actorId: string; organizationId: string; agreementId: string }) {
+    return prisma.$transaction(async (tx) => {
+      const agreement = await tx.ticketFeeAgreement.findUnique({
+        where: { id: input.agreementId },
+        include: { tiers: true, remittances: { select: { id: true } } },
+      });
+      if (!agreement || agreement.organizationId !== input.organizationId)
+        throw AppError.notFound("Ticket-fee agreement not found.");
+      if (agreement.effectiveFrom <= new Date())
+        throw AppError.conflict("Only a scheduled ticket-fee agreement may be canceled.");
+      if (agreement.remittances.length)
+        throw AppError.conflict("An agreement with remittance records cannot be canceled.");
+      const laterAgreement = await tx.ticketFeeAgreement.findFirst({
+        where: { organizationId: input.organizationId, effectiveFrom: { gt: agreement.effectiveFrom } },
+        select: { id: true },
+      });
+      if (laterAgreement)
+        throw AppError.conflict("Cancel the latest scheduled agreement version first.");
+      const previous = await tx.ticketFeeAgreement.findFirst({
+        where: { organizationId: input.organizationId, effectiveFrom: { lt: agreement.effectiveFrom } },
+        orderBy: { effectiveFrom: "desc" },
+      });
+      await tx.ticketFeeAgreement.delete({ where: { id: agreement.id } });
+      if (previous?.effectiveTo?.getTime() === agreement.effectiveFrom.getTime())
+        await tx.ticketFeeAgreement.update({ where: { id: previous.id }, data: { effectiveTo: null } });
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        action: "platform.ticket_fee_agreement_canceled",
+        entityType: "TicketFeeAgreement",
+        entityId: agreement.id,
+        beforeState: {
+          organizationId: agreement.organizationId,
+          name: agreement.name,
+          customerFeeMinor: agreement.customerFeeMinor,
+          thresholdPeriod: agreement.thresholdPeriod,
+          effectiveFrom: agreement.effectiveFrom.toISOString(),
+          effectiveTo: agreement.effectiveTo?.toISOString() ?? null,
+          tiers: agreement.tiers,
+        },
+      }, tx);
+      return { canceled: true };
+    });
+  }
+
   async deleteOrganization(input: { actorId: string; organizationId: string }) {
     try {
       return await prisma.$transaction(async (tx) => {
