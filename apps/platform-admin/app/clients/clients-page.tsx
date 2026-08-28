@@ -142,6 +142,7 @@ interface OrganizationDetail {
     agreementId: string;
     agreementName: string;
     thresholdPeriod: "CONTRACT_YEAR" | "CALENDAR_YEAR" | "LIFETIME";
+    asOf: string;
     periodFrom: string;
     periodTo: string | null;
     tickets: number;
@@ -376,6 +377,7 @@ export default function AttendMaster() {
     useState<OrganizationCreateDraft | null>(null);
   const [ticketFeeAgreementDraft, setTicketFeeAgreementDraft] =
     useState<TicketFeeAgreementDraft | null>(null);
+  const [ticketFeeSettlementAsOf, setTicketFeeSettlementAsOf] = useState(() => dateInputValue(new Date()));
   const [locationDraft, setLocationDraft] = useState<{
     id: string;
     values: LocationDraft;
@@ -802,7 +804,8 @@ export default function AttendMaster() {
     if (!session || !organization) return;
     setError(null);
     try {
-      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, `/platform/organizations/${organization.id}/ticket-fee-settlement.csv`, session.accessToken);
+      const asOf = encodeURIComponent(`${ticketFeeSettlementAsOf}T23:59:59.999Z`);
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, `/platform/organizations/${organization.id}/ticket-fee-settlement.csv?asOf=${asOf}`, session.accessToken);
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
@@ -811,6 +814,21 @@ export default function AttendMaster() {
       URL.revokeObjectURL(url);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not export the ticket-fee settlement.");
+    }
+  }
+
+  async function loadTicketFeeSettlement() {
+    if (!session || !organization) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const asOf = encodeURIComponent(`${ticketFeeSettlementAsOf}T23:59:59.999Z`);
+      const settlement = await request<OrganizationDetail["ticketFeeSettlement"]>(`/platform/organizations/${organization.id}/ticket-fee-settlement?asOf=${asOf}`, undefined, session.accessToken);
+      setOrganization({ ...organization, ticketFeeSettlement: settlement });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not load the ticket-fee settlement.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1901,7 +1919,7 @@ export default function AttendMaster() {
                     <h3>Ticket-fee agreement</h3>
                     <p className="muted">Define how the customer fee is divided between Ringo and this operator as ticket volume grows. New versions preserve prior settlement terms.</p>
                   </div>
-                  <div className="panel-actions">{organization.ticketFeeSettlement && <button className="quiet" onClick={() => void downloadTicketFeeSettlement()}>Export statement</button>}{session.user.role !== "VIEWER" && !ticketFeeAgreementDraft && <button onClick={beginTicketFeeAgreementCreate}>{organization.ticketFeeAgreements.length ? "Add future version" : "Create agreement"}</button>}</div>
+                  <div className="panel-actions"><label className="statement-date">Statement as of<input type="date" value={ticketFeeSettlementAsOf} onChange={(event) => setTicketFeeSettlementAsOf(event.target.value)} /></label><button className="quiet" disabled={saving} onClick={() => void loadTicketFeeSettlement()}>View period</button>{organization.ticketFeeSettlement && <button className="quiet" onClick={() => void downloadTicketFeeSettlement()}>Export statement</button>}{session.user.role !== "VIEWER" && !ticketFeeAgreementDraft && <button onClick={beginTicketFeeAgreementCreate}>{organization.ticketFeeAgreements.length ? "Add future version" : "Create agreement"}</button>}</div>
                 </div>
                 {ticketFeeAgreementDraft && <form className="editor commercial-terms-editor" onSubmit={createTicketFeeAgreement}>
                   <div className="editor-heading"><div><p className="eyebrow">NEW VERSION</p><h4>Commercial agreement</h4></div><button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft(null)}>Cancel</button></div>
