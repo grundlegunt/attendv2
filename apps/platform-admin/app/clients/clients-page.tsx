@@ -366,6 +366,14 @@ function dateInputValue(date: Date) { return date.toISOString().slice(0, 10); }
 function utcCalendarDate(value: string) {
   return new Intl.DateTimeFormat("en-US", { timeZone: "UTC" }).format(new Date(value));
 }
+function ticketFeeAgreementVersionStatus(
+  agreement: OrganizationDetail["ticketFeeAgreements"][number],
+  now = new Date(),
+) {
+  if (new Date(agreement.effectiveFrom) > now) return "Scheduled version";
+  if (agreement.effectiveTo && new Date(agreement.effectiveTo) <= now) return "Historical version";
+  return "Current version";
+}
 function ticketFeeAgreementMinEffectiveDate(agreements: OrganizationDetail["ticketFeeAgreements"]) {
   const today = dateInputValue(new Date());
   const latest = agreements.reduce((value, agreement) => agreement.effectiveFrom > value ? agreement.effectiveFrom : value, "");
@@ -2137,10 +2145,13 @@ export default function AttendMaster() {
                 {organization.ticketFeeSettlement?.periodTo && new Date(organization.ticketFeeSettlement.periodTo) <= new Date() && !organization.ticketFeeRemittances.some((remittance) => remittance.agreementId === organization.ticketFeeSettlement?.agreementId && remittance.periodFrom === organization.ticketFeeSettlement?.periodFrom) && <div className="remittance-finalize"><label>Remittance due date<input type="date" value={ticketFeeRemittanceDueDate} onChange={(event) => setTicketFeeRemittanceDueDate(event.target.value)} /></label><div><p>This settlement period is complete and may be locked as an operator remittance receivable.</p><button disabled={saving} onClick={() => void finalizeTicketFeeRemittance()}>Finalize period</button></div></div>}
                 {organization.ticketFeeRemittances.length > 0 && <div className="remittance-ledger"><div className="editor-heading"><div><p className="eyebrow">REMITTANCE LEDGER</p><h4>Operator fee remittances</h4></div></div>{organization.ticketFeeRemittances.map((remittance) => <article key={remittance.id}><div><span className={`status-chip ${remittance.status === "PAID" ? "status-success" : remittance.status === "VOID" ? "status-danger" : ""}`}>{remittance.status}</span><strong>{utcCalendarDate(remittance.periodFrom)} – {utcCalendarDate(remittance.periodTo)}</strong><small>{remittance.ticketCount.toLocaleString()} tickets · {money(remittance.collectedFeeCents)} customer fees</small><small>Collection owner: {remittance.collectionOwner?.name ?? "Unassigned"}</small>{remittance.notes && <small>Collection note: {remittance.notes}</small>}{remittance.lastContactedAt && <small>Last contacted {new Date(remittance.lastContactedAt).toLocaleDateString()}</small>}{remittance.nextFollowUpAt && <small>Next follow-up {new Date(remittance.nextFollowUpAt).toLocaleDateString()}</small>}</div><div><small>Ringo receivable</small><strong>{money(remittance.platformShareCents)}</strong><em>{remittance.status === "PAID" ? `Paid ${remittance.paidAt ? new Date(remittance.paidAt).toLocaleDateString() : ""}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</em>{remittance.paymentReference && <em>Ref: {remittance.paymentReference}</em>}</div>{session.user.role !== "VIEWER" && <div className="remittance-actions"><button className="quiet" disabled={saving} onClick={() => void editTicketFeeRemittanceNotes(remittance.id, remittance.status, remittance.notes)}>{remittance.notes ? "Edit note" : "Add note"}</button>{remittance.status === "DUE" && <><button className="quiet" disabled={saving} onClick={() => void assignTicketFeeRemittanceToMe(remittance.id)}>Assign to me</button><button className="quiet" disabled={saving} onClick={() => void logTicketFeeRemittanceContact(remittance.id, remittance.notes)}>Log contact</button><button disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "PAID")}>Mark paid</button><button className="danger" disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "VOID")}>Void</button></>}</div>}</article>)}</div>}
                 {organization.ticketFeeAgreements.length > 0 && <div className="agreement-history">
-                  {organization.ticketFeeAgreements.map((agreement, index) => <article key={agreement.id}>
-                    <div><span className={`status-chip ${index === 0 && !agreement.effectiveTo ? "status-success" : ""}`}>{index === 0 && !agreement.effectiveTo ? "Current version" : "Historical version"}</span><h4>{agreement.name}</h4><p>{utcCalendarDate(agreement.effectiveFrom)} – {agreement.effectiveTo ? utcCalendarDate(agreement.effectiveTo) : "present"} · {agreement.tiers.length === 1 ? "flat split" : agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p></div>
-                    <div className="agreement-tiers">{agreement.tiers.map((tier) => <span key={tier.startsAtTicket}><strong>{agreement.tiers.length === 1 ? "Every paid ticket" : `${tier.startsAtTicket.toLocaleString()}–${tier.endsAtTicket?.toLocaleString() ?? "∞"} tickets`}</strong><em>Customer {money(agreement.customerFeeMinor)} · Ringo {money(tier.platformShareMinor)} · Operator {money(tier.operatorShareMinor)}</em></span>)}</div>
-                  </article>)}
+                  {organization.ticketFeeAgreements.map((agreement) => {
+                    const versionStatus = ticketFeeAgreementVersionStatus(agreement);
+                    return <article key={agreement.id}>
+                      <div><span className={`status-chip ${versionStatus === "Current version" ? "status-success" : ""}`}>{versionStatus}</span><h4>{agreement.name}</h4><p>{utcCalendarDate(agreement.effectiveFrom)} – {agreement.effectiveTo ? utcCalendarDate(agreement.effectiveTo) : versionStatus === "Scheduled version" ? "scheduled onward" : "present"} · {agreement.tiers.length === 1 ? "flat split" : agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p></div>
+                      <div className="agreement-tiers">{agreement.tiers.map((tier) => <span key={tier.startsAtTicket}><strong>{agreement.tiers.length === 1 ? "Every paid ticket" : `${tier.startsAtTicket.toLocaleString()}–${tier.endsAtTicket?.toLocaleString() ?? "∞"} tickets`}</strong><em>Customer {money(agreement.customerFeeMinor)} · Ringo {money(tier.platformShareMinor)} · Operator {money(tier.operatorShareMinor)}</em></span>)}</div>
+                    </article>;
+                  })}
                 </div>}
               </section>
               <section className="dashboard-panel platform-revenue client-financials">
