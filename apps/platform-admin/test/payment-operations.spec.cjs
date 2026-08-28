@@ -71,6 +71,14 @@ test("payment operations summarizes collection owner workload", () => {
   assert.match(source, /setRemittanceOwnerFilter\(owner\.id\)/);
 });
 
+test("payment operations exports collection owner workload", () => {
+  assert.match(source, /function exportCollectionOwnerWorkload\(\)/);
+  assert.match(source, /collectionOwnerWorkload\.map/);
+  assert.match(source, /"Upcoming follow-ups"/);
+  assert.match(source, /ringo-collection-owner-workload-/);
+  assert.match(source, />Export owner workload<\/button>/);
+});
+
 test("payment operations supports operator-scoped collections deep links", () => {
   assert.match(source, /setRemittanceOrganizationFilter\(organizationId\)/);
   assert.match(source, /params\.get\("followUp"\)/);
