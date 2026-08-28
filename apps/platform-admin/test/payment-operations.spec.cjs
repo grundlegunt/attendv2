@@ -62,6 +62,15 @@ test("payment operations filters receivables by collection owner", () => {
   assert.match(source, /collectionOwners\.map\(\(owner\)/);
 });
 
+test("payment operations bulk assigns filtered open receivables", () => {
+  assert.match(source, /const assignableDisplayedRemittances = displayedRemittances\.filter/);
+  assert.match(source, /function assignFilteredRemittancesToMe\(\)/);
+  assert.match(source, /JSON\.stringify\(\{ collectionOwnerId: session\.user\.id \}\)/);
+  assert.match(source, /Assign \$\{assignableDisplayedRemittances\.length\} to me/);
+  assert.match(source, /session\.user\.role !== "VIEWER"/);
+  assert.match(source, /failed \+= 1/);
+});
+
 test("payment operations summarizes collection owner workload", () => {
   assert.match(source, /const collectionOwnerWorkload = useMemo/);
   assert.match(source, /aria-label="Collection owner workload"/);
