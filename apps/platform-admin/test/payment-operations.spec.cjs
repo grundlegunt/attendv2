@@ -77,6 +77,14 @@ test("payment operations summarizes receivables by operator", () => {
   assert.match(source, />View ledger</);
 });
 
+test("payment operations identifies operator collection risk", () => {
+  assert.match(source, /days60PlusCents > 0 \? "CRITICAL"/);
+  assert.match(source, /days31To60Cents > 0 \? "ESCALATE"/);
+  assert.match(source, />Risk<\/span>/);
+  assert.match(source, /at 31–60/);
+  assert.match(source, /at 60\+/);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);

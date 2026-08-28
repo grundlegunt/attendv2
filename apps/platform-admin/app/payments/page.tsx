@@ -244,6 +244,9 @@ export default function PlatformPayments() {
     return (overview?.organizations ?? []).map((organization) => {
       const due = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
       const overdue = due.filter((remittance) => remittanceAgingBucket(remittance, now) !== "CURRENT");
+      const days31To60Cents = due.filter((remittance) => remittanceAgingBucket(remittance, now) === "31_60").reduce((sum, remittance) => sum + remittance.platformShareCents, 0);
+      const days60PlusCents = due.filter((remittance) => remittanceAgingBucket(remittance, now) === "60_PLUS").reduce((sum, remittance) => sum + remittance.platformShareCents, 0);
+      const days1To30Cents = due.filter((remittance) => remittanceAgingBucket(remittance, now) === "1_30").reduce((sum, remittance) => sum + remittance.platformShareCents, 0);
       const oldestDays = due.reduce((oldest, remittance) => Math.max(oldest, daysOverdue(remittance.dueDate, now) ?? 0), 0);
       return {
         id: organization.id,
@@ -251,6 +254,9 @@ export default function PlatformPayments() {
         dueCount: due.length,
         dueCents: due.reduce((sum, remittance) => sum + remittance.platformShareCents, 0),
         overdueCents: overdue.reduce((sum, remittance) => sum + remittance.platformShareCents, 0),
+        days31To60Cents,
+        days60PlusCents,
+        risk: days60PlusCents > 0 ? "CRITICAL" : days31To60Cents > 0 ? "ESCALATE" : days1To30Cents > 0 ? "MONITOR" : "CURRENT",
         oldestDays,
         overdueFollowUps: due.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < now).length,
         unscheduledFollowUps: due.filter((remittance) => !remittance.nextFollowUpAt).length,
@@ -432,9 +438,9 @@ export default function PlatformPayments() {
         <article><strong>{money(remittanceTotals.paidCents)}</strong><span>Ringo share paid</span><small>{remittanceTotals.paidCount} periods received</small></article>
       </section>
       <section className="operator-receivables" aria-label="Receivables by operator">
-        <div><span>Operator</span><span>Open balance</span><span>Overdue</span><span>Oldest</span><span>Follow-up</span><span>Action</span></div>
+        <div><span>Operator</span><span>Open balance</span><span>Overdue</span><span>Risk</span><span>Oldest</span><span>Follow-up</span><span>Action</span></div>
         {operatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators currently have open ticket-fee receivables.</p>}
-        {operatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}</span><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
+        {operatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}<small>{money(operator.days31To60Cents)} at 31–60 · {money(operator.days60PlusCents)} at 60+</small></span><b className={`status ${operator.risk === "CURRENT" ? "good" : "warning"}`}>{operator.risk.toLowerCase()}</b><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
       </section>
       <section className="remittance-master-table">
         <div><span>Operator</span><span>Period</span><span>Tickets</span><span>Ringo receivable</span><span>Status</span><span>Action</span></div>
