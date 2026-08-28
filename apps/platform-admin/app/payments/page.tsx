@@ -84,6 +84,7 @@ function csvCell(value: unknown) {
 
 type RemittanceAgingFilter = "ALL" | "CURRENT" | "1_30" | "31_60" | "60_PLUS" | "PAID";
 type RemittanceFollowUpFilter = "ALL" | "OVERDUE" | "UPCOMING" | "UNASSIGNED";
+type OperatorRiskFilter = "ALL" | "CRITICAL" | "ESCALATE" | "MONITOR" | "CURRENT";
 
 function daysOverdue(dueDate: string | null, now = new Date()) {
   if (!dueDate) return null;
@@ -123,6 +124,7 @@ export default function PlatformPayments() {
   const [remittanceFollowUpFilter, setRemittanceFollowUpFilter] = useState<RemittanceFollowUpFilter>("ALL");
   const [remittanceOwnerFilter, setRemittanceOwnerFilter] = useState("ALL");
   const [remittanceOrganizationFilter, setRemittanceOrganizationFilter] = useState("ALL");
+  const [operatorRiskFilter, setOperatorRiskFilter] = useState<OperatorRiskFilter>("ALL");
   const overviewRequestRef = useRef(0);
   const authRequestRef = useRef(0);
 
@@ -263,6 +265,7 @@ export default function PlatformPayments() {
       };
     }).filter((organization) => organization.dueCount > 0).sort((left, right) => right.overdueCents - left.overdueCents || right.dueCents - left.dueCents);
   }, [overview]);
+  const displayedOperatorReceivables = useMemo(() => operatorReceivables.filter((operator) => operatorRiskFilter === "ALL" || operator.risk === operatorRiskFilter), [operatorReceivables, operatorRiskFilter]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -391,7 +394,7 @@ export default function PlatformPayments() {
 
   function exportOperatorReceivables() {
     const columns = ["Operator", "Collection risk", "Open periods", "Open balance", "Overdue balance", "31–60 days", "60+ days", "Oldest days overdue", "Overdue follow-ups", "Unscheduled follow-ups"];
-    const rows = operatorReceivables.map((operator) => [
+    const rows = displayedOperatorReceivables.map((operator) => [
       operator.name,
       operator.risk,
       operator.dueCount,
@@ -460,11 +463,12 @@ export default function PlatformPayments() {
         <article><strong>{money(remittanceTotals.days60PlusCents)}</strong><span>60+ days</span><small>{remittanceTotals.overdueCount} total overdue periods</small></article>
         <article><strong>{money(remittanceTotals.paidCents)}</strong><span>Ringo share paid</span><small>{remittanceTotals.paidCount} periods received</small></article>
       </section>
-      <div className="operator-receivables-heading"><div><p className="eyebrow">OPERATOR RISK</p><h3>Receivables by operator</h3></div><button className="quiet" type="button" disabled={operatorReceivables.length === 0} onClick={exportOperatorReceivables}>Export operator summary</button></div>
+      <div className="operator-receivables-heading"><div><p className="eyebrow">OPERATOR RISK</p><h3>Receivables by operator</h3></div><div className="operator-receivables-actions"><label>Risk <select value={operatorRiskFilter} onChange={(event) => setOperatorRiskFilter(event.target.value as OperatorRiskFilter)}><option value="ALL">All risk tiers</option><option value="CRITICAL">Critical</option><option value="ESCALATE">Escalate</option><option value="MONITOR">Monitor</option><option value="CURRENT">Current</option></select></label><span>{displayedOperatorReceivables.length} of {operatorReceivables.length} operators</span><button className="quiet" type="button" disabled={displayedOperatorReceivables.length === 0} onClick={exportOperatorReceivables}>Export operator summary</button></div></div>
       <section className="operator-receivables" aria-label="Receivables by operator">
         <div><span>Operator</span><span>Open balance</span><span>Overdue</span><span>Risk</span><span>Oldest</span><span>Follow-up</span><span>Action</span></div>
         {operatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators currently have open ticket-fee receivables.</p>}
-        {operatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}<small>{money(operator.days31To60Cents)} at 31–60 · {money(operator.days60PlusCents)} at 60+</small></span><b className={`status ${operator.risk === "CURRENT" ? "good" : "warning"}`}>{operator.risk.toLowerCase()}</b><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
+        {operatorReceivables.length > 0 && displayedOperatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators match this collection risk tier.</p>}
+        {displayedOperatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}<small>{money(operator.days31To60Cents)} at 31–60 · {money(operator.days60PlusCents)} at 60+</small></span><b className={`status ${operator.risk === "CURRENT" ? "good" : "warning"}`}>{operator.risk.toLowerCase()}</b><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
       </section>
       <section className="remittance-master-table">
         <div><span>Operator</span><span>Period</span><span>Tickets</span><span>Ringo receivable</span><span>Status</span><span>Action</span></div>
