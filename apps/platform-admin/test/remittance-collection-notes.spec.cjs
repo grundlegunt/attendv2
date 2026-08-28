@@ -50,3 +50,11 @@ test("settlement variance labels explain over- and under-collection", () => {
     assert.match(pageSource, /cents > 0 \? "over-collected" : "under-collected"/);
   }
 });
+
+test("paid remittances require a non-empty payment reference", () => {
+  const apiSource = readFileSync(resolve(__dirname, "../../api/src/platform/platform.service.ts"), "utf8");
+  assert.match(source, /!paymentReference\?\.trim\(\)/);
+  assert.match(source, /Enter a payment reference before marking this remittance paid/);
+  assert.match(apiSource, /status === "PAID" && !paymentReference/);
+  assert.match(apiSource, /A payment reference is required before a ticket-fee remittance can be marked paid/);
+});
