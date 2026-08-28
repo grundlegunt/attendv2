@@ -16,6 +16,14 @@ test("dashboard overview and revenue requests are invalidated on session exit", 
   assert.match(source, /revenueRequestRef\.current \+= 1;\s*setSession\(null\)/);
 });
 
+test("Master dashboard refreshes operational risk without discarding its last good snapshot", () => {
+  assert.match(source, /window\.setInterval/);
+  assert.match(source, /60_000/);
+  assert.match(source, /Preserve the last good dashboard snapshot/);
+  assert.match(source, /refreshes every minute/);
+  assert.match(source, /window\.clearInterval/);
+});
+
 test("Attend Master exposes real operator payment and refund health facts", () => {
   assert.match(source, /Operator health/);
   assert.match(source, /lastSuccessfulPaymentAt/);

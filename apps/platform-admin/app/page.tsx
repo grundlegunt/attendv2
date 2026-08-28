@@ -129,6 +129,17 @@ export default function PlatformDashboard() {
     };
   }, [session]);
 
+  useEffect(() => {
+    if (!session) return;
+    const interval = window.setInterval(() => {
+      const requestId = ++overviewRequestRef.current;
+      request<Overview>("/platform/overview", undefined, session.accessToken)
+        .then((nextOverview) => { if (requestId === overviewRequestRef.current) setOverview(nextOverview); })
+        .catch(() => { /* Preserve the last good dashboard snapshot during a transient refresh failure. */ });
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [session]);
+
   async function loadRevenue(range: RevenueRange, from = customFrom, to = customTo) {
     if (!session) return;
     const path = revenueRange(range, from, to);
@@ -261,7 +272,7 @@ export default function PlatformDashboard() {
           <p className="muted">A cross-client view of onboarding and operating readiness.</p>
         </div>
         <div className="identity">
-          {overview && <small>Updated {new Date(overview.generatedAt).toLocaleTimeString()}</small>}
+          {overview && <small>Updated {new Date(overview.generatedAt).toLocaleTimeString()} · refreshes every minute</small>}
           <Link className="diagnostics-link" href="/diagnostics">Diagnostics</Link>
           <button className="quiet" disabled={overviewLoading} onClick={() => void refreshOverview()}>{overviewLoading ? "Refreshing…" : "Refresh health"}</button>
           <span>{session.user.name}</span>
