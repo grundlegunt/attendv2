@@ -138,6 +138,19 @@ interface OrganizationDetail {
     createdAt: string;
     tiers: Array<{ startsAtTicket: number; endsAtTicket: number | null; platformShareMinor: number; operatorShareMinor: number }>;
   }>;
+  ticketFeeSettlement: null | {
+    agreementId: string;
+    agreementName: string;
+    thresholdPeriod: "CONTRACT_YEAR" | "CALENDAR_YEAR" | "LIFETIME";
+    periodFrom: string;
+    periodTo: string | null;
+    tickets: number;
+    collectedFeeCents: number;
+    platformShareCents: number;
+    operatorShareCents: number;
+    varianceCents: number;
+    activeTier: { startsAtTicket: number; endsAtTicket: number | null; platformShareMinor: number; operatorShareMinor: number; ticketsRemaining: number | null };
+  };
   createdAt: string;
   payments: { connected: boolean; onboardingStatus: string };
   health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null; trends: { paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } }; refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } } } };
@@ -1890,6 +1903,13 @@ export default function AttendMaster() {
                   <button disabled={saving}>{saving ? "Creating…" : "Create agreement version"}</button>
                 </form>}
                 {!organization.ticketFeeAgreements.length && !ticketFeeAgreementDraft && <p className="dashboard-empty">No commercial ticket-fee agreement has been recorded. Customer fees are currently reported entirely as Ringo fee revenue.</p>}
+                {organization.ticketFeeSettlement && <div className="agreement-settlement">
+                  <div><small>Net paid tickets</small><strong>{organization.ticketFeeSettlement.tickets.toLocaleString()}</strong><em>{new Date(organization.ticketFeeSettlement.periodFrom).toLocaleDateString()} – {organization.ticketFeeSettlement.periodTo ? new Date(organization.ticketFeeSettlement.periodTo).toLocaleDateString() : "lifetime"}</em></div>
+                  <div><small>Fees collected</small><strong>{money(organization.ticketFeeSettlement.collectedFeeCents)}</strong><em>{organization.ticketFeeSettlement.varianceCents === 0 ? "Reconciled to agreement" : `${money(organization.ticketFeeSettlement.varianceCents)} variance`}</em></div>
+                  <div><small>Ringo accrued share</small><strong>{money(organization.ticketFeeSettlement.platformShareCents)}</strong><em>{money(organization.ticketFeeSettlement.activeTier.platformShareMinor)} per ticket in current tier</em></div>
+                  <div><small>Operator accrued share</small><strong>{money(organization.ticketFeeSettlement.operatorShareCents)}</strong><em>{money(organization.ticketFeeSettlement.activeTier.operatorShareMinor)} per ticket in current tier</em></div>
+                  <div><small>Current tier</small><strong>{organization.ticketFeeSettlement.activeTier.startsAtTicket.toLocaleString()}–{organization.ticketFeeSettlement.activeTier.endsAtTicket?.toLocaleString() ?? "∞"}</strong><em>{organization.ticketFeeSettlement.activeTier.ticketsRemaining === null ? "Final tier" : `${organization.ticketFeeSettlement.activeTier.ticketsRemaining.toLocaleString()} tickets until next tier`}</em></div>
+                </div>}
                 {organization.ticketFeeAgreements.length > 0 && <div className="agreement-history">
                   {organization.ticketFeeAgreements.map((agreement, index) => <article key={agreement.id}>
                     <div><span className={`status-chip ${index === 0 && !agreement.effectiveTo ? "status-success" : ""}`}>{index === 0 && !agreement.effectiveTo ? "Current version" : "Historical version"}</span><h4>{agreement.name}</h4><p>{new Date(agreement.effectiveFrom).toLocaleDateString()} – {agreement.effectiveTo ? new Date(agreement.effectiveTo).toLocaleDateString() : "present"} · {agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p></div>
