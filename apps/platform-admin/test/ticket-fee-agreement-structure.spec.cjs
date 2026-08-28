@@ -57,3 +57,11 @@ test("commercial agreement calendar dates do not shift with browser timezone", (
   assert.match(source, /utcCalendarDate\(agreement\.effectiveFrom\)/);
   assert.match(source, /utcCalendarDate\(organization\.ticketFeeSettlement\.periodFrom\)/);
 });
+
+test("agreement history distinguishes scheduled, current, and historical versions", () => {
+  assert.match(source, /function ticketFeeAgreementVersionStatus/);
+  assert.match(source, /return "Scheduled version"/);
+  assert.match(source, /return "Historical version"/);
+  assert.match(source, /return "Current version"/);
+  assert.match(source, /versionStatus === "Scheduled version" \? "scheduled onward"/);
+});
