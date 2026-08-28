@@ -52,6 +52,7 @@ interface OrganizationOverview {
     dueDate: string | null;
     paidAt: string | null;
     paymentReference: string | null;
+    notes: string | null;
   }>;
 }
 
@@ -301,7 +302,7 @@ export default function PlatformPayments() {
   }
 
   function exportAgedReceivables() {
-    const columns = ["Operator", "Period start", "Period end", "Tickets", "Fees collected", "Ringo receivable", "Operator share", "Variance", "Status", "Aging bucket", "Days overdue", "Due date", "Paid date", "Payment reference"];
+    const columns = ["Operator", "Period start", "Period end", "Tickets", "Fees collected", "Ringo receivable", "Operator share", "Variance", "Status", "Aging bucket", "Days overdue", "Due date", "Paid date", "Payment reference", "Collection notes"];
     const rows = displayedRemittances.map((remittance) => [
       remittance.organizationName,
       remittance.periodFrom.slice(0, 10),
@@ -317,6 +318,7 @@ export default function PlatformPayments() {
       remittance.dueDate?.slice(0, 10) ?? "",
       remittance.paidAt?.slice(0, 10) ?? "",
       remittance.paymentReference ?? "",
+      remittance.notes ?? "",
     ]);
     const csv = [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -374,7 +376,7 @@ export default function PlatformPayments() {
         {!overview && <p className="muted payments-loading">Loading operator remittances…</p>}
         {overview && remittanceLedger.length === 0 && <p className="empty-state payments-loading">No ticket-fee settlement periods have been finalized yet.</p>}
         {overview && remittanceLedger.length > 0 && displayedRemittances.length === 0 && <p className="empty-state payments-loading">No remittances match this aging view.</p>}
-        {displayedRemittances.map((remittance) => <article key={remittance.id}><strong>{remittance.organizationName}</strong><span>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</span><span>{remittance.ticketCount.toLocaleString()}</span><span><strong>{money(remittance.platformShareCents)}</strong><small>{money(remittance.collectedFeeCents)} collected</small></span><span><b className={`status ${remittance.status === "PAID" ? "good" : remittanceAgingBucket(remittance) !== "CURRENT" ? "warning" : ""}`}>{remittanceAgeLabel(remittance)}</b><small>{remittance.status === "PAID" && remittance.paidAt ? `Paid ${new Date(remittance.paidAt).toLocaleDateString()}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</small></span><Link href={`/clients?organizationId=${encodeURIComponent(remittance.organizationId)}`}>Open client →</Link></article>)}
+        {displayedRemittances.map((remittance) => <article key={remittance.id}><strong>{remittance.organizationName}</strong><span>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</span><span>{remittance.ticketCount.toLocaleString()}</span><span><strong>{money(remittance.platformShareCents)}</strong><small>{money(remittance.collectedFeeCents)} collected</small></span><span><b className={`status ${remittance.status === "PAID" ? "good" : remittanceAgingBucket(remittance) !== "CURRENT" ? "warning" : ""}`}>{remittanceAgeLabel(remittance)}</b><small>{remittance.status === "PAID" && remittance.paidAt ? `Paid ${new Date(remittance.paidAt).toLocaleDateString()}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</small>{remittance.notes && <small title={remittance.notes}>Note: {remittance.notes}</small>}</span><Link href={`/clients?organizationId=${encodeURIComponent(remittance.organizationId)}`}>Open client →</Link></article>)}
       </section>
       <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><div className="payments-toolbar-actions"><span>{displayedOrganizations.length} of {overview?.organizations.length ?? 0} clients</span><button className="quiet" type="button" disabled={!overview || displayedOrganizations.length === 0} onClick={exportPaymentOperations}>Export CSV</button></div></div>
       <section className="payments-filters" aria-label="Filter payment operations">

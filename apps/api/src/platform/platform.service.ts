@@ -1402,6 +1402,7 @@ export class PlatformService {
               dueDate: remittance.dueDate?.toISOString() ?? null,
               paidAt: remittance.paidAt?.toISOString() ?? null,
               paymentReference: remittance.paymentReference,
+              notes: remittance.notes,
             })),
             locations: organization.locations.map((location) => {
               const auditoriums = auditoriumCounts.get(location.id) ?? 0;
