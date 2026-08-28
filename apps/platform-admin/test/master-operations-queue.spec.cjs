@@ -10,6 +10,7 @@ test("Master provides a prioritized cross-operator operations queue", () => {
   assert.match(source, /Failed payments in the last 24 hours/);
   assert.match(source, /Payments awaiting verification/);
   assert.match(source, /Overdue remittance follow-ups/);
+  assert.match(source, /Unassigned ticket-fee remittances/);
   assert.match(source, /Failed refunds/);
   assert.match(source, /Expired seat holds awaiting cleanup/);
   assert.match(source, /Missing \$\{missing\.join/);
@@ -23,12 +24,14 @@ test("operations queue supports focused resolution workflows", () => {
   assert.match(source, /Resolve →/);
   assert.match(source, /\/payments\?organizationId=/);
   assert.match(source, /followUp=OVERDUE/);
+  assert.match(source, /owner=UNASSIGNED/);
   assert.match(source, /age=60_PLUS/);
   assert.match(source, /age=31_60/);
   assert.match(source, /age=1_30/);
   assert.match(source, /Critical ticket-fee remittances/);
   assert.match(source, /exposureCents\?: number/);
   assert.match(source, /exposure\(overdue60Plus\)/);
+  assert.match(source, /exposure\(unassignedRemittances\)/);
   assert.match(source, />Impact<\/span>/);
   assert.match(source, /money\(item\.exposureCents\)/);
   assert.match(source, /locationId=/);

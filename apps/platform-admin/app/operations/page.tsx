@@ -10,7 +10,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV ==
 const STORAGE_KEY = "attend-platform-session";
 interface Session { accessToken: string; user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" } }
 interface Location { id: string; name: string; active: boolean; configuration: { branding: boolean; auditoriums: number; employees: number; menuItems: number; upcomingShowtimes: number } }
-interface Organization { id: string; name: string; payments: { onboardingStatus: string }; health: { failedPayments24h: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number }; ticketFeeRemittances: Array<{ status: "DUE" | "PAID" | "VOID"; dueDate: string | null; nextFollowUpAt: string | null; platformShareCents: number }>; locations: Location[] }
+interface Organization { id: string; name: string; payments: { onboardingStatus: string }; health: { failedPayments24h: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number }; ticketFeeRemittances: Array<{ status: "DUE" | "PAID" | "VOID"; dueDate: string | null; nextFollowUpAt: string | null; platformShareCents: number; collectionOwner: { id: string } | null }>; locations: Location[] }
 interface Overview { generatedAt: string; organizations: Organization[] }
 type QueueItem = { id: string; client: string; location: string | null; category: "Payments" | "Refunds" | "Ticketing" | "Setup"; issue: string; count: number; exposureCents?: number; href: string; priority: number };
 
@@ -40,8 +40,10 @@ function queueItems(organizations: Organization[]): QueueItem[] {
     const overdue31To60 = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) >= 31 && remittanceAge(remittance.dueDate) <= 60);
     const overdue60Plus = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) > 60);
     const overdueFollowUps = openRemittances.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date());
+    const unassignedRemittances = openRemittances.filter((remittance) => !remittance.collectionOwner);
     const currentRemittances = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) === 0);
     const exposure = (remittances: typeof openRemittances) => remittances.reduce((sum, remittance) => sum + remittance.platformShareCents, 0);
+    add("Payments", "Unassigned ticket-fee remittances", unassignedRemittances.length, `${paymentHref}&owner=UNASSIGNED`, 112, exposure(unassignedRemittances));
     add("Payments", "Overdue remittance follow-ups", overdueFollowUps.length, `${paymentHref}&followUp=OVERDUE`, 110, exposure(overdueFollowUps));
     add("Payments", "Critical ticket-fee remittances · 60+ days", overdue60Plus.length, `${paymentHref}&age=60_PLUS`, 115, exposure(overdue60Plus));
     add("Payments", "Escalated ticket-fee remittances · 31–60 days", overdue31To60.length, `${paymentHref}&age=31_60`, 108, exposure(overdue31To60));

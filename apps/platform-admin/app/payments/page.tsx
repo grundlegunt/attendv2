@@ -157,6 +157,8 @@ export default function PlatformPayments() {
     if (organizationId) setRemittanceOrganizationFilter(organizationId);
     const followUp = params.get("followUp");
     if (followUp === "OVERDUE" || followUp === "UPCOMING" || followUp === "UNASSIGNED") setRemittanceFollowUpFilter(followUp);
+    const owner = params.get("owner");
+    if (owner) setRemittanceOwnerFilter(owner);
     const age = params.get("age");
     if (age === "CURRENT" || age === "1_30" || age === "31_60" || age === "60_PLUS" || age === "PAID") setRemittanceAgingFilter(age);
     const connectAction = params.get("connect");

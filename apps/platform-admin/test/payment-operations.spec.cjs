@@ -82,6 +82,8 @@ test("payment operations exports collection owner workload", () => {
 test("payment operations supports operator-scoped collections deep links", () => {
   assert.match(source, /setRemittanceOrganizationFilter\(organizationId\)/);
   assert.match(source, /params\.get\("followUp"\)/);
+  assert.match(source, /params\.get\("owner"\)/);
+  assert.match(source, /setRemittanceOwnerFilter\(owner\)/);
   assert.match(source, /params\.get\("age"\)/);
   assert.match(source, /setRemittanceAgingFilter\(age\)/);
   assert.match(source, /remittance\.organizationId !== remittanceOrganizationFilter/);
