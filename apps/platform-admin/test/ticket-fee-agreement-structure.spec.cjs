@@ -15,3 +15,10 @@ test("flat agreements serialize as one unlimited tier", () => {
   assert.match(source, /isTiered[\s\S]*startsAtTicket: 1, endsAtTicket: null[\s\S]*tiers,/);
   assert.match(source, /Ringo share per ticket/);
 });
+
+test("the editor previews the resulting split and labels saved flat agreements", () => {
+  assert.match(source, /PER-TICKET SPLIT PREVIEW/);
+  assert.match(source, /Operator receives/);
+  assert.match(source, /agreement\.tiers\.length === 1 \? "flat split"/);
+  assert.match(source, /Every paid ticket/);
+});
