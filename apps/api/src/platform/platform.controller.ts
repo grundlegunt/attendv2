@@ -38,6 +38,10 @@ const ticketFeeAgreementCreateSchema = z.object({
   }).strict()).min(1).max(20),
 }).strict();
 
+const ticketFeeSettlementQuerySchema = z.object({
+  asOf: z.string().datetime().optional(),
+}).strict();
+
 const connectOnboardingSchema = z.object({
   origin: z.string().url(),
   returnPath: z.enum(["/clients", "/payments"]).default("/clients"),
@@ -384,11 +388,19 @@ export class PlatformController {
 
   @Get("organizations/:organizationId/ticket-fee-settlement.csv")
   @UseGuards(PlatformAuthGuard)
-  async ticketFeeSettlementCsv(@Res() response: Response, @Param("organizationId") organizationId: string) {
-    const statement = await this.platform.ticketFeeSettlementCsv(organizationId);
+  async ticketFeeSettlementCsv(@Res() response: Response, @Param("organizationId") organizationId: string, @Query(new ZodValidationPipe(ticketFeeSettlementQuerySchema)) query: unknown) {
+    const parsed = ticketFeeSettlementQuerySchema.parse(query);
+    const statement = await this.platform.ticketFeeSettlementCsv(organizationId, parsed.asOf ? new Date(parsed.asOf) : undefined);
     response.setHeader("Content-Type", "text/csv; charset=utf-8");
     response.setHeader("Content-Disposition", 'attachment; filename="ringo-ticket-fee-settlement.csv"');
     response.send(statement);
+  }
+
+  @Get("organizations/:organizationId/ticket-fee-settlement")
+  @UseGuards(PlatformAuthGuard)
+  ticketFeeSettlement(@Param("organizationId") organizationId: string, @Query(new ZodValidationPipe(ticketFeeSettlementQuerySchema)) query: unknown) {
+    const parsed = ticketFeeSettlementQuerySchema.parse(query);
+    return this.platform.ticketFeeSettlement(organizationId, parsed.asOf ? new Date(parsed.asOf) : undefined);
   }
 
   @Delete("organizations/:organizationId")

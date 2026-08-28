@@ -2430,12 +2430,12 @@ export class PlatformService {
     };
   }
 
-  private async ticketFeeSettlement(organizationId: string, now = new Date()) {
+  async ticketFeeSettlement(organizationId: string, asOf = new Date()) {
     const agreement = await prisma.ticketFeeAgreement.findFirst({
       where: {
         organizationId,
-        effectiveFrom: { lte: now },
-        OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+        effectiveFrom: { lte: asOf },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: asOf } }],
       },
       orderBy: { effectiveFrom: "desc" },
       include: { tiers: { orderBy: { startsAtTicket: "asc" } } },
@@ -2445,24 +2445,25 @@ export class PlatformService {
     let periodFrom = agreement.effectiveFrom;
     let periodTo: Date | null = agreement.effectiveTo;
     if (agreement.thresholdPeriod === "CALENDAR_YEAR") {
-      periodFrom = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
-      periodTo = new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1));
+      periodFrom = new Date(Date.UTC(asOf.getUTCFullYear(), 0, 1));
+      periodTo = new Date(Date.UTC(asOf.getUTCFullYear() + 1, 0, 1));
     } else if (agreement.thresholdPeriod === "CONTRACT_YEAR") {
       const month = agreement.effectiveFrom.getUTCMonth();
       const day = agreement.effectiveFrom.getUTCDate();
-      let startYear = now.getUTCFullYear();
+      let startYear = asOf.getUTCFullYear();
       let anniversary = new Date(Date.UTC(startYear, month, day));
-      if (anniversary > now) anniversary = new Date(Date.UTC(--startYear, month, day));
+      if (anniversary > asOf) anniversary = new Date(Date.UTC(--startYear, month, day));
       periodFrom = anniversary < agreement.effectiveFrom ? agreement.effectiveFrom : anniversary;
       periodTo = new Date(Date.UTC(startYear + 1, month, day));
     }
     if (periodFrom < agreement.effectiveFrom) periodFrom = agreement.effectiveFrom;
     if (agreement.effectiveTo && (!periodTo || agreement.effectiveTo < periodTo)) periodTo = agreement.effectiveTo;
+    const queryTo = periodTo && periodTo < asOf ? periodTo : asOf;
 
     const orders = await prisma.ticketOrder.findMany({
       where: {
         location: { organizationId },
-        createdAt: { gte: periodFrom, lt: now },
+        createdAt: { gte: periodFrom, lt: queryTo },
         status: { in: ["PAID", "EXCHANGED"] },
       },
       select: { feesCents: true, _count: { select: { tickets: true } } },
@@ -2483,6 +2484,7 @@ export class PlatformService {
       agreementId: agreement.id,
       agreementName: agreement.name,
       thresholdPeriod: agreement.thresholdPeriod,
+      asOf: asOf.toISOString(),
       periodFrom: periodFrom.toISOString(),
       periodTo: periodTo?.toISOString() ?? null,
       tickets,
@@ -2500,10 +2502,10 @@ export class PlatformService {
     };
   }
 
-  async ticketFeeSettlementCsv(organizationId: string) {
+  async ticketFeeSettlementCsv(organizationId: string, asOf?: Date) {
     const [organization, settlement] = await Promise.all([
       prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
-      this.ticketFeeSettlement(organizationId),
+      this.ticketFeeSettlement(organizationId, asOf),
     ]);
     if (!organization) throw AppError.notFound("Cinema organization not found.");
     if (!settlement) throw AppError.notFound("No active ticket-fee agreement was found.");
@@ -2514,6 +2516,7 @@ export class PlatformService {
       row(["Cinema operator", organization.name]),
       row(["Agreement", settlement.agreementName]),
       row(["Threshold period", settlement.thresholdPeriod]),
+      row(["Statement as of", settlement.asOf]),
       row(["Period from", settlement.periodFrom]),
       row(["Period to", settlement.periodTo ?? "Lifetime"]),
       "",
