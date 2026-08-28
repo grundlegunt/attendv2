@@ -49,6 +49,8 @@ test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /Days overdue/);
   assert.match(source, /ringo-aged-receivables-/);
   assert.match(source, />Export aging CSV<\/button>/);
+  assert.match(source, /Collection notes/);
+  assert.match(source, /Note: \{remittance\.notes\}/);
 });
 
 test("payment operations can find clients and filter Stripe readiness", () => {
