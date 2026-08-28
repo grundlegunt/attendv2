@@ -42,6 +42,19 @@ const ticketFeeSettlementQuerySchema = z.object({
   asOf: z.string().datetime().optional(),
 }).strict();
 
+const ticketFeeRemittanceCreateSchema = z.object({
+  asOf: z.string().datetime(),
+  dueDate: z.string().datetime().nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+}).strict();
+
+const ticketFeeRemittanceUpdateSchema = z.object({
+  status: z.enum(["DUE", "PAID", "VOID"]),
+  paidAt: z.string().datetime().nullable().optional(),
+  paymentReference: z.string().trim().max(200).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+}).strict();
+
 const connectOnboardingSchema = z.object({
   origin: z.string().url(),
   returnPath: z.enum(["/clients", "/payments"]).default("/clients"),
@@ -401,6 +414,20 @@ export class PlatformController {
   ticketFeeSettlement(@Param("organizationId") organizationId: string, @Query(new ZodValidationPipe(ticketFeeSettlementQuerySchema)) query: unknown) {
     const parsed = ticketFeeSettlementQuerySchema.parse(query);
     return this.platform.ticketFeeSettlement(organizationId, parsed.asOf ? new Date(parsed.asOf) : undefined);
+  }
+
+  @Post("organizations/:organizationId/ticket-fee-remittances")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  createTicketFeeRemittance(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(ticketFeeRemittanceCreateSchema)) body: unknown) {
+    return this.platform.createTicketFeeRemittance({ actorId: actor.sub, organizationId, ...ticketFeeRemittanceCreateSchema.parse(body) });
+  }
+
+  @Patch("ticket-fee-remittances/:remittanceId")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  updateTicketFeeRemittance(@CurrentActor() actor: RequestActor, @Param("remittanceId") remittanceId: string, @Body(new ZodValidationPipe(ticketFeeRemittanceUpdateSchema)) body: unknown) {
+    return this.platform.updateTicketFeeRemittance({ actorId: actor.sub, remittanceId, ...ticketFeeRemittanceUpdateSchema.parse(body) });
   }
 
   @Delete("organizations/:organizationId")

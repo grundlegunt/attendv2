@@ -49,6 +49,7 @@ model Organization {
   donationCheckouts   DonationCheckout[]
   membershipCheckouts MembershipCheckout[]
   ticketFeeAgreements TicketFeeAgreement[]
+  ticketFeeRemittances TicketFeeRemittance[]
 
   @@map("organizations")
 }
@@ -76,9 +77,48 @@ model TicketFeeAgreement {
 
   organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   tiers        TicketFeeAgreementTier[]
+  remittances  TicketFeeRemittance[]
 
   @@index([organizationId, effectiveFrom])
   @@map("ticket_fee_agreements")
+}
+
+enum TicketFeeRemittanceStatus {
+  DUE
+  PAID
+  VOID
+}
+
+// Immutable settlement-period snapshot. Ticket fees are collected in the
+// cinema's connected account, so the platform share is a receivable from the
+// operator until the remittance is marked paid.
+model TicketFeeRemittance {
+  id                    String                    @id @default(uuid())
+  organizationId        String
+  agreementId           String
+  periodFrom             DateTime
+  periodTo               DateTime
+  statementAsOf          DateTime
+  ticketCount            Int
+  collectedFeeCents      Int
+  platformShareCents     Int
+  operatorShareCents     Int
+  varianceCents          Int
+  status                 TicketFeeRemittanceStatus @default(DUE)
+  dueDate                DateTime?
+  paidAt                 DateTime?
+  paymentReference       String?
+  notes                  String?
+  createdById            String
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agreement    TicketFeeAgreement @relation(fields: [agreementId], references: [id], onDelete: Restrict)
+
+  @@unique([agreementId, periodFrom])
+  @@index([organizationId, status, dueDate])
+  @@map("ticket_fee_remittances")
 }
 
 model TicketFeeAgreementTier {
