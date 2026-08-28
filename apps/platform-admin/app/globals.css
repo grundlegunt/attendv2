@@ -74,7 +74,7 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .remittance-master-table article > span { display: grid; gap: 3px; }
 .remittance-master-table small { color: var(--muted); }
 .operator-receivables { margin-bottom: 14px; border: 1px solid var(--border); background: var(--surface); }
-.operator-receivables > div, .operator-receivables > article { display: grid; grid-template-columns: minmax(170px, 1fr) minmax(120px, .7fr) minmax(120px, .7fr) 100px minmax(130px, .7fr) 110px; gap: 16px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.operator-receivables > div, .operator-receivables > article { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .65fr) minmax(180px, 1fr) 90px 90px minmax(120px, .7fr) 105px; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .operator-receivables > div { color: var(--muted); font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .operator-receivables > article:last-child { border-bottom: 0; }
 .operator-receivables article > strong, .operator-receivables article > span { display: grid; gap: 3px; }
