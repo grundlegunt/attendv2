@@ -1403,6 +1403,7 @@ export class PlatformService {
               paidAt: remittance.paidAt?.toISOString() ?? null,
               paymentReference: remittance.paymentReference,
               reconciliationNote: remittance.reconciliationNote,
+              voidReason: remittance.voidReason,
               notes: remittance.notes,
               lastContactedAt: remittance.lastContactedAt?.toISOString() ?? null,
               nextFollowUpAt: remittance.nextFollowUpAt?.toISOString() ?? null,
@@ -2626,6 +2627,7 @@ export class PlatformService {
     status?: "DUE" | "PAID" | "VOID";
     paidAt?: string | null;
     paymentReference?: string | null;
+    voidReason?: string | null;
     notes?: string | null;
     lastContactedAt?: string | null;
     nextFollowUpAt?: string | null;
@@ -2644,12 +2646,19 @@ export class PlatformService {
       if (status === "PAID" && !paymentReference) {
         throw AppError.validationFailed("A payment reference is required before a ticket-fee remittance can be marked paid.");
       }
+      const voidReason = input.voidReason === undefined
+        ? before.voidReason
+        : input.voidReason?.trim() || null;
+      if (status === "VOID" && !voidReason) {
+        throw AppError.validationFailed("A reason is required before a ticket-fee remittance can be voided.");
+      }
       const remittance = await tx.ticketFeeRemittance.update({
         where: { id: input.remittanceId },
         data: {
           status,
           paidAt,
           paymentReference,
+          voidReason,
           notes: input.notes === undefined ? before.notes : input.notes,
           lastContactedAt: input.lastContactedAt === undefined ? before.lastContactedAt : input.lastContactedAt ? new Date(input.lastContactedAt) : null,
           nextFollowUpAt: input.nextFollowUpAt === undefined ? before.nextFollowUpAt : input.nextFollowUpAt ? new Date(input.nextFollowUpAt) : null,

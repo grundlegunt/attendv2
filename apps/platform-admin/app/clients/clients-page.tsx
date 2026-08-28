@@ -168,6 +168,7 @@ interface OrganizationDetail {
     paidAt: string | null;
     paymentReference: string | null;
     reconciliationNote: string | null;
+    voidReason: string | null;
     notes: string | null;
     lastContactedAt: string | null;
     nextFollowUpAt: string | null;
@@ -948,18 +949,24 @@ export default function AttendMaster() {
   async function updateTicketFeeRemittance(remittanceId: string, status: "PAID" | "VOID") {
     if (!session || !organization) return;
     const paymentReference = status === "PAID" ? window.prompt("Payment reference (ACH, check, or transfer ID)") : null;
+    const voidReason = status === "VOID" ? window.prompt("Reason for voiding this remittance") : null;
     if (status === "PAID" && paymentReference === null) return;
     if (status === "PAID" && !paymentReference?.trim()) {
       setError("Enter a payment reference before marking this remittance paid.");
       return;
     }
-    if (status === "VOID" && !window.confirm("Void this remittance? The original financial snapshot will remain in the audit trail.")) return;
+    if (status === "VOID" && voidReason === null) return;
+    if (status === "VOID" && !voidReason?.trim()) {
+      setError("Enter a reason before voiding this remittance.");
+      return;
+    }
+    if (status === "VOID" && !window.confirm("Void this remittance? The original financial snapshot and reason will remain in the audit trail.")) return;
     setSaving(true);
     setError(null);
     try {
       await request(`/platform/ticket-fee-remittances/${remittanceId}`, {
         method: "PATCH",
-        body: JSON.stringify({ status, paymentReference: paymentReference?.trim() || null }),
+        body: JSON.stringify({ status, paymentReference: paymentReference?.trim() || null, voidReason: voidReason?.trim() || null }),
       }, session.accessToken);
       setOrganization(await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken));
     } catch (reason) {
@@ -2177,6 +2184,7 @@ export default function AttendMaster() {
                 {organization.ticketFeeSettlement && organization.ticketFeeSettlement.varianceCents !== 0 && <div className="agreement-fee-warning agreement-settlement-variance" role="alert"><div><strong>Settlement needs reconciliation</strong><p>Actual checkout fees are {feeVarianceLabel(organization.ticketFeeSettlement.varianceCents)} versus the agreement expectation. Review guest and registered-customer pricing, refunds, and the agreement basis before finalizing this period.</p></div></div>}
                 {organization.ticketFeeSettlement?.periodTo && new Date(organization.ticketFeeSettlement.periodTo) <= new Date() && !organization.ticketFeeRemittances.some((remittance) => remittance.agreementId === organization.ticketFeeSettlement?.agreementId && remittance.periodFrom === organization.ticketFeeSettlement?.periodFrom) && <div className="remittance-finalize"><label>Remittance due date<input type="date" value={ticketFeeRemittanceDueDate} onChange={(event) => setTicketFeeRemittanceDueDate(event.target.value)} /></label>{organization.ticketFeeSettlement.varianceCents !== 0 && <label className="remittance-reconciliation-note">Reconciliation note<textarea required value={ticketFeeReconciliationNote} onChange={(event) => setTicketFeeReconciliationNote(event.target.value)} placeholder="Explain the fee variance and how it was reviewed." /><small className="muted">Required because collected fees do not match the agreement expectation.</small></label>}<div><p>This settlement period is complete and may be locked as an operator remittance receivable.</p><button disabled={saving || (organization.ticketFeeSettlement.varianceCents !== 0 && !ticketFeeReconciliationNote.trim())} onClick={() => void finalizeTicketFeeRemittance()}>Finalize period</button></div></div>}
                 {organization.ticketFeeRemittances.length > 0 && <div className="remittance-ledger"><div className="editor-heading"><div><p className="eyebrow">REMITTANCE LEDGER</p><h4>Operator fee remittances</h4></div></div>{organization.ticketFeeRemittances.map((remittance) => <article key={remittance.id}><div><span className={`status-chip ${remittance.status === "PAID" ? "status-success" : remittance.status === "VOID" ? "status-danger" : ""}`}>{remittance.status}</span><strong>{utcCalendarDate(remittance.periodFrom)} – {utcCalendarDate(remittance.periodTo)}</strong><small>{remittance.ticketCount.toLocaleString()} tickets · {money(remittance.collectedFeeCents)} customer fees</small><small>Collection owner: {remittance.collectionOwner?.name ?? "Unassigned"}</small>{remittance.reconciliationNote && <small>Reconciliation: {remittance.reconciliationNote}</small>}{remittance.notes && <small>Collection note: {remittance.notes}</small>}{remittance.lastContactedAt && <small>Last contacted {new Date(remittance.lastContactedAt).toLocaleDateString()}</small>}{remittance.nextFollowUpAt && <small>Next follow-up {new Date(remittance.nextFollowUpAt).toLocaleDateString()}</small>}</div><div><small>Ringo receivable</small><strong>{money(remittance.platformShareCents)}</strong><em>{money(remittance.platformShareCents + remittance.operatorShareCents)} expected fees</em><em className={remittance.varianceCents !== 0 ? "status warning" : "status good"}>{feeVarianceLabel(remittance.varianceCents)}</em><em>{remittance.status === "PAID" ? `Paid ${remittance.paidAt ? new Date(remittance.paidAt).toLocaleDateString() : ""}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</em>{remittance.paymentReference && <em>Ref: {remittance.paymentReference}</em>}</div>{session.user.role !== "VIEWER" && <div className="remittance-actions"><button className="quiet" disabled={saving} onClick={() => void editTicketFeeRemittanceNotes(remittance.id, remittance.status, remittance.notes)}>{remittance.notes ? "Edit note" : "Add note"}</button>{remittance.status === "DUE" && <><button className="quiet" disabled={saving} onClick={() => void assignTicketFeeRemittanceToMe(remittance.id)}>Assign to me</button><button className="quiet" disabled={saving} onClick={() => void logTicketFeeRemittanceContact(remittance.id, remittance.notes)}>Log contact</button><button disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "PAID")}>Mark paid</button><button className="danger" disabled={saving} onClick={() => void updateTicketFeeRemittance(remittance.id, "VOID")}>Void</button></>}</div>}</article>)}</div>}
+                {organization.ticketFeeRemittances.some((remittance) => remittance.voidReason) && <div className="agreement-history"><div className="editor-heading"><div><p className="eyebrow">VOID AUDIT</p><h4>Voided remittance reasons</h4></div></div>{organization.ticketFeeRemittances.filter((remittance) => remittance.voidReason).map((remittance) => <article key={`void-${remittance.id}`}><div><strong>{utcCalendarDate(remittance.periodFrom)} – {utcCalendarDate(remittance.periodTo)}</strong><small>{remittance.voidReason}</small></div></article>)}</div>}
                 {organization.ticketFeeAgreements.length > 0 && <div className="agreement-history">
                   {organization.ticketFeeAgreements.map((agreement) => {
                     const versionStatus = ticketFeeAgreementVersionStatus(agreement);
