@@ -75,3 +75,11 @@ test("operations queue refreshes without allowing stale responses", () => {
   assert.match(source, /Refresh queue/);
   assert.match(source, /Refreshing…/);
 });
+
+test("operations queue filters handoffs by client", () => {
+  assert.match(source, /const clients = useMemo/);
+  assert.match(source, /item\.client === client/);
+  assert.match(source, /All clients/);
+  assert.match(source, /clients\.map\(\(name\)/);
+  assert.match(source, /setClient\("ALL"\)/);
+});
