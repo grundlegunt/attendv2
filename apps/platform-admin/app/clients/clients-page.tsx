@@ -128,6 +128,16 @@ interface OrganizationDetail {
   active: boolean;
   ticketFeeMinor: number;
   registeredTicketFeeMinor: number;
+  ticketFeeAgreements: Array<{
+    id: string;
+    name: string;
+    customerFeeMinor: number;
+    thresholdPeriod: "CONTRACT_YEAR" | "CALENDAR_YEAR" | "LIFETIME";
+    effectiveFrom: string;
+    effectiveTo: string | null;
+    createdAt: string;
+    tiers: Array<{ startsAtTicket: number; endsAtTicket: number | null; platformShareMinor: number; operatorShareMinor: number }>;
+  }>;
   createdAt: string;
   payments: { connected: boolean; onboardingStatus: string };
   health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null; trends: { paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } }; refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } } } };
@@ -231,6 +241,15 @@ type OrganizationCreateDraft = {
   locationName: string;
   address: string;
   locationTimezone: string;
+};
+type TicketFeeAgreementDraft = {
+  name: string;
+  customerFee: string;
+  thresholdPeriod: "CONTRACT_YEAR" | "CALENDAR_YEAR" | "LIFETIME";
+  effectiveFrom: string;
+  thresholdTickets: string;
+  firstPlatformShare: string;
+  secondPlatformShare: string;
 };
 type CinemaManagerDraft = {
   locationId: string;
@@ -342,6 +361,8 @@ export default function AttendMaster() {
     useState<OrganizationDraft | null>(null);
   const [organizationCreateDraft, setOrganizationCreateDraft] =
     useState<OrganizationCreateDraft | null>(null);
+  const [ticketFeeAgreementDraft, setTicketFeeAgreementDraft] =
+    useState<TicketFeeAgreementDraft | null>(null);
   const [locationDraft, setLocationDraft] = useState<{
     id: string;
     values: LocationDraft;
@@ -708,6 +729,57 @@ export default function AttendMaster() {
           ? reason.message
           : "Could not save organization.",
       );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function beginTicketFeeAgreementCreate() {
+    if (!organization) return;
+    const customerFee = organization.ticketFeeMinor / 100;
+    setTicketFeeAgreementDraft({
+      name: `${organization.name} ticket-fee agreement`,
+      customerFee: customerFee.toFixed(2),
+      thresholdPeriod: "CONTRACT_YEAR",
+      effectiveFrom: dateInputValue(new Date()),
+      thresholdTickets: "100000",
+      firstPlatformShare: (customerFee / 2).toFixed(2),
+      secondPlatformShare: (customerFee / 2).toFixed(2),
+    });
+  }
+
+  async function createTicketFeeAgreement(event: FormEvent) {
+    event.preventDefault();
+    if (!session || !organization || !ticketFeeAgreementDraft) return;
+    const customerFeeMinor = Math.round(Number(ticketFeeAgreementDraft.customerFee) * 100);
+    const threshold = Number(ticketFeeAgreementDraft.thresholdTickets);
+    const firstPlatformShareMinor = Math.round(Number(ticketFeeAgreementDraft.firstPlatformShare) * 100);
+    const secondPlatformShareMinor = Math.round(Number(ticketFeeAgreementDraft.secondPlatformShare) * 100);
+    setSaving(true);
+    setError(null);
+    try {
+      await request(
+        `/platform/organizations/${organization.id}/ticket-fee-agreements`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            name: ticketFeeAgreementDraft.name,
+            customerFeeMinor,
+            thresholdPeriod: ticketFeeAgreementDraft.thresholdPeriod,
+            effectiveFrom: `${ticketFeeAgreementDraft.effectiveFrom}T00:00:00.000Z`,
+            tiers: [
+              { startsAtTicket: 1, endsAtTicket: threshold, platformShareMinor: firstPlatformShareMinor, operatorShareMinor: customerFeeMinor - firstPlatformShareMinor },
+              { startsAtTicket: threshold + 1, endsAtTicket: null, platformShareMinor: secondPlatformShareMinor, operatorShareMinor: customerFeeMinor - secondPlatformShareMinor },
+            ],
+          }),
+        },
+        session.accessToken,
+      );
+      const refreshed = await request<OrganizationDetail>(`/platform/organizations/${organization.id}`, undefined, session.accessToken);
+      setOrganization(refreshed);
+      setTicketFeeAgreementDraft(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not create ticket-fee agreement.");
     } finally {
       setSaving(false);
     }
@@ -1793,6 +1865,38 @@ export default function AttendMaster() {
                   </button>
                 </form>
               )}
+              <section className="dashboard-panel commercial-terms-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">COMMERCIAL TERMS</p>
+                    <h3>Ticket-fee agreement</h3>
+                    <p className="muted">Define how the customer fee is divided between Ringo and this operator as ticket volume grows. New versions preserve prior settlement terms.</p>
+                  </div>
+                  {session.user.role !== "VIEWER" && !ticketFeeAgreementDraft && <button onClick={beginTicketFeeAgreementCreate}>{organization.ticketFeeAgreements.length ? "Add future version" : "Create agreement"}</button>}
+                </div>
+                {ticketFeeAgreementDraft && <form className="editor commercial-terms-editor" onSubmit={createTicketFeeAgreement}>
+                  <div className="editor-heading"><div><p className="eyebrow">NEW VERSION</p><h4>Commercial agreement</h4></div><button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft(null)}>Cancel</button></div>
+                  <div className="form-grid">
+                    <label>Agreement name<input required value={ticketFeeAgreementDraft.name} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, name: event.target.value })} /></label>
+                    <label>Effective date<input required type="date" value={ticketFeeAgreementDraft.effectiveFrom} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, effectiveFrom: event.target.value })} /></label>
+                    <label>Customer fee per ticket<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.customerFee} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: event.target.value })} /></label>
+                    <label>Volume resets<select value={ticketFeeAgreementDraft.thresholdPeriod} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, thresholdPeriod: event.target.value as TicketFeeAgreementDraft["thresholdPeriod"] })}><option value="CONTRACT_YEAR">Each contract year</option><option value="CALENDAR_YEAR">Each calendar year</option><option value="LIFETIME">Never (lifetime volume)</option></select></label>
+                    <label>First tier ends after<input required type="number" min="1" step="1" value={ticketFeeAgreementDraft.thresholdTickets} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, thresholdTickets: event.target.value })} /><small className="muted">Net paid tickets</small></label>
+                    <span />
+                    <label>Ringo share · first tier<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.firstPlatformShare} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, firstPlatformShare: event.target.value })} /><small className="muted">Operator receives the remaining customer fee.</small></label>
+                    <label>Ringo share · after threshold<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.secondPlatformShare} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, secondPlatformShare: event.target.value })} /><small className="muted">Continues without an upper limit.</small></label>
+                  </div>
+                  <p className="form-note">Creating this version closes the previous agreement at the new effective date. Existing versions cannot be edited retroactively.</p>
+                  <button disabled={saving}>{saving ? "Creating…" : "Create agreement version"}</button>
+                </form>}
+                {!organization.ticketFeeAgreements.length && !ticketFeeAgreementDraft && <p className="dashboard-empty">No commercial ticket-fee agreement has been recorded. Customer fees are currently reported entirely as Ringo fee revenue.</p>}
+                {organization.ticketFeeAgreements.length > 0 && <div className="agreement-history">
+                  {organization.ticketFeeAgreements.map((agreement, index) => <article key={agreement.id}>
+                    <div><span className={`status-chip ${index === 0 && !agreement.effectiveTo ? "status-success" : ""}`}>{index === 0 && !agreement.effectiveTo ? "Current version" : "Historical version"}</span><h4>{agreement.name}</h4><p>{new Date(agreement.effectiveFrom).toLocaleDateString()} – {agreement.effectiveTo ? new Date(agreement.effectiveTo).toLocaleDateString() : "present"} · {agreement.thresholdPeriod.toLowerCase().replaceAll("_", " ")}</p></div>
+                    <div className="agreement-tiers">{agreement.tiers.map((tier) => <span key={tier.startsAtTicket}><strong>{tier.startsAtTicket.toLocaleString()}–{tier.endsAtTicket?.toLocaleString() ?? "∞"} tickets</strong><em>Customer {money(agreement.customerFeeMinor)} · Ringo {money(tier.platformShareMinor)} · Operator {money(tier.operatorShareMinor)}</em></span>)}</div>
+                  </article>)}
+                </div>}
+              </section>
               <section className="dashboard-panel platform-revenue client-financials">
                 <div className="panel-heading">
                   <div>
