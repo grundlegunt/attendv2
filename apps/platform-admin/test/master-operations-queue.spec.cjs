@@ -83,3 +83,14 @@ test("operations queue filters handoffs by client", () => {
   assert.match(source, /clients\.map\(\(name\)/);
   assert.match(source, /setClient\("ALL"\)/);
 });
+
+test("operations queue filters are shareable by URL", () => {
+  assert.match(source, /new URLSearchParams\(window\.location\.search\)/);
+  assert.match(source, /params\.set\("client", client\)/);
+  assert.match(source, /params\.set\("category", category\)/);
+  assert.match(source, /params\.set\("priority", priority\)/);
+  assert.match(source, /window\.history\.replaceState/);
+  assert.match(source, /navigator\.clipboard\.writeText\(window\.location\.href\)/);
+  assert.match(source, /Copy view link/);
+  assert.match(source, /Link copied/);
+});
