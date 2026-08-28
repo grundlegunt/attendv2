@@ -22,3 +22,9 @@ test("the editor previews the resulting split and labels saved flat agreements",
   assert.match(source, /agreement\.tiers\.length === 1 \? "flat split"/);
   assert.match(source, /Every paid ticket/);
 });
+
+test("the editor warns when agreement and live checkout fees differ", () => {
+  assert.match(source, /currencyInputCents\(ticketFeeAgreementDraft\.customerFee\) !== organization\.ticketFeeMinor/);
+  assert.match(source, /Customer-fee mismatch/);
+  assert.match(source, /avoid settlement variances/);
+});
