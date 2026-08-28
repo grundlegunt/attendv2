@@ -2226,6 +2226,7 @@ export class PlatformService {
           orderBy: { effectiveFrom: "desc" },
           include: { tiers: { orderBy: { startsAtTicket: "asc" } } },
         },
+        ticketFeeRemittances: { orderBy: { periodFrom: "desc" } },
       },
     });
     if (!organization)
@@ -2257,6 +2258,16 @@ export class PlatformService {
         })),
       })),
       ticketFeeSettlement: await this.ticketFeeSettlement(organization.id),
+      ticketFeeRemittances: organization.ticketFeeRemittances.map((remittance) => ({
+        ...remittance,
+        periodFrom: remittance.periodFrom.toISOString(),
+        periodTo: remittance.periodTo.toISOString(),
+        statementAsOf: remittance.statementAsOf.toISOString(),
+        dueDate: remittance.dueDate?.toISOString() ?? null,
+        paidAt: remittance.paidAt?.toISOString() ?? null,
+        createdAt: remittance.createdAt.toISOString(),
+        updatedAt: remittance.updatedAt.toISOString(),
+      })),
       createdAt: organization.createdAt.toISOString(),
       payments: {
         connected: Boolean(organization.stripeConnectedAccountId),
@@ -2533,6 +2544,87 @@ export class PlatformService {
       row(["Operator per-ticket share (cents)", settlement.activeTier.operatorShareMinor]),
       row(["Tickets until next tier", settlement.activeTier.ticketsRemaining ?? "Final tier"]),
     ].join("\n");
+  }
+
+  async createTicketFeeRemittance(input: {
+    actorId: string;
+    organizationId: string;
+    asOf: string;
+    dueDate?: string | null;
+    notes?: string | null;
+  }) {
+    const asOf = new Date(input.asOf);
+    const settlement = await this.ticketFeeSettlement(input.organizationId, asOf);
+    if (!settlement) throw AppError.notFound("No ticket-fee agreement was effective on the statement date.");
+    if (!settlement.periodTo || new Date(settlement.periodTo) > new Date())
+      throw AppError.validationFailed("Only a completed ticket-fee settlement period can be finalized.");
+    const periodTo = new Date(settlement.periodTo);
+    return prisma.$transaction(async (tx) => {
+      const existing = await tx.ticketFeeRemittance.findUnique({
+        where: { agreementId_periodFrom: { agreementId: settlement.agreementId, periodFrom: new Date(settlement.periodFrom) } },
+      });
+      if (existing) throw AppError.conflict("This ticket-fee settlement period has already been finalized.");
+      const remittance = await tx.ticketFeeRemittance.create({
+        data: {
+          organizationId: input.organizationId,
+          agreementId: settlement.agreementId,
+          periodFrom: new Date(settlement.periodFrom),
+          periodTo,
+          statementAsOf: asOf,
+          ticketCount: settlement.tickets,
+          collectedFeeCents: settlement.collectedFeeCents,
+          platformShareCents: settlement.platformShareCents,
+          operatorShareCents: settlement.operatorShareCents,
+          varianceCents: settlement.varianceCents,
+          dueDate: input.dueDate ? new Date(input.dueDate) : null,
+          notes: input.notes ?? null,
+          createdById: input.actorId,
+        },
+      });
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        action: "platform.ticket_fee_remittance_finalized",
+        entityType: "TicketFeeRemittance",
+        entityId: remittance.id,
+        afterState: remittance,
+      }, tx);
+      return remittance;
+    });
+  }
+
+  async updateTicketFeeRemittance(input: {
+    actorId: string;
+    remittanceId: string;
+    status: "DUE" | "PAID" | "VOID";
+    paidAt?: string | null;
+    paymentReference?: string | null;
+    notes?: string | null;
+  }) {
+    return prisma.$transaction(async (tx) => {
+      const before = await tx.ticketFeeRemittance.findUnique({ where: { id: input.remittanceId } });
+      if (!before) throw AppError.notFound("Ticket-fee remittance not found.");
+      const paidAt = input.status === "PAID" ? new Date(input.paidAt ?? Date.now()) : null;
+      const remittance = await tx.ticketFeeRemittance.update({
+        where: { id: input.remittanceId },
+        data: {
+          status: input.status,
+          paidAt,
+          paymentReference: input.paymentReference === undefined ? before.paymentReference : input.paymentReference,
+          notes: input.notes === undefined ? before.notes : input.notes,
+        },
+      });
+      await this.audit.record({
+        actorType: "PLATFORM",
+        actorId: input.actorId,
+        action: "platform.ticket_fee_remittance_updated",
+        entityType: "TicketFeeRemittance",
+        entityId: remittance.id,
+        beforeState: before,
+        afterState: remittance,
+      }, tx);
+      return remittance;
+    });
   }
 
   async createAuditorium(
