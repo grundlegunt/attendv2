@@ -61,7 +61,7 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .payment-trend-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }.payment-trend-summary article { border: 1px solid var(--border); background: var(--surface); display: grid; gap: 7px; padding: 20px 22px; }.payment-trend-summary span { color: var(--muted); font-size: .7rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }.payment-trend-summary strong { color: var(--accent); font-family: var(--font-serif); font-size: 2rem; }.payment-trend-summary small { color: var(--muted); line-height: 1.4; }
 .payment-health-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .payments-loading { padding: 22px; }
-.remittance-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.remittance-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .remittance-summary article { display: grid; gap: 4px; }
 .remittance-summary small { color: var(--muted); }
 .remittance-master-table { border: 1px solid var(--border); background: var(--surface); }

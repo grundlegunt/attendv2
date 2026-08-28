@@ -34,6 +34,15 @@ test("payment operations exports and displays remittance collection health", () 
   assert.match(source, /open fee remittances/);
 });
 
+test("payment operations prioritizes remittances by aging bucket", () => {
+  assert.match(source, /type RemittanceAgingFilter = "ALL" \| "CURRENT" \| "1_30" \| "31_60" \| "60_PLUS" \| "PAID"/);
+  assert.match(source, /function daysOverdue/);
+  assert.match(source, /1–30 days/);
+  assert.match(source, /31–60 days/);
+  assert.match(source, /60\+ days/);
+  assert.match(source, /No remittances match this aging view/);
+});
+
 test("payment operations can find clients and filter Stripe readiness", () => {
   assert.match(source, /Find client/);
   assert.match(source, /Cinema or legal name/);
