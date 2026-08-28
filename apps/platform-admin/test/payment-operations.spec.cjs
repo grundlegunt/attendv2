@@ -50,6 +50,8 @@ test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /ringo-aged-receivables-/);
   assert.match(source, />Export aging CSV<\/button>/);
   assert.match(source, /Collection notes/);
+  assert.match(source, /Last contacted/);
+  assert.match(source, /Next follow-up/);
   assert.match(source, /Note: \{remittance\.notes\}/);
 });
 

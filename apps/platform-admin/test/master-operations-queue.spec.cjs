@@ -9,6 +9,7 @@ test("Master provides a prioritized cross-operator operations queue", () => {
   assert.match(source, /Operations Queue/);
   assert.match(source, /Failed payments in the last 24 hours/);
   assert.match(source, /Payments awaiting verification/);
+  assert.match(source, /Overdue remittance follow-ups/);
   assert.match(source, /Failed refunds/);
   assert.match(source, /Expired seat holds awaiting cleanup/);
   assert.match(source, /Missing \$\{missing\.join/);

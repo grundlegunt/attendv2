@@ -12,3 +12,12 @@ test("Master client remittances support audited collection notes", () => {
   assert.match(source, /Collection note: \{remittance\.notes\}/);
   assert.match(source, /remittance\.notes \? "Edit note" : "Add note"/);
 });
+
+test("Master client remittances schedule and display collection follow-ups", () => {
+  assert.match(source, /function logTicketFeeRemittanceContact/);
+  assert.match(source, /lastContactedAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(source, /nextFollowUpAt:/);
+  assert.match(source, />Log contact<\/button>/);
+  assert.match(source, /Last contacted/);
+  assert.match(source, /Next follow-up/);
+});

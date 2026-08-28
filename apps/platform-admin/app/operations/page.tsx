@@ -10,7 +10,7 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? (process.env.NODE_ENV ==
 const STORAGE_KEY = "attend-platform-session";
 interface Session { accessToken: string; user: { id: string; name: string; email: string; role: "OWNER" | "OPERATOR" | "VIEWER" } }
 interface Location { id: string; name: string; active: boolean; configuration: { branding: boolean; auditoriums: number; employees: number; menuItems: number; upcomingShowtimes: number } }
-interface Organization { id: string; name: string; payments: { onboardingStatus: string }; health: { failedPayments24h: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number }; ticketFeeRemittances: Array<{ status: "DUE" | "PAID" | "VOID"; dueDate: string | null; platformShareCents: number }>; locations: Location[] }
+interface Organization { id: string; name: string; payments: { onboardingStatus: string }; health: { failedPayments24h: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number }; ticketFeeRemittances: Array<{ status: "DUE" | "PAID" | "VOID"; dueDate: string | null; nextFollowUpAt: string | null; platformShareCents: number }>; locations: Location[] }
 interface Overview { generatedAt: string; organizations: Organization[] }
 type QueueItem = { id: string; client: string; location: string | null; category: "Payments" | "Refunds" | "Ticketing" | "Setup"; issue: string; count: number; href: string; priority: number };
 
@@ -29,6 +29,8 @@ function queueItems(organizations: Organization[]): QueueItem[] {
     add("Payments", "Stale processing payments", organization.health.stalePayments, paymentHref, 85);
     const openRemittances = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
     const overdueRemittances = openRemittances.filter((remittance) => remittance.dueDate && new Date(remittance.dueDate) < new Date());
+    const overdueFollowUps = openRemittances.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date());
+    add("Payments", "Overdue remittance follow-ups", overdueFollowUps.length, clientHref, 110);
     add("Payments", "Overdue ticket-fee remittances", overdueRemittances.length, clientHref, 105);
     add("Payments", "Open ticket-fee remittances", openRemittances.length - overdueRemittances.length, clientHref, 82);
     add("Refunds", "Failed refunds", organization.health.failedRefunds, paymentHref, 100);
