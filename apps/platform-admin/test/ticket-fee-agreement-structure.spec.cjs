@@ -43,3 +43,10 @@ test("the editor identifies distinct guest and registered checkout fees", () => 
   assert.match(source, /Use guest fee/);
   assert.match(source, /Use registered fee/);
 });
+
+test("new agreement versions start after the latest scheduled version", () => {
+  assert.match(source, /function ticketFeeAgreementMinEffectiveDate/);
+  assert.match(source, /nextDate\.setUTCDate\(nextDate\.getUTCDate\(\) \+ 1\)/);
+  assert.match(source, /min=\{ticketFeeAgreementMinEffectiveDate\(organization\.ticketFeeAgreements\)\}/);
+  assert.match(source, /Must follow the latest scheduled agreement version/);
+});

@@ -363,6 +363,15 @@ function csvCell(value: string | number | boolean) {
 }
 function healthRate(value: number | null) { return value === null ? "No activity" : `${value.toFixed(2)}%`; }
 function dateInputValue(date: Date) { return date.toISOString().slice(0, 10); }
+function ticketFeeAgreementMinEffectiveDate(agreements: OrganizationDetail["ticketFeeAgreements"]) {
+  const today = dateInputValue(new Date());
+  const latest = agreements.reduce((value, agreement) => agreement.effectiveFrom > value ? agreement.effectiveFrom : value, "");
+  if (!latest) return today;
+  const nextDate = new Date(latest);
+  nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+  const nextAvailableDate = dateInputValue(nextDate);
+  return nextAvailableDate > today ? nextAvailableDate : today;
+}
 function revenuePath(
   organizationId: string,
   range: RevenueRange,
@@ -793,7 +802,7 @@ export default function AttendMaster() {
       customerFee: customerFee.toFixed(2),
       structure: "FLAT",
       thresholdPeriod: "CONTRACT_YEAR",
-      effectiveFrom: dateInputValue(new Date()),
+      effectiveFrom: ticketFeeAgreementMinEffectiveDate(organization.ticketFeeAgreements),
       thresholdTickets: "100000",
       firstPlatformShare: (customerFee / 2).toFixed(2),
       secondPlatformShare: (customerFee / 2).toFixed(2),
@@ -2074,7 +2083,7 @@ export default function AttendMaster() {
                   <div className="editor-heading"><div><p className="eyebrow">NEW VERSION</p><h4>Commercial agreement</h4></div><button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft(null)}>Cancel</button></div>
                   <div className="form-grid">
                     <label>Agreement name<input required value={ticketFeeAgreementDraft.name} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, name: event.target.value })} /></label>
-                    <label>Effective date<input required type="date" value={ticketFeeAgreementDraft.effectiveFrom} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, effectiveFrom: event.target.value })} /></label>
+                    <label>Effective date<input required type="date" min={ticketFeeAgreementMinEffectiveDate(organization.ticketFeeAgreements)} value={ticketFeeAgreementDraft.effectiveFrom} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, effectiveFrom: event.target.value })} /><small className="muted">Must follow the latest scheduled agreement version.</small></label>
                     <label>Customer fee per ticket<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.customerFee} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: event.target.value })} /></label>
                     <label>Agreement structure<select value={ticketFeeAgreementDraft.structure} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, structure: event.target.value as TicketFeeAgreementDraft["structure"] })}><option value="FLAT">Flat split — same amount for every ticket</option><option value="TIERED">Volume tiers — amount changes after a threshold</option></select></label>
                     {ticketFeeAgreementDraft.structure === "TIERED" && <>
