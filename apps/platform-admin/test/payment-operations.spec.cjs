@@ -22,8 +22,16 @@ test("Attend Master payment operations exposes factual client health", () => {
 
 test("payment operations can focus on clients with actual exceptions", () => {
   assert.match(source, /Show exceptions only/);
-  assert.match(source, /showExceptionsOnly && organization\.health\.failedPayments24h \+ organization\.health\.verificationReviews \+ organization\.health\.failedRefunds \+ organization\.health\.stalePayments \+ organization\.health\.staleRefunds \+ organization\.health\.managerReviewTabs \+ organization\.health\.expiredHoldBacklog === 0/);
+  assert.match(source, /const openRemittances = organization\.ticketFeeRemittances\.filter\(\(remittance\) => remittance\.status === "DUE"\)\.length/);
+  assert.match(source, /organization\.health\.expiredHoldBacklog \+ openRemittances === 0/);
   assert.match(source, /params\.get\("exceptions"\) === "true"/);
+});
+
+test("payment operations exports and displays remittance collection health", () => {
+  assert.match(source, /Open fee remittances/);
+  assert.match(source, /Overdue fee remittances/);
+  assert.match(source, /Ringo receivable due/);
+  assert.match(source, /open fee remittances/);
 });
 
 test("payment operations can find clients and filter Stripe readiness", () => {
