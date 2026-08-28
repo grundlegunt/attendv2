@@ -38,7 +38,15 @@ test("remittance ledgers keep settlement reconciliation visible", () => {
   const paymentsSource = readFileSync(resolve(__dirname, "../app/payments/page.tsx"), "utf8");
   for (const pageSource of [source, paymentsSource]) {
     assert.match(pageSource, /platformShareCents \+ remittance\.operatorShareCents/);
-    assert.match(pageSource, /remittance\.varianceCents === 0 \? "Reconciled"/);
-    assert.match(pageSource, /money\(remittance\.varianceCents\).*variance/);
+    assert.match(pageSource, /feeVarianceLabel\(remittance\.varianceCents\)/);
+  }
+});
+
+test("settlement variance labels explain over- and under-collection", () => {
+  const paymentsSource = readFileSync(resolve(__dirname, "../app/payments/page.tsx"), "utf8");
+  for (const pageSource of [source, paymentsSource]) {
+    assert.match(pageSource, /function feeVarianceLabel/);
+    assert.match(pageSource, /money\(Math\.abs\(cents\)\)/);
+    assert.match(pageSource, /cents > 0 \? "over-collected" : "under-collected"/);
   }
 });
