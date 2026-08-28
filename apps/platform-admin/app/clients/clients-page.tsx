@@ -798,6 +798,22 @@ export default function AttendMaster() {
     }
   }
 
+  async function downloadTicketFeeSettlement() {
+    if (!session || !organization) return;
+    setError(null);
+    try {
+      const blob = await platformDownload(API_BASE_URL, STORAGE_KEY, `/platform/organizations/${organization.id}/ticket-fee-settlement.csv`, session.accessToken);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${organization.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-ticket-fee-settlement.csv`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not export the ticket-fee settlement.");
+    }
+  }
+
   async function setOrganizationActive(active: boolean) {
     if (!session || !organization) return;
     const action = active ? "reactivate" : "suspend";
@@ -1885,7 +1901,7 @@ export default function AttendMaster() {
                     <h3>Ticket-fee agreement</h3>
                     <p className="muted">Define how the customer fee is divided between Ringo and this operator as ticket volume grows. New versions preserve prior settlement terms.</p>
                   </div>
-                  {session.user.role !== "VIEWER" && !ticketFeeAgreementDraft && <button onClick={beginTicketFeeAgreementCreate}>{organization.ticketFeeAgreements.length ? "Add future version" : "Create agreement"}</button>}
+                  <div className="panel-actions">{organization.ticketFeeSettlement && <button className="quiet" onClick={() => void downloadTicketFeeSettlement()}>Export statement</button>}{session.user.role !== "VIEWER" && !ticketFeeAgreementDraft && <button onClick={beginTicketFeeAgreementCreate}>{organization.ticketFeeAgreements.length ? "Add future version" : "Create agreement"}</button>}</div>
                 </div>
                 {ticketFeeAgreementDraft && <form className="editor commercial-terms-editor" onSubmit={createTicketFeeAgreement}>
                   <div className="editor-heading"><div><p className="eyebrow">NEW VERSION</p><h4>Commercial agreement</h4></div><button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft(null)}>Cancel</button></div>
