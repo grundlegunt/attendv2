@@ -25,3 +25,12 @@ test("Master client remittances schedule and display collection follow-ups", () 
   assert.match(source, />Assign to me<\/button>/);
   assert.match(source, /Collection owner:/);
 });
+
+test("remittance ledgers keep settlement reconciliation visible", () => {
+  const paymentsSource = readFileSync(resolve(__dirname, "../app/payments/page.tsx"), "utf8");
+  for (const pageSource of [source, paymentsSource]) {
+    assert.match(pageSource, /platformShareCents \+ remittance\.operatorShareCents/);
+    assert.match(pageSource, /remittance\.varianceCents === 0 \? "Reconciled"/);
+    assert.match(pageSource, /money\(remittance\.varianceCents\).*variance/);
+  }
+});
