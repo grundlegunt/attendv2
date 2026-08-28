@@ -74,6 +74,9 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .remittance-master-table article > span { display: grid; gap: 3px; }
 .remittance-master-table small { color: var(--muted); }
 .operator-receivables { margin-bottom: 14px; border: 1px solid var(--border); background: var(--surface); }
+.operator-receivables-heading { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin: 24px 0 10px; }
+.operator-receivables-heading h3 { margin: 0; }
+.operator-receivables-heading button { margin: 0; }
 .operator-receivables > div, .operator-receivables > article { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(110px, .65fr) minmax(180px, 1fr) 90px 90px minmax(120px, .7fr) 105px; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
 .operator-receivables > div { color: var(--muted); font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
 .operator-receivables > article:last-child { border-bottom: 0; }
