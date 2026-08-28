@@ -25,6 +25,19 @@ const organizationUpdateSchema = z.object({
   active: z.boolean().optional(),
 }).strict();
 
+const ticketFeeAgreementCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  customerFeeMinor: z.number().int().min(0).max(100_000),
+  thresholdPeriod: z.enum(["CONTRACT_YEAR", "CALENDAR_YEAR", "LIFETIME"]).default("CONTRACT_YEAR"),
+  effectiveFrom: z.string().datetime(),
+  tiers: z.array(z.object({
+    startsAtTicket: z.number().int().min(1),
+    endsAtTicket: z.number().int().min(1).nullable(),
+    platformShareMinor: z.number().int().min(0).max(100_000),
+    operatorShareMinor: z.number().int().min(0).max(100_000),
+  }).strict()).min(1).max(20),
+}).strict();
+
 const connectOnboardingSchema = z.object({
   origin: z.string().url(),
   returnPath: z.enum(["/clients", "/payments"]).default("/clients"),
@@ -360,6 +373,13 @@ export class PlatformController {
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
   updateOrganization(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(organizationUpdateSchema)) body: unknown) {
     return this.platform.updateOrganization({ actorId: actor.sub, organizationId, ...organizationUpdateSchema.parse(body) });
+  }
+
+  @Post("organizations/:organizationId/ticket-fee-agreements")
+  @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
+  @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)
+  createTicketFeeAgreement(@CurrentActor() actor: RequestActor, @Param("organizationId") organizationId: string, @Body(new ZodValidationPipe(ticketFeeAgreementCreateSchema)) body: unknown) {
+    return this.platform.createTicketFeeAgreement({ actorId: actor.sub, organizationId, ...ticketFeeAgreementCreateSchema.parse(body) });
   }
 
   @Delete("organizations/:organizationId")
