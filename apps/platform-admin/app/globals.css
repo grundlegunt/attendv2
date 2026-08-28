@@ -39,6 +39,12 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .delivery-readiness { margin-bottom: 16px; }.delivery-readiness-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); }.delivery-readiness-grid article { display: grid; gap: 7px; min-height: 118px; padding: 18px; border-right: 1px solid var(--border); background: var(--surface); }.delivery-readiness-grid article:last-child { border-right: 0; }.delivery-readiness-grid article.not-ready { box-shadow: inset 0 3px 0 var(--warning); }.delivery-readiness-grid span { color: var(--muted); font-size: .68rem; font-weight: 900; letter-spacing: .09em; text-transform: uppercase; }.delivery-readiness-grid strong { margin-top: auto; font-size: 1.15rem; }.delivery-readiness-grid article.ready strong { color: var(--accent); }.delivery-readiness-grid small { color: var(--muted); }
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 18px; }
 .dashboard-panel { min-width: 0; padding: 24px; border: 1px solid var(--border); background: var(--surface); }
+.urgent-operations-panel { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+.urgent-operations-panel > div { display: grid; gap: 7px; }
+.urgent-operations-panel h2, .urgent-operations-panel p { margin: 0; }
+.urgent-operations-panel > a { flex: 0 0 auto; color: var(--accent); font-weight: 900; text-decoration: none; }
+.urgent-operations-panel.has-urgent { border-color: var(--danger); }
+.urgent-operations-panel.has-urgent .eyebrow, .urgent-operations-panel.has-urgent > a { color: var(--danger); }
 .panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
 .panel-heading a { color: var(--accent); font-size: .75rem; font-weight: 900; text-decoration: none; }
 .attention-list, .readiness-list { display: grid; }
@@ -172,7 +178,7 @@ dl { margin: 0; }dl div { display: flex; justify-content: space-between; gap: 14
 @media (max-width: 800px) { .branding-list article { grid-template-columns: 1fr; align-items: start; }.branding-list .link-button { justify-self: start; } }
 @media (max-width: 900px) { .detail-heading, .location-detail-heading { display: grid; }.org-actions { justify-items: start; } }
 @media (max-width: 900px) { .client-health-panel { grid-template-columns: 1fr; }.client-health-trends { grid-template-columns: 1fr; }.client-health-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .shell { width: min(100% - 24px, 1500px); }.summary, .dashboard-summary, .payment-summary, .onboarding-summary, .metric-grid { grid-template-columns: 1fr; }.actions, .actions.horizontal { display: grid; grid-template-columns: 1fr; }.swatches { grid-template-columns: 1fr; }.attention-list > a, .readiness-list > a, .pipeline-heading { align-items: flex-start; flex-direction: column; }.payments-table > article, .pipeline-steps { grid-template-columns: 1fr; }.payment-actions { grid-column: auto; } }
+@media (max-width: 520px) { .shell { width: min(100% - 24px, 1500px); }.summary, .dashboard-summary, .payment-summary, .onboarding-summary, .metric-grid { grid-template-columns: 1fr; }.urgent-operations-panel { align-items: flex-start; flex-direction: column; }.actions, .actions.horizontal { display: grid; grid-template-columns: 1fr; }.swatches { grid-template-columns: 1fr; }.attention-list > a, .readiness-list > a, .pipeline-heading { align-items: flex-start; flex-direction: column; }.payments-table > article, .pipeline-steps { grid-template-columns: 1fr; }.payment-actions { grid-column: auto; } }
 @media (max-width: 520px) { .delivery-readiness-grid { grid-template-columns: 1fr; }.delivery-readiness-grid article { border-right: 0; border-bottom: 1px solid var(--border); }.delivery-readiness-grid article:nth-last-child(2) { border-bottom: 1px solid var(--border); }.delivery-readiness-grid article:last-child { border-bottom: 0; } }
 @media (max-width: 650px) { .payments-toolbar { align-items: flex-start; flex-direction: column; } }
 @media (max-width: 650px) { .payment-trend-summary { grid-template-columns: 1fr; } }
