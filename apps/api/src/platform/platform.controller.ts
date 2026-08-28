@@ -45,7 +45,7 @@ const ticketFeeSettlementQuerySchema = z.object({
 const ticketFeeRemittanceCreateSchema = z.object({
   asOf: z.string().datetime(),
   dueDate: z.string().datetime().nullable().optional(),
-  notes: z.string().trim().max(2000).nullable().optional(),
+  reconciliationNote: z.string().trim().max(2000).nullable().optional(),
 }).strict();
 
 const ticketFeeRemittanceUpdateSchema = z.object({

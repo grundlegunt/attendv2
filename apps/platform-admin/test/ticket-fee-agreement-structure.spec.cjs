@@ -84,7 +84,7 @@ test("settlement reconciliation distinguishes collected and expected fees", () =
 test("settlement variances require a durable reconciliation note", () => {
   assert.match(source, /Reconciliation note/);
   assert.match(source, /ticketFeeSettlement\.varianceCents !== 0 && !ticketFeeReconciliationNote\.trim\(\)/);
-  assert.match(source, /notes: ticketFeeReconciliationNote\.trim\(\) \|\| null/);
-  assert.match(apiSource, /settlement\.varianceCents !== 0 && !input\.notes\?\.trim\(\)/);
+  assert.match(source, /reconciliationNote: ticketFeeReconciliationNote\.trim\(\) \|\| null/);
+  assert.match(apiSource, /settlement\.varianceCents !== 0 && !input\.reconciliationNote\?\.trim\(\)/);
   assert.match(apiSource, /A reconciliation note is required when collected fees differ/);
 });

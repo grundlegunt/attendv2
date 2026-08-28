@@ -152,7 +152,8 @@ test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /Collection owner/);
   assert.match(source, /Collection owner email/);
   assert.match(source, /Owner: \{remittance\.collectionOwner\?\.name/);
-  assert.match(source, /Note: \{remittance\.notes\}/);
+  assert.match(source, /Collection: \{remittance\.notes\}/);
+  assert.match(source, /Reconciliation: \{remittance\.reconciliationNote\}/);
 });
 
 test("payment operations can find clients and filter Stripe readiness", () => {

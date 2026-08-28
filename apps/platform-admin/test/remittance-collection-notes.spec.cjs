@@ -13,6 +13,14 @@ test("Master client remittances support audited collection notes", () => {
   assert.match(source, /remittance\.notes \? "Edit note" : "Add note"/);
 });
 
+test("financial reconciliation notes remain separate from editable collection notes", () => {
+  const paymentsSource = readFileSync(resolve(__dirname, "../app/payments/page.tsx"), "utf8");
+  assert.match(source, /Reconciliation: \{remittance\.reconciliationNote\}/);
+  assert.match(source, /Collection note: \{remittance\.notes\}/);
+  assert.match(paymentsSource, /Reconciliation note/);
+  assert.match(paymentsSource, /remittance\.reconciliationNote \?\? ""/);
+});
+
 test("Master client remittances schedule and display collection follow-ups", () => {
   assert.match(source, /function logTicketFeeRemittanceContact/);
   assert.match(source, /lastContactedAt: new Date\(\)\.toISOString\(\)/);
