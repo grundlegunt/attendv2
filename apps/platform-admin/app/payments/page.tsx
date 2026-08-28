@@ -458,6 +458,27 @@ export default function PlatformPayments() {
     URL.revokeObjectURL(url);
   }
 
+  function exportCollectionOwnerWorkload() {
+    const columns = ["Collection owner", "Email", "Open periods", "Open balance", "Overdue balance", "Overdue follow-ups", "Upcoming follow-ups", "Unscheduled follow-ups"];
+    const rows = collectionOwnerWorkload.map((owner) => [
+      owner.name,
+      owner.email ?? "",
+      owner.dueCount,
+      owner.dueCents / 100,
+      owner.overdueCents / 100,
+      owner.overdueFollowUps,
+      owner.upcomingFollowUps,
+      owner.unscheduledFollowUps,
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-collection-owner-workload-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
@@ -513,7 +534,7 @@ export default function PlatformPayments() {
         {operatorReceivables.length > 0 && displayedOperatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators match this collection risk tier.</p>}
         {displayedOperatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}<small>{money(operator.days31To60Cents)} at 31–60 · {money(operator.days60PlusCents)} at 60+</small></span><b className={`status ${operator.risk === "CURRENT" ? "good" : "warning"}`}>{operator.risk.toLowerCase()}</b><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
       </section>
-      <div className="operator-receivables-heading"><div><p className="eyebrow">COLLECTION OWNERS</p><h3>Owner workload</h3></div><span className="muted">Open receivables and follow-up coverage</span></div>
+      <div className="operator-receivables-heading"><div><p className="eyebrow">COLLECTION OWNERS</p><h3>Owner workload</h3></div><div className="operator-receivables-actions"><span>Open receivables and follow-up coverage</span><button className="quiet" type="button" disabled={collectionOwnerWorkload.length === 0} onClick={exportCollectionOwnerWorkload}>Export owner workload</button></div></div>
       <section className="collection-owner-workload" aria-label="Collection owner workload">
         <div><span>Owner</span><span>Open balance</span><span>Overdue balance</span><span>Periods</span><span>Follow-ups</span><span>Action</span></div>
         {collectionOwnerWorkload.length === 0 && <p className="empty-state payments-loading">No open receivables are assigned for collection.</p>}
