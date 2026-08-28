@@ -85,6 +85,13 @@ test("payment operations identifies operator collection risk", () => {
   assert.match(source, /at 60\+/);
 });
 
+test("payment operations exports operator-level collection risk", () => {
+  assert.match(source, /function exportOperatorReceivables\(\)/);
+  assert.match(source, /"Collection risk"/);
+  assert.match(source, /ringo-operator-receivables-/);
+  assert.match(source, />Export operator summary<\/button>/);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);

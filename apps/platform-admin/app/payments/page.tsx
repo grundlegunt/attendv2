@@ -389,6 +389,29 @@ export default function PlatformPayments() {
     URL.revokeObjectURL(url);
   }
 
+  function exportOperatorReceivables() {
+    const columns = ["Operator", "Collection risk", "Open periods", "Open balance", "Overdue balance", "31–60 days", "60+ days", "Oldest days overdue", "Overdue follow-ups", "Unscheduled follow-ups"];
+    const rows = operatorReceivables.map((operator) => [
+      operator.name,
+      operator.risk,
+      operator.dueCount,
+      operator.dueCents / 100,
+      operator.overdueCents / 100,
+      operator.days31To60Cents / 100,
+      operator.days60PlusCents / 100,
+      operator.oldestDays,
+      operator.overdueFollowUps,
+      operator.unscheduledFollowUps,
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-operator-receivables-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
@@ -437,6 +460,7 @@ export default function PlatformPayments() {
         <article><strong>{money(remittanceTotals.days60PlusCents)}</strong><span>60+ days</span><small>{remittanceTotals.overdueCount} total overdue periods</small></article>
         <article><strong>{money(remittanceTotals.paidCents)}</strong><span>Ringo share paid</span><small>{remittanceTotals.paidCount} periods received</small></article>
       </section>
+      <div className="operator-receivables-heading"><div><p className="eyebrow">OPERATOR RISK</p><h3>Receivables by operator</h3></div><button className="quiet" type="button" disabled={operatorReceivables.length === 0} onClick={exportOperatorReceivables}>Export operator summary</button></div>
       <section className="operator-receivables" aria-label="Receivables by operator">
         <div><span>Operator</span><span>Open balance</span><span>Overdue</span><span>Risk</span><span>Oldest</span><span>Follow-up</span><span>Action</span></div>
         {operatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators currently have open ticket-fee receivables.</p>}
