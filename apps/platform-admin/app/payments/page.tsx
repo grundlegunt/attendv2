@@ -53,6 +53,7 @@ interface OrganizationOverview {
     paidAt: string | null;
     paymentReference: string | null;
     reconciliationNote: string | null;
+    voidReason: string | null;
     notes: string | null;
     lastContactedAt: string | null;
     nextFollowUpAt: string | null;

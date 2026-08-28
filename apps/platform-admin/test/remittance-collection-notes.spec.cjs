@@ -58,3 +58,14 @@ test("paid remittances require a non-empty payment reference", () => {
   assert.match(apiSource, /status === "PAID" && !paymentReference/);
   assert.match(apiSource, /A payment reference is required before a ticket-fee remittance can be marked paid/);
 });
+
+test("voided remittances require and retain an audit reason", () => {
+  const apiSource = readFileSync(resolve(__dirname, "../../api/src/platform/platform.service.ts"), "utf8");
+  const schemaSource = readFileSync(resolve(__dirname, "../../../packages/database/prisma/schema.prisma"), "utf8");
+  assert.match(source, /window\.prompt\("Reason for voiding this remittance"\)/);
+  assert.match(source, /Enter a reason before voiding this remittance/);
+  assert.match(source, /Voided remittance reasons/);
+  assert.match(apiSource, /status === "VOID" && !voidReason/);
+  assert.match(apiSource, /A reason is required before a ticket-fee remittance can be voided/);
+  assert.match(schemaSource, /voidReason\s+String\?/);
+});

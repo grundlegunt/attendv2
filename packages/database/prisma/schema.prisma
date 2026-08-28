@@ -109,6 +109,7 @@ model TicketFeeRemittance {
   paidAt                 DateTime?
   paymentReference       String?
   reconciliationNote     String?
+  voidReason              String?
   notes                  String?
   lastContactedAt        DateTime?
   nextFollowUpAt         DateTime?
