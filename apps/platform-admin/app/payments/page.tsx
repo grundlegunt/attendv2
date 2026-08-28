@@ -239,6 +239,24 @@ export default function PlatformPayments() {
         : new Date(remittance.nextFollowUpAt) >= now;
     });
   }, [remittanceAgingFilter, remittanceFollowUpFilter, remittanceLedger, remittanceOrganizationFilter, remittanceOwnerFilter]);
+  const operatorReceivables = useMemo(() => {
+    const now = new Date();
+    return (overview?.organizations ?? []).map((organization) => {
+      const due = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
+      const overdue = due.filter((remittance) => remittanceAgingBucket(remittance, now) !== "CURRENT");
+      const oldestDays = due.reduce((oldest, remittance) => Math.max(oldest, daysOverdue(remittance.dueDate, now) ?? 0), 0);
+      return {
+        id: organization.id,
+        name: organization.name,
+        dueCount: due.length,
+        dueCents: due.reduce((sum, remittance) => sum + remittance.platformShareCents, 0),
+        overdueCents: overdue.reduce((sum, remittance) => sum + remittance.platformShareCents, 0),
+        oldestDays,
+        overdueFollowUps: due.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < now).length,
+        unscheduledFollowUps: due.filter((remittance) => !remittance.nextFollowUpAt).length,
+      };
+    }).filter((organization) => organization.dueCount > 0).sort((left, right) => right.overdueCents - left.overdueCents || right.dueCents - left.dueCents);
+  }, [overview]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -412,6 +430,11 @@ export default function PlatformPayments() {
         <article><strong>{money(remittanceTotals.days31To60Cents)}</strong><span>31–60 days</span><small>Escalation required</small></article>
         <article><strong>{money(remittanceTotals.days60PlusCents)}</strong><span>60+ days</span><small>{remittanceTotals.overdueCount} total overdue periods</small></article>
         <article><strong>{money(remittanceTotals.paidCents)}</strong><span>Ringo share paid</span><small>{remittanceTotals.paidCount} periods received</small></article>
+      </section>
+      <section className="operator-receivables" aria-label="Receivables by operator">
+        <div><span>Operator</span><span>Open balance</span><span>Overdue</span><span>Oldest</span><span>Follow-up</span><span>Action</span></div>
+        {operatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators currently have open ticket-fee receivables.</p>}
+        {operatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}</span><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
       </section>
       <section className="remittance-master-table">
         <div><span>Operator</span><span>Period</span><span>Tickets</span><span>Ringo receivable</span><span>Status</span><span>Action</span></div>
