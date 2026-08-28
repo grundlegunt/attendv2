@@ -45,6 +45,9 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .urgent-operations-panel > a { flex: 0 0 auto; color: var(--accent); font-weight: 900; text-decoration: none; }
 .urgent-operations-panel.has-urgent { border-color: var(--danger); }
 .urgent-operations-panel.has-urgent .eyebrow, .urgent-operations-panel.has-urgent > a { color: var(--danger); }
+.urgent-operations-breakdown { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+.urgent-operations-breakdown span { padding: 6px 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); font-size: .72rem; }
+.urgent-operations-breakdown strong { color: var(--danger); }
 .panel-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
 .panel-heading a { color: var(--accent); font-size: .75rem; font-weight: 900; text-decoration: none; }
 .attention-list, .readiness-list { display: grid; }

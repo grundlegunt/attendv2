@@ -193,6 +193,9 @@ export default function PlatformDashboard() {
         clientAffected: issueGroups > 0,
         remittanceCount: urgentRemittances.length,
         exposureCents: urgentRemittances.reduce((total, remittance) => total + remittance.platformShareCents, 0),
+        unassignedCount: openRemittances.filter((remittance) => !remittance.collectionOwner).length,
+        overdueFollowUpCount: openRemittances.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date()).length,
+        criticalAgingCount: openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) > 60).length,
       };
     });
     return {
@@ -206,6 +209,9 @@ export default function PlatformDashboard() {
       urgentOperationClients: urgentOperations.filter((item) => item.clientAffected).length,
       urgentRemittanceCount: urgentOperations.reduce((total, item) => total + item.remittanceCount, 0),
       urgentExposureCents: urgentOperations.reduce((total, item) => total + item.exposureCents, 0),
+      urgentUnassignedCount: urgentOperations.reduce((total, item) => total + item.unassignedCount, 0),
+      urgentOverdueFollowUpCount: urgentOperations.reduce((total, item) => total + item.overdueFollowUpCount, 0),
+      urgentCriticalAgingCount: urgentOperations.reduce((total, item) => total + item.criticalAgingCount, 0),
     };
   }, [overview]);
 
@@ -275,6 +281,7 @@ export default function PlatformDashboard() {
           <p className="eyebrow">URGENT OPERATIONS</p>
           <h2>{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationGroups} issue groups need immediate follow-up` : "No urgent operational risks"}</h2>
           <p className="muted">{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationClients} ${metrics.urgentOperationClients === 1 ? "client has" : "clients have"} ${metrics.urgentRemittanceCount} urgent ${metrics.urgentRemittanceCount === 1 ? "remittance" : "remittances"} representing ${money(metrics.urgentExposureCents)} in Ringo receivables.` : "No unassigned remittances, overdue follow-ups, or remittances more than 60 days past due."}</p>
+          {metrics.urgentOperationGroups > 0 && <div className="urgent-operations-breakdown" aria-label="Urgent remittance causes"><span><strong>{metrics.urgentUnassignedCount}</strong> unassigned</span><span><strong>{metrics.urgentOverdueFollowUpCount}</strong> overdue follow-ups</span><span><strong>{metrics.urgentCriticalAgingCount}</strong> over 60 days</span></div>}
         </div>
         <Link href="/operations?priority=Urgent">Open urgent queue →</Link>
       </section>
