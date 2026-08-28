@@ -14,6 +14,13 @@ interface Organization { id: string; name: string; payments: { onboardingStatus:
 interface Overview { generatedAt: string; organizations: Organization[] }
 type QueueItem = { id: string; client: string; location: string | null; category: "Payments" | "Refunds" | "Ticketing" | "Setup"; issue: string; count: number; href: string; priority: number };
 
+function remittanceAge(dueDate: string | null) {
+  if (!dueDate) return 0;
+  const due = new Date(dueDate);
+  due.setHours(23, 59, 59, 999);
+  return Math.max(0, Math.floor((Date.now() - due.getTime()) / 86_400_000));
+}
+
 function request<T>(path: string, init?: RequestInit, accessToken?: string) { return platformRequest<T>(API_BASE_URL, STORAGE_KEY, path, init, accessToken); }
 function label(value: string) { return value.toLowerCase().replaceAll("_", " "); }
 
@@ -28,11 +35,15 @@ function queueItems(organizations: Organization[]): QueueItem[] {
     add("Payments", "Payments awaiting verification", organization.health.verificationReviews, paymentHref, 95);
     add("Payments", "Stale processing payments", organization.health.stalePayments, paymentHref, 85);
     const openRemittances = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
-    const overdueRemittances = openRemittances.filter((remittance) => remittance.dueDate && new Date(remittance.dueDate) < new Date());
+    const overdue1To30 = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) >= 1 && remittanceAge(remittance.dueDate) <= 30);
+    const overdue31To60 = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) >= 31 && remittanceAge(remittance.dueDate) <= 60);
+    const overdue60Plus = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) > 60);
     const overdueFollowUps = openRemittances.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date());
     add("Payments", "Overdue remittance follow-ups", overdueFollowUps.length, `${paymentHref}&followUp=OVERDUE`, 110);
-    add("Payments", "Overdue ticket-fee remittances", overdueRemittances.length, clientHref, 105);
-    add("Payments", "Open ticket-fee remittances", openRemittances.length - overdueRemittances.length, clientHref, 82);
+    add("Payments", "Critical ticket-fee remittances · 60+ days", overdue60Plus.length, `${paymentHref}&age=60_PLUS`, 115);
+    add("Payments", "Escalated ticket-fee remittances · 31–60 days", overdue31To60.length, `${paymentHref}&age=31_60`, 108);
+    add("Payments", "Overdue ticket-fee remittances · 1–30 days", overdue1To30.length, `${paymentHref}&age=1_30`, 102);
+    add("Payments", "Current ticket-fee remittances", openRemittances.length - overdue1To30.length - overdue31To60.length - overdue60Plus.length, `${paymentHref}&age=CURRENT`, 82);
     add("Refunds", "Failed refunds", organization.health.failedRefunds, paymentHref, 100);
     add("Refunds", "Stale refunds", organization.health.staleRefunds, paymentHref, 85);
     add("Ticketing", "Tabs awaiting manager review", organization.health.managerReviewTabs, paymentHref, 80);
