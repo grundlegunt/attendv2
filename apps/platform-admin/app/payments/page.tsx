@@ -78,6 +78,31 @@ function csvCell(value: unknown) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
+type RemittanceAgingFilter = "ALL" | "CURRENT" | "1_30" | "31_60" | "60_PLUS" | "PAID";
+
+function daysOverdue(dueDate: string | null, now = new Date()) {
+  if (!dueDate) return null;
+  const due = new Date(dueDate);
+  due.setHours(23, 59, 59, 999);
+  return Math.max(0, Math.floor((now.getTime() - due.getTime()) / 86_400_000));
+}
+
+function remittanceAgingBucket(remittance: { status: "DUE" | "PAID" | "VOID"; dueDate: string | null }, now = new Date()): RemittanceAgingFilter | "VOID" {
+  if (remittance.status === "PAID") return "PAID";
+  if (remittance.status === "VOID") return "VOID";
+  const age = daysOverdue(remittance.dueDate, now);
+  if (age === null || age === 0) return "CURRENT";
+  if (age <= 30) return "1_30";
+  if (age <= 60) return "31_60";
+  return "60_PLUS";
+}
+
+function remittanceAgeLabel(remittance: { status: "DUE" | "PAID" | "VOID"; dueDate: string | null }) {
+  if (remittance.status !== "DUE") return remittance.status.toLowerCase();
+  const age = daysOverdue(remittance.dueDate);
+  return age && age > 0 ? `${age} day${age === 1 ? "" : "s"} overdue` : "current";
+}
+
 export default function PlatformPayments() {
   const [session, setSession] = useState<Session | null>(null);
   const [restored, setRestored] = useState(false);
@@ -89,6 +114,7 @@ export default function PlatformPayments() {
   const [showExceptionsOnly, setShowExceptionsOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [onboardingStatus, setOnboardingStatus] = useState("ALL");
+  const [remittanceAgingFilter, setRemittanceAgingFilter] = useState<RemittanceAgingFilter>("ALL");
   const overviewRequestRef = useRef(0);
   const authRequestRef = useRef(0);
 
@@ -171,10 +197,15 @@ export default function PlatformPayments() {
       dueCents: due.reduce((sum, item) => sum + item.platformShareCents, 0),
       dueCount: due.length,
       overdueCount: due.filter((item) => item.dueDate && new Date(item.dueDate) < now).length,
+      currentCents: due.filter((item) => remittanceAgingBucket(item, now) === "CURRENT").reduce((sum, item) => sum + item.platformShareCents, 0),
+      days1To30Cents: due.filter((item) => remittanceAgingBucket(item, now) === "1_30").reduce((sum, item) => sum + item.platformShareCents, 0),
+      days31To60Cents: due.filter((item) => remittanceAgingBucket(item, now) === "31_60").reduce((sum, item) => sum + item.platformShareCents, 0),
+      days60PlusCents: due.filter((item) => remittanceAgingBucket(item, now) === "60_PLUS").reduce((sum, item) => sum + item.platformShareCents, 0),
       paidCents: paid.reduce((sum, item) => sum + item.platformShareCents, 0),
       paidCount: paid.length,
     };
   }, [remittanceLedger]);
+  const displayedRemittances = useMemo(() => remittanceLedger.filter((remittance) => remittanceAgingFilter === "ALL" || remittanceAgingBucket(remittance) === remittanceAgingFilter), [remittanceAgingFilter, remittanceLedger]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -303,17 +334,20 @@ export default function PlatformPayments() {
         <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
       </section>
-      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><span>{remittanceLedger.length} finalized periods</span></div></div>
+      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><label>Age <select value={remittanceAgingFilter} onChange={(event) => setRemittanceAgingFilter(event.target.value as RemittanceAgingFilter)}><option value="ALL">All periods</option><option value="CURRENT">Current</option><option value="1_30">1–30 days</option><option value="31_60">31–60 days</option><option value="60_PLUS">60+ days</option><option value="PAID">Paid</option></select></label><span>{displayedRemittances.length} of {remittanceLedger.length} periods</span></div></div>
       <section className="payment-summary remittance-summary" aria-label="Ticket fee remittance totals">
-        <article><strong>{money(remittanceTotals.dueCents)}</strong><span>Ringo share due</span><small>{remittanceTotals.dueCount} open periods</small></article>
-        <article><strong>{remittanceTotals.overdueCount}</strong><span>Overdue periods</span><small>Past their assigned due date</small></article>
+        <article><strong>{money(remittanceTotals.currentCents)}</strong><span>Current</span><small>Not yet overdue</small></article>
+        <article><strong>{money(remittanceTotals.days1To30Cents)}</strong><span>1–30 days</span><small>Early collections</small></article>
+        <article><strong>{money(remittanceTotals.days31To60Cents)}</strong><span>31–60 days</span><small>Escalation required</small></article>
+        <article><strong>{money(remittanceTotals.days60PlusCents)}</strong><span>60+ days</span><small>{remittanceTotals.overdueCount} total overdue periods</small></article>
         <article><strong>{money(remittanceTotals.paidCents)}</strong><span>Ringo share paid</span><small>{remittanceTotals.paidCount} periods received</small></article>
       </section>
       <section className="remittance-master-table">
         <div><span>Operator</span><span>Period</span><span>Tickets</span><span>Ringo receivable</span><span>Status</span><span>Action</span></div>
         {!overview && <p className="muted payments-loading">Loading operator remittances…</p>}
         {overview && remittanceLedger.length === 0 && <p className="empty-state payments-loading">No ticket-fee settlement periods have been finalized yet.</p>}
-        {remittanceLedger.map((remittance) => <article key={remittance.id}><strong>{remittance.organizationName}</strong><span>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</span><span>{remittance.ticketCount.toLocaleString()}</span><span><strong>{money(remittance.platformShareCents)}</strong><small>{money(remittance.collectedFeeCents)} collected</small></span><span><b className={`status ${remittance.status === "PAID" ? "good" : remittance.status === "DUE" && remittance.dueDate && new Date(remittance.dueDate) < new Date() ? "warning" : ""}`}>{remittance.status.toLowerCase()}</b><small>{remittance.status === "PAID" && remittance.paidAt ? new Date(remittance.paidAt).toLocaleDateString() : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</small></span><Link href={`/clients?organizationId=${encodeURIComponent(remittance.organizationId)}`}>Open client →</Link></article>)}
+        {overview && remittanceLedger.length > 0 && displayedRemittances.length === 0 && <p className="empty-state payments-loading">No remittances match this aging view.</p>}
+        {displayedRemittances.map((remittance) => <article key={remittance.id}><strong>{remittance.organizationName}</strong><span>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</span><span>{remittance.ticketCount.toLocaleString()}</span><span><strong>{money(remittance.platformShareCents)}</strong><small>{money(remittance.collectedFeeCents)} collected</small></span><span><b className={`status ${remittance.status === "PAID" ? "good" : remittanceAgingBucket(remittance) !== "CURRENT" ? "warning" : ""}`}>{remittanceAgeLabel(remittance)}</b><small>{remittance.status === "PAID" && remittance.paidAt ? `Paid ${new Date(remittance.paidAt).toLocaleDateString()}` : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</small></span><Link href={`/clients?organizationId=${encodeURIComponent(remittance.organizationId)}`}>Open client →</Link></article>)}
       </section>
       <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><div className="payments-toolbar-actions"><span>{displayedOrganizations.length} of {overview?.organizations.length ?? 0} clients</span><button className="quiet" type="button" disabled={!overview || displayedOrganizations.length === 0} onClick={exportPaymentOperations}>Export CSV</button></div></div>
       <section className="payments-filters" aria-label="Filter payment operations">
