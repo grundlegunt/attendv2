@@ -2087,8 +2087,10 @@ export default function AttendMaster() {
                     {ticketFeeAgreementDraft.structure === "TIERED" && <><div><span>Ringo · after threshold</span><strong>{money(currencyInputCents(ticketFeeAgreementDraft.secondPlatformShare))}</strong></div><div><span>Operator · after threshold</span><strong>{money(Math.max(0, currencyInputCents(ticketFeeAgreementDraft.customerFee) - currencyInputCents(ticketFeeAgreementDraft.secondPlatformShare)))}</strong></div></>}
                   </div>
                   {currencyInputCents(ticketFeeAgreementDraft.customerFee) !== organization.ticketFeeMinor && <div className="agreement-fee-warning" role="alert">
-                    <strong>Customer-fee mismatch</strong>
-                    <p>This agreement uses {money(currencyInputCents(ticketFeeAgreementDraft.customerFee))} per ticket, but this operator&apos;s live checkout fee is {money(organization.ticketFeeMinor)}. Align the amounts before the effective date to avoid settlement variances.</p>
+                    <div><strong>Customer-fee mismatch</strong>
+                      <p>This agreement uses {money(currencyInputCents(ticketFeeAgreementDraft.customerFee))} per ticket, but this operator&apos;s live checkout fee is {money(organization.ticketFeeMinor)}. Align the amounts before the effective date to avoid settlement variances.</p>
+                    </div>
+                    <button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: (organization.ticketFeeMinor / 100).toFixed(2) })}>Use live checkout fee</button>
                   </div>}
                   <p className="form-note">Creating this version closes the previous agreement at the new effective date. Existing versions cannot be edited retroactively.</p>
                   <button disabled={saving}>{saving ? "Creating…" : "Create agreement version"}</button>

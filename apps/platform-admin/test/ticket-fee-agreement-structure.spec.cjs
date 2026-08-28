@@ -27,4 +27,6 @@ test("the editor warns when agreement and live checkout fees differ", () => {
   assert.match(source, /currencyInputCents\(ticketFeeAgreementDraft\.customerFee\) !== organization\.ticketFeeMinor/);
   assert.match(source, /Customer-fee mismatch/);
   assert.match(source, /avoid settlement variances/);
+  assert.match(source, /Use live checkout fee/);
+  assert.match(source, /customerFee: \(organization\.ticketFeeMinor \/ 100\)\.toFixed\(2\)/);
 });
