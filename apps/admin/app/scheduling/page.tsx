@@ -245,6 +245,7 @@ export default function AdminPage() {
   const undoMoveAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
   const scheduleMoveActionRef = useRef(false);
   const [showtimeEditorOpen, setShowtimeEditorOpen] = useState(false);
+  const [seatInventoryOpen, setSeatInventoryOpen] = useState(false);
   const [linkedShowtimeHandled, setLinkedShowtimeHandled] = useState(false);
   const [movieEditorOpen, setMovieEditorOpen] = useState(false);
   const movieAttemptRef = useRef<{ fingerprint: string; requestId: string } | null>(null);
@@ -1152,6 +1153,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!showtimeEditorOpen || !editingShowtimeId) {
+      setSeatInventoryOpen(false);
       setSeatInventory(null);
       setSeatInventoryError(null);
       return;
@@ -2293,17 +2295,6 @@ export default function AdminPage() {
                               )}
                             </div>
                           )}
-                          <SeatMap
-                            seats={seatInventory.seats.map((seat) => ({
-                              ...seat,
-                              state:
-                                seat.state === "AVAILABLE"
-                                  ? "available"
-                                  : "unavailable",
-                            }))}
-                            seatingStyle={seatInventory.showtime.auditorium.seatingStyle}
-                            label="Read-only showtime seat inventory"
-                          />
                           <p className="sold-seat-labels">
                             <strong>Purchased seats</strong>
                             <span>
@@ -2313,6 +2304,13 @@ export default function AdminPage() {
                                 .join(", ") || "None"}
                             </span>
                           </p>
+                          <button
+                            type="button"
+                            className="secondary showtime-seat-map-button"
+                            onClick={() => setSeatInventoryOpen(true)}
+                          >
+                            View full seat map
+                          </button>
                         </>
                       ) : seatInventoryError ? (
                         <p className="inline-error">{seatInventoryError}</p>
@@ -2498,6 +2496,61 @@ export default function AdminPage() {
               </form>
             </aside>
           )}
+        </div>
+      )}
+
+      {seatInventoryOpen && seatInventory && (
+        <div
+          className="editor-backdrop seat-inventory-backdrop"
+          role="presentation"
+          onMouseDown={() => setSeatInventoryOpen(false)}
+        >
+          <section
+            className="seat-inventory-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Showtime seat inventory"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <div className="drawer-heading">
+              <div>
+                <p className="kicker">SEAT INVENTORY</p>
+                <h2>{selectedMovie?.title ?? "Selected showtime"}</h2>
+                {selectedRoom && <p className="inspector-room">{selectedRoom.name}</p>}
+              </div>
+              <button
+                type="button"
+                className="drawer-close"
+                onClick={() => setSeatInventoryOpen(false)}
+                aria-label="Close seat inventory"
+              >
+                ×
+              </button>
+            </div>
+            <div className="seat-inventory-counts">
+              <span><b>{seatInventory.counts.available}</b> available</span>
+              <span><b>{seatInventory.counts.sold}</b> sold</span>
+              <span><b>{seatInventory.counts.held}</b> held</span>
+              <span><b>{seatInventory.counts.blocked}</b> blocked</span>
+            </div>
+            <SeatMap
+              seats={seatInventory.seats.map((seat) => ({
+                ...seat,
+                state: seat.state === "AVAILABLE" ? "available" : "unavailable",
+              }))}
+              seatingStyle={seatInventory.showtime.auditorium.seatingStyle}
+              label="Read-only showtime seat inventory"
+            />
+            <p className="sold-seat-labels">
+              <strong>Purchased seats</strong>
+              <span>
+                {seatInventory.seats
+                  .filter((seat) => seat.state === "SOLD")
+                  .map((seat) => seat.label)
+                  .join(", ") || "None"}
+              </span>
+            </p>
+          </section>
         </div>
       )}
 
