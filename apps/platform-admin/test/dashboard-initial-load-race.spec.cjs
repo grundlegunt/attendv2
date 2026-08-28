@@ -31,3 +31,11 @@ test("Attend Master exposes real operator payment and refund health facts", () =
   assert.match(source, /Refund rate · 7d/);
   assert.match(source, /prior 7d:/);
 });
+
+test("Ringo Master surfaces the same urgent remittance risks as Operations", () => {
+  assert.match(source, /Urgent operations/i);
+  assert.match(source, /!remittance\.collectionOwner/);
+  assert.match(source, /remittance\.nextFollowUpAt/);
+  assert.match(source, /remittanceAge\(remittance\.dueDate\) > 60/);
+  assert.match(source, /href="\/operations\?priority=Urgent"/);
+});

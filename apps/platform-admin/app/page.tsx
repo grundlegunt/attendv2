@@ -37,6 +37,7 @@ interface OrganizationOverview {
   legalName: string | null;
   payments: { connected: boolean; onboardingStatus: string };
   health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null; trends: { paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } }; refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } } } };
+  ticketFeeRemittances: Array<{ status: "DUE" | "PAID" | "VOID"; dueDate: string | null; nextFollowUpAt: string | null; collectionOwner: { id: string } | null }>;
   locations: LocationOverview[];
 }
 
@@ -59,6 +60,12 @@ function statusLabel(status: string) {
 function money(cents: number) { return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
 function lastActivity(value: string | null) { return value ? new Date(value).toLocaleString() : "No completed payments"; }
 function rate(value: number | null) { return value === null ? "No activity" : `${value.toFixed(2)}%`; }
+function remittanceAge(dueDate: string | null) {
+  if (!dueDate) return 0;
+  const due = new Date(dueDate);
+  due.setHours(23, 59, 59, 999);
+  return Math.max(0, Math.floor((Date.now() - due.getTime()) / 86_400_000));
+}
 const revenueRanges = [
   { days: 1, label: "Today" },
   { days: 7, label: "Last 7 days" },
@@ -169,6 +176,15 @@ export default function PlatformDashboard() {
   const metrics = useMemo(() => {
     const organizations = overview?.organizations ?? [];
     const locations = organizations.flatMap((organization) => organization.locations);
+    const urgentOperations = organizations.map((organization) => {
+      const openRemittances = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
+      const issueGroups = [
+        openRemittances.some((remittance) => !remittance.collectionOwner),
+        openRemittances.some((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date()),
+        openRemittances.some((remittance) => remittanceAge(remittance.dueDate) > 60),
+      ].filter(Boolean).length;
+      return { issueGroups, clientAffected: issueGroups > 0 };
+    });
     return {
       clients: organizations.length,
       locations: locations.length,
@@ -176,6 +192,8 @@ export default function PlatformDashboard() {
       connectedClients: organizations.filter((organization) => organization.payments.onboardingStatus === "COMPLETE").length,
       attentionClients: organizations.filter((organization) => organization.payments.onboardingStatus !== "COMPLETE"),
       operationalExceptions: organizations.reduce((total, organization) => total + organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + organization.health.stalePayments + organization.health.staleRefunds + organization.health.managerReviewTabs + organization.health.expiredHoldBacklog, 0),
+      urgentOperationGroups: urgentOperations.reduce((total, item) => total + item.issueGroups, 0),
+      urgentOperationClients: urgentOperations.filter((item) => item.clientAffected).length,
     };
   }, [overview]);
 
@@ -239,6 +257,14 @@ export default function PlatformDashboard() {
         <article><span>Locations</span><strong>{metrics.locations}</strong><small>{metrics.activeLocations} active</small></article>
         <article><span>Stripe ready</span><strong>{metrics.connectedClients}</strong><small>clients accepting payments</small></article>
         <article className={metrics.operationalExceptions + metrics.attentionClients.length ? "attention" : ""}><span>Needs attention</span><strong>{metrics.operationalExceptions + metrics.attentionClients.length}</strong><small>open operational issue groups</small></article>
+      </section>
+      <section className={`dashboard-panel urgent-operations-panel ${metrics.urgentOperationGroups > 0 ? "has-urgent" : ""}`}>
+        <div>
+          <p className="eyebrow">URGENT OPERATIONS</p>
+          <h2>{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationGroups} issue groups need immediate follow-up` : "No urgent operational risks"}</h2>
+          <p className="muted">{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationClients} ${metrics.urgentOperationClients === 1 ? "client has" : "clients have"} an unassigned remittance, an overdue follow-up, or a remittance more than 60 days past due.` : "No unassigned remittances, overdue follow-ups, or remittances more than 60 days past due."}</p>
+        </div>
+        <Link href="/operations?priority=Urgent">Open urgent queue →</Link>
       </section>
       <section className="dashboard-panel delivery-readiness">
         <div className="panel-heading">
