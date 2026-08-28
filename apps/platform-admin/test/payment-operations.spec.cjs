@@ -71,6 +71,16 @@ test("payment operations bulk assigns filtered open receivables", () => {
   assert.match(source, /failed \+= 1/);
 });
 
+test("payment operations bulk schedules follow-ups for filtered open receivables", () => {
+  assert.match(source, /const schedulableDisplayedRemittances = displayedRemittances\.filter/);
+  assert.match(source, /function scheduleFilteredRemittanceFollowUps\(\)/);
+  assert.match(source, /nextFollowUpAt: `\$\{bulkFollowUpDate\}T23:59:59\.999Z`/);
+  assert.match(source, /collectionOwnerId: remittance\.collectionOwner\?\.id \?\? session\.user\.id/);
+  assert.match(source, />Bulk follow-up/);
+  assert.match(source, /Schedule \$\{schedulableDisplayedRemittances\.length\}/);
+  assert.match(source, /min=\{new Date\(\)\.toISOString\(\)\.slice\(0, 10\)\}/);
+});
+
 test("payment operations summarizes collection owner workload", () => {
   assert.match(source, /const collectionOwnerWorkload = useMemo/);
   assert.match(source, /aria-label="Collection owner workload"/);
