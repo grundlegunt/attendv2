@@ -2582,6 +2582,8 @@ export class PlatformService {
     if (!settlement) throw AppError.notFound("No ticket-fee agreement was effective on the statement date.");
     if (!settlement.periodTo || new Date(settlement.periodTo) > new Date())
       throw AppError.validationFailed("Only a completed ticket-fee settlement period can be finalized.");
+    if (settlement.varianceCents !== 0 && !input.notes?.trim())
+      throw AppError.validationFailed("A reconciliation note is required when collected fees differ from the agreement expectation.");
     const periodTo = new Date(settlement.periodTo);
     return prisma.$transaction(async (tx) => {
       const existing = await tx.ticketFeeRemittance.findUnique({
@@ -2601,7 +2603,7 @@ export class PlatformService {
           operatorShareCents: settlement.operatorShareCents,
           varianceCents: settlement.varianceCents,
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
-          notes: input.notes ?? null,
+          notes: input.notes?.trim() || null,
           createdById: input.actorId,
         },
       });

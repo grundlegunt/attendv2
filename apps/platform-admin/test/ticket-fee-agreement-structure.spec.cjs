@@ -4,6 +4,7 @@ const { resolve } = require("node:path");
 const test = require("node:test");
 
 const source = readFileSync(resolve(__dirname, "../app/clients/clients-page.tsx"), "utf8");
+const apiSource = readFileSync(resolve(__dirname, "../../api/src/platform/platform.service.ts"), "utf8");
 
 test("commercial agreements offer explicit flat and volume-tier structures", () => {
   assert.match(source, /structure: "FLAT" \| "TIERED"/);
@@ -78,4 +79,12 @@ test("settlement reconciliation distinguishes collected and expected fees", () =
   assert.match(source, /platformShareCents \+ organization\.ticketFeeSettlement\.operatorShareCents/);
   assert.match(source, /Settlement needs reconciliation/);
   assert.match(source, /Review guest and registered-customer pricing, refunds, and the agreement basis/);
+});
+
+test("settlement variances require a durable reconciliation note", () => {
+  assert.match(source, /Reconciliation note/);
+  assert.match(source, /ticketFeeSettlement\.varianceCents !== 0 && !ticketFeeReconciliationNote\.trim\(\)/);
+  assert.match(source, /notes: ticketFeeReconciliationNote\.trim\(\) \|\| null/);
+  assert.match(apiSource, /settlement\.varianceCents !== 0 && !input\.notes\?\.trim\(\)/);
+  assert.match(apiSource, /A reconciliation note is required when collected fees differ/);
 });
