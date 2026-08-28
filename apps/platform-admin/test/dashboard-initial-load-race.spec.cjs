@@ -43,4 +43,7 @@ test("Ringo Master surfaces the same urgent remittance risks as Operations", () 
   assert.match(source, /urgentUnassignedCount/);
   assert.match(source, /urgentOverdueFollowUpCount/);
   assert.match(source, /urgentCriticalAgingCount/);
+  assert.match(source, /risk=UNASSIGNED/);
+  assert.match(source, /risk=FOLLOW_UP_OVERDUE/);
+  assert.match(source, /risk=AGE_60_PLUS/);
 });
