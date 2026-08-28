@@ -3271,7 +3271,12 @@ export class PlatformService {
           thresholdPeriod: agreement.thresholdPeriod,
           effectiveFrom: agreement.effectiveFrom.toISOString(),
           effectiveTo: agreement.effectiveTo?.toISOString() ?? null,
-          tiers: agreement.tiers,
+          tiers: agreement.tiers.map((tier) => ({
+            startsAtTicket: tier.startsAtTicket,
+            endsAtTicket: tier.endsAtTicket,
+            platformShareMinor: tier.platformShareMinor,
+            operatorShareMinor: tier.operatorShareMinor,
+          })),
         },
       }, tx);
       return { canceled: true };
