@@ -50,3 +50,10 @@ test("new agreement versions start after the latest scheduled version", () => {
   assert.match(source, /min=\{ticketFeeAgreementMinEffectiveDate\(organization\.ticketFeeAgreements\)\}/);
   assert.match(source, /Must follow the latest scheduled agreement version/);
 });
+
+test("commercial agreement calendar dates do not shift with browser timezone", () => {
+  assert.match(source, /function utcCalendarDate/);
+  assert.match(source, /timeZone: "UTC"/);
+  assert.match(source, /utcCalendarDate\(agreement\.effectiveFrom\)/);
+  assert.match(source, /utcCalendarDate\(organization\.ticketFeeSettlement\.periodFrom\)/);
+});
