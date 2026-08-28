@@ -1,0 +1,17 @@
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const { resolve } = require("node:path");
+const test = require("node:test");
+
+const source = readFileSync(resolve(__dirname, "../app/clients/clients-page.tsx"), "utf8");
+
+test("commercial agreements offer explicit flat and volume-tier structures", () => {
+  assert.match(source, /structure: "FLAT" \| "TIERED"/);
+  assert.match(source, /Flat split — same amount for every ticket/);
+  assert.match(source, /Volume tiers — amount changes after a threshold/);
+});
+
+test("flat agreements serialize as one unlimited tier", () => {
+  assert.match(source, /isTiered[\s\S]*startsAtTicket: 1, endsAtTicket: null[\s\S]*tiers,/);
+  assert.match(source, /Ringo share per ticket/);
+});

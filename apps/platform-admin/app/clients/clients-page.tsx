@@ -280,6 +280,7 @@ type OrganizationCreateDraft = {
 type TicketFeeAgreementDraft = {
   name: string;
   customerFee: string;
+  structure: "FLAT" | "TIERED";
   thresholdPeriod: "CONTRACT_YEAR" | "CALENDAR_YEAR" | "LIFETIME";
   effectiveFrom: string;
   thresholdTickets: string;
@@ -781,6 +782,7 @@ export default function AttendMaster() {
     setTicketFeeAgreementDraft({
       name: `${organization.name} ticket-fee agreement`,
       customerFee: customerFee.toFixed(2),
+      structure: "FLAT",
       thresholdPeriod: "CONTRACT_YEAR",
       effectiveFrom: dateInputValue(new Date()),
       thresholdTickets: "100000",
@@ -796,6 +798,17 @@ export default function AttendMaster() {
     const threshold = Number(ticketFeeAgreementDraft.thresholdTickets);
     const firstPlatformShareMinor = Math.round(Number(ticketFeeAgreementDraft.firstPlatformShare) * 100);
     const secondPlatformShareMinor = Math.round(Number(ticketFeeAgreementDraft.secondPlatformShare) * 100);
+    const isTiered = ticketFeeAgreementDraft.structure === "TIERED";
+    if (!Number.isFinite(customerFeeMinor) || customerFeeMinor < 0 || !Number.isFinite(firstPlatformShareMinor) || firstPlatformShareMinor < 0 || firstPlatformShareMinor > customerFeeMinor || (isTiered && (!Number.isInteger(threshold) || threshold < 1 || !Number.isFinite(secondPlatformShareMinor) || secondPlatformShareMinor < 0 || secondPlatformShareMinor > customerFeeMinor))) {
+      setError("Ringo's share must be between $0.00 and the customer fee, and volume tiers need a valid ticket threshold.");
+      return;
+    }
+    const tiers = isTiered
+      ? [
+          { startsAtTicket: 1, endsAtTicket: threshold, platformShareMinor: firstPlatformShareMinor, operatorShareMinor: customerFeeMinor - firstPlatformShareMinor },
+          { startsAtTicket: threshold + 1, endsAtTicket: null, platformShareMinor: secondPlatformShareMinor, operatorShareMinor: customerFeeMinor - secondPlatformShareMinor },
+        ]
+      : [{ startsAtTicket: 1, endsAtTicket: null, platformShareMinor: firstPlatformShareMinor, operatorShareMinor: customerFeeMinor - firstPlatformShareMinor }];
     setSaving(true);
     setError(null);
     try {
@@ -808,10 +821,7 @@ export default function AttendMaster() {
             customerFeeMinor,
             thresholdPeriod: ticketFeeAgreementDraft.thresholdPeriod,
             effectiveFrom: `${ticketFeeAgreementDraft.effectiveFrom}T00:00:00.000Z`,
-            tiers: [
-              { startsAtTicket: 1, endsAtTicket: threshold, platformShareMinor: firstPlatformShareMinor, operatorShareMinor: customerFeeMinor - firstPlatformShareMinor },
-              { startsAtTicket: threshold + 1, endsAtTicket: null, platformShareMinor: secondPlatformShareMinor, operatorShareMinor: customerFeeMinor - secondPlatformShareMinor },
-            ],
+            tiers,
           }),
         },
         session.accessToken,
@@ -2057,11 +2067,13 @@ export default function AttendMaster() {
                     <label>Agreement name<input required value={ticketFeeAgreementDraft.name} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, name: event.target.value })} /></label>
                     <label>Effective date<input required type="date" value={ticketFeeAgreementDraft.effectiveFrom} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, effectiveFrom: event.target.value })} /></label>
                     <label>Customer fee per ticket<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.customerFee} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: event.target.value })} /></label>
-                    <label>Volume resets<select value={ticketFeeAgreementDraft.thresholdPeriod} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, thresholdPeriod: event.target.value as TicketFeeAgreementDraft["thresholdPeriod"] })}><option value="CONTRACT_YEAR">Each contract year</option><option value="CALENDAR_YEAR">Each calendar year</option><option value="LIFETIME">Never (lifetime volume)</option></select></label>
-                    <label>First tier ends after<input required type="number" min="1" step="1" value={ticketFeeAgreementDraft.thresholdTickets} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, thresholdTickets: event.target.value })} /><small className="muted">Net paid tickets</small></label>
-                    <span />
-                    <label>Ringo share · first tier<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.firstPlatformShare} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, firstPlatformShare: event.target.value })} /><small className="muted">Operator receives the remaining customer fee.</small></label>
-                    <label>Ringo share · after threshold<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.secondPlatformShare} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, secondPlatformShare: event.target.value })} /><small className="muted">Continues without an upper limit.</small></label>
+                    <label>Agreement structure<select value={ticketFeeAgreementDraft.structure} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, structure: event.target.value as TicketFeeAgreementDraft["structure"] })}><option value="FLAT">Flat split — same amount for every ticket</option><option value="TIERED">Volume tiers — amount changes after a threshold</option></select></label>
+                    {ticketFeeAgreementDraft.structure === "TIERED" && <>
+                      <label>Volume resets<select value={ticketFeeAgreementDraft.thresholdPeriod} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, thresholdPeriod: event.target.value as TicketFeeAgreementDraft["thresholdPeriod"] })}><option value="CONTRACT_YEAR">Each contract year</option><option value="CALENDAR_YEAR">Each calendar year</option><option value="LIFETIME">Never (lifetime volume)</option></select></label>
+                      <label>First tier ends after<input required type="number" min="1" step="1" value={ticketFeeAgreementDraft.thresholdTickets} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, thresholdTickets: event.target.value })} /><small className="muted">Net paid tickets</small></label>
+                    </>}
+                    <label>{ticketFeeAgreementDraft.structure === "TIERED" ? "Ringo share · first tier" : "Ringo share per ticket"}<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.firstPlatformShare} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, firstPlatformShare: event.target.value })} /><small className="muted">Operator receives the remainder of the customer fee.</small></label>
+                    {ticketFeeAgreementDraft.structure === "TIERED" && <label>Ringo share · after threshold<input required type="number" min="0" step="0.01" value={ticketFeeAgreementDraft.secondPlatformShare} onChange={(event) => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, secondPlatformShare: event.target.value })} /><small className="muted">Continues without an upper limit.</small></label>}
                   </div>
                   <p className="form-note">Creating this version closes the previous agreement at the new effective date. Existing versions cannot be edited retroactively.</p>
                   <button disabled={saving}>{saving ? "Creating…" : "Create agreement version"}</button>
