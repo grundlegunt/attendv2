@@ -38,4 +38,6 @@ test("Ringo Master surfaces the same urgent remittance risks as Operations", () 
   assert.match(source, /remittance\.nextFollowUpAt/);
   assert.match(source, /remittanceAge\(remittance\.dueDate\) > 60/);
   assert.match(source, /href="\/operations\?priority=Urgent"/);
+  assert.match(source, /urgentRemittances\.reduce\(\(total, remittance\) => total \+ remittance\.platformShareCents/);
+  assert.match(source, /urgentExposureCents/);
 });
