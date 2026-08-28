@@ -268,6 +268,47 @@ export default function PlatformPayments() {
     }).filter((organization) => organization.dueCount > 0).sort((left, right) => right.overdueCents - left.overdueCents || right.dueCents - left.dueCents);
   }, [overview]);
   const displayedOperatorReceivables = useMemo(() => operatorReceivables.filter((operator) => operatorRiskFilter === "ALL" || operator.risk === operatorRiskFilter), [operatorReceivables, operatorRiskFilter]);
+  const collectionOwnerWorkload = useMemo(() => {
+    const now = new Date();
+    const workload = new Map<string, {
+      id: string;
+      name: string;
+      email: string | null;
+      dueCount: number;
+      dueCents: number;
+      overdueCents: number;
+      overdueFollowUps: number;
+      upcomingFollowUps: number;
+      unscheduledFollowUps: number;
+    }>();
+    for (const remittance of remittanceLedger.filter((item) => item.status === "DUE")) {
+      const owner = remittance.collectionOwner;
+      const id = owner?.id ?? "UNASSIGNED";
+      const current = workload.get(id) ?? {
+        id,
+        name: owner?.name ?? "Unassigned",
+        email: owner?.email ?? null,
+        dueCount: 0,
+        dueCents: 0,
+        overdueCents: 0,
+        overdueFollowUps: 0,
+        upcomingFollowUps: 0,
+        unscheduledFollowUps: 0,
+      };
+      current.dueCount += 1;
+      current.dueCents += remittance.platformShareCents;
+      if (remittance.dueDate && new Date(remittance.dueDate) < now) current.overdueCents += remittance.platformShareCents;
+      if (!remittance.nextFollowUpAt) current.unscheduledFollowUps += 1;
+      else if (new Date(remittance.nextFollowUpAt) < now) current.overdueFollowUps += 1;
+      else current.upcomingFollowUps += 1;
+      workload.set(id, current);
+    }
+    return Array.from(workload.values()).sort((left, right) => {
+      if (left.id === "UNASSIGNED") return -1;
+      if (right.id === "UNASSIGNED") return 1;
+      return right.overdueFollowUps - left.overdueFollowUps || right.dueCents - left.dueCents || left.name.localeCompare(right.name);
+    });
+  }, [remittanceLedger]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -471,6 +512,12 @@ export default function PlatformPayments() {
         {operatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators currently have open ticket-fee receivables.</p>}
         {operatorReceivables.length > 0 && displayedOperatorReceivables.length === 0 && <p className="empty-state payments-loading">No operators match this collection risk tier.</p>}
         {displayedOperatorReceivables.map((operator) => <article key={operator.id}><strong>{operator.name}<small>{operator.dueCount} open period{operator.dueCount === 1 ? "" : "s"}</small></strong><span>{money(operator.dueCents)}</span><span className={operator.overdueCents > 0 ? "status warning" : ""}>{money(operator.overdueCents)}<small>{money(operator.days31To60Cents)} at 31–60 · {money(operator.days60PlusCents)} at 60+</small></span><b className={`status ${operator.risk === "CURRENT" ? "good" : "warning"}`}>{operator.risk.toLowerCase()}</b><span>{operator.oldestDays > 0 ? `${operator.oldestDays} days` : "Current"}</span><span>{operator.overdueFollowUps} overdue<small>{operator.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOrganizationFilter(operator.id)}>View ledger</button></article>)}
+      </section>
+      <div className="operator-receivables-heading"><div><p className="eyebrow">COLLECTION OWNERS</p><h3>Owner workload</h3></div><span className="muted">Open receivables and follow-up coverage</span></div>
+      <section className="collection-owner-workload" aria-label="Collection owner workload">
+        <div><span>Owner</span><span>Open balance</span><span>Overdue balance</span><span>Periods</span><span>Follow-ups</span><span>Action</span></div>
+        {collectionOwnerWorkload.length === 0 && <p className="empty-state payments-loading">No open receivables are assigned for collection.</p>}
+        {collectionOwnerWorkload.map((owner) => <article key={owner.id}><strong>{owner.name}<small>{owner.email ?? "Needs an owner"}</small></strong><span>{money(owner.dueCents)}</span><span className={owner.overdueCents > 0 ? "status warning" : ""}>{money(owner.overdueCents)}</span><span>{owner.dueCount}</span><span className={owner.overdueFollowUps > 0 || owner.unscheduledFollowUps > 0 ? "status warning" : ""}>{owner.overdueFollowUps} overdue<small>{owner.upcomingFollowUps} upcoming · {owner.unscheduledFollowUps} unscheduled</small></span><button className="quiet" type="button" onClick={() => setRemittanceOwnerFilter(owner.id)}>View ledger</button></article>)}
       </section>
       <section className="remittance-master-table">
         <div><span>Operator</span><span>Period</span><span>Tickets</span><span>Ringo receivable</span><span>Status</span><span>Action</span></div>

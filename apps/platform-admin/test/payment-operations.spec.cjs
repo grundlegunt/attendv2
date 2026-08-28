@@ -62,6 +62,15 @@ test("payment operations filters receivables by collection owner", () => {
   assert.match(source, /collectionOwners\.map\(\(owner\)/);
 });
 
+test("payment operations summarizes collection owner workload", () => {
+  assert.match(source, /const collectionOwnerWorkload = useMemo/);
+  assert.match(source, /aria-label="Collection owner workload"/);
+  assert.match(source, /Open receivables and follow-up coverage/);
+  assert.match(source, /owner\.overdueFollowUps/);
+  assert.match(source, /owner\.unscheduledFollowUps/);
+  assert.match(source, /setRemittanceOwnerFilter\(owner\.id\)/);
+});
+
 test("payment operations supports operator-scoped collections deep links", () => {
   assert.match(source, /setRemittanceOrganizationFilter\(organizationId\)/);
   assert.match(source, /params\.get\("followUp"\)/);
