@@ -65,3 +65,13 @@ test("operations summary highlights and opens urgent work", () => {
   assert.match(source, /onClick=\{\(\) => setPriority\("Urgent"\)\}/);
   assert.match(source, /View urgent only →/);
 });
+
+test("operations queue refreshes without allowing stale responses", () => {
+  assert.match(source, /const refreshOverview = useCallback/);
+  assert.match(source, /overviewRequestRef/);
+  assert.match(source, /requestId === overviewRequestRef\.current/);
+  assert.match(source, /window\.setInterval/);
+  assert.match(source, /60_000/);
+  assert.match(source, /Refresh queue/);
+  assert.match(source, /Refreshing…/);
+});
