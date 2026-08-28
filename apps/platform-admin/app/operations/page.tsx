@@ -30,7 +30,7 @@ function queueItems(organizations: Organization[]): QueueItem[] {
     const openRemittances = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
     const overdueRemittances = openRemittances.filter((remittance) => remittance.dueDate && new Date(remittance.dueDate) < new Date());
     const overdueFollowUps = openRemittances.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date());
-    add("Payments", "Overdue remittance follow-ups", overdueFollowUps.length, clientHref, 110);
+    add("Payments", "Overdue remittance follow-ups", overdueFollowUps.length, `${paymentHref}&followUp=OVERDUE`, 110);
     add("Payments", "Overdue ticket-fee remittances", overdueRemittances.length, clientHref, 105);
     add("Payments", "Open ticket-fee remittances", openRemittances.length - overdueRemittances.length, clientHref, 82);
     add("Refunds", "Failed refunds", organization.health.failedRefunds, paymentHref, 100);

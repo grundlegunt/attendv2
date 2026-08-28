@@ -62,6 +62,13 @@ test("payment operations filters receivables by collection owner", () => {
   assert.match(source, /collectionOwners\.map\(\(owner\)/);
 });
 
+test("payment operations supports operator-scoped collections deep links", () => {
+  assert.match(source, /setRemittanceOrganizationFilter\(organizationId\)/);
+  assert.match(source, /params\.get\("followUp"\)/);
+  assert.match(source, /remittance\.organizationId !== remittanceOrganizationFilter/);
+  assert.match(source, />All operators<\/option>/);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);
