@@ -39,6 +39,20 @@ interface OrganizationOverview {
     };
   };
   locations: Array<{ id: string; name: string; active: boolean }>;
+  ticketFeeRemittances: Array<{
+    id: string;
+    periodFrom: string;
+    periodTo: string;
+    ticketCount: number;
+    collectedFeeCents: number;
+    platformShareCents: number;
+    operatorShareCents: number;
+    varianceCents: number;
+    status: "DUE" | "PAID" | "VOID";
+    dueDate: string | null;
+    paidAt: string | null;
+    paymentReference: string | null;
+  }>;
 }
 
 interface Overview {
@@ -54,6 +68,10 @@ function statusLabel(status: string) {
 
 function percentage(numerator: number, denominator: number) {
   return denominator > 0 ? `${(numerator / denominator * 100).toFixed(2)}%` : "No activity";
+}
+
+function money(cents: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 }
 
 function csvCell(value: unknown) {
@@ -142,6 +160,20 @@ export default function PlatformPayments() {
       return true;
     });
   }, [onboardingStatus, overview, query, showExceptionsOnly]);
+
+  const remittanceLedger = useMemo(() => (overview?.organizations ?? []).flatMap((organization) => organization.ticketFeeRemittances.map((remittance) => ({ ...remittance, organizationId: organization.id, organizationName: organization.name }))).sort((left, right) => new Date(right.periodFrom).getTime() - new Date(left.periodFrom).getTime()), [overview]);
+  const remittanceTotals = useMemo(() => {
+    const due = remittanceLedger.filter((item) => item.status === "DUE");
+    const paid = remittanceLedger.filter((item) => item.status === "PAID");
+    const now = new Date();
+    return {
+      dueCents: due.reduce((sum, item) => sum + item.platformShareCents, 0),
+      dueCount: due.length,
+      overdueCount: due.filter((item) => item.dueDate && new Date(item.dueDate) < now).length,
+      paidCents: paid.reduce((sum, item) => sum + item.platformShareCents, 0),
+      paidCount: paid.length,
+    };
+  }, [remittanceLedger]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -265,6 +297,18 @@ export default function PlatformPayments() {
       <section className="payment-trend-summary" aria-label="Seven-day payment trends">
         <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
+      </section>
+      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><span>{remittanceLedger.length} finalized periods</span></div></div>
+      <section className="payment-summary remittance-summary" aria-label="Ticket fee remittance totals">
+        <article><strong>{money(remittanceTotals.dueCents)}</strong><span>Ringo share due</span><small>{remittanceTotals.dueCount} open periods</small></article>
+        <article><strong>{remittanceTotals.overdueCount}</strong><span>Overdue periods</span><small>Past their assigned due date</small></article>
+        <article><strong>{money(remittanceTotals.paidCents)}</strong><span>Ringo share paid</span><small>{remittanceTotals.paidCount} periods received</small></article>
+      </section>
+      <section className="remittance-master-table">
+        <div><span>Operator</span><span>Period</span><span>Tickets</span><span>Ringo receivable</span><span>Status</span><span>Action</span></div>
+        {!overview && <p className="muted payments-loading">Loading operator remittances…</p>}
+        {overview && remittanceLedger.length === 0 && <p className="empty-state payments-loading">No ticket-fee settlement periods have been finalized yet.</p>}
+        {remittanceLedger.map((remittance) => <article key={remittance.id}><strong>{remittance.organizationName}</strong><span>{new Date(remittance.periodFrom).toLocaleDateString()} – {new Date(remittance.periodTo).toLocaleDateString()}</span><span>{remittance.ticketCount.toLocaleString()}</span><span><strong>{money(remittance.platformShareCents)}</strong><small>{money(remittance.collectedFeeCents)} collected</small></span><span><b className={`status ${remittance.status === "PAID" ? "good" : remittance.status === "DUE" && remittance.dueDate && new Date(remittance.dueDate) < new Date() ? "warning" : ""}`}>{remittance.status.toLowerCase()}</b><small>{remittance.status === "PAID" && remittance.paidAt ? new Date(remittance.paidAt).toLocaleDateString() : remittance.dueDate ? `Due ${new Date(remittance.dueDate).toLocaleDateString()}` : "No due date"}</small></span><Link href={`/clients?organizationId=${encodeURIComponent(remittance.organizationId)}`}>Open client →</Link></article>)}
       </section>
       <div className="payments-toolbar"><div><p className="eyebrow">OPERATOR HEALTH</p><h2>Payment operations</h2></div><div className="payments-toolbar-actions"><span>{displayedOrganizations.length} of {overview?.organizations.length ?? 0} clients</span><button className="quiet" type="button" disabled={!overview || displayedOrganizations.length === 0} onClick={exportPaymentOperations}>Export CSV</button></div></div>
       <section className="payments-filters" aria-label="Filter payment operations">
