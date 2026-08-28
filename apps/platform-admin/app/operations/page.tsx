@@ -40,10 +40,12 @@ function queueItems(organizations: Organization[]): QueueItem[] {
     const overdue31To60 = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) >= 31 && remittanceAge(remittance.dueDate) <= 60);
     const overdue60Plus = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) > 60);
     const overdueFollowUps = openRemittances.filter((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date());
+    const unscheduledFollowUps = openRemittances.filter((remittance) => !remittance.nextFollowUpAt);
     const unassignedRemittances = openRemittances.filter((remittance) => !remittance.collectionOwner);
     const currentRemittances = openRemittances.filter((remittance) => remittanceAge(remittance.dueDate) === 0);
     const exposure = (remittances: typeof openRemittances) => remittances.reduce((sum, remittance) => sum + remittance.platformShareCents, 0);
     add("Payments", "Unassigned ticket-fee remittances", unassignedRemittances.length, `${paymentHref}&owner=UNASSIGNED`, 112, exposure(unassignedRemittances));
+    add("Payments", "Remittances without a scheduled follow-up", unscheduledFollowUps.length, `${paymentHref}&followUp=UNASSIGNED`, 109, exposure(unscheduledFollowUps));
     add("Payments", "Overdue remittance follow-ups", overdueFollowUps.length, `${paymentHref}&followUp=OVERDUE`, 110, exposure(overdueFollowUps));
     add("Payments", "Critical ticket-fee remittances · 60+ days", overdue60Plus.length, `${paymentHref}&age=60_PLUS`, 115, exposure(overdue60Plus));
     add("Payments", "Escalated ticket-fee remittances · 31–60 days", overdue31To60.length, `${paymentHref}&age=31_60`, 108, exposure(overdue31To60));
