@@ -353,6 +353,11 @@ function currencyInputCents(value: string) {
   const cents = Math.round(Number(value) * 100);
   return Number.isFinite(cents) ? cents : 0;
 }
+function ticketFeeDraftOverallocates(draft: TicketFeeAgreementDraft) {
+  const customerFee = currencyInputCents(draft.customerFee);
+  return currencyInputCents(draft.firstPlatformShare) > customerFee
+    || (draft.structure === "TIERED" && currencyInputCents(draft.secondPlatformShare) > customerFee);
+}
 function csvCell(value: string | number | boolean) {
   return `"${String(value).replaceAll('"', '""')}"`;
 }
@@ -2092,8 +2097,13 @@ export default function AttendMaster() {
                     </div>
                     <button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: (organization.ticketFeeMinor / 100).toFixed(2) })}>Use live checkout fee</button>
                   </div>}
+                  {ticketFeeDraftOverallocates(ticketFeeAgreementDraft) && <div className="agreement-fee-warning agreement-split-error" role="alert">
+                    <div><strong>Split exceeds customer fee</strong>
+                      <p>Ringo&apos;s share cannot be greater than the amount charged to the customer. Lower the Ringo share or increase the customer fee before creating this agreement.</p>
+                    </div>
+                  </div>}
                   <p className="form-note">Creating this version closes the previous agreement at the new effective date. Existing versions cannot be edited retroactively.</p>
-                  <button disabled={saving}>{saving ? "Creating…" : "Create agreement version"}</button>
+                  <button disabled={saving || ticketFeeDraftOverallocates(ticketFeeAgreementDraft)}>{saving ? "Creating…" : "Create agreement version"}</button>
                 </form>}
                 {!organization.ticketFeeAgreements.length && !ticketFeeAgreementDraft && <p className="dashboard-empty">No commercial ticket-fee agreement has been recorded. Customer fees are currently reported entirely as Ringo fee revenue.</p>}
                 {organization.ticketFeeSettlement && <div className="agreement-settlement">

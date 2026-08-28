@@ -30,3 +30,9 @@ test("the editor warns when agreement and live checkout fees differ", () => {
   assert.match(source, /Use live checkout fee/);
   assert.match(source, /customerFee: \(organization\.ticketFeeMinor \/ 100\)\.toFixed\(2\)/);
 });
+
+test("the editor blocks agreement splits that exceed the customer fee", () => {
+  assert.match(source, /function ticketFeeDraftOverallocates/);
+  assert.match(source, /Split exceeds customer fee/);
+  assert.match(source, /saving \|\| ticketFeeDraftOverallocates\(ticketFeeAgreementDraft\)/);
+});
