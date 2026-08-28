@@ -37,7 +37,7 @@ interface OrganizationOverview {
   legalName: string | null;
   payments: { connected: boolean; onboardingStatus: string };
   health: { failedPayments24h: number; processingPayments: number; verificationReviews: number; failedRefunds: number; stalePayments: number; staleRefunds: number; managerReviewTabs: number; expiredHoldBacklog: number; lastSuccessfulPaymentAt: string | null; trends: { paymentFailure: { current: { failed: number; total: number; ratePercent: number | null }; previous: { failed: number; total: number; ratePercent: number | null } }; refunds: { current: { refundedCents: number; capturedCents: number; ratePercent: number | null }; previous: { refundedCents: number; capturedCents: number; ratePercent: number | null } } } };
-  ticketFeeRemittances: Array<{ status: "DUE" | "PAID" | "VOID"; dueDate: string | null; nextFollowUpAt: string | null; collectionOwner: { id: string } | null }>;
+  ticketFeeRemittances: Array<{ id: string; status: "DUE" | "PAID" | "VOID"; dueDate: string | null; nextFollowUpAt: string | null; platformShareCents: number; collectionOwner: { id: string } | null }>;
   locations: LocationOverview[];
 }
 
@@ -178,12 +178,22 @@ export default function PlatformDashboard() {
     const locations = organizations.flatMap((organization) => organization.locations);
     const urgentOperations = organizations.map((organization) => {
       const openRemittances = organization.ticketFeeRemittances.filter((remittance) => remittance.status === "DUE");
+      const urgentRemittances = openRemittances.filter((remittance) =>
+        !remittance.collectionOwner ||
+        Boolean(remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date()) ||
+        remittanceAge(remittance.dueDate) > 60,
+      );
       const issueGroups = [
         openRemittances.some((remittance) => !remittance.collectionOwner),
         openRemittances.some((remittance) => remittance.nextFollowUpAt && new Date(remittance.nextFollowUpAt) < new Date()),
         openRemittances.some((remittance) => remittanceAge(remittance.dueDate) > 60),
       ].filter(Boolean).length;
-      return { issueGroups, clientAffected: issueGroups > 0 };
+      return {
+        issueGroups,
+        clientAffected: issueGroups > 0,
+        remittanceCount: urgentRemittances.length,
+        exposureCents: urgentRemittances.reduce((total, remittance) => total + remittance.platformShareCents, 0),
+      };
     });
     return {
       clients: organizations.length,
@@ -194,6 +204,8 @@ export default function PlatformDashboard() {
       operationalExceptions: organizations.reduce((total, organization) => total + organization.health.failedPayments24h + organization.health.verificationReviews + organization.health.failedRefunds + organization.health.stalePayments + organization.health.staleRefunds + organization.health.managerReviewTabs + organization.health.expiredHoldBacklog, 0),
       urgentOperationGroups: urgentOperations.reduce((total, item) => total + item.issueGroups, 0),
       urgentOperationClients: urgentOperations.filter((item) => item.clientAffected).length,
+      urgentRemittanceCount: urgentOperations.reduce((total, item) => total + item.remittanceCount, 0),
+      urgentExposureCents: urgentOperations.reduce((total, item) => total + item.exposureCents, 0),
     };
   }, [overview]);
 
@@ -262,7 +274,7 @@ export default function PlatformDashboard() {
         <div>
           <p className="eyebrow">URGENT OPERATIONS</p>
           <h2>{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationGroups} issue groups need immediate follow-up` : "No urgent operational risks"}</h2>
-          <p className="muted">{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationClients} ${metrics.urgentOperationClients === 1 ? "client has" : "clients have"} an unassigned remittance, an overdue follow-up, or a remittance more than 60 days past due.` : "No unassigned remittances, overdue follow-ups, or remittances more than 60 days past due."}</p>
+          <p className="muted">{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationClients} ${metrics.urgentOperationClients === 1 ? "client has" : "clients have"} ${metrics.urgentRemittanceCount} urgent ${metrics.urgentRemittanceCount === 1 ? "remittance" : "remittances"} representing ${money(metrics.urgentExposureCents)} in Ringo receivables.` : "No unassigned remittances, overdue follow-ups, or remittances more than 60 days past due."}</p>
         </div>
         <Link href="/operations?priority=Urgent">Open urgent queue →</Link>
       </section>
