@@ -72,3 +72,10 @@ test("Master staff can cancel a scheduled agreement version", () => {
   assert.match(source, /Cancel scheduled version/);
   assert.match(source, /versionStatus === "Scheduled version" && session\.user\.role !== "VIEWER"/);
 });
+
+test("settlement reconciliation distinguishes collected and expected fees", () => {
+  assert.match(source, /Agreement expected fees/);
+  assert.match(source, /platformShareCents \+ organization\.ticketFeeSettlement\.operatorShareCents/);
+  assert.match(source, /Settlement needs reconciliation/);
+  assert.match(source, /Review guest and registered-customer pricing, refunds, and the agreement basis/);
+});
