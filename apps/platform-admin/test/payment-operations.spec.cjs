@@ -69,6 +69,14 @@ test("payment operations supports operator-scoped collections deep links", () =>
   assert.match(source, />All operators<\/option>/);
 });
 
+test("payment operations summarizes receivables by operator", () => {
+  assert.match(source, /const operatorReceivables = useMemo/);
+  assert.match(source, /aria-label="Receivables by operator"/);
+  assert.match(source, />Open balance</);
+  assert.match(source, />Oldest</);
+  assert.match(source, />View ledger</);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);
