@@ -20,4 +20,8 @@ test("Master client remittances schedule and display collection follow-ups", () 
   assert.match(source, />Log contact<\/button>/);
   assert.match(source, /Last contacted/);
   assert.match(source, /Next follow-up/);
+  assert.match(source, /collectionOwnerId: session\.user\.id/);
+  assert.match(source, /function assignTicketFeeRemittanceToMe/);
+  assert.match(source, />Assign to me<\/button>/);
+  assert.match(source, /Collection owner:/);
 });
