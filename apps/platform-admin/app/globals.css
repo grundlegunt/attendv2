@@ -62,6 +62,9 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .payment-health-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .payments-loading { padding: 22px; }
 .remittance-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.collections-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.collections-summary article { display: grid; gap: 4px; }
+.collections-summary small { color: var(--muted); }
 .remittance-summary article { display: grid; gap: 4px; }
 .remittance-summary small { color: var(--muted); }
 .remittance-master-table { border: 1px solid var(--border); background: var(--surface); }

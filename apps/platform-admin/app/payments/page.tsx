@@ -196,10 +196,16 @@ export default function PlatformPayments() {
     const due = remittanceLedger.filter((item) => item.status === "DUE");
     const paid = remittanceLedger.filter((item) => item.status === "PAID");
     const now = new Date();
+    const overdue = due.filter((item) => item.dueDate && new Date(item.dueDate) < now);
+    const overdueFollowUps = due.filter((item) => item.nextFollowUpAt && new Date(item.nextFollowUpAt) < now);
     return {
       dueCents: due.reduce((sum, item) => sum + item.platformShareCents, 0),
       dueCount: due.length,
-      overdueCount: due.filter((item) => item.dueDate && new Date(item.dueDate) < now).length,
+      overdueCents: overdue.reduce((sum, item) => sum + item.platformShareCents, 0),
+      overdueCount: overdue.length,
+      overdueFollowUpCount: overdueFollowUps.length,
+      scheduledFollowUpCount: due.filter((item) => item.nextFollowUpAt).length,
+      unassignedFollowUpCount: due.filter((item) => !item.nextFollowUpAt).length,
       currentCents: due.filter((item) => remittanceAgingBucket(item, now) === "CURRENT").reduce((sum, item) => sum + item.platformShareCents, 0),
       days1To30Cents: due.filter((item) => remittanceAgingBucket(item, now) === "1_30").reduce((sum, item) => sum + item.platformShareCents, 0),
       days31To60Cents: due.filter((item) => remittanceAgingBucket(item, now) === "31_60").reduce((sum, item) => sum + item.platformShareCents, 0),
@@ -368,6 +374,12 @@ export default function PlatformPayments() {
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
       </section>
       <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><label>Age <select value={remittanceAgingFilter} onChange={(event) => setRemittanceAgingFilter(event.target.value as RemittanceAgingFilter)}><option value="ALL">All periods</option><option value="CURRENT">Current</option><option value="1_30">1–30 days</option><option value="31_60">31–60 days</option><option value="60_PLUS">60+ days</option><option value="PAID">Paid</option></select></label><span>{displayedRemittances.length} of {remittanceLedger.length} periods</span><button className="quiet" type="button" disabled={displayedRemittances.length === 0} onClick={exportAgedReceivables}>Export aging CSV</button></div></div>
+      <section className="payment-summary collections-summary" aria-label="Collections workflow totals">
+        <article><strong>{money(remittanceTotals.dueCents)}</strong><span>Open receivables</span><small>{remittanceTotals.dueCount} periods</small></article>
+        <article><strong>{money(remittanceTotals.overdueCents)}</strong><span>Overdue receivables</span><small>{remittanceTotals.overdueCount} periods</small></article>
+        <article><strong>{remittanceTotals.overdueFollowUpCount}</strong><span>Follow-ups overdue</span><small>{remittanceTotals.scheduledFollowUpCount} scheduled</small></article>
+        <article><strong>{remittanceTotals.unassignedFollowUpCount}</strong><span>Without follow-up</span><small>Open periods needing a date</small></article>
+      </section>
       <section className="payment-summary remittance-summary" aria-label="Ticket fee remittance totals">
         <article><strong>{money(remittanceTotals.currentCents)}</strong><span>Current</span><small>Not yet overdue</small></article>
         <article><strong>{money(remittanceTotals.days1To30Cents)}</strong><span>1–30 days</span><small>Early collections</small></article>
