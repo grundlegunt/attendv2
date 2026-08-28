@@ -118,6 +118,8 @@ export default function PlatformPayments() {
   const [error, setError] = useState<string | null>(null);
   const [workingOrganizationId, setWorkingOrganizationId] = useState<string | null>(null);
   const [assigningRemittances, setAssigningRemittances] = useState(false);
+  const [schedulingFollowUps, setSchedulingFollowUps] = useState(false);
+  const [bulkFollowUpDate, setBulkFollowUpDate] = useState("");
   const [showExceptionsOnly, setShowExceptionsOnly] = useState(false);
   const [query, setQuery] = useState("");
   const [onboardingStatus, setOnboardingStatus] = useState("ALL");
@@ -247,6 +249,7 @@ export default function PlatformPayments() {
     });
   }, [remittanceAgingFilter, remittanceFollowUpFilter, remittanceLedger, remittanceOrganizationFilter, remittanceOwnerFilter]);
   const assignableDisplayedRemittances = displayedRemittances.filter((remittance) => remittance.status === "DUE" && !remittance.collectionOwner);
+  const schedulableDisplayedRemittances = displayedRemittances.filter((remittance) => remittance.status === "DUE");
   const operatorReceivables = useMemo(() => {
     const now = new Date();
     return (overview?.organizations ?? []).map((organization) => {
@@ -399,6 +402,36 @@ export default function PlatformPayments() {
     }
   }
 
+  async function scheduleFilteredRemittanceFollowUps() {
+    if (!session || !bulkFollowUpDate || schedulableDisplayedRemittances.length === 0) return;
+    if (!window.confirm(`Schedule ${schedulableDisplayedRemittances.length} follow-up${schedulableDisplayedRemittances.length === 1 ? "" : "s"} for ${new Date(`${bulkFollowUpDate}T12:00:00`).toLocaleDateString()}?`)) return;
+    setSchedulingFollowUps(true);
+    setError(null);
+    let failed = 0;
+    for (const remittance of schedulableDisplayedRemittances) {
+      try {
+        await request(`/platform/ticket-fee-remittances/${remittance.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            nextFollowUpAt: `${bulkFollowUpDate}T23:59:59.999Z`,
+            collectionOwnerId: remittance.collectionOwner?.id ?? session.user.id,
+          }),
+        }, session.accessToken);
+      } catch {
+        failed += 1;
+      }
+    }
+    try {
+      await loadOverview(session);
+      if (failed > 0) setError(`${failed} of ${schedulableDisplayedRemittances.length} follow-ups could not be scheduled. Refresh and try those periods again.`);
+      else setBulkFollowUpDate("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Follow-ups were submitted, but the updated ledger could not be loaded.");
+    } finally {
+      setSchedulingFollowUps(false);
+    }
+  }
+
   function exportPaymentOperations() {
     const columns = ["Client", "Legal name", "Locations", "Stripe status", "Open fee remittances", "Overdue fee remittances", "Ringo receivable due", "Ringo remittances paid", "Failed payments 24h", "Processing payments", "Payment reviews", "Failed refunds", "Stale payments", "Stale refunds", "Manager-review tabs", "Expired seat holds", "Payment failure rate 7d", "Payment failure rate prior 7d", "Refund rate 7d", "Refund rate prior 7d", "Last successful payment"];
     const rows = displayedOrganizations.map((organization) => [
@@ -543,7 +576,7 @@ export default function PlatformPayments() {
         <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
       </section>
-      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><label>Operator <select value={remittanceOrganizationFilter} onChange={(event) => setRemittanceOrganizationFilter(event.target.value)}><option value="ALL">All operators</option>{(overview?.organizations ?? []).map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><label>Age <select value={remittanceAgingFilter} onChange={(event) => setRemittanceAgingFilter(event.target.value as RemittanceAgingFilter)}><option value="ALL">All periods</option><option value="CURRENT">Current</option><option value="1_30">1–30 days</option><option value="31_60">31–60 days</option><option value="60_PLUS">60+ days</option><option value="PAID">Paid</option></select></label><label>Follow-up <select value={remittanceFollowUpFilter} onChange={(event) => setRemittanceFollowUpFilter(event.target.value as RemittanceFollowUpFilter)}><option value="ALL">All follow-ups</option><option value="OVERDUE">Overdue</option><option value="UPCOMING">Upcoming</option><option value="UNASSIGNED">Not scheduled</option></select></label><label>Owner <select value={remittanceOwnerFilter} onChange={(event) => setRemittanceOwnerFilter(event.target.value)}><option value="ALL">All owners</option><option value="UNASSIGNED">Unassigned</option>{collectionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select></label><span>{displayedRemittances.length} of {remittanceLedger.length} periods</span>{session.user.role !== "VIEWER" && assignableDisplayedRemittances.length > 0 && <button type="button" disabled={assigningRemittances} onClick={() => void assignFilteredRemittancesToMe()}>{assigningRemittances ? "Assigning…" : `Assign ${assignableDisplayedRemittances.length} to me`}</button>}<button className="quiet" type="button" disabled={displayedRemittances.length === 0} onClick={exportAgedReceivables}>Export aging CSV</button></div></div>
+      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><label>Operator <select value={remittanceOrganizationFilter} onChange={(event) => setRemittanceOrganizationFilter(event.target.value)}><option value="ALL">All operators</option>{(overview?.organizations ?? []).map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label><label>Age <select value={remittanceAgingFilter} onChange={(event) => setRemittanceAgingFilter(event.target.value as RemittanceAgingFilter)}><option value="ALL">All periods</option><option value="CURRENT">Current</option><option value="1_30">1–30 days</option><option value="31_60">31–60 days</option><option value="60_PLUS">60+ days</option><option value="PAID">Paid</option></select></label><label>Follow-up <select value={remittanceFollowUpFilter} onChange={(event) => setRemittanceFollowUpFilter(event.target.value as RemittanceFollowUpFilter)}><option value="ALL">All follow-ups</option><option value="OVERDUE">Overdue</option><option value="UPCOMING">Upcoming</option><option value="UNASSIGNED">Not scheduled</option></select></label><label>Owner <select value={remittanceOwnerFilter} onChange={(event) => setRemittanceOwnerFilter(event.target.value)}><option value="ALL">All owners</option><option value="UNASSIGNED">Unassigned</option>{collectionOwners.map((owner) => <option key={owner.id} value={owner.id}>{owner.name}</option>)}</select></label><span>{displayedRemittances.length} of {remittanceLedger.length} periods</span>{session.user.role !== "VIEWER" && schedulableDisplayedRemittances.length > 0 && <><label>Bulk follow-up <input type="date" value={bulkFollowUpDate} min={new Date().toISOString().slice(0, 10)} onChange={(event) => setBulkFollowUpDate(event.target.value)} /></label><button type="button" disabled={!bulkFollowUpDate || schedulingFollowUps} onClick={() => void scheduleFilteredRemittanceFollowUps()}>{schedulingFollowUps ? "Scheduling…" : `Schedule ${schedulableDisplayedRemittances.length}`}</button></>}{session.user.role !== "VIEWER" && assignableDisplayedRemittances.length > 0 && <button type="button" disabled={assigningRemittances} onClick={() => void assignFilteredRemittancesToMe()}>{assigningRemittances ? "Assigning…" : `Assign ${assignableDisplayedRemittances.length} to me`}</button>}<button className="quiet" type="button" disabled={displayedRemittances.length === 0} onClick={exportAgedReceivables}>Export aging CSV</button></div></div>
       <section className="payment-summary collections-summary" aria-label="Collections workflow totals">
         <article><strong>{money(remittanceTotals.dueCents)}</strong><span>Open receivables</span><small>{remittanceTotals.dueCount} periods</small></article>
         <article><strong>{money(remittanceTotals.overdueCents)}</strong><span>Overdue receivables</span><small>{remittanceTotals.overdueCount} periods</small></article>
