@@ -86,6 +86,13 @@ header { display: flex; justify-content: space-between; align-items: flex-start;
 .operator-receivables article > strong, .operator-receivables article > span { display: grid; gap: 3px; }
 .operator-receivables small { color: var(--muted); }
 .operator-receivables button { margin: 0; }
+.collection-owner-workload { margin-bottom: 14px; border: 1px solid var(--border); background: var(--surface); }
+.collection-owner-workload > div, .collection-owner-workload > article { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(120px, .65fr) minmax(130px, .7fr) 80px minmax(175px, 1fr) 105px; gap: 14px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.collection-owner-workload > div { color: var(--muted); font-size: .68rem; font-weight: 900; letter-spacing: .1em; text-transform: uppercase; }
+.collection-owner-workload > article:last-child { border-bottom: 0; }
+.collection-owner-workload article > strong, .collection-owner-workload article > span { display: grid; gap: 3px; }
+.collection-owner-workload small { color: var(--muted); }
+.collection-owner-workload button { margin: 0; }
 .link-button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); color: var(--text); font-size: .78rem; font-weight: 900; text-decoration: none; }
 .onboarding-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }.onboarding-summary article { display: flex; align-items: baseline; gap: 12px; padding: 20px 22px; border: 1px solid var(--border); background: var(--surface); }.onboarding-summary strong { font-size: 2.2rem; }.onboarding-summary span { color: var(--muted); font-size: .75rem; font-weight: 900; text-transform: uppercase; }
 .onboarding-filters { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(180px, .45fr) auto auto auto; gap: 12px; align-items: end; margin-bottom: 18px; padding: 16px 18px; border: 1px solid var(--border); background: var(--surface); }.onboarding-filters label { margin: 0; }.onboarding-filters input, .onboarding-filters select { min-height: 42px; }.onboarding-filters > span { display: flex; align-items: baseline; gap: 5px; min-height: 42px; padding: 11px 4px; color: var(--muted); font-size: .72rem; white-space: nowrap; }.onboarding-filters > span strong { color: var(--text); font-size: 1.15rem; }.onboarding-filters button { margin: 0; }
