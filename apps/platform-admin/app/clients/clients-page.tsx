@@ -2091,11 +2091,20 @@ export default function AttendMaster() {
                     <div><span>{ticketFeeAgreementDraft.structure === "TIERED" ? "Operator · first tier" : "Operator receives"}</span><strong>{money(Math.max(0, currencyInputCents(ticketFeeAgreementDraft.customerFee) - currencyInputCents(ticketFeeAgreementDraft.firstPlatformShare)))}</strong></div>
                     {ticketFeeAgreementDraft.structure === "TIERED" && <><div><span>Ringo · after threshold</span><strong>{money(currencyInputCents(ticketFeeAgreementDraft.secondPlatformShare))}</strong></div><div><span>Operator · after threshold</span><strong>{money(Math.max(0, currencyInputCents(ticketFeeAgreementDraft.customerFee) - currencyInputCents(ticketFeeAgreementDraft.secondPlatformShare)))}</strong></div></>}
                   </div>
-                  {currencyInputCents(ticketFeeAgreementDraft.customerFee) !== organization.ticketFeeMinor && <div className="agreement-fee-warning" role="alert">
+                  {![organization.ticketFeeMinor, organization.registeredTicketFeeMinor].includes(currencyInputCents(ticketFeeAgreementDraft.customerFee)) && <div className="agreement-fee-warning" role="alert">
                     <div><strong>Customer-fee mismatch</strong>
-                      <p>This agreement uses {money(currencyInputCents(ticketFeeAgreementDraft.customerFee))} per ticket, but this operator&apos;s live checkout fee is {money(organization.ticketFeeMinor)}. Align the amounts before the effective date to avoid settlement variances.</p>
+                      <p>This agreement uses {money(currencyInputCents(ticketFeeAgreementDraft.customerFee))} per ticket, which matches neither the {money(organization.ticketFeeMinor)} guest fee nor the {money(organization.registeredTicketFeeMinor)} registered-customer fee. Align the amount before the effective date to avoid settlement variances.</p>
                     </div>
                     <button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: (organization.ticketFeeMinor / 100).toFixed(2) })}>Use live checkout fee</button>
+                  </div>}
+                  {organization.registeredTicketFeeMinor !== organization.ticketFeeMinor && <div className="agreement-fee-warning agreement-fee-options" role="note">
+                    <div><strong>Two live checkout fees</strong>
+                      <p>Guests currently pay {money(organization.ticketFeeMinor)} and registered customers pay {money(organization.registeredTicketFeeMinor)} per ticket. This agreement records one customer-fee basis, so choose which checkout fee governs settlement.</p>
+                    </div>
+                    <div className="agreement-fee-option-actions">
+                      <button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: (organization.ticketFeeMinor / 100).toFixed(2) })}>Use guest fee</button>
+                      <button type="button" className="quiet" onClick={() => setTicketFeeAgreementDraft({ ...ticketFeeAgreementDraft, customerFee: (organization.registeredTicketFeeMinor / 100).toFixed(2) })}>Use registered fee</button>
+                    </div>
                   </div>}
                   {ticketFeeDraftOverallocates(ticketFeeAgreementDraft) && <div className="agreement-fee-warning agreement-split-error" role="alert">
                     <div><strong>Split exceeds customer fee</strong>

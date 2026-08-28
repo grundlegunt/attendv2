@@ -24,7 +24,7 @@ test("the editor previews the resulting split and labels saved flat agreements",
 });
 
 test("the editor warns when agreement and live checkout fees differ", () => {
-  assert.match(source, /currencyInputCents\(ticketFeeAgreementDraft\.customerFee\) !== organization\.ticketFeeMinor/);
+  assert.match(source, /\[organization\.ticketFeeMinor, organization\.registeredTicketFeeMinor\]\.includes\(currencyInputCents\(ticketFeeAgreementDraft\.customerFee\)\)/);
   assert.match(source, /Customer-fee mismatch/);
   assert.match(source, /avoid settlement variances/);
   assert.match(source, /Use live checkout fee/);
@@ -35,4 +35,11 @@ test("the editor blocks agreement splits that exceed the customer fee", () => {
   assert.match(source, /function ticketFeeDraftOverallocates/);
   assert.match(source, /Split exceeds customer fee/);
   assert.match(source, /saving \|\| ticketFeeDraftOverallocates\(ticketFeeAgreementDraft\)/);
+});
+
+test("the editor identifies distinct guest and registered checkout fees", () => {
+  assert.match(source, /registeredTicketFeeMinor !== organization\.ticketFeeMinor/);
+  assert.match(source, /Two live checkout fees/);
+  assert.match(source, /Use guest fee/);
+  assert.match(source, /Use registered fee/);
 });
