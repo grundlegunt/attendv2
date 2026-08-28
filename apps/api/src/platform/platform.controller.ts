@@ -382,6 +382,15 @@ export class PlatformController {
     return this.platform.createTicketFeeAgreement({ actorId: actor.sub, organizationId, ...ticketFeeAgreementCreateSchema.parse(body) });
   }
 
+  @Get("organizations/:organizationId/ticket-fee-settlement.csv")
+  @UseGuards(PlatformAuthGuard)
+  async ticketFeeSettlementCsv(@Res() response: Response, @Param("organizationId") organizationId: string) {
+    const statement = await this.platform.ticketFeeSettlementCsv(organizationId);
+    response.setHeader("Content-Type", "text/csv; charset=utf-8");
+    response.setHeader("Content-Disposition", 'attachment; filename="ringo-ticket-fee-settlement.csv"');
+    response.send(statement);
+  }
+
   @Delete("organizations/:organizationId")
   @UseGuards(PlatformAuthGuard, PlatformPermissionGuard)
   @RequirePlatformPermission(PLATFORM_WRITE_PERMISSION)

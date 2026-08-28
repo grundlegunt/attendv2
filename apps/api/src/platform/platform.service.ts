@@ -2500,6 +2500,38 @@ export class PlatformService {
     };
   }
 
+  async ticketFeeSettlementCsv(organizationId: string) {
+    const [organization, settlement] = await Promise.all([
+      prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true } }),
+      this.ticketFeeSettlement(organizationId),
+    ]);
+    if (!organization) throw AppError.notFound("Cinema organization not found.");
+    if (!settlement) throw AppError.notFound("No active ticket-fee agreement was found.");
+    const quote = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const row = (values: unknown[]) => values.map(quote).join(",");
+    return [
+      row(["Ringo ticket-fee settlement statement"]),
+      row(["Cinema operator", organization.name]),
+      row(["Agreement", settlement.agreementName]),
+      row(["Threshold period", settlement.thresholdPeriod]),
+      row(["Period from", settlement.periodFrom]),
+      row(["Period to", settlement.periodTo ?? "Lifetime"]),
+      "",
+      row(["Metric", "Amount"]),
+      row(["Net paid tickets", settlement.tickets]),
+      row(["Customer fees collected (cents)", settlement.collectedFeeCents]),
+      row(["Ringo accrued share (cents)", settlement.platformShareCents]),
+      row(["Operator accrued share (cents)", settlement.operatorShareCents]),
+      row(["Agreement variance (cents)", settlement.varianceCents]),
+      "",
+      row(["Current tier starts at ticket", settlement.activeTier.startsAtTicket]),
+      row(["Current tier ends at ticket", settlement.activeTier.endsAtTicket ?? "No limit"]),
+      row(["Ringo per-ticket share (cents)", settlement.activeTier.platformShareMinor]),
+      row(["Operator per-ticket share (cents)", settlement.activeTier.operatorShareMinor]),
+      row(["Tickets until next tier", settlement.activeTier.ticketsRemaining ?? "Final tier"]),
+    ].join("\n");
+  }
+
   async createAuditorium(
     input: PlatformAuditoriumInput & {
       actorId: string;
