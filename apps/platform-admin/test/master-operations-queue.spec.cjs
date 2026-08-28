@@ -89,8 +89,18 @@ test("operations queue filters are shareable by URL", () => {
   assert.match(source, /params\.set\("client", client\)/);
   assert.match(source, /params\.set\("category", category\)/);
   assert.match(source, /params\.set\("priority", priority\)/);
+  assert.match(source, /params\.set\("risk", risk\)/);
   assert.match(source, /window\.history\.replaceState/);
   assert.match(source, /navigator\.clipboard\.writeText\(window\.location\.href\)/);
   assert.match(source, /Copy view link/);
   assert.match(source, /Link copied/);
+});
+
+test("operations queue accepts focused remittance-risk links", () => {
+  assert.match(source, /function riskMatches/);
+  assert.match(source, /UNASSIGNED/);
+  assert.match(source, /FOLLOW_UP_OVERDUE/);
+  assert.match(source, /AGE_60_PLUS/);
+  assert.match(source, /riskMatches\(item\.issue, risk\)/);
+  assert.match(source, /All risks/);
 });

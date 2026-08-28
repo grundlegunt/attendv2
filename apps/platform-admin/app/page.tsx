@@ -281,7 +281,7 @@ export default function PlatformDashboard() {
           <p className="eyebrow">URGENT OPERATIONS</p>
           <h2>{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationGroups} issue groups need immediate follow-up` : "No urgent operational risks"}</h2>
           <p className="muted">{metrics.urgentOperationGroups > 0 ? `${metrics.urgentOperationClients} ${metrics.urgentOperationClients === 1 ? "client has" : "clients have"} ${metrics.urgentRemittanceCount} urgent ${metrics.urgentRemittanceCount === 1 ? "remittance" : "remittances"} representing ${money(metrics.urgentExposureCents)} in Ringo receivables.` : "No unassigned remittances, overdue follow-ups, or remittances more than 60 days past due."}</p>
-          {metrics.urgentOperationGroups > 0 && <div className="urgent-operations-breakdown" aria-label="Urgent remittance causes"><span><strong>{metrics.urgentUnassignedCount}</strong> unassigned</span><span><strong>{metrics.urgentOverdueFollowUpCount}</strong> overdue follow-ups</span><span><strong>{metrics.urgentCriticalAgingCount}</strong> over 60 days</span></div>}
+          {metrics.urgentOperationGroups > 0 && <div className="urgent-operations-breakdown" aria-label="Urgent remittance causes"><Link href="/operations?priority=Urgent&risk=UNASSIGNED"><strong>{metrics.urgentUnassignedCount}</strong> unassigned</Link><Link href="/operations?priority=Urgent&risk=FOLLOW_UP_OVERDUE"><strong>{metrics.urgentOverdueFollowUpCount}</strong> overdue follow-ups</Link><Link href="/operations?priority=Urgent&risk=AGE_60_PLUS"><strong>{metrics.urgentCriticalAgingCount}</strong> over 60 days</Link></div>}
         </div>
         <Link href="/operations?priority=Urgent">Open urgent queue →</Link>
       </section>
