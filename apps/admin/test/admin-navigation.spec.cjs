@@ -306,7 +306,7 @@ describe("saved schedule publishing", () => {
 });
 
 describe("showtime inspector layout", () => {
-  it("contains the seat map and form controls within their grid columns", () => {
+  it("keeps summary controls compact and opens the full seat map separately", () => {
     assert.match(
       globalStylesSource,
       /\.schedule-inspector \.showtime-inspector-summary \{[^}]*min-width: 0;/,
@@ -318,6 +318,13 @@ describe("showtime inspector layout", () => {
     assert.match(
       globalStylesSource,
       /\.showtime-seat-inventory \{[^}]*grid-column: 1 \/ -1;[^}]*min-width: 0;/,
+    );
+    assert.match(schedulingSource, /View full seat map/);
+    assert.match(schedulingSource, /role="dialog"/);
+    assert.match(schedulingSource, /aria-label="Close seat inventory"/);
+    assert.match(
+      globalStylesSource,
+      /\.seat-inventory-modal \{[^}]*max-height: calc\(100vh - 48px\);[^}]*overflow: auto;/,
     );
     assert.match(
       globalStylesSource,

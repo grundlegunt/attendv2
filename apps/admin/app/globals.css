@@ -280,8 +280,13 @@ form button.secondary { width: 100%; margin-top: 10px; }
 .showtime-seat-inventory-heading span, .seat-inventory-loading { color: var(--color-text-muted); font-size: .78rem; }
 .seat-inventory-counts { flex-wrap: wrap; margin-top: 9px; font-size: .72rem; color: var(--color-text-muted); }
 .seat-inventory-counts b { color: var(--color-text); }
-.showtime-seat-inventory .seat-map { margin: 12px 0; max-height: 280px; overflow: auto; }
-.showtime-seat-inventory .seat-map__grid { transform-origin: top left; }
+.showtime-seat-map-button { width: 100%; margin: 12px 0 0; }
+.seat-inventory-backdrop { align-items: center; justify-content: center; padding: 24px; }
+.seat-inventory-modal { width: min(980px, 100%); max-height: calc(100vh - 48px); overflow: auto; padding: 26px; border: 1px solid #484943; background: #151613; box-shadow: 0 24px 70px rgba(0,0,0,.65); }
+.seat-inventory-modal .drawer-heading { margin-bottom: 12px; }
+.seat-inventory-modal .seat-inventory-counts { justify-content: flex-start; gap: 18px; }
+.seat-inventory-modal .seat-map { margin: 18px 0; max-height: calc(100vh - 260px); overflow: auto; }
+.seat-inventory-modal .seat-map__grid { transform-origin: top left; }
 .sold-seat-labels { align-items: flex-start; margin: 8px 0 0; font-size: .75rem; }
 .sold-seat-labels span { color: var(--color-text-muted); text-align: right; }
 .schedule-inspector .calculation-note { margin: 8px 0 10px; padding: 9px 11px; font-size: .72rem; }
