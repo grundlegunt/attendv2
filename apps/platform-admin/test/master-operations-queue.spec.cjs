@@ -39,3 +39,11 @@ test("operations queue supports focused resolution workflows", () => {
   assert.match(source, /money\(item\.exposureCents\)/);
   assert.match(source, /locationId=/);
 });
+
+test("operations queue exports the current filtered view for handoffs", () => {
+  assert.match(source, /function exportOperationsQueue\(\)/);
+  assert.match(source, /const rows = items\.map/);
+  assert.match(source, /"Resolution URL"/);
+  assert.match(source, /ringo-operations-queue-/);
+  assert.match(source, /Export queue CSV/);
+});
