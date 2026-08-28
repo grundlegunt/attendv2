@@ -43,6 +43,14 @@ test("payment operations prioritizes remittances by aging bucket", () => {
   assert.match(source, /No remittances match this aging view/);
 });
 
+test("payment operations exports the filtered aged-receivables ledger", () => {
+  assert.match(source, /function exportAgedReceivables/);
+  assert.match(source, /displayedRemittances\.map/);
+  assert.match(source, /Days overdue/);
+  assert.match(source, /ringo-aged-receivables-/);
+  assert.match(source, />Export aging CSV<\/button>/);
+});
+
 test("payment operations can find clients and filter Stripe readiness", () => {
   assert.match(source, /Find client/);
   assert.match(source, /Cinema or legal name/);
