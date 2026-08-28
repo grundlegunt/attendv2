@@ -1402,6 +1402,7 @@ export class PlatformService {
               dueDate: remittance.dueDate?.toISOString() ?? null,
               paidAt: remittance.paidAt?.toISOString() ?? null,
               paymentReference: remittance.paymentReference,
+              reconciliationNote: remittance.reconciliationNote,
               notes: remittance.notes,
               lastContactedAt: remittance.lastContactedAt?.toISOString() ?? null,
               nextFollowUpAt: remittance.nextFollowUpAt?.toISOString() ?? null,
@@ -2575,14 +2576,14 @@ export class PlatformService {
     organizationId: string;
     asOf: string;
     dueDate?: string | null;
-    notes?: string | null;
+    reconciliationNote?: string | null;
   }) {
     const asOf = new Date(input.asOf);
     const settlement = await this.ticketFeeSettlement(input.organizationId, asOf);
     if (!settlement) throw AppError.notFound("No ticket-fee agreement was effective on the statement date.");
     if (!settlement.periodTo || new Date(settlement.periodTo) > new Date())
       throw AppError.validationFailed("Only a completed ticket-fee settlement period can be finalized.");
-    if (settlement.varianceCents !== 0 && !input.notes?.trim())
+    if (settlement.varianceCents !== 0 && !input.reconciliationNote?.trim())
       throw AppError.validationFailed("A reconciliation note is required when collected fees differ from the agreement expectation.");
     const periodTo = new Date(settlement.periodTo);
     return prisma.$transaction(async (tx) => {
@@ -2603,7 +2604,7 @@ export class PlatformService {
           operatorShareCents: settlement.operatorShareCents,
           varianceCents: settlement.varianceCents,
           dueDate: input.dueDate ? new Date(input.dueDate) : null,
-          notes: input.notes?.trim() || null,
+          reconciliationNote: input.reconciliationNote?.trim() || null,
           createdById: input.actorId,
         },
       });
