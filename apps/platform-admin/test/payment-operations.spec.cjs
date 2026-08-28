@@ -48,6 +48,13 @@ test("payment operations prioritizes remittances by aging bucket", () => {
   assert.match(source, /No remittances match this aging view/);
 });
 
+test("payment operations filters the collections ledger by follow-up status", () => {
+  assert.match(source, /type RemittanceFollowUpFilter = "ALL" \| "OVERDUE" \| "UPCOMING" \| "UNASSIGNED"/);
+  assert.match(source, /remittanceFollowUpFilter === "UNASSIGNED"/);
+  assert.match(source, />All follow-ups<\/option>/);
+  assert.match(source, />Not scheduled<\/option>/);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);
