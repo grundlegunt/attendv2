@@ -300,6 +300,33 @@ export default function PlatformPayments() {
     URL.revokeObjectURL(url);
   }
 
+  function exportAgedReceivables() {
+    const columns = ["Operator", "Period start", "Period end", "Tickets", "Fees collected", "Ringo receivable", "Operator share", "Variance", "Status", "Aging bucket", "Days overdue", "Due date", "Paid date", "Payment reference"];
+    const rows = displayedRemittances.map((remittance) => [
+      remittance.organizationName,
+      remittance.periodFrom.slice(0, 10),
+      remittance.periodTo.slice(0, 10),
+      remittance.ticketCount,
+      remittance.collectedFeeCents / 100,
+      remittance.platformShareCents / 100,
+      remittance.operatorShareCents / 100,
+      remittance.varianceCents / 100,
+      remittance.status,
+      remittanceAgingBucket(remittance),
+      remittance.status === "DUE" ? daysOverdue(remittance.dueDate) ?? "" : "",
+      remittance.dueDate?.slice(0, 10) ?? "",
+      remittance.paidAt?.slice(0, 10) ?? "",
+      remittance.paymentReference ?? "",
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `ringo-aged-receivables-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!restored) return <main className="center"><p>Loading Ringo Master…</p></main>;
   if (!session) {
     return (
@@ -334,7 +361,7 @@ export default function PlatformPayments() {
         <article><span>Payment failure · 7d</span><strong>{percentage(totals.failedAttempts7d, totals.paymentAttempts7d)}</strong><small>{totals.failedAttempts7d} failed of {totals.paymentAttempts7d} attempts · prior 7d {percentage(totals.previousFailedAttempts7d, totals.previousPaymentAttempts7d)}</small></article>
         <article><span>Refund rate · 7d</span><strong>{percentage(totals.refundedCents7d, totals.capturedCents7d)}</strong><small>{new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.refundedCents7d / 100)} refunded of {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(totals.capturedCents7d / 100)} captured · prior 7d {percentage(totals.previousRefundedCents7d, totals.previousCapturedCents7d)}</small></article>
       </section>
-      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><label>Age <select value={remittanceAgingFilter} onChange={(event) => setRemittanceAgingFilter(event.target.value as RemittanceAgingFilter)}><option value="ALL">All periods</option><option value="CURRENT">Current</option><option value="1_30">1–30 days</option><option value="31_60">31–60 days</option><option value="60_PLUS">60+ days</option><option value="PAID">Paid</option></select></label><span>{displayedRemittances.length} of {remittanceLedger.length} periods</span></div></div>
+      <div className="payments-toolbar"><div><p className="eyebrow">TICKET-FEE RECEIVABLES</p><h2>Operator remittances</h2></div><div className="payments-toolbar-actions"><label>Age <select value={remittanceAgingFilter} onChange={(event) => setRemittanceAgingFilter(event.target.value as RemittanceAgingFilter)}><option value="ALL">All periods</option><option value="CURRENT">Current</option><option value="1_30">1–30 days</option><option value="31_60">31–60 days</option><option value="60_PLUS">60+ days</option><option value="PAID">Paid</option></select></label><span>{displayedRemittances.length} of {remittanceLedger.length} periods</span><button className="quiet" type="button" disabled={displayedRemittances.length === 0} onClick={exportAgedReceivables}>Export aging CSV</button></div></div>
       <section className="payment-summary remittance-summary" aria-label="Ticket fee remittance totals">
         <article><strong>{money(remittanceTotals.currentCents)}</strong><span>Current</span><small>Not yet overdue</small></article>
         <article><strong>{money(remittanceTotals.days1To30Cents)}</strong><span>1–30 days</span><small>Early collections</small></article>
