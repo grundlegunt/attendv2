@@ -32,6 +32,11 @@ test("payment operations exports and displays remittance collection health", () 
   assert.match(source, /Overdue fee remittances/);
   assert.match(source, /Ringo receivable due/);
   assert.match(source, /open fee remittances/);
+  assert.match(source, /Collections workflow totals/);
+  assert.match(source, /Open receivables/);
+  assert.match(source, /Overdue receivables/);
+  assert.match(source, /Follow-ups overdue/);
+  assert.match(source, /Without follow-up/);
 });
 
 test("payment operations prioritizes remittances by aging bucket", () => {
