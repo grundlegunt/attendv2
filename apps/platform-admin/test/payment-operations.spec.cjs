@@ -92,6 +92,14 @@ test("payment operations exports operator-level collection risk", () => {
   assert.match(source, />Export operator summary<\/button>/);
 });
 
+test("payment operations filters operators by collection risk", () => {
+  assert.match(source, /type OperatorRiskFilter/);
+  assert.match(source, /const displayedOperatorReceivables = useMemo/);
+  assert.match(source, /operator\.risk === operatorRiskFilter/);
+  assert.match(source, />All risk tiers<\/option>/);
+  assert.match(source, /displayedOperatorReceivables\.map/);
+});
+
 test("payment operations exports the filtered aged-receivables ledger", () => {
   assert.match(source, /function exportAgedReceivables/);
   assert.match(source, /displayedRemittances\.map/);
