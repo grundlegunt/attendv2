@@ -47,3 +47,13 @@ test("operations queue exports the current filtered view for handoffs", () => {
   assert.match(source, /ringo-operations-queue-/);
   assert.match(source, /Export queue CSV/);
 });
+
+test("operations queue exposes priority for rapid triage", () => {
+  assert.match(source, /function priorityLabel/);
+  assert.match(source, /All priorities/);
+  assert.match(source, /priorityLabel\(item\.priority\) === priority/);
+  assert.match(source, />Urgent<\/option>/);
+  assert.match(source, />High<\/option>/);
+  assert.match(source, />Priority<\/span>/);
+  assert.match(source, /operations-priority/);
+});
