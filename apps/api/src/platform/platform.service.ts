@@ -2256,6 +2256,7 @@ export class PlatformService {
           operatorShareMinor: tier.operatorShareMinor,
         })),
       })),
+      ticketFeeSettlement: await this.ticketFeeSettlement(organization.id),
       createdAt: organization.createdAt.toISOString(),
       payments: {
         connected: Boolean(organization.stripeConnectedAccountId),
@@ -2426,6 +2427,76 @@ export class PlatformService {
           };
         }),
       ),
+    };
+  }
+
+  private async ticketFeeSettlement(organizationId: string, now = new Date()) {
+    const agreement = await prisma.ticketFeeAgreement.findFirst({
+      where: {
+        organizationId,
+        effectiveFrom: { lte: now },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gt: now } }],
+      },
+      orderBy: { effectiveFrom: "desc" },
+      include: { tiers: { orderBy: { startsAtTicket: "asc" } } },
+    });
+    if (!agreement) return null;
+
+    let periodFrom = agreement.effectiveFrom;
+    let periodTo: Date | null = agreement.effectiveTo;
+    if (agreement.thresholdPeriod === "CALENDAR_YEAR") {
+      periodFrom = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+      periodTo = new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1));
+    } else if (agreement.thresholdPeriod === "CONTRACT_YEAR") {
+      const month = agreement.effectiveFrom.getUTCMonth();
+      const day = agreement.effectiveFrom.getUTCDate();
+      let startYear = now.getUTCFullYear();
+      let anniversary = new Date(Date.UTC(startYear, month, day));
+      if (anniversary > now) anniversary = new Date(Date.UTC(--startYear, month, day));
+      periodFrom = anniversary < agreement.effectiveFrom ? agreement.effectiveFrom : anniversary;
+      periodTo = new Date(Date.UTC(startYear + 1, month, day));
+    }
+    if (periodFrom < agreement.effectiveFrom) periodFrom = agreement.effectiveFrom;
+    if (agreement.effectiveTo && (!periodTo || agreement.effectiveTo < periodTo)) periodTo = agreement.effectiveTo;
+
+    const orders = await prisma.ticketOrder.findMany({
+      where: {
+        location: { organizationId },
+        createdAt: { gte: periodFrom, lt: now },
+        status: { in: ["PAID", "EXCHANGED"] },
+      },
+      select: { feesCents: true, _count: { select: { tickets: true } } },
+    });
+    const tickets = orders.reduce((sum, order) => sum + order._count.tickets, 0);
+    const collectedFeeCents = orders.reduce((sum, order) => sum + order.feesCents, 0);
+    let platformShareCents = 0;
+    let operatorShareCents = 0;
+    for (const tier of agreement.tiers) {
+      const upper = Math.min(tickets, tier.endsAtTicket ?? tickets);
+      const units = Math.max(0, upper - tier.startsAtTicket + 1);
+      platformShareCents += units * tier.platformShareMinor;
+      operatorShareCents += units * tier.operatorShareMinor;
+    }
+    const nextTicket = tickets + 1;
+    const activeTier = agreement.tiers.find((tier) => nextTicket >= tier.startsAtTicket && (tier.endsAtTicket === null || nextTicket <= tier.endsAtTicket)) ?? agreement.tiers.at(-1)!;
+    return {
+      agreementId: agreement.id,
+      agreementName: agreement.name,
+      thresholdPeriod: agreement.thresholdPeriod,
+      periodFrom: periodFrom.toISOString(),
+      periodTo: periodTo?.toISOString() ?? null,
+      tickets,
+      collectedFeeCents,
+      platformShareCents,
+      operatorShareCents,
+      varianceCents: collectedFeeCents - platformShareCents - operatorShareCents,
+      activeTier: {
+        startsAtTicket: activeTier.startsAtTicket,
+        endsAtTicket: activeTier.endsAtTicket,
+        platformShareMinor: activeTier.platformShareMinor,
+        operatorShareMinor: activeTier.operatorShareMinor,
+        ticketsRemaining: activeTier.endsAtTicket === null ? null : Math.max(0, activeTier.endsAtTicket - tickets),
+      },
     };
   }
 
