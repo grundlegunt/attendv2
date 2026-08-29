@@ -22,7 +22,7 @@ import {
 import { DisabledSmsProvider, EmailProvider, SmsProvider, TicketReceipt, WalletPassArtifact, WalletPassProvider } from "@cinema/notifications";
 import { TicketingError } from "./ticketing-error";
 import { createTicketCredential } from "./qr-credential";
-import { finalizeConfirmedTicketOrderRefund } from "./refund-settlement";
+import { finalizeConfirmedTicketOrderRefund, settleDeferredBoxOfficeTenderRefunds } from "./refund-settlement";
 import {
   OrderAheadQuote,
   OrderAheadQuoteError,
@@ -1887,6 +1887,11 @@ export class TicketingService {
           data: { status: PaymentStatus.REFUNDED },
         });
         if (localRefund.scope === "TICKET" || localRefund.scope === "BOTH") {
+          await settleDeferredBoxOfficeTenderRefunds(
+            tx,
+            localRefund.payment.ticketOrder!.id,
+            localRefund.id,
+          );
           const finalized = await finalizeConfirmedTicketOrderRefund(tx, localRefund.payment.ticketOrder!.id);
           if (finalized) {
             await tx.auditEvent.create({
@@ -2252,6 +2257,7 @@ export class TicketingService {
             select: { scope: true },
           });
           if (persistedRefund.scope === "TICKET" || persistedRefund.scope === "BOTH") {
+            await settleDeferredBoxOfficeTenderRefunds(tx, ctx.ticketOrderId, refund.id);
             const finalized = await finalizeConfirmedTicketOrderRefund(tx, ctx.ticketOrderId);
             if (finalized) {
               await tx.auditEvent.create({
