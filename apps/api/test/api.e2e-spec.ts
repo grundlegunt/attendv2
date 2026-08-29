@@ -10674,6 +10674,125 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: orders[1].id } })).toMatchObject({ status: "PAYMENT_FAILED" });
   });
 
+  async function createBoxOfficeReceiptFixture(label: string, orderId?: string) {
+    const { prisma } = await import("@cinema/database");
+    const existing = orderId
+      ? { id: orderId }
+      : await prisma.ticketOrder.findFirstOrThrow({
+          where: { status: "PAID", tickets: { some: { status: { in: ["ISSUED", "ADMITTED"] } } } },
+          select: { id: true },
+        });
+    await prisma.ticketOrder.update({
+      where: { id: existing.id },
+      data: {
+        guestEmail: `box-office-receipt-${label}-${crypto.randomUUID()}@example.test`,
+        receiptEmailSentAt: null,
+        receiptEmailMessageId: null,
+        receiptEmailClaimedAt: null,
+        receiptEmailError: "retry box-office receipt",
+        receiptResendRequestId: null,
+        receiptResendActorType: null,
+        receiptResendActorId: null,
+        receiptResendPreviousEmail: null,
+      },
+    });
+    return prisma.ticketOrder.findUniqueOrThrow({
+      where: { id: existing.id },
+      include: {
+        tickets: {
+          include: {
+            ticketType: true,
+            showtimeSeat: { include: { seat: true, showtime: { include: { movie: true, auditorium: true } } } },
+          },
+        },
+        payment: true,
+        cashTransactions: true,
+      },
+    });
+  }
+
+  it("does not let a stale box-office receipt worker overwrite a newer successful delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const order = await createBoxOfficeReceiptFixture("success");
+    const boxOffice = app.get(BoxOfficeService) as unknown as {
+      paidOrderWithReceipt(orderId: string): Promise<{ receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED" }>;
+    };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(emailProvider, "sendTicketReceipt").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { messageId: "stale-box-office-receipt" };
+      }
+      return { messageId: "current-box-office-receipt" };
+    });
+    try {
+      const staleWorker = boxOffice.paidOrderWithReceipt(order.id);
+      await firstStarted;
+      await createBoxOfficeReceiptFixture("replacement", order.id);
+      await expect(boxOffice.paidOrderWithReceipt(order.id)).resolves.toMatchObject({ receiptDelivery: "SENT" });
+      releaseFirst();
+      await expect(staleWorker).resolves.toMatchObject({ receiptDelivery: "NOT_REQUESTED" });
+      await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+        receiptEmailMessageId: "current-box-office-receipt",
+        receiptEmailSentAt: expect.any(Date),
+        receiptEmailClaimedAt: null,
+        receiptEmailError: null,
+      });
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale failing box-office receipt worker clear a newer delivery claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const order = await createBoxOfficeReceiptFixture("failure");
+    const boxOffice = app.get(BoxOfficeService) as unknown as {
+      paidOrderWithReceipt(orderId: string): Promise<{ receiptDelivery: "SENT" | "FAILED" | "NOT_REQUESTED" }>;
+    };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(emailProvider, "sendTicketReceipt").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale box-office receipt failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = boxOffice.paidOrderWithReceipt(order.id);
+      await sendStarted;
+      await prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: { receiptEmailClaimedAt: newerClaim, receiptEmailError: null },
+      });
+      releaseSend();
+      await expect(staleWorker).resolves.toMatchObject({ receiptDelivery: "NOT_REQUESTED" });
+      await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+        receiptEmailMessageId: null,
+        receiptEmailSentAt: null,
+        receiptEmailClaimedAt: newerClaim,
+        receiptEmailError: null,
+      });
+    } finally {
+      releaseSend();
+      send.mockRestore();
+    }
+  });
+
   it("rate limits repeated public workforce PIN attempts", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
