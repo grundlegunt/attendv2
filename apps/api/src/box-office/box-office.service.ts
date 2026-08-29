@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
-import { createTicketCredential, finalizeConfirmedTicketOrderRefund } from "@cinema/ticketing";
+import { createTicketCredential, finalizeConfirmedTicketOrderRefund, settleDeferredBoxOfficeTenderRefunds } from "@cinema/ticketing";
 import { loadEnv } from "@cinema/config/env";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
@@ -700,6 +700,31 @@ export class BoxOfficeService {
       if (refundRow.paymentId !== order.payment.id || refundRow.amountCents !== cardPaid || refundRow.reason !== input.reason || refundRow.scope !== "TICKET") {
         throw AppError.conflict("The refund request id was already used with different details.");
       }
+      const existingTenderPlan = await prisma.auditEvent.findFirst({
+        where: { action: "ticket_order.refund_tender_plan", entityType: "Refund", entityId: refundRow.id },
+        select: { id: true },
+      });
+      if (!existingTenderPlan) {
+        await prisma.auditEvent.create({
+          data: {
+            actorType: "EMPLOYEE",
+            actorId: input.employeeId,
+            locationId: input.locationId,
+            action: "ticket_order.refund_tender_plan",
+            entityType: "Refund",
+            entityId: refundRow.id,
+            afterState: {
+              ticketOrderId: order.id,
+              requestId: input.requestId,
+              cashDrawerId: input.cashDrawerId ?? null,
+              giftCardId: giftRedemption?.giftCardId ?? null,
+              cashCents: cashPaid,
+              giftCardCents: giftCardPaid,
+              reason: input.reason,
+            },
+          },
+        });
+      }
       providerRefund = refundRow.status === "PROCESSING" && refundRow.providerRefundId
         ? await this.paymentProvider.retrieveRefund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerRefundId: refundRow.providerRefundId })
         : await this.paymentProvider.refund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerPaymentId: order.payment.providerPaymentId, amountCents: cardPaid, reason: "requested_by_customer", idempotencyKey: refundRow.idempotencyKey, metadata: { refundId: refundRow.id, ticketOrderId: order.id } });
@@ -710,33 +735,39 @@ export class BoxOfficeService {
     }
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
-      if (giftRedemption) {
-        await tx.$queryRaw`SELECT "id" FROM "gift_cards" WHERE "id" = ${giftRedemption.giftCardId} FOR UPDATE`;
-        const giftCard = await tx.giftCard.findUniqueOrThrow({ where: { id: giftRedemption.giftCardId } });
-        const reference = `refund:${order.id}:${input.requestId}`;
-        const existingGiftRefund = await tx.giftCardTransaction.findFirst({ where: { giftCardId: giftCard.id, type: "REFUND", reference } });
-        if (!existingGiftRefund) {
-          const balanceAfterCents = giftCard.balanceCents + giftCardPaid;
-          await tx.giftCard.update({ where: { id: giftCard.id }, data: { balanceCents: balanceAfterCents } });
-          await tx.giftCardTransaction.create({ data: { giftCardId: giftCard.id, locationId: input.locationId, employeeId: input.employeeId, type: "REFUND", amountCents: giftCardPaid, balanceAfterCents, reference } });
-        }
-      }
-      if (cashPaid > 0) {
-        await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
-        const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
-        if (!drawer) throw AppError.conflict("The cash drawer is not open.");
-        const cashRefund = await tx.cashTransaction.upsert({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` }, update: {}, create: { locationId: input.locationId, cashDrawerId: drawer.id, ticketOrderId: order.id, employeeId: input.employeeId, type: "REFUND", amountCents: cashPaid, reason: input.reason, idempotencyKey: `box-office-cash-refund:${input.requestId}` } });
-        if (cashRefund.ticketOrderId !== order.id || cashRefund.cashDrawerId !== drawer.id || cashRefund.amountCents !== cashPaid || cashRefund.reason !== input.reason || cashRefund.type !== "REFUND") {
-          throw AppError.conflict("The refund request id was already used with different details.");
-        }
-      }
+      const confirmed = !providerRefund || providerRefund.status === "SUCCEEDED";
       if (order.payment && refundRow && providerRefund) {
         await tx.refund.update({ where: { id: refundRow.id }, data: { providerRefundId: providerRefund.id, status: providerRefund.status === "SUCCEEDED" ? "SUCCEEDED" : "PROCESSING" } });
         await tx.payment.update({ where: { id: order.payment.id }, data: { status: providerRefund.status === "SUCCEEDED" ? "REFUNDED" : "SUCCEEDED" } });
       }
-      const confirmed = !providerRefund || providerRefund.status === "SUCCEEDED";
-      if (confirmed) await finalizeConfirmedTicketOrderRefund(tx, order.id);
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: confirmed ? "ticket_order.refunded" : "ticket_order.refund_pending", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: cardPaid, giftCardCents: giftCardPaid, reason: input.reason, refundId: refundRow?.id ?? null } } });
+      if (confirmed) {
+        if (refundRow) {
+          await settleDeferredBoxOfficeTenderRefunds(tx, order.id, refundRow.id);
+        } else if (cashPaid > 0) {
+          await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
+          const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
+          if (!drawer) throw AppError.conflict("The cash drawer is not open.");
+          const cashRefund = await tx.cashTransaction.upsert({
+            where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` },
+            update: {},
+            create: {
+              locationId: input.locationId,
+              cashDrawerId: drawer.id,
+              ticketOrderId: order.id,
+              employeeId: input.employeeId,
+              type: "REFUND",
+              amountCents: cashPaid,
+              reason: input.reason,
+              idempotencyKey: `box-office-cash-refund:${input.requestId}`,
+            },
+          });
+          if (cashRefund.ticketOrderId !== order.id || cashRefund.cashDrawerId !== drawer.id || cashRefund.amountCents !== cashPaid || cashRefund.reason !== input.reason || cashRefund.type !== "REFUND") {
+            throw AppError.conflict("The refund request id was already used with different details.");
+          }
+        }
+        await finalizeConfirmedTicketOrderRefund(tx, order.id);
+      }
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: confirmed ? "ticket_order.refunded" : "ticket_order.refund_pending", entityType: "TicketOrder", entityId: order.id, afterState: { requestId: input.requestId, cashDrawerId: input.cashDrawerId ?? null, giftCardId: giftRedemption?.giftCardId ?? null, cashCents: cashPaid, cardCents: cardPaid, giftCardCents: giftCardPaid, reason: input.reason, refundId: refundRow?.id ?? null } } });
       return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
     });
   }
