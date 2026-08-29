@@ -9655,6 +9655,28 @@ describe("Milestone 9 box office and workforce", () => {
 
     expect(await prisma.ticketOrder.findUniqueOrThrow({ where: { id: orders[1].id } })).toMatchObject({ status: "PAID" });
     expect(await prisma.cashTransaction.count({ where: { idempotencyKey: `box-office-cash-refund:${requestId}` } })).toBe(1);
+
+    const raceOrder = await prisma.ticketOrder.create({
+      data: {
+        locationId: owner.locationId, ticketTypeId: ticketType.id, holdTokens: [], holderKey: crypto.randomUUID(),
+        channel: "BOX_OFFICE", status: "PAID", orderNumber: `REFUND-RACE-${crypto.randomUUID()}`,
+        checkoutIdempotencyKey: crypto.randomUUID(), subtotalCents: 1000, feesCents: 0, taxCents: 0, totalCents: 1000,
+        placedByEmployeeId: owner.id,
+      },
+    });
+    await prisma.cashTransaction.create({
+      data: {
+        locationId: owner.locationId, cashDrawerId: drawer.body.id, ticketOrderId: raceOrder.id, employeeId: owner.id,
+        type: "SALE", amountCents: 1000, cashReceivedCents: 1000, changeGivenCents: 0, idempotencyKey: `refund-race-sale:${raceOrder.id}`,
+      },
+    });
+    const concurrent = await Promise.all([crypto.randomUUID(), crypto.randomUUID()].map((concurrentRequestId) =>
+      request(app.getHttpServer()).post(`/api/v1/box-office/orders/${raceOrder.id}/refund`)
+        .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+        .send({ requestId: concurrentRequestId, reason: "Concurrent customer request", cashDrawerId: drawer.body.id }),
+    ));
+    expect(concurrent.map((response) => response.status).sort()).toEqual([201, 409]);
+    expect(await prisma.cashTransaction.count({ where: { ticketOrderId: raceOrder.id, type: "REFUND" } })).toBe(1);
   });
 
   it("reuses one cash box-office sale when identical register requests arrive concurrently", async () => {

@@ -735,6 +735,23 @@ export class BoxOfficeService {
     }
     return prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
+      const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, select: { status: true } });
+      if (lockedOrder.status === "REFUNDED") {
+        const [cashRefund, giftRefund] = await Promise.all([
+          cashPaid > 0 ? tx.cashTransaction.findUnique({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` } }) : null,
+          giftRedemption ? tx.giftCardTransaction.findFirst({ where: { giftCardId: giftRedemption.giftCardId, type: "REFUND", reference: `refund:${order.id}:${input.requestId}` } }) : null,
+        ]);
+        const exactCardReplay = cardPaid === 0 || (refundRow !== null
+          && refundRow.paymentId === order.payment?.id
+          && refundRow.amountCents === cardPaid
+          && refundRow.reason === input.reason
+          && refundRow.scope === "TICKET");
+        const exactCashReplay = cashPaid === 0 || (cashRefund?.ticketOrderId === order.id && cashRefund.cashDrawerId === input.cashDrawerId && cashRefund.amountCents === cashPaid && cashRefund.reason === input.reason && cashRefund.type === "REFUND");
+        const exactGiftReplay = !giftRedemption || giftRefund?.amountCents === giftCardPaid;
+        if (!exactCardReplay || !exactCashReplay || !exactGiftReplay) throw AppError.conflict("The ticket order was already refunded with a different request.");
+        return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
+      }
+      if (!["PAID", "EXCHANGED"].includes(lockedOrder.status)) throw AppError.conflict("Ticket order is no longer refundable.");
       const confirmed = !providerRefund || providerRefund.status === "SUCCEEDED";
       if (order.payment && refundRow && providerRefund) {
         await tx.refund.update({ where: { id: refundRow.id }, data: { providerRefundId: providerRefund.id, status: providerRefund.status === "SUCCEEDED" ? "SUCCEEDED" : "PROCESSING" } });
