@@ -398,10 +398,10 @@ export class CinemaService implements OnModuleInit, OnModuleDestroy {
       if (!claimed.count) continue;
       try {
         const { messageId } = await this.emailProvider.sendShowtimeWaitlistAvailability({ to: entry.email, theaterName: entry.showtime.auditorium.location.name, movieTitle: entry.showtime.movie.title, startsAt: entry.showtime.startsAt, timeZone: entry.showtime.auditorium.location.timezone, purchaseUrl: `${loadEnv().CUSTOMER_WEB_URL.replace(/\/$/, "")}/showtimes?locationId=${encodeURIComponent(entry.showtime.auditorium.locationId)}` });
-        await prisma.showtimeWaitlistEntry.update({ where: { id: entry.id }, data: { status: "NOTIFIED", notifiedAt: new Date(), notificationMessageId: messageId, notificationClaimedAt: null } });
-        notified += 1;
+        const updated = await prisma.showtimeWaitlistEntry.updateMany({ where: { id: entry.id, status: "ACTIVE", notificationClaimedAt: now }, data: { status: "NOTIFIED", notifiedAt: new Date(), notificationMessageId: messageId, notificationClaimedAt: null, notificationError: null } });
+        notified += updated.count;
       } catch (error) {
-        await prisma.showtimeWaitlistEntry.updateMany({ where: { id: entry.id, status: "ACTIVE" }, data: { notificationClaimedAt: null, notificationError: error instanceof Error ? error.message.slice(0, 1000) : "Waitlist email failed." } });
+        await prisma.showtimeWaitlistEntry.updateMany({ where: { id: entry.id, status: "ACTIVE", notificationClaimedAt: now }, data: { notificationClaimedAt: null, notificationError: error instanceof Error ? error.message.slice(0, 1000) : "Waitlist email failed." } });
       }
     }
     return notified;
