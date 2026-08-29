@@ -741,7 +741,30 @@ export class BoxOfficeService {
         await tx.payment.update({ where: { id: order.payment.id }, data: { status: providerRefund.status === "SUCCEEDED" ? "REFUNDED" : "SUCCEEDED" } });
       }
       if (confirmed) {
-        await settleDeferredBoxOfficeTenderRefunds(tx, order.id, refundRow!.id);
+        if (refundRow) {
+          await settleDeferredBoxOfficeTenderRefunds(tx, order.id, refundRow.id);
+        } else if (cashPaid > 0) {
+          await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.cashDrawerId!} FOR UPDATE`;
+          const drawer = await tx.cashDrawer.findFirst({ where: { id: input.cashDrawerId, locationId: input.locationId, status: "OPEN" } });
+          if (!drawer) throw AppError.conflict("The cash drawer is not open.");
+          const cashRefund = await tx.cashTransaction.upsert({
+            where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` },
+            update: {},
+            create: {
+              locationId: input.locationId,
+              cashDrawerId: drawer.id,
+              ticketOrderId: order.id,
+              employeeId: input.employeeId,
+              type: "REFUND",
+              amountCents: cashPaid,
+              reason: input.reason,
+              idempotencyKey: `box-office-cash-refund:${input.requestId}`,
+            },
+          });
+          if (cashRefund.ticketOrderId !== order.id || cashRefund.cashDrawerId !== drawer.id || cashRefund.amountCents !== cashPaid || cashRefund.reason !== input.reason || cashRefund.type !== "REFUND") {
+            throw AppError.conflict("The refund request id was already used with different details.");
+          }
+        }
         await finalizeConfirmedTicketOrderRefund(tx, order.id);
       }
       await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: confirmed ? "ticket_order.refunded" : "ticket_order.refund_pending", entityType: "TicketOrder", entityId: order.id, afterState: { requestId: input.requestId, cashDrawerId: input.cashDrawerId ?? null, giftCardId: giftRedemption?.giftCardId ?? null, cashCents: cashPaid, cardCents: cardPaid, giftCardCents: giftCardPaid, reason: input.reason, refundId: refundRow?.id ?? null } } });
