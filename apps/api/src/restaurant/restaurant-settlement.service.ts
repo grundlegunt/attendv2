@@ -776,10 +776,11 @@ export class RestaurantSettlementService {
     });
     if (!tab?.primaryCustomer?.email || !tab.receipt) return "NOT_REQUESTED" as const;
     if (tab.receipt.emailSentAt) return "SENT" as const;
+    const receiptId = tab.receipt.id;
     const now = new Date();
     const claim = await prisma.restaurantReceipt.updateMany({
       where: {
-        id: tab.receipt.id,
+        id: receiptId,
         emailSentAt: null,
         OR: [
           { emailClaimedAt: null },
@@ -813,8 +814,8 @@ export class RestaurantSettlementService {
               item.quantity,
           })),
       });
-      await prisma.restaurantReceipt.update({
-        where: { id: tab.receipt.id },
+      const updated = await prisma.restaurantReceipt.updateMany({
+        where: { id: receiptId, emailSentAt: null, emailClaimedAt: now },
         data: {
           emailSentAt: new Date(),
           emailMessageId: delivery.messageId,
@@ -822,15 +823,16 @@ export class RestaurantSettlementService {
           emailError: null,
         },
       });
-      return "SENT" as const;
+      return updated.count ? "SENT" as const : "NOT_REQUESTED" as const;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Email delivery failed";
-      await prisma.$transaction([
-        prisma.restaurantReceipt.update({
-          where: { id: tab.receipt.id },
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.restaurantReceipt.updateMany({
+          where: { id: receiptId, emailSentAt: null, emailClaimedAt: now },
           data: { emailClaimedAt: null, emailError: message.slice(0, 1000) },
-        }),
-        prisma.auditEvent.create({ data: {
+        });
+        if (!updated.count) return;
+        await tx.auditEvent.create({ data: {
           actorType: "SYSTEM",
           action: "restaurant_tab.receipt_notification_failed",
           entityType: "RestaurantTab",
@@ -839,8 +841,8 @@ export class RestaurantSettlementService {
           afterState: {
             message,
           },
-        } }),
-      ]);
+        } });
+      });
       return "FAILED" as const;
     }
   }
@@ -920,8 +922,8 @@ export class RestaurantSettlementService {
         currency,
         paymentUrl: `${baseUrl}/account?restaurantTab=${encodeURIComponent(token)}`,
       });
-      await prisma.restaurantTab.update({
-        where: { id: tab.id },
+      const updated = await prisma.restaurantTab.updateMany({
+        where: { id: tab.id, status: "PAYMENT_FAILED", paymentFailureEmailSentAt: null, paymentFailureEmailClaimedAt: now },
         data: {
           paymentFailureEmailSentAt: new Date(),
           paymentFailureEmailMessageId: delivery.messageId,
@@ -929,18 +931,19 @@ export class RestaurantSettlementService {
           paymentFailureEmailError: null,
         },
       });
-      return "SENT" as const;
+      return updated.count ? "SENT" as const : "NOT_REQUESTED" as const;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Email delivery failed";
-      await prisma.$transaction([
-        prisma.restaurantTab.update({
-          where: { id: tab.id },
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.restaurantTab.updateMany({
+          where: { id: tab.id, status: "PAYMENT_FAILED", paymentFailureEmailSentAt: null, paymentFailureEmailClaimedAt: now },
           data: {
             paymentFailureEmailClaimedAt: null,
             paymentFailureEmailError: message.slice(0, 1000),
           },
-        }),
-        prisma.auditEvent.create({ data: {
+        });
+        if (!updated.count) return;
+        await tx.auditEvent.create({ data: {
           actorType: "SYSTEM",
           action: "restaurant_tab.payment_failure_notification_failed",
           entityType: "RestaurantTab",
@@ -949,8 +952,8 @@ export class RestaurantSettlementService {
           afterState: {
             message,
           },
-        } }),
-      ]);
+        } });
+      });
       return "FAILED" as const;
     }
   }
