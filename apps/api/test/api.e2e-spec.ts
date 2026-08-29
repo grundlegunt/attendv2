@@ -6213,6 +6213,117 @@ describe("Customer authentication", () => {
       .expect(404);
   });
 
+  async function createCustomerReceiptClaimFixture(label: string) {
+    const { prisma } = await import("@cinema/database");
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: { tickets: { none: {} } },
+      include: { showtime: { include: { auditorium: { include: { location: { include: { ticketTypes: true } } } } } } },
+    });
+    const ticketType = inventory.showtime.auditorium.location.ticketTypes[0]!;
+    const requestId = crypto.randomUUID();
+    const order = await prisma.ticketOrder.create({
+      data: {
+        locationId: inventory.showtime.auditorium.location.id,
+        customerId,
+        ticketTypeId: ticketType.id,
+        holdTokens: [],
+        holderKey: crypto.randomUUID(),
+        status: "PAID",
+        orderNumber: `CUSTOMER-RECEIPT-CLAIM-${label}-${crypto.randomUUID()}`,
+        checkoutIdempotencyKey: crypto.randomUUID(),
+        subtotalCents: 1700,
+        feesCents: 0,
+        taxCents: 0,
+        totalCents: 1700,
+        guestEmail: email,
+        guestName: "Updated Customer",
+        receiptEmailError: "retry customer receipt",
+        receiptResendRequestId: requestId,
+        receiptResendActorType: "CUSTOMER",
+        receiptResendActorId: customerId,
+        tickets: { create: { showtimeSeatId: inventory.id, ticketTypeId: ticketType.id, priceCentsPaid: 1700, qrToken: `customer-receipt-claim-${crypto.randomUUID()}` } },
+      },
+    });
+    return { order, requestId };
+  }
+
+  it("does not let a stale customer receipt worker overwrite a newer successful delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { AuthService } = await import("../src/auth/auth.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { order, requestId } = await createCustomerReceiptClaimFixture("success");
+    const auth = app.get(AuthService) as unknown as { deliverCustomerReceipt(orderId: string, requestId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(emailProvider, "sendTicketReceipt").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { messageId: "stale-customer-receipt" };
+      }
+      return { messageId: "current-customer-receipt" };
+    });
+    try {
+      const staleWorker = auth.deliverCustomerReceipt(order.id, requestId);
+      await firstStarted;
+      await prisma.ticketOrder.update({ where: { id: order.id }, data: { receiptEmailClaimedAt: null } });
+      await expect(auth.deliverCustomerReceipt(order.id, requestId)).resolves.toBe("SENT");
+      releaseFirst();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+        receiptEmailMessageId: "current-customer-receipt",
+        receiptEmailSentAt: expect.any(Date),
+        receiptEmailClaimedAt: null,
+        receiptEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({ where: { action: "ticket_order.receipt_resent", entityId: order.id } })).toBe(1);
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale failing customer receipt worker clear a newer delivery claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { AuthService } = await import("../src/auth/auth.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { order, requestId } = await createCustomerReceiptClaimFixture("failure");
+    const auth = app.get(AuthService) as unknown as { deliverCustomerReceipt(orderId: string, requestId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(emailProvider, "sendTicketReceipt").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale customer receipt failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = auth.deliverCustomerReceipt(order.id, requestId);
+      await sendStarted;
+      await prisma.ticketOrder.update({ where: { id: order.id }, data: { receiptEmailClaimedAt: newerClaim, receiptEmailError: null } });
+      releaseSend();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+        receiptEmailMessageId: null,
+        receiptEmailSentAt: null,
+        receiptEmailClaimedAt: newerClaim,
+        receiptEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({ where: { action: "ticket_order.receipt_resend_failed", entityId: order.id } })).toBe(0);
+    } finally {
+      releaseSend();
+      send.mockRestore();
+    }
+  });
+
   it("refreshes from the HttpOnly refresh cookie and restores an access-cookie session", async () => {
     const refreshed = await request(app.getHttpServer())
       .post("/api/v1/auth/customers/refresh")
