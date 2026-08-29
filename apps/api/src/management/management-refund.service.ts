@@ -90,6 +90,49 @@ export class ManagementRefundService {
     if (!tab.payments.length) throw AppError.conflict("The restaurant tab has no refundable payments.");
     if (tab.payments.some((payment) => payment.status !== "REFUNDED" && !payment.providerPaymentId)) throw AppError.conflict("A restaurant payment is missing its provider reference.");
 
+    const claim = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "restaurant_tabs" WHERE "id" = ${tab.id} FOR UPDATE`;
+      const current = await tx.restaurantTab.findFirstOrThrow({ where: { id: tab.id, locationId: input.locationId }, select: { status: true } });
+      const latest = await tx.auditEvent.findFirst({
+        where: {
+          locationId: input.locationId,
+          entityType: "RestaurantTab",
+          entityId: tab.id,
+          action: { in: ["restaurant_tab.refund_requested", "restaurant_tab.refunded", "restaurant_tab.refund_attention_required"] },
+        },
+        orderBy: { occurredAt: "desc" },
+        select: { action: true, afterState: true },
+      });
+      const state = latest?.afterState && typeof latest.afterState === "object" && !Array.isArray(latest.afterState)
+        ? latest.afterState as Record<string, unknown>
+        : undefined;
+      if (current.status === "REFUNDED") {
+        if (latest?.action === "restaurant_tab.refunded" && state?.requestId === input.requestId && state.reason === input.reason) return "completed" as const;
+        throw AppError.conflict("This restaurant tab was already refunded by a different request.");
+      }
+      if (latest?.action === "restaurant_tab.refund_requested") {
+        if (state?.requestId !== input.requestId || state.reason !== input.reason) {
+          throw AppError.conflict("Another restaurant refund request is already in progress.");
+        }
+        return "claimed" as const;
+      }
+      await tx.auditEvent.create({
+        data: {
+          actorType: "EMPLOYEE",
+          actorId: input.employeeId,
+          locationId: input.locationId,
+          action: "restaurant_tab.refund_requested",
+          entityType: "RestaurantTab",
+          entityId: tab.id,
+          afterState: { requestId: input.requestId, reason: input.reason },
+        },
+      });
+      return "claimed" as const;
+    });
+    if (claim === "completed") {
+      return prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id }, include: { payments: { include: { refunds: true } }, receipt: true } });
+    }
+
     let requiresAttention = false;
     for (const payment of tab.payments) {
       const succeeded = payment.refunds.find((refund) => refund.status === "SUCCEEDED");
