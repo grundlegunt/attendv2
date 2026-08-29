@@ -9721,27 +9721,29 @@ describe("Milestone 9 box office and workforce", () => {
 
   it("redeems an active gift card atomically for a box-office ticket sale", async () => {
     const { prisma } = await import("@cinema/database");
+    const ownerLogin = await loginOwner();
+    const accessToken = ownerLogin.body.accessToken as string;
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
     const inventory = await prisma.showtimeSeat.findFirstOrThrow({
       where: { blockedAt: null, showtime: { onSale: true, startsAt: { gt: new Date() } }, tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } }, holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } } },
     });
     const ticketType = await prisma.ticketType.findFirstOrThrow({ where: { locationId: owner.locationId, active: true } });
     const issued = await request(app.getHttpServer()).post("/api/v1/management/gift-cards")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ amountCents: 100_000 }).expect(201);
+      .set("Authorization", `Bearer ${accessToken}`).send({ amountCents: 100_000 }).expect(201);
     const staffBalance = await request(app.getHttpServer()).post("/api/v1/box-office/gift-cards/balance")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ code: issued.body.code }).expect(201);
+      .set("Authorization", `Bearer ${accessToken}`).send({ code: issued.body.code }).expect(201);
     expect(staffBalance.body).toEqual({ codeLast4: issued.body.codeLast4, balanceCents: 100_000, currency: issued.body.currency });
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `GIFT-${crypto.randomUUID()}`, openingBalanceCents: 20_000 }).expect(201);
+      .set("Authorization", `Bearer ${accessToken}`).send({ requestId: crypto.randomUUID(), registerId: `GIFT-${crypto.randomUUID()}`, openingBalanceCents: 20_000 }).expect(201);
     const holderKey = `gift-card-box-office-${crypto.randomUUID()}`;
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
+      .set("Authorization", `Bearer ${accessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
+      .set("Authorization", `Bearer ${accessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
     const cashCents = 100;
     const giftCardCents = quote.body.totalCents - cashCents;
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({
+      .set("Authorization", `Bearer ${accessToken}`).send({
         requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey,
         ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cashReceivedCents: cashCents, cardCents: 0,
         giftCardCents, giftCardCode: issued.body.code,
@@ -9752,9 +9754,15 @@ describe("Milestone 9 box office and workforce", () => {
     expect(card.balanceCents).toBe(100_000 - giftCardCents);
     expect(card.transactions).toEqual([expect.objectContaining({ amountCents: -giftCardCents, balanceAfterCents: card.balanceCents, reference: sale.body.id })]);
 
-    const refundRequestId = crypto.randomUUID();
-    const refunded = await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
-      .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: refundRequestId, reason: "E2E gift card refund", cashDrawerId: drawer.body.id }).expect(201);
+    const refundRequestIds = [crypto.randomUUID(), crypto.randomUUID()];
+    const refundAttempts = await Promise.all(refundRequestIds.map((requestId) =>
+      request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+        .set("Authorization", `Bearer ${accessToken}`).send({ requestId, reason: "E2E gift card refund", cashDrawerId: drawer.body.id }),
+    ));
+    expect(refundAttempts.map((attempt) => attempt.status).sort()).toEqual([201, 409]);
+    const winningIndex = refundAttempts.findIndex((attempt) => attempt.status === 201);
+    const refundRequestId = refundRequestIds[winningIndex]!;
+    const refunded = refundAttempts[winningIndex]!;
     expect(refunded.body.status).toBe("REFUNDED");
     const restored = await prisma.giftCard.findUniqueOrThrow({ where: { id: issued.body.id }, include: { transactions: { orderBy: { createdAt: "asc" } } } });
     expect(restored.balanceCents).toBe(100_000);

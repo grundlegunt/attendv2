@@ -655,7 +655,20 @@ export class BoxOfficeService {
       return prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
         const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id } });
-        if (lockedOrder.status === "REFUNDED") return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
+        if (lockedOrder.status === "REFUNDED") {
+          const [cashRefund, giftRefund] = await Promise.all([
+            cashPaid > 0 ? tx.cashTransaction.findUnique({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` } }) : null,
+            tx.giftCardTransaction.findFirst({ where: { giftCardId: giftRedemption.giftCardId, type: "REFUND", reference: `refund:${order.id}:${input.requestId}` } }),
+          ]);
+          const exactCashReplay = cashPaid === 0 || (cashRefund?.ticketOrderId === order.id
+            && cashRefund.cashDrawerId === input.cashDrawerId
+            && cashRefund.amountCents === cashPaid
+            && cashRefund.reason === input.reason
+            && cashRefund.type === "REFUND");
+          const exactGiftReplay = giftRefund?.amountCents === giftCardPaid;
+          if (!exactCashReplay || !exactGiftReplay) throw AppError.conflict("The ticket order was already refunded with a different request.");
+          return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
+        }
         if (!["PAID", "EXCHANGED"].includes(lockedOrder.status)) throw AppError.conflict("Ticket order is no longer refundable.");
         await tx.$queryRaw`SELECT "id" FROM "gift_cards" WHERE "id" = ${giftRedemption.giftCardId} FOR UPDATE`;
         const giftCard = await tx.giftCard.findUniqueOrThrow({ where: { id: giftRedemption.giftCardId } });
