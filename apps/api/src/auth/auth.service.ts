@@ -944,7 +944,7 @@ export class AuthService {
     }
     if (account.emailChangeTokenVersion !== account.refreshTokenVersion) {
       await prisma.customerAuthAccount.updateMany({
-        where: { customerId, emailChangeRequestId: requestId },
+        where: { customerId, emailChangeRequestId: requestId, emailChangeEmailClaimedAt: now },
         data: { emailChangeRequestId: null, emailChangeEmailClaimedAt: null },
       });
       return "NOT_REQUESTED" as const;
@@ -965,7 +965,12 @@ export class AuthService {
       });
       const recorded = await prisma.$transaction(async (tx) => {
         const updated = await tx.customerAuthAccount.updateMany({
-          where: { customerId, emailChangeRequestId: requestId },
+          where: {
+            customerId,
+            emailChangeRequestId: requestId,
+            emailChangeEmailSentAt: null,
+            emailChangeEmailClaimedAt: now,
+          },
           data: {
             emailChangeEmailSentAt: new Date(),
             emailChangeEmailMessageId: delivery.messageId,
@@ -984,20 +989,27 @@ export class AuthService {
       return recorded ? "SENT" as const : "NOT_REQUESTED" as const;
     } catch (error) {
       const message = (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000);
-      await prisma.$transaction([
-        prisma.customerAuthAccount.updateMany({
-          where: { customerId, emailChangeRequestId: requestId },
+      const recorded = await prisma.$transaction(async (tx) => {
+        const updated = await tx.customerAuthAccount.updateMany({
+          where: {
+            customerId,
+            emailChangeRequestId: requestId,
+            emailChangeEmailSentAt: null,
+            emailChangeEmailClaimedAt: now,
+          },
           data: { emailChangeEmailClaimedAt: null, emailChangeEmailError: message },
-        }),
-        prisma.auditEvent.create({
+        });
+        if (updated.count === 0) return false;
+        await tx.auditEvent.create({
           data: {
             actorType: "SYSTEM", action: "customer.email_change_delivery_failed",
             entityType: "Customer", entityId: customer.id,
             afterState: { requestId, newEmail: account.emailChangeNewEmail, error: message },
           },
-        }),
-      ]);
-      return "FAILED" as const;
+        });
+        return true;
+      });
+      return recorded ? "FAILED" as const : "NOT_REQUESTED" as const;
     }
   }
 
