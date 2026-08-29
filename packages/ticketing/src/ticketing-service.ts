@@ -2489,7 +2489,12 @@ export class TicketingService {
       const delivery = await this.emailProvider.sendTicketReceipt(receipt);
       await this.prisma.$transaction(async (tx) => {
         const updated = await tx.ticketOrder.updateMany({
-          where: { id: order.id, receiptResendRequestId: order.receiptResendRequestId },
+          where: {
+            id: order.id,
+            receiptEmailSentAt: null,
+            receiptEmailClaimedAt: now,
+            receiptResendRequestId: order.receiptResendRequestId,
+          },
           data: {
             receiptEmailSentAt: new Date(),
             receiptEmailMessageId: delivery.messageId,
@@ -2511,15 +2516,24 @@ export class TicketingService {
           },
         });
       });
-      return "SENT";
+      const current = await this.prisma.ticketOrder.findUniqueOrThrow({
+        where: { id: order.id },
+        select: { receiptEmailMessageId: true },
+      });
+      return current.receiptEmailMessageId === delivery.messageId ? "SENT" : "NOT_REQUESTED";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email delivery error";
       await this.prisma.$transaction(async (tx) => {
-        await tx.ticketOrder.updateMany({
-          where: { id: order.id, receiptResendRequestId: order.receiptResendRequestId },
+        const updated = await tx.ticketOrder.updateMany({
+          where: {
+            id: order.id,
+            receiptEmailSentAt: null,
+            receiptEmailClaimedAt: now,
+            receiptResendRequestId: order.receiptResendRequestId,
+          },
           data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) },
         });
-        if (!order.receiptResendRequestId || !order.receiptResendActorType) return;
+        if (updated.count === 0 || !order.receiptResendRequestId || !order.receiptResendActorType) return;
         await tx.auditEvent.create({
           data: {
             actorType: order.receiptResendActorType,
@@ -2532,7 +2546,11 @@ export class TicketingService {
           },
         });
       });
-      return "FAILED";
+      const current = await this.prisma.ticketOrder.findUniqueOrThrow({
+        where: { id: order.id },
+        select: { receiptEmailError: true },
+      });
+      return current.receiptEmailError === message.slice(0, 1000) ? "FAILED" : "NOT_REQUESTED";
     }
   }
 
