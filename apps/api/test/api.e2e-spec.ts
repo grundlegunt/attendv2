@@ -9328,6 +9328,189 @@ describe("Milestone 9 box office and workforce", () => {
     await expect(boxOffice.closeDrawer({ ...input, closingBalanceCents: 19900 })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
+  it("claims a donation receipt before sending it so concurrent finalizers email once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { DonationCheckoutService } = await import("../src/donation-checkouts/donation-checkout.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const owner = await prisma.employee.findFirstOrThrow({
+      where: { email: `owner@${SEED_SUFFIX}` },
+      include: { location: true },
+    });
+    const payment = await prisma.payment.create({
+      data: {
+        purpose: "DONATION",
+        amountCents: 2500,
+        currency: owner.location.currency,
+        status: "SUCCEEDED",
+        idempotencyKey: `donation-receipt-race:${crypto.randomUUID()}`,
+        provider: "test",
+      },
+    });
+    const donation = await prisma.donation.create({
+      data: {
+        locationId: owner.locationId,
+        donorName: "Receipt Race Donor",
+        donorEmail: `donor-${crypto.randomUUID()}@example.test`,
+        amountCents: 2500,
+        taxDeductibleAmountCents: 2500,
+        paymentMethod: "ONLINE",
+        status: "SETTLED",
+        receivedAt: new Date(),
+      },
+    });
+    const checkout = await prisma.donationCheckout.create({
+      data: {
+        organizationId: owner.location.organizationId,
+        locationId: owner.locationId,
+        paymentId: payment.id,
+        donationId: donation.id,
+        donorName: donation.donorName,
+        donorEmail: donation.donorEmail!,
+        amountCents: donation.amountCents,
+        currency: owner.location.currency,
+        idempotencyKey: `donation-receipt-race:${crypto.randomUUID()}`,
+        status: "PAID",
+      },
+      include: {
+        payment: true,
+        location: { include: { organization: true } },
+        campaign: true,
+      },
+    });
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseDelivery!: () => void;
+    const deliveryGate = new Promise<void>((resolve) => { releaseDelivery = resolve; });
+    const send = jest.spyOn(email, "sendDonationReceipt").mockImplementation(async () => {
+      await deliveryGate;
+      return { messageId: "donation-receipt-race-message" };
+    });
+    const service = app.get(DonationCheckoutService) as unknown as {
+      sendReceipt(value: typeof checkout): Promise<void>;
+    };
+
+    const first = service.sendReceipt(checkout);
+    for (let attempt = 0; attempt < 100 && send.mock.calls.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const second = service.sendReceipt(checkout);
+    await expect(second).resolves.toBeUndefined();
+    releaseDelivery();
+    await expect(first).resolves.toBeUndefined();
+
+    expect(send).toHaveBeenCalledTimes(1);
+    await expect(prisma.donationCheckout.findUniqueOrThrow({ where: { id: checkout.id } }))
+      .resolves.toMatchObject({
+        receiptMessageId: "donation-receipt-race-message",
+        receiptSentAt: expect.any(Date),
+        receiptClaimedAt: null,
+        receiptError: null,
+      });
+    send.mockRestore();
+  });
+
+  it("claims a membership receipt before sending it so concurrent finalizers email once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { MembershipCheckoutService } = await import("../src/membership-checkouts/membership-checkout.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const owner = await prisma.employee.findFirstOrThrow({
+      where: { email: `owner@${SEED_SUFFIX}` },
+      include: { location: true },
+    });
+    const plan = await prisma.membershipPlan.create({
+      data: {
+        organizationId: owner.location.organizationId,
+        name: `Receipt Race Plan ${crypto.randomUUID()}`,
+        description: "Concurrency regression fixture",
+        priceCents: 5000,
+        benefitsFairMarketValueCents: 1000,
+        durationMonths: 12,
+        benefits: [],
+      },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        name: "Receipt Race Member",
+        email: `member-${crypto.randomUUID()}@example.test`,
+        isGuest: true,
+      },
+    });
+    const membership = await prisma.membership.create({
+      data: {
+        organizationId: owner.location.organizationId,
+        customerId: customer.id,
+        planId: plan.id,
+        membershipNumber: `RACE-${crypto.randomUUID()}`,
+        tier: plan.name,
+        status: "ACTIVE",
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60_000),
+      },
+    });
+    const payment = await prisma.payment.create({
+      data: {
+        purpose: "MEMBERSHIP",
+        amountCents: plan.priceCents,
+        currency: owner.location.currency,
+        status: "SUCCEEDED",
+        idempotencyKey: `membership-receipt-race:${crypto.randomUUID()}`,
+        provider: "test",
+      },
+    });
+    const checkout = await prisma.membershipCheckout.create({
+      data: {
+        organizationId: owner.location.organizationId,
+        locationId: owner.locationId,
+        planId: plan.id,
+        paymentId: payment.id,
+        membershipId: membership.id,
+        memberName: customer.name!,
+        memberEmail: customer.email!,
+        planName: plan.name,
+        planDescription: plan.description,
+        planBenefits: [],
+        durationMonths: plan.durationMonths,
+        amountCents: plan.priceCents,
+        taxDeductibleAmountCents: Math.max(0, plan.priceCents - plan.benefitsFairMarketValueCents),
+        currency: owner.location.currency,
+        idempotencyKey: `membership-receipt-race:${crypto.randomUUID()}`,
+        status: "PAID",
+      },
+      include: {
+        payment: true,
+        membership: true,
+        location: { include: { organization: true } },
+      },
+    });
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseDelivery!: () => void;
+    const deliveryGate = new Promise<void>((resolve) => { releaseDelivery = resolve; });
+    const send = jest.spyOn(email, "sendMembershipReceipt").mockImplementation(async () => {
+      await deliveryGate;
+      return { messageId: "membership-receipt-race-message" };
+    });
+    const service = app.get(MembershipCheckoutService) as unknown as {
+      sendReceipt(value: typeof checkout): Promise<void>;
+    };
+
+    const first = service.sendReceipt(checkout);
+    for (let attempt = 0; attempt < 100 && send.mock.calls.length === 0; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    const second = service.sendReceipt(checkout);
+    await expect(second).resolves.toBeUndefined();
+    releaseDelivery();
+    await expect(first).resolves.toBeUndefined();
+
+    expect(send).toHaveBeenCalledTimes(1);
+    await expect(prisma.membershipCheckout.findUniqueOrThrow({ where: { id: checkout.id } }))
+      .resolves.toMatchObject({
+        receiptMessageId: "membership-receipt-race-message",
+        receiptSentAt: expect.any(Date),
+        receiptClaimedAt: null,
+        receiptError: null,
+      });
+    send.mockRestore();
+  });
+
   it("rejects a cash movement id reused with a different reason", async () => {
     const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
       .set("Authorization", `Bearer ${ownerAccessToken}`).send({ requestId: crypto.randomUUID(), registerId: `REPLAY-${crypto.randomUUID()}`, openingBalanceCents: 20000 }).expect(201);
