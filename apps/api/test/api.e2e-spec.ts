@@ -8656,6 +8656,129 @@ describe("Milestone 8 restaurant settlement and tipping", () => {
     ).toHaveLength(1);
   });
 
+  it("does not let a stale restaurant receipt worker overwrite a newer delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const { EMAIL_PROVIDER } = await import(
+      "../src/notifications/notifications.module"
+    );
+    const receipt = await prisma.restaurantReceipt.findUniqueOrThrow({
+      where: { restaurantTabId: milestone8TabId },
+    });
+    await prisma.restaurantReceipt.update({
+      where: { id: receipt.id },
+      data: { emailSentAt: null, emailMessageId: null, emailClaimedAt: null, emailError: null },
+    });
+    const settlement = app.get(RestaurantSettlementService) as unknown as {
+      notifyReceipt(tabId: string): Promise<"SENT" | "NOT_REQUESTED" | "FAILED">;
+    };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(emailProvider, "sendRestaurantReceipt").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { messageId: "stale-restaurant-receipt" };
+      }
+      return { messageId: "current-restaurant-receipt" };
+    });
+    try {
+      const staleWorker = settlement.notifyReceipt(milestone8TabId);
+      await firstStarted;
+      await prisma.restaurantReceipt.update({
+        where: { id: receipt.id },
+        data: { emailClaimedAt: new Date(Date.now() - 2 * 60_000) },
+      });
+      await expect(settlement.notifyReceipt(milestone8TabId)).resolves.toBe("SENT");
+      releaseFirst();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(
+        prisma.restaurantReceipt.findUniqueOrThrow({ where: { id: receipt.id } }),
+      ).resolves.toMatchObject({
+        emailMessageId: "current-restaurant-receipt",
+        emailSentAt: expect.any(Date),
+        emailClaimedAt: null,
+        emailError: null,
+      });
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale payment-failure worker clear a newer notification claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { RestaurantSettlementService } = await import(
+      "../src/restaurant/restaurant-settlement.service"
+    );
+    const { EMAIL_PROVIDER } = await import(
+      "../src/notifications/notifications.module"
+    );
+    const source = await prisma.restaurantTab.findUniqueOrThrow({
+      where: { id: milestone8TabId },
+      select: { locationId: true, primaryCustomerId: true },
+    });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: source.locationId,
+        primaryCustomerId: source.primaryCustomerId,
+        tabType: "WALK_IN",
+        status: "PAYMENT_FAILED",
+        label: "Payment failure claim race fixture",
+        subtotalCents: 1_000,
+        taxCents: 0,
+        serviceChargeCents: 0,
+        totalCents: 1_000,
+      },
+    });
+    const settlement = app.get(RestaurantSettlementService) as unknown as {
+      notifyPaymentFailure(tabId: string): Promise<"SENT" | "NOT_REQUESTED" | "FAILED">;
+    };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(emailProvider, "sendRestaurantPaymentFailed").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale payment-failure delivery failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = settlement.notifyPaymentFailure(tab.id);
+      await sendStarted;
+      await prisma.restaurantTab.update({
+        where: { id: tab.id },
+        data: { paymentFailureEmailClaimedAt: newerClaim },
+      });
+      releaseSend();
+      await expect(staleWorker).resolves.toBe("FAILED");
+      await expect(
+        prisma.restaurantTab.findUniqueOrThrow({ where: { id: tab.id } }),
+      ).resolves.toMatchObject({
+        status: "PAYMENT_FAILED",
+        paymentFailureEmailClaimedAt: newerClaim,
+        paymentFailureEmailSentAt: null,
+        paymentFailureEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({
+        where: { entityId: tab.id, action: "restaurant_tab.payment_failure_notification_failed" },
+      })).toBe(0);
+    } finally {
+      releaseSend();
+      send.mockRestore();
+      await prisma.restaurantTab.delete({ where: { id: tab.id } });
+    }
+  });
+
   it("runs fallback once, does not retry a failed card, and surfaces attention", async () => {
     const { prisma } = await import("@cinema/database");
     const source = await prisma.restaurantTab.findUniqueOrThrow({
