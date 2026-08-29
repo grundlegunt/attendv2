@@ -3753,7 +3753,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(giftCard.transactions).toEqual([expect.objectContaining({ amountCents: -checkout.body.totalCents, reference: checkout.body.orderId })]);
   });
 
-  it("finalizes tickets and order-ahead food with consistent sold-seat inventory across every surface", async () => {
+  it("propagates a combined ticket and order-ahead purchase and refund across every surface", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const holderKey = `online-order-ahead-${crypto.randomUUID()}`;
@@ -3946,6 +3946,87 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       totalCollectedCents: paidOrder.totalCents,
       ticketsSold: 1,
       fnbOrders: 1,
+    });
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/management/refunds/ticket-orders/${checkout.body.orderId}`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ requestId: crypto.randomUUID(), reason: "Cross-surface refund audit" })
+      .expect(201);
+
+    const refundedRestaurantOrder = await prisma.restaurantOrder.findUniqueOrThrow({
+      where: { id: restaurantOrder.id },
+      include: { items: true, fulfillmentTickets: true },
+    });
+    expect(refundedRestaurantOrder.status).toBe("CANCELED");
+    expect(refundedRestaurantOrder.items).toEqual([
+      expect.objectContaining({ status: "VOIDED" }),
+    ]);
+    expect(refundedRestaurantOrder.fulfillmentTickets).toEqual([
+      expect.objectContaining({ status: "CANCELED" }),
+    ]);
+
+    for (const path of [
+      `/api/v1/cinema/showtimes/${showtimeId}/seats`,
+      `/api/v1/cinema/admin/showtimes/${showtimeId}/seats`,
+    ]) {
+      const refundedSeatMap = await request(app.getHttpServer())
+        .get(path)
+        .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+        .expect(200);
+      expect(
+        refundedSeatMap.body.seats.find(
+          (candidate: { id: string }) => candidate.id === seat.id,
+        ),
+      ).toEqual(expect.objectContaining({ state: "AVAILABLE" }));
+    }
+    const refundedReportingSeatMap = await request(app.getHttpServer())
+      .get(`/api/v1/reports/showtimes/${showtimeId}/ticket-map`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .expect(200);
+    expect(
+      refundedReportingSeatMap.body.seats.find(
+        (candidate: { id: string }) => candidate.id === seat.id,
+      ),
+    ).toEqual(expect.objectContaining({ state: "AVAILABLE", ticket: null }));
+
+    const refundedReport = await request(app.getHttpServer())
+      .get(
+        "/api/v1/reports/revenue" +
+          "?from=2098-03-10T00:00:00.000Z&to=2098-03-11T00:00:00.000Z",
+      )
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .expect(200);
+    expect(refundedReport.body.totals).toMatchObject({
+      ticketCollectedCents: 0,
+      ticketRefundedCents: paidOrder.totalCents - orderAheadRevenueCents,
+      fnbRevenueCents: 0,
+      fnbRefundedCents: orderAheadRevenueCents,
+      combinedRevenueCents: 0,
+      refundedCents: paidOrder.totalCents,
+      ticketsSold: 0,
+      fnbOrders: 0,
+    });
+
+    const refundedPlatformReport = await request(app.getHttpServer())
+      .get(
+        "/api/v1/platform/revenue" +
+          "?from=2098-03-10T00:00:00.000Z&to=2098-03-11T00:00:00.000Z",
+      )
+      .set("Authorization", `Bearer ${platformLogin.body.accessToken}`)
+      .expect(200);
+    expect(
+      refundedPlatformReport.body.clients.find(
+        (client: { name: string }) => client.name === "Meridian Cinema Co.",
+      ),
+    ).toMatchObject({
+      ticketCollectedCents: 0,
+      fnbRevenueCents: 0,
+      combinedRevenueCents: 0,
+      totalCollectedCents: 0,
+      refundedCents: paidOrder.totalCents,
+      ticketsSold: 0,
+      fnbOrders: 0,
     });
   });
 

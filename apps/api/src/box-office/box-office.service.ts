@@ -33,6 +33,40 @@ export class BoxOfficeService {
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
 
+  private async cancelRefundedOrderAhead(
+    tx: Prisma.TransactionClient,
+    ticketOrderId: string,
+  ) {
+    const orders = await tx.restaurantOrder.findMany({
+      where: {
+        ticketOrderId,
+        source: "ONLINE_ORDER_AHEAD",
+        status: { notIn: ["CANCELED", "DELIVERED"] },
+      },
+      select: { id: true },
+    });
+    const orderIds = orders.map((order) => order.id);
+    if (orderIds.length === 0) return;
+    await tx.fulfillmentTicket.updateMany({
+      where: {
+        restaurantOrderId: { in: orderIds },
+        status: { notIn: ["CANCELED", "VOIDED", "DELIVERED"] },
+      },
+      data: { status: "CANCELED" },
+    });
+    await tx.restaurantOrderItem.updateMany({
+      where: {
+        restaurantOrderId: { in: orderIds },
+        status: { in: ["DRAFT", "SENT"] },
+      },
+      data: { status: "VOIDED" },
+    });
+    await tx.restaurantOrder.updateMany({
+      where: { id: { in: orderIds } },
+      data: { status: "CANCELED" },
+    });
+  }
+
   async holdSeats(showtimeId: string, seatIds: string[], holderKey: string, locationId: string) {
     const showtime = await prisma.showtime.findFirst({
       where: { id: showtimeId, auditorium: { locationId } },
@@ -676,6 +710,7 @@ export class BoxOfficeService {
           }
         }
         await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
+        await this.cancelRefundedOrderAhead(tx, order.id);
         await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
         await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
         return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
@@ -719,6 +754,7 @@ export class BoxOfficeService {
         }
       }
       await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
+      await this.cancelRefundedOrderAhead(tx, order.id);
       await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
       if (order.payment && refundRow && providerRefund) {
         await tx.refund.update({ where: { id: refundRow.id }, data: { providerRefundId: providerRefund.id, status: providerRefund.status === "SUCCEEDED" ? "SUCCEEDED" : "PROCESSING" } });
