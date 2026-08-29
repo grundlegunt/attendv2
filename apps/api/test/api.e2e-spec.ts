@@ -3753,6 +3753,77 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(giftCard.transactions).toEqual([expect.objectContaining({ amountCents: -checkout.body.totalCents, reference: checkout.body.orderId })]);
   });
 
+  it("preserves a paid order and sold seat when a pending staff refund later fails", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const holderKey = `failed-staff-refund-${crypto.randomUUID()}`;
+    const { seat, hold } = await holdAvailableSeat(holderKey);
+    const config = await request(app.getHttpServer())
+      .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
+      .expect(200);
+    const checkout = await request(app.getHttpServer())
+      .post("/api/v1/ticketing/checkouts")
+      .set("Idempotency-Key", `checkout-${holderKey}`)
+      .send({
+        holdTokens: [hold.holdToken],
+        holderKey,
+        ticketTypeId: config.body.ticketTypes[0].id,
+        email: `${holderKey}@example.test`,
+        diningAuthorizationRequested: false,
+      })
+      .expect(201);
+
+    provider.setIntentStatus(checkout.body.payment.providerPaymentId, "SUCCEEDED");
+    await request(app.getHttpServer())
+      .post(`/api/v1/ticketing/orders/${checkout.body.orderId}/finalize`)
+      .send({ holderKey })
+      .expect(201);
+
+    const ownerLogin = await loginOwner();
+    provider.makeRefundsReturnStatus("PENDING");
+    const refundResponse = await request(app.getHttpServer())
+      .post(`/api/v1/management/refunds/ticket-orders/${checkout.body.orderId}`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ requestId: crypto.randomUUID(), reason: "Failed refund integrity audit" })
+      .expect(201);
+    expect(refundResponse.body.status).toBe("PAID");
+
+    const pendingPayment = await prisma.payment.findUniqueOrThrow({
+      where: { ticketOrderId: checkout.body.orderId },
+      include: { refunds: true },
+    });
+    provider.setRefundLiveStatus(pendingPayment.refunds[0].providerRefundId!, "FAILED");
+    await app.get(TicketingService).reconcilePendingRefunds();
+    provider.makeRefundsReturnStatus("SUCCEEDED");
+
+    const order = await prisma.ticketOrder.findUniqueOrThrow({
+      where: { id: checkout.body.orderId },
+      include: { payment: { include: { refunds: true } }, tickets: true },
+    });
+    expect(order).toMatchObject({
+      status: "PAID",
+      payment: { status: "SUCCEEDED", refunds: [expect.objectContaining({ status: "FAILED" })] },
+      tickets: [expect.objectContaining({ status: "ISSUED" })],
+    });
+    const seatMap = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`)
+      .expect(200);
+    expect(
+      seatMap.body.seats.find((candidate: { id: string }) => candidate.id === seat.id),
+    ).toEqual(expect.objectContaining({ state: "SOLD" }));
+    expect(
+      await prisma.auditEvent.count({
+        where: {
+          action: "payment.refund_attention_required",
+          entityType: "Refund",
+          entityId: pendingPayment.refunds[0].id,
+        },
+      }),
+    ).toBe(1);
+  });
+
   it("propagates a combined ticket and order-ahead purchase and refund across every surface", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
