@@ -3948,11 +3948,45 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       fnbOrders: 1,
     });
 
-    await request(app.getHttpServer())
+    provider.makeRefundsReturnStatus("PENDING");
+    const pendingRefundResponse = await request(app.getHttpServer())
       .post(`/api/v1/management/refunds/ticket-orders/${checkout.body.orderId}`)
       .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
       .send({ requestId: crypto.randomUUID(), reason: "Cross-surface refund audit" })
       .expect(201);
+    expect(pendingRefundResponse.body.status).toBe("PAID");
+
+    const pendingPayment = await prisma.payment.findUniqueOrThrow({
+      where: { ticketOrderId: checkout.body.orderId },
+      include: { refunds: true },
+    });
+    expect(pendingPayment.status).toBe("SUCCEEDED");
+    expect(pendingPayment.refunds).toEqual([
+      expect.objectContaining({ status: "PROCESSING", scope: "TICKET" }),
+    ]);
+    await expect(prisma.ticket.findFirstOrThrow({
+      where: { ticketOrderId: checkout.body.orderId },
+    })).resolves.toMatchObject({ status: "ISSUED" });
+    await expect(prisma.restaurantOrder.findUniqueOrThrow({
+      where: { id: restaurantOrder.id },
+    })).resolves.toMatchObject({ status: "SENT" });
+
+    const pendingSeatMap = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`)
+      .expect(200);
+    expect(
+      pendingSeatMap.body.seats.find(
+        (candidate: { id: string }) => candidate.id === seat.id,
+      ),
+    ).toEqual(expect.objectContaining({ state: "SOLD" }));
+
+    const pendingRefund = pendingPayment.refunds[0];
+    provider.setRefundLiveStatus(pendingRefund.providerRefundId!, "SUCCEEDED");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    await expect(app.get(TicketingService).reconcilePendingRefunds()).resolves.toEqual(
+      expect.objectContaining({ reconciled: expect.any(Number) }),
+    );
+    provider.makeRefundsReturnStatus("SUCCEEDED");
 
     const refundedRestaurantOrder = await prisma.restaurantOrder.findUniqueOrThrow({
       where: { id: restaurantOrder.id },

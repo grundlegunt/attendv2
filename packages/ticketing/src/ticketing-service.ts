@@ -22,6 +22,7 @@ import {
 import { DisabledSmsProvider, EmailProvider, SmsProvider, TicketReceipt, WalletPassArtifact, WalletPassProvider } from "@cinema/notifications";
 import { TicketingError } from "./ticketing-error";
 import { createTicketCredential } from "./qr-credential";
+import { finalizeConfirmedTicketOrderRefund } from "./refund-settlement";
 import {
   OrderAheadQuote,
   OrderAheadQuoteError,
@@ -1844,6 +1845,17 @@ export class TicketingService {
     if (mapped === RefundStatus.PROCESSING) return; // still not resolved -- nothing to update yet.
 
     await this.prisma.$transaction(async (tx) => {
+      if (
+        mapped === RefundStatus.SUCCEEDED &&
+        localRefund.payment?.ticketOrder &&
+        (localRefund.scope === "TICKET" || localRefund.scope === "BOTH")
+      ) {
+        // Match settleRefund's order-first lock order before claiming the
+        // Refund row, otherwise webhook and reconciliation can deadlock.
+        await tx.$queryRaw(
+          Prisma.sql`SELECT "id" FROM "ticket_orders" WHERE "id" = ${localRefund.payment.ticketOrder.id} FOR UPDATE`,
+        );
+      }
       // Codex review fixes: guarded on "still non-terminal" (CREATED or
       // PROCESSING), not merely "not already at this exact status." A
       // guard of `status: { not: mapped }` would still let a SUCCEEDED row
@@ -1874,6 +1886,21 @@ export class TicketingService {
           where: { id: localRefund.paymentId, status: { not: PaymentStatus.REFUNDED } },
           data: { status: PaymentStatus.REFUNDED },
         });
+        if (localRefund.scope === "TICKET" || localRefund.scope === "BOTH") {
+          const finalized = await finalizeConfirmedTicketOrderRefund(tx, localRefund.payment.ticketOrder!.id);
+          if (finalized) {
+            await tx.auditEvent.create({
+              data: {
+                actorType: "SYSTEM",
+                action: "ticket_order.refunded",
+                entityType: "TicketOrder",
+                entityId: localRefund.payment.ticketOrder!.id,
+                locationId: localRefund.payment.ticketOrder!.locationId,
+                afterState: { refundId: localRefund.id, settledAsynchronously: true },
+              },
+            });
+          }
+        }
       }
       // Codex review fixes: a refund can also reach terminal FAILED via
       // an asynchronous refund.updated webhook (not just a thrown
@@ -2172,7 +2199,6 @@ export class TicketingService {
           where: { id: refund.id, status: { in: [RefundStatus.CREATED, RefundStatus.PROCESSING] } },
           data: { status: RefundStatus.FAILED, leaseExpiresAt: null },
         });
-        await tx.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } });
         if (updated.count === 0) {
           const current = await tx.refund.findUniqueOrThrow({ where: { id: refund.id } });
           return current.status;
@@ -2221,8 +2247,26 @@ export class TicketingService {
             where: { id: refund.paymentId, status: { not: PaymentStatus.REFUNDED } },
             data: { status: PaymentStatus.REFUNDED },
           });
+          const persistedRefund = await tx.refund.findUniqueOrThrow({
+            where: { id: refund.id },
+            select: { scope: true },
+          });
+          if (persistedRefund.scope === "TICKET" || persistedRefund.scope === "BOTH") {
+            const finalized = await finalizeConfirmedTicketOrderRefund(tx, ctx.ticketOrderId);
+            if (finalized) {
+              await tx.auditEvent.create({
+                data: {
+                  actorType: "SYSTEM",
+                  action: "ticket_order.refunded",
+                  entityType: "TicketOrder",
+                  entityId: ctx.ticketOrderId,
+                  locationId: ctx.locationId,
+                  afterState: { refundId: refund.id, settledAsynchronously: true },
+                },
+              });
+            }
+          }
         }
-        await tx.ticketOrder.update({ where: { id: ctx.ticketOrderId }, data: { status: TicketOrderStatus.EXPIRED } });
         // Codex review fixes: a refund can reach terminal FAILED via a
         // normal (non-throwing) provider response too, not only a thrown
         // ProviderDefinitiveError above -- that must alert the same way,

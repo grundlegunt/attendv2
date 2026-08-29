@@ -1,7 +1,7 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma, prisma } from "@cinema/database";
 import { PaymentProvider } from "@cinema/payments";
-import { createTicketCredential } from "@cinema/ticketing";
+import { createTicketCredential, finalizeConfirmedTicketOrderRefund } from "@cinema/ticketing";
 import { loadEnv } from "@cinema/config/env";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { AppError } from "../common/app-error";
@@ -32,40 +32,6 @@ export class BoxOfficeService {
     @Inject(PAYMENT_PROVIDER) private readonly paymentProvider: PaymentProvider,
     @Inject(EMAIL_PROVIDER) private readonly emailProvider: EmailProvider,
   ) {}
-
-  private async cancelRefundedOrderAhead(
-    tx: Prisma.TransactionClient,
-    ticketOrderId: string,
-  ) {
-    const orders = await tx.restaurantOrder.findMany({
-      where: {
-        ticketOrderId,
-        source: "ONLINE_ORDER_AHEAD",
-        status: { notIn: ["CANCELED", "DELIVERED"] },
-      },
-      select: { id: true },
-    });
-    const orderIds = orders.map((order) => order.id);
-    if (orderIds.length === 0) return;
-    await tx.fulfillmentTicket.updateMany({
-      where: {
-        restaurantOrderId: { in: orderIds },
-        status: { notIn: ["CANCELED", "VOIDED", "DELIVERED"] },
-      },
-      data: { status: "CANCELED" },
-    });
-    await tx.restaurantOrderItem.updateMany({
-      where: {
-        restaurantOrderId: { in: orderIds },
-        status: { in: ["DRAFT", "SENT"] },
-      },
-      data: { status: "VOIDED" },
-    });
-    await tx.restaurantOrder.updateMany({
-      where: { id: { in: orderIds } },
-      data: { status: "CANCELED" },
-    });
-  }
 
   async holdSeats(showtimeId: string, seatIds: string[], holderKey: string, locationId: string) {
     const showtime = await prisma.showtime.findFirst({
@@ -709,9 +675,7 @@ export class BoxOfficeService {
             throw AppError.conflict("The refund request id was already used with different details.");
           }
         }
-        await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
-        await this.cancelRefundedOrderAhead(tx, order.id);
-        await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
+        await finalizeConfirmedTicketOrderRefund(tx, order.id);
         await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
         return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
       });
@@ -721,11 +685,24 @@ export class BoxOfficeService {
     let refundRow = null;
     if (cardPaid > 0) {
       if (!order.payment?.providerPaymentId) throw AppError.conflict("The card payment is missing its provider reference.");
-      refundRow = await prisma.refund.upsert({ where: { idempotencyKey: `box-office-refund:${input.requestId}` }, update: {}, create: { paymentId: order.payment.id, amountCents: cardPaid, reason: input.reason, scope: "TICKET", idempotencyKey: `box-office-refund:${input.requestId}` } });
+      const requestedKey = `box-office-refund:${input.requestId}`;
+      const existingRefund = await prisma.refund.findFirst({
+        where: {
+          paymentId: order.payment.id,
+          status: { in: ["CREATED", "PROCESSING", "SUCCEEDED"] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existingRefund && existingRefund.idempotencyKey !== requestedKey) {
+        throw AppError.conflict("A refund for this ticket order is already pending or completed.");
+      }
+      refundRow = await prisma.refund.upsert({ where: { idempotencyKey: requestedKey }, update: {}, create: { paymentId: order.payment.id, amountCents: cardPaid, reason: input.reason, scope: "TICKET", idempotencyKey: requestedKey } });
       if (refundRow.paymentId !== order.payment.id || refundRow.amountCents !== cardPaid || refundRow.reason !== input.reason || refundRow.scope !== "TICKET") {
         throw AppError.conflict("The refund request id was already used with different details.");
       }
-      providerRefund = await this.paymentProvider.refund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerPaymentId: order.payment.providerPaymentId, amountCents: cardPaid, reason: "requested_by_customer", idempotencyKey: refundRow.idempotencyKey, metadata: { refundId: refundRow.id, ticketOrderId: order.id } });
+      providerRefund = refundRow.status === "PROCESSING" && refundRow.providerRefundId
+        ? await this.paymentProvider.retrieveRefund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerRefundId: refundRow.providerRefundId })
+        : await this.paymentProvider.refund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerPaymentId: order.payment.providerPaymentId, amountCents: cardPaid, reason: "requested_by_customer", idempotencyKey: refundRow.idempotencyKey, metadata: { refundId: refundRow.id, ticketOrderId: order.id } });
       if (providerRefund.status === "FAILED") {
         await prisma.refund.update({ where: { id: refundRow.id }, data: { status: "FAILED", providerRefundId: providerRefund.id } });
         throw AppError.conflict("The card refund was rejected and requires staff attention.");
@@ -753,14 +730,13 @@ export class BoxOfficeService {
           throw AppError.conflict("The refund request id was already used with different details.");
         }
       }
-      await tx.ticket.updateMany({ where: { ticketOrderId: order.id, status: { in: ["ISSUED", "ADMITTED"] } }, data: { status: "REFUNDED" } });
-      await this.cancelRefundedOrderAhead(tx, order.id);
-      await tx.ticketOrder.update({ where: { id: order.id }, data: { status: "REFUNDED" } });
       if (order.payment && refundRow && providerRefund) {
         await tx.refund.update({ where: { id: refundRow.id }, data: { providerRefundId: providerRefund.id, status: providerRefund.status === "SUCCEEDED" ? "SUCCEEDED" : "PROCESSING" } });
         await tx.payment.update({ where: { id: order.payment.id }, data: { status: providerRefund.status === "SUCCEEDED" ? "REFUNDED" : "SUCCEEDED" } });
       }
-      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: cardPaid, giftCardCents: giftCardPaid, reason: input.reason } } });
+      const confirmed = !providerRefund || providerRefund.status === "SUCCEEDED";
+      if (confirmed) await finalizeConfirmedTicketOrderRefund(tx, order.id);
+      await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: confirmed ? "ticket_order.refunded" : "ticket_order.refund_pending", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: cardPaid, giftCardCents: giftCardPaid, reason: input.reason, refundId: refundRow?.id ?? null } } });
       return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
     });
   }
