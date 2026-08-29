@@ -10,7 +10,7 @@
     "test": "jest --config jest.config.js"
   },
   "dependencies": {
-    "jsonwebtoken": "9.0.2",
+    "jsonwebtoken": "9.0.3",
     "passkit-generator": "3.5.7",
     "qrcode": "^1.5.4"
   },
