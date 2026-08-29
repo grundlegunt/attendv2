@@ -9450,6 +9450,93 @@ describe("Milestone 9 box office and workforce", () => {
     await prisma.ticketType.update({ where: { id: ticketType.id }, data: { active: false } });
   });
 
+  it("keeps a box-office seat sold until its pending card refund succeeds", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const ownerLogin = await loginOwner();
+    const inventory = await prisma.showtimeSeat.findFirstOrThrow({
+      where: {
+        blockedAt: null,
+        showtime: { onSale: true, startsAt: { gt: new Date() } },
+        tickets: { none: { status: { notIn: ["REFUNDED", "CANCELED"] } } },
+        holds: { none: { releasedAt: null, expiresAt: { gt: new Date() } } },
+      },
+    });
+    const ticketType = await prisma.ticketType.findFirstOrThrow({
+      where: { locationId: owner.locationId, active: true },
+    });
+    const holderKey = `pending-box-office-refund-${crypto.randomUUID()}`;
+    const holds = await request(app.getHttpServer())
+      .post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ seatIds: [inventory.seatId], holderKey })
+      .expect(201);
+    const quote = await request(app.getHttpServer())
+      .post("/api/v1/box-office/quotes")
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id })
+      .expect(201);
+    const sale = await request(app.getHttpServer())
+      .post("/api/v1/box-office/checkouts")
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({
+        requestId: crypto.randomUUID(),
+        holdTokens: [holds.body[0].holdToken],
+        holderKey,
+        ticketTypeId: ticketType.id,
+        cashCents: 0,
+        cardCents: quote.body.totalCents,
+        readerId: "tmr_pending_refund",
+      })
+      .expect(201);
+
+    provider.makeRefundsReturnStatus("PENDING");
+    const pending = await request(app.getHttpServer())
+      .post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .send({ requestId: crypto.randomUUID(), reason: "Pending card-present refund" })
+      .expect(201);
+    expect(pending.body).toMatchObject({
+      status: "PAID",
+      payment: { status: "SUCCEEDED" },
+      tickets: [expect.objectContaining({ status: "ISSUED" })],
+    });
+    const soldMap = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${inventory.showtimeId}/seats`)
+      .expect(200);
+    expect(
+      soldMap.body.seats.find((seat: { id: string }) => seat.id === inventory.seatId),
+    ).toEqual(expect.objectContaining({ state: "SOLD" }));
+
+    const payment = await prisma.payment.findUniqueOrThrow({
+      where: { ticketOrderId: sale.body.id },
+      include: { refunds: true },
+    });
+    provider.setRefundLiveStatus(payment.refunds[0].providerRefundId!, "SUCCEEDED");
+    await app.get(TicketingService).reconcilePendingRefunds();
+    provider.makeRefundsReturnStatus("SUCCEEDED");
+
+    await expect(
+      prisma.ticketOrder.findUniqueOrThrow({
+        where: { id: sale.body.id },
+        include: { payment: true, tickets: true },
+      }),
+    ).resolves.toMatchObject({
+      status: "REFUNDED",
+      payment: { status: "REFUNDED" },
+      tickets: [expect.objectContaining({ status: "REFUNDED" })],
+    });
+    const availableMap = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${inventory.showtimeId}/seats`)
+      .expect(200);
+    expect(
+      availableMap.body.seats.find((seat: { id: string }) => seat.id === inventory.seatId),
+    ).toEqual(expect.objectContaining({ state: "AVAILABLE" }));
+  });
+
   it("prices and issues mixed ticket types in one box-office sale", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
