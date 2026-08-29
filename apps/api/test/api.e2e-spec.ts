@@ -3757,7 +3757,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const holderKey = `online-order-ahead-${crypto.randomUUID()}`;
-    const { hold } = await holdAvailableSeat(holderKey);
+    const { seat, hold } = await holdAvailableSeat(holderKey);
     const config = await request(app.getHttpServer())
       .get(`/api/v1/ticketing/showtimes/${showtimeId}/checkout-config`)
       .expect(200);
@@ -3828,6 +3828,58 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     });
     expect(restaurantOrder.items).toHaveLength(1);
     expect(restaurantOrder.fulfillmentTickets).toHaveLength(1);
+
+    const seatMap = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/showtimes/${showtimeId}/seats`)
+      .expect(200);
+    expect(
+      seatMap.body.seats.find(
+        (candidate: { id: string }) => candidate.id === seat.id,
+      ),
+    ).toEqual(expect.objectContaining({ state: "SOLD" }));
+
+    const reportCreatedAt = new Date("2098-03-10T12:00:00.000Z");
+    const paidOrder = await prisma.ticketOrder.update({
+      where: { id: checkout.body.orderId },
+      data: { createdAt: reportCreatedAt },
+      include: { tickets: true },
+    });
+    const ownerLogin = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD })
+      .expect(200);
+    const report = await request(app.getHttpServer())
+      .get(
+        "/api/v1/reports/revenue" +
+          "?from=2098-03-10T00:00:00.000Z&to=2098-03-11T00:00:00.000Z",
+      )
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .expect(200);
+    const orderAheadRevenueCents =
+      paidOrder.orderAheadSubtotalCents +
+      paidOrder.orderAheadTaxCents +
+      paidOrder.orderAheadServiceChargeCents;
+    expect(report.body.totals).toMatchObject({
+      ticketRevenueCents: paidOrder.tickets.reduce(
+        (total, ticket) => total + ticket.priceCentsPaid,
+        0,
+      ),
+      ticketFeesCents: paidOrder.feesCents,
+      ticketTaxCents: paidOrder.taxCents,
+      ticketCollectedCents: paidOrder.totalCents - orderAheadRevenueCents,
+      fnbRevenueCents: orderAheadRevenueCents,
+      combinedRevenueCents: paidOrder.totalCents,
+      ticketsSold: 1,
+      fnbOrders: 1,
+      concessionAttachRatePercent: 100,
+    });
+    expect(report.body.showtimes).toEqual([
+      expect.objectContaining({
+        showtimeId,
+        ticketsSold: 1,
+        fnbRevenueCents: orderAheadRevenueCents,
+      }),
+    ]);
   });
 
   it("redeems a gift-card-only checkout once when finalize requests race", async () => {
