@@ -1832,6 +1832,105 @@ describe("Milestone 1 cinema configuration", () => {
     firstShowtimeId = res.body.id;
   });
 
+  it("does not let a stale waitlist worker overwrite a newer successful notification", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { CinemaService } = await import("../src/cinema/cinema.service");
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    const cinema = app.get(CinemaService);
+    const deliveriesBefore = emailProvider.sentShowtimeWaitlistAvailability.length;
+    const entry = await prisma.showtimeWaitlistEntry.create({
+      data: {
+        showtimeId: firstShowtimeId,
+        email: `waitlist-success-${crypto.randomUUID()}@example.test`,
+        expiresAt: new Date("2030-01-01T18:00:00.000Z"),
+        requestId: crypto.randomUUID(),
+        requestFingerprint: crypto.randomUUID(),
+      },
+    });
+    const originalSend = emailProvider.sendShowtimeWaitlistAvailability.bind(emailProvider);
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(emailProvider, "sendShowtimeWaitlistAvailability").mockImplementation(async (delivery) => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+      }
+      return originalSend(delivery);
+    });
+    try {
+      const staleWorker = cinema.notifyAvailableWaitlists();
+      await firstStarted;
+      await prisma.showtimeWaitlistEntry.update({
+        where: { id: entry.id },
+        data: { notificationClaimedAt: new Date(Date.now() - 6 * 60 * 1000) },
+      });
+      const retryResult = await cinema.notifyAvailableWaitlists();
+      releaseFirst();
+      const staleResult = await staleWorker;
+      const stored = await prisma.showtimeWaitlistEntry.findUniqueOrThrow({ where: { id: entry.id } });
+      expect(retryResult).toBe(1);
+      expect(staleResult).toBe(0);
+      expect(stored.status).toBe("NOTIFIED");
+      expect(stored.notificationMessageId).toBe(`test-showtime-waitlist-${deliveriesBefore + 1}`);
+      expect(stored.notificationClaimedAt).toBeNull();
+      expect(send).toHaveBeenCalledTimes(2);
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+      await prisma.showtimeWaitlistEntry.deleteMany({ where: { id: entry.id } });
+    }
+  });
+
+  it("does not let a stale failed waitlist worker clear a newer claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const { CinemaService } = await import("../src/cinema/cinema.service");
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    const cinema = app.get(CinemaService);
+    const entry = await prisma.showtimeWaitlistEntry.create({
+      data: {
+        showtimeId: firstShowtimeId,
+        email: `waitlist-failure-${crypto.randomUUID()}@example.test`,
+        expiresAt: new Date("2030-01-01T18:00:00.000Z"),
+        requestId: crypto.randomUUID(),
+        requestFingerprint: crypto.randomUUID(),
+      },
+    });
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(emailProvider, "sendShowtimeWaitlistAvailability").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale delivery failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = cinema.notifyAvailableWaitlists();
+      await sendStarted;
+      await prisma.showtimeWaitlistEntry.update({
+        where: { id: entry.id },
+        data: { notificationClaimedAt: newerClaim },
+      });
+      releaseSend();
+      await expect(staleWorker).resolves.toBe(0);
+      const stored = await prisma.showtimeWaitlistEntry.findUniqueOrThrow({ where: { id: entry.id } });
+      expect(stored.status).toBe("ACTIVE");
+      expect(stored.notificationClaimedAt).toEqual(newerClaim);
+      expect(stored.notificationError).toBeNull();
+    } finally {
+      releaseSend();
+      send.mockRestore();
+      await prisma.showtimeWaitlistEntry.deleteMany({ where: { id: entry.id } });
+    }
+  });
+
   it("replays concurrent showtime creation with one seat inventory", async () => {
     const { prisma } = await import("@cinema/database");
     const requestId = crypto.randomUUID();
