@@ -1266,14 +1266,14 @@ export class TicketingService {
         consent: { grantedAt: order.consents[0].grantedAt, source: "customer_checkout" },
       });
       if (delivery.status === "disabled") {
-        await this.prisma.ticketOrder.update({
-          where: { id: order.id },
+        const updated = await this.prisma.ticketOrder.updateMany({
+          where: { id: order.id, smsDeliverySentAt: null, smsDeliveryClaimedAt: now },
           data: { smsDeliveryClaimedAt: null, smsDeliveryError: "SMS delivery is not configured." },
         });
-        return "FAILED";
+        return updated.count ? "FAILED" : "NOT_REQUESTED";
       }
-      await this.prisma.ticketOrder.update({
-        where: { id: order.id },
+      const updated = await this.prisma.ticketOrder.updateMany({
+        where: { id: order.id, smsDeliverySentAt: null, smsDeliveryClaimedAt: now },
         data: {
           smsDeliveryClaimedAt: null,
           smsDeliverySentAt: new Date(),
@@ -1281,14 +1281,14 @@ export class TicketingService {
           smsDeliveryError: null,
         },
       });
-      return "SENT";
+      return updated.count ? "SENT" : "NOT_REQUESTED";
     } catch (error) {
       const message = error instanceof Error ? error.message : "SMS delivery failed.";
-      await this.prisma.ticketOrder.update({
-        where: { id: order.id },
+      const updated = await this.prisma.ticketOrder.updateMany({
+        where: { id: order.id, smsDeliverySentAt: null, smsDeliveryClaimedAt: now },
         data: { smsDeliveryClaimedAt: null, smsDeliveryError: message.slice(0, 1000) },
       });
-      return "FAILED";
+      return updated.count ? "FAILED" : "NOT_REQUESTED";
     }
   }
 

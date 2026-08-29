@@ -5668,6 +5668,131 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(order.status).toBe(TicketOrderStatus.PAID);
     expect(order.payment?.status).toBe(PaymentStatus.SUCCEEDED);
   });
+
+  async function createSmsDeliveryFixture(label: string) {
+    const { prisma } = await import("@cinema/database");
+    const order = await prisma.ticketOrder.findFirstOrThrow({
+      where: {
+        status: "PAID",
+        smsTicketsRequested: false,
+        consents: { none: { type: "SMS_TICKET_DELIVERY" } },
+        tickets: { some: { status: { in: ["ISSUED", "ADMITTED"] } } },
+      },
+    });
+    const customer = await prisma.customer.create({
+      data: {
+        email: `sms-claim-${label}-${crypto.randomUUID()}@example.test`,
+        phone: "+16155550199",
+        name: "SMS claim race customer",
+      },
+    });
+    return prisma.ticketOrder.update({
+      where: { id: order.id },
+      data: {
+        customerId: customer.id,
+        guestPhone: customer.phone,
+        smsTicketsRequested: true,
+        consents: {
+          create: {
+            customerId: customer.id,
+            type: "SMS_TICKET_DELIVERY",
+            granted: true,
+            termsVersion: "integration-test-v1",
+            grantedAt: new Date(),
+          },
+        },
+      },
+    });
+  }
+
+  it("does not let a stale SMS worker overwrite a newer successful delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    const { SMS_PROVIDER } = await import("../src/notifications/notifications.module");
+    const order = await createSmsDeliveryFixture("success");
+    const ticketing = app.get(TicketingService) as unknown as {
+      domain: { deliverSmsTickets(orderId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    };
+    const smsProvider = app.get(SMS_PROVIDER) as {
+      send(input: unknown): Promise<{ status: "sent"; messageId: string }>;
+    };
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(smsProvider, "send").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { status: "sent", messageId: "stale-sms-delivery" };
+      }
+      return { status: "sent", messageId: "current-sms-delivery" };
+    });
+    try {
+      const staleWorker = ticketing.domain.deliverSmsTickets(order.id);
+      await firstStarted;
+      await prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: { smsDeliveryClaimedAt: new Date(Date.now() - 6 * 60_000) },
+      });
+      await expect(ticketing.domain.deliverSmsTickets(order.id)).resolves.toBe("SENT");
+      releaseFirst();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+        smsDeliveryMessageId: "current-sms-delivery",
+        smsDeliverySentAt: expect.any(Date),
+        smsDeliveryClaimedAt: null,
+        smsDeliveryError: null,
+      });
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale failing SMS worker clear a newer delivery claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { TicketingService } = await import("../src/ticketing/ticketing.service");
+    const { SMS_PROVIDER } = await import("../src/notifications/notifications.module");
+    const order = await createSmsDeliveryFixture("failure");
+    const ticketing = app.get(TicketingService) as unknown as {
+      domain: { deliverSmsTickets(orderId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    };
+    const smsProvider = app.get(SMS_PROVIDER) as {
+      send(input: unknown): Promise<{ status: "sent"; messageId: string }>;
+    };
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(smsProvider, "send").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale SMS delivery failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = ticketing.domain.deliverSmsTickets(order.id);
+      await sendStarted;
+      await prisma.ticketOrder.update({
+        where: { id: order.id },
+        data: { smsDeliveryClaimedAt: newerClaim },
+      });
+      releaseSend();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id } })).resolves.toMatchObject({
+        smsDeliveryMessageId: null,
+        smsDeliverySentAt: null,
+        smsDeliveryClaimedAt: newerClaim,
+        smsDeliveryError: null,
+      });
+    } finally {
+      releaseSend();
+      send.mockRestore();
+    }
+  });
 });
 
 describe("Customer authentication", () => {
