@@ -3880,6 +3880,41 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
         fnbRevenueCents: orderAheadRevenueCents,
       }),
     ]);
+
+    const platformLogin = await loginPlatformOwner();
+    expect(platformLogin.status).toBe(200);
+    const platformReport = await request(app.getHttpServer())
+      .get(
+        "/api/v1/platform/revenue" +
+          "?from=2098-03-10T00:00:00.000Z&to=2098-03-11T00:00:00.000Z",
+      )
+      .set("Authorization", `Bearer ${platformLogin.body.accessToken}`)
+      .expect(200);
+    const meridian = platformReport.body.clients.find(
+      (client: { name: string }) => client.name === "Meridian Cinema Co.",
+    );
+    expect(meridian).toMatchObject({
+      ticketRevenueCents: paidOrder.tickets.reduce(
+        (total, ticket) => total + ticket.priceCentsPaid,
+        0,
+      ),
+      ticketFeesCents: paidOrder.feesCents,
+      ticketTaxCents: paidOrder.taxCents,
+      ticketCollectedCents: paidOrder.totalCents - orderAheadRevenueCents,
+      fnbRevenueCents: orderAheadRevenueCents,
+      combinedRevenueCents: paidOrder.totalCents,
+      totalCollectedCents: paidOrder.totalCents,
+      ticketsSold: 1,
+      fnbOrders: 1,
+    });
+    expect(platformReport.body.totals).toMatchObject({
+      ticketCollectedCents: paidOrder.totalCents - orderAheadRevenueCents,
+      fnbRevenueCents: orderAheadRevenueCents,
+      combinedRevenueCents: paidOrder.totalCents,
+      totalCollectedCents: paidOrder.totalCents,
+      ticketsSold: 1,
+      fnbOrders: 1,
+    });
   });
 
   it("redeems a gift-card-only checkout once when finalize requests race", async () => {
