@@ -896,19 +896,20 @@ export class BoxOfficeService {
     reason: string;
     idempotencyKey: string;
   }) {
-    const drawer = await prisma.cashDrawer.findFirst({
-      where: { id: input.drawerId, locationId: input.locationId, status: "OPEN" },
-    });
-    if (!drawer) throw AppError.notFound("Open cash drawer not found.");
     const existing = await prisma.cashTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
     if (existing) {
-      if (existing.cashDrawerId !== drawer.id || existing.amountCents !== input.amountCents || existing.type !== input.type || existing.reason !== input.reason) {
+      if (existing.locationId !== input.locationId || existing.cashDrawerId !== input.drawerId || existing.amountCents !== input.amountCents || existing.type !== input.type || existing.reason !== input.reason) {
         throw AppError.conflict("Cash movement id was reused with different details.");
       }
       return existing;
     }
     try {
       return await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "cash_drawers" WHERE "id" = ${input.drawerId} FOR UPDATE`;
+        const drawer = await tx.cashDrawer.findFirst({
+          where: { id: input.drawerId, locationId: input.locationId, status: "OPEN" },
+        });
+        if (!drawer) throw AppError.notFound("Open cash drawer not found.");
         const movement = await tx.cashTransaction.create({
           data: {
             locationId: input.locationId,
@@ -935,7 +936,7 @@ export class BoxOfficeService {
       for (let attempt = 0; attempt < 5; attempt += 1) {
         const concurrent = await prisma.cashTransaction.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
         if (concurrent) {
-          if (concurrent.cashDrawerId !== drawer.id || concurrent.amountCents !== input.amountCents || concurrent.type !== input.type || concurrent.reason !== input.reason) {
+          if (concurrent.locationId !== input.locationId || concurrent.cashDrawerId !== input.drawerId || concurrent.amountCents !== input.amountCents || concurrent.type !== input.type || concurrent.reason !== input.reason) {
             throw AppError.conflict("Cash movement id was reused with different details.");
           }
           return concurrent;

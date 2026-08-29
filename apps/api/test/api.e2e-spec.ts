@@ -9246,6 +9246,53 @@ describe("Milestone 9 box office and workforce", () => {
     expect(await prisma.auditEvent.count({ where: { entityType: "CashTransaction", entityId: first.body.id, action: "cash_drawer.paid_in" } })).toBe(1);
   });
 
+  it("serializes cash movements with drawer closure so closed balances include every accepted movement", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { BoxOfficeService } = await import("../src/box-office/box-office.service");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const boxOffice = app.get(BoxOfficeService);
+
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const drawer = await boxOffice.openDrawer({
+        locationId: owner.locationId,
+        employeeId: owner.id,
+        requestId: crypto.randomUUID(),
+        registerId: `MOVEMENT-CLOSE-${crypto.randomUUID()}`,
+        openingBalanceCents: 20_000,
+      });
+      const movementInput = {
+        drawerId: drawer.id,
+        locationId: owner.locationId,
+        employeeId: owner.id,
+        type: "PAID_IN" as const,
+        amountCents: 2_500,
+        reason: "Concurrent close integrity test",
+        idempotencyKey: crypto.randomUUID(),
+      };
+      const closeInput = {
+        drawerId: drawer.id,
+        locationId: owner.locationId,
+        employeeId: owner.id,
+        requestId: crypto.randomUUID(),
+        closingBalanceCents: 20_000,
+      };
+
+      const [movementResult, closeResult] = await Promise.allSettled([
+        boxOffice.recordMovement(movementInput),
+        boxOffice.closeDrawer(closeInput),
+      ]);
+
+      expect(closeResult.status).toBe("fulfilled");
+      const stored = await prisma.cashDrawer.findUniqueOrThrow({
+        where: { id: drawer.id },
+        include: { transactions: { where: { idempotencyKey: movementInput.idempotencyKey } } },
+      });
+      expect(stored.status).toBe("CLOSED");
+      expect(stored.transactions).toHaveLength(movementResult.status === "fulfilled" ? 1 : 0);
+      expect(stored.expectedBalanceCents).toBe(20_000 + (movementResult.status === "fulfilled" ? 2_500 : 0));
+    }
+  });
+
   it("replays a completed cash drawer open without creating another drawer", async () => {
     const { prisma } = await import("@cinema/database");
     const { BoxOfficeService } = await import("../src/box-office/box-office.service");
