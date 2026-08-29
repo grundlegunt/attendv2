@@ -510,7 +510,7 @@ export class AuthService {
     }
     if (customer.authAccount.passwordResetTokenVersion !== customer.authAccount.refreshTokenVersion) {
       await prisma.customerAuthAccount.updateMany({
-        where: { customerId, passwordResetRequestId: requestId },
+        where: { customerId, passwordResetRequestId: requestId, passwordResetEmailClaimedAt: now },
         data: { passwordResetRequestId: null, passwordResetEmailClaimedAt: null },
       });
       return "NOT_REQUESTED" as const;
@@ -526,7 +526,12 @@ export class AuthService {
       });
       const recorded = await prisma.$transaction(async (tx) => {
         const updated = await tx.customerAuthAccount.updateMany({
-          where: { customerId, passwordResetRequestId: requestId },
+          where: {
+            customerId,
+            passwordResetRequestId: requestId,
+            passwordResetEmailSentAt: null,
+            passwordResetEmailClaimedAt: now,
+          },
           data: {
             passwordResetEmailSentAt: new Date(),
             passwordResetEmailMessageId: delivery.messageId,
@@ -545,20 +550,27 @@ export class AuthService {
       return recorded ? "SENT" as const : "NOT_REQUESTED" as const;
     } catch (error) {
       const message = (error instanceof Error ? error.message : "Unknown email delivery error").slice(0, 1000);
-      await prisma.$transaction([
-        prisma.customerAuthAccount.updateMany({
-          where: { customerId, passwordResetRequestId: requestId },
+      const recorded = await prisma.$transaction(async (tx) => {
+        const updated = await tx.customerAuthAccount.updateMany({
+          where: {
+            customerId,
+            passwordResetRequestId: requestId,
+            passwordResetEmailSentAt: null,
+            passwordResetEmailClaimedAt: now,
+          },
           data: { passwordResetEmailClaimedAt: null, passwordResetEmailError: message },
-        }),
-        prisma.auditEvent.create({
+        });
+        if (updated.count === 0) return false;
+        await tx.auditEvent.create({
           data: {
             actorType: "SYSTEM", action: "customer.password_reset_delivery_failed",
             entityType: "Customer", entityId: customer.id,
             afterState: { requestId, error: message },
           },
-        }),
-      ]);
-      return "FAILED" as const;
+        });
+        return true;
+      });
+      return recorded ? "FAILED" as const : "NOT_REQUESTED" as const;
     }
   }
 
