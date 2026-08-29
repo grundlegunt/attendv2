@@ -1138,22 +1138,38 @@ export class AuthService {
     };
     try {
       const delivery = await this.emailProvider.sendTicketReceipt(receipt);
-      await prisma.$transaction(async (tx) => {
+      const persisted = await prisma.$transaction(async (tx) => {
         const updated = await tx.ticketOrder.updateMany({
-          where: { id: order.id, receiptResendRequestId: requestId },
+          where: {
+            id: order.id,
+            receiptResendRequestId: requestId,
+            receiptEmailSentAt: null,
+            receiptEmailClaimedAt: now,
+          },
           data: { receiptEmailSentAt: new Date(), receiptEmailMessageId: delivery.messageId, receiptEmailClaimedAt: null, receiptEmailError: null },
         });
-        if (updated.count === 0) return;
+        if (updated.count === 0) return false;
         await this.audit.record({ actorType: "CUSTOMER", actorId: order.receiptResendActorId ?? undefined, locationId: order.locationId, action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id, beforeState: { email: order.receiptResendPreviousEmail }, afterState: { requestId, email: order.guestEmail, messageId: delivery.messageId } }, tx);
+        return true;
       });
-      return "SENT" as const;
+      return persisted ? "SENT" as const : "NOT_REQUESTED" as const;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email delivery error";
-      await prisma.$transaction([
-        prisma.ticketOrder.updateMany({ where: { id: order.id, receiptResendRequestId: requestId }, data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) } }),
-        prisma.auditEvent.create({ data: { actorType: "CUSTOMER", actorId: order.receiptResendActorId, locationId: order.locationId, action: "ticket_order.receipt_resend_failed", entityType: "TicketOrder", entityId: order.id, afterState: { requestId, email: order.guestEmail, error: message.slice(0, 1000) } } }),
-      ]);
-      return "FAILED" as const;
+      const persisted = await prisma.$transaction(async (tx) => {
+        const updated = await tx.ticketOrder.updateMany({
+          where: {
+            id: order.id,
+            receiptResendRequestId: requestId,
+            receiptEmailSentAt: null,
+            receiptEmailClaimedAt: now,
+          },
+          data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) },
+        });
+        if (updated.count === 0) return false;
+        await tx.auditEvent.create({ data: { actorType: "CUSTOMER", actorId: order.receiptResendActorId, locationId: order.locationId, action: "ticket_order.receipt_resend_failed", entityType: "TicketOrder", entityId: order.id, afterState: { requestId, email: order.guestEmail, error: message.slice(0, 1000) } } });
+        return true;
+      });
+      return persisted ? "FAILED" as const : "NOT_REQUESTED" as const;
     }
   }
 
