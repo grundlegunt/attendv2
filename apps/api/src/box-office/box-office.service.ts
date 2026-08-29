@@ -729,9 +729,21 @@ export class BoxOfficeService {
         }
         const existingTenderPlan = await tx.auditEvent.findFirst({
           where: { action: "ticket_order.refund_tender_plan", entityType: "Refund", entityId: claimedRefund.id },
-          select: { id: true },
+          select: { afterState: true },
         });
-        if (!existingTenderPlan) {
+        if (existingTenderPlan) {
+          const state = existingTenderPlan.afterState && typeof existingTenderPlan.afterState === "object" && !Array.isArray(existingTenderPlan.afterState)
+            ? existingTenderPlan.afterState as Record<string, unknown>
+            : undefined;
+          const exactTenderPlan = state?.ticketOrderId === order.id
+            && state.requestId === input.requestId
+            && state.cashDrawerId === (cashPaid > 0 ? input.cashDrawerId : null)
+            && state.giftCardId === (giftRedemption?.giftCardId ?? null)
+            && state.cashCents === cashPaid
+            && state.giftCardCents === giftCardPaid
+            && state.reason === input.reason;
+          if (!exactTenderPlan) throw AppError.conflict("The refund request id was already used with different tender details.");
+        } else {
           await tx.auditEvent.create({
             data: {
               actorType: "EMPLOYEE",
