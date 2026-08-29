@@ -6506,6 +6506,101 @@ describe("Customer authentication", () => {
     refreshCookie = cookiePair(cookies, "attend_customer_refresh");
   });
 
+  async function stagePasswordResetClaim() {
+    const { prisma } = await import("@cinema/database");
+    const account = await prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } });
+    const requestId = crypto.randomUUID();
+    await prisma.customerAuthAccount.update({
+      where: { customerId },
+      data: {
+        passwordResetRequestId: requestId,
+        passwordResetTokenVersion: account.refreshTokenVersion,
+        passwordResetEmailSentAt: null,
+        passwordResetEmailMessageId: null,
+        passwordResetEmailClaimedAt: null,
+        passwordResetEmailError: "retry password reset",
+      },
+    });
+    return requestId;
+  }
+
+  it("does not let a stale password-reset worker overwrite a newer successful delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { AuthService } = await import("../src/auth/auth.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const requestId = await stagePasswordResetClaim();
+    const auth = app.get(AuthService) as unknown as { deliverCustomerPasswordResetEmail(customerId: string, requestId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(emailProvider, "sendCustomerPasswordReset").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { messageId: "stale-password-reset" };
+      }
+      return { messageId: "current-password-reset" };
+    });
+    try {
+      const staleWorker = auth.deliverCustomerPasswordResetEmail(customerId, requestId);
+      await firstStarted;
+      await prisma.customerAuthAccount.update({ where: { customerId }, data: { passwordResetEmailClaimedAt: null } });
+      await expect(auth.deliverCustomerPasswordResetEmail(customerId, requestId)).resolves.toBe("SENT");
+      releaseFirst();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } })).resolves.toMatchObject({
+        passwordResetEmailMessageId: "current-password-reset",
+        passwordResetEmailSentAt: expect.any(Date),
+        passwordResetEmailClaimedAt: null,
+        passwordResetEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({ where: { action: "customer.password_reset_requested", entityId: customerId, afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale failing password-reset worker clear a newer delivery claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { AuthService } = await import("../src/auth/auth.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const requestId = await stagePasswordResetClaim();
+    const auth = app.get(AuthService) as unknown as { deliverCustomerPasswordResetEmail(customerId: string, requestId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(emailProvider, "sendCustomerPasswordReset").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale password reset failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = auth.deliverCustomerPasswordResetEmail(customerId, requestId);
+      await sendStarted;
+      await prisma.customerAuthAccount.update({ where: { customerId }, data: { passwordResetEmailClaimedAt: newerClaim, passwordResetEmailError: null } });
+      releaseSend();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } })).resolves.toMatchObject({
+        passwordResetEmailMessageId: null,
+        passwordResetEmailSentAt: null,
+        passwordResetEmailClaimedAt: newerClaim,
+        passwordResetEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({ where: { action: "customer.password_reset_delivery_failed", entityId: customerId, afterState: { path: ["requestId"], equals: requestId } } })).toBe(0);
+    } finally {
+      releaseSend();
+      send.mockRestore();
+    }
+  });
+
   it("changes a customer email only after the new address is verified", async () => {
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
