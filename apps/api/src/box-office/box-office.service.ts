@@ -638,14 +638,20 @@ export class BoxOfficeService {
     const giftRedemption = await prisma.giftCardTransaction.findFirst({ where: { reference: order.id, type: "REDEMPTION" }, select: { giftCardId: true, amountCents: true } });
     const giftCardPaid = giftRedemption ? -giftRedemption.amountCents : 0;
     if (order.status === "REFUNDED") {
-      const [cardRefund, cashRefund, giftRefund] = await Promise.all([
+      const [cardRefund, cashRefund, giftRefund, refundAudit] = await Promise.all([
         cardPaid > 0 ? prisma.refund.findUnique({ where: { idempotencyKey: `box-office-refund:${input.requestId}` } }) : null,
         cashPaid > 0 ? prisma.cashTransaction.findUnique({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` } }) : null,
         giftRedemption ? prisma.giftCardTransaction.findFirst({ where: { giftCardId: giftRedemption.giftCardId, type: "REFUND", reference: `refund:${order.id}:${input.requestId}` } }) : null,
+        giftRedemption ? prisma.auditEvent.findFirst({ where: { action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id }, orderBy: { occurredAt: "desc" }, select: { afterState: true } }) : null,
       ]);
+      const refundAuditState = refundAudit?.afterState && typeof refundAudit.afterState === "object" && !Array.isArray(refundAudit.afterState)
+        ? refundAudit.afterState as Record<string, unknown>
+        : undefined;
       const exactCardReplay = cardPaid === 0 || (cardRefund?.paymentId === order.payment?.id && cardRefund?.amountCents === cardPaid && cardRefund?.reason === input.reason && cardRefund?.scope === "TICKET");
       const exactCashReplay = cashPaid === 0 || (cashRefund?.ticketOrderId === order.id && cashRefund.cashDrawerId === input.cashDrawerId && cashRefund.amountCents === cashPaid && cashRefund.reason === input.reason && cashRefund.type === "REFUND");
-      const exactGiftReplay = !giftRedemption || giftRefund?.amountCents === giftCardPaid;
+      const exactGiftReplay = !giftRedemption || (giftRefund?.amountCents === giftCardPaid
+        && refundAuditState?.reason === input.reason
+        && (refundAuditState.requestId === undefined || refundAuditState.requestId === input.requestId));
       if (!exactCardReplay || !exactCashReplay || !exactGiftReplay) throw AppError.conflict("The ticket order was already refunded with a different request.");
       return prisma.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
     }
@@ -656,16 +662,22 @@ export class BoxOfficeService {
         await tx.$queryRaw`SELECT "id" FROM "ticket_orders" WHERE "id" = ${order.id} FOR UPDATE`;
         const lockedOrder = await tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id } });
         if (lockedOrder.status === "REFUNDED") {
-          const [cashRefund, giftRefund] = await Promise.all([
+          const [cashRefund, giftRefund, refundAudit] = await Promise.all([
             cashPaid > 0 ? tx.cashTransaction.findUnique({ where: { idempotencyKey: `box-office-cash-refund:${input.requestId}` } }) : null,
             tx.giftCardTransaction.findFirst({ where: { giftCardId: giftRedemption.giftCardId, type: "REFUND", reference: `refund:${order.id}:${input.requestId}` } }),
+            tx.auditEvent.findFirst({ where: { action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id }, orderBy: { occurredAt: "desc" }, select: { afterState: true } }),
           ]);
+          const refundAuditState = refundAudit?.afterState && typeof refundAudit.afterState === "object" && !Array.isArray(refundAudit.afterState)
+            ? refundAudit.afterState as Record<string, unknown>
+            : undefined;
           const exactCashReplay = cashPaid === 0 || (cashRefund?.ticketOrderId === order.id
             && cashRefund.cashDrawerId === input.cashDrawerId
             && cashRefund.amountCents === cashPaid
             && cashRefund.reason === input.reason
             && cashRefund.type === "REFUND");
-          const exactGiftReplay = giftRefund?.amountCents === giftCardPaid;
+          const exactGiftReplay = giftRefund?.amountCents === giftCardPaid
+            && refundAuditState?.reason === input.reason
+            && (refundAuditState.requestId === undefined || refundAuditState.requestId === input.requestId);
           if (!exactCashReplay || !exactGiftReplay) throw AppError.conflict("The ticket order was already refunded with a different request.");
           return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
         }
@@ -689,7 +701,7 @@ export class BoxOfficeService {
           }
         }
         await finalizeConfirmedTicketOrderRefund(tx, order.id);
-        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { cashCents: cashPaid, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
+        await tx.auditEvent.create({ data: { actorType: "EMPLOYEE", actorId: input.employeeId, locationId: input.locationId, action: "ticket_order.refunded", entityType: "TicketOrder", entityId: order.id, afterState: { requestId: input.requestId, cashDrawerId: input.cashDrawerId ?? null, giftCardId: giftRedemption.giftCardId, cashCents: cashPaid, cardCents: 0, giftCardCents: giftCardPaid, reason: input.reason } } });
         return tx.ticketOrder.findUniqueOrThrow({ where: { id: order.id }, include: { tickets: true, payment: true, cashTransactions: true } });
       });
     }

@@ -9719,7 +9719,7 @@ describe("Milestone 9 box office and workforce", () => {
       });
   });
 
-  it("redeems an active gift card atomically for a box-office ticket sale", async () => {
+  it("redeems an active gift card atomically and validates concurrent refund replays", async () => {
     const { prisma } = await import("@cinema/database");
     const ownerLogin = await loginOwner();
     const accessToken = ownerLogin.body.accessToken as string;
@@ -9733,19 +9733,16 @@ describe("Milestone 9 box office and workforce", () => {
     const staffBalance = await request(app.getHttpServer()).post("/api/v1/box-office/gift-cards/balance")
       .set("Authorization", `Bearer ${accessToken}`).send({ code: issued.body.code }).expect(201);
     expect(staffBalance.body).toEqual({ codeLast4: issued.body.codeLast4, balanceCents: 100_000, currency: issued.body.currency });
-    const drawer = await request(app.getHttpServer()).post("/api/v1/box-office/cash-drawers")
-      .set("Authorization", `Bearer ${accessToken}`).send({ requestId: crypto.randomUUID(), registerId: `GIFT-${crypto.randomUUID()}`, openingBalanceCents: 20_000 }).expect(201);
     const holderKey = `gift-card-box-office-${crypto.randomUUID()}`;
     const holds = await request(app.getHttpServer()).post(`/api/v1/box-office/showtimes/${inventory.showtimeId}/holds`)
       .set("Authorization", `Bearer ${accessToken}`).send({ seatIds: [inventory.seatId], holderKey }).expect(201);
     const quote = await request(app.getHttpServer()).post("/api/v1/box-office/quotes")
       .set("Authorization", `Bearer ${accessToken}`).send({ holdTokens: [holds.body[0].holdToken], holderKey, ticketTypeId: ticketType.id }).expect(201);
-    const cashCents = 100;
-    const giftCardCents = quote.body.totalCents - cashCents;
+    const giftCardCents = quote.body.totalCents;
     const sale = await request(app.getHttpServer()).post("/api/v1/box-office/checkouts")
       .set("Authorization", `Bearer ${accessToken}`).send({
         requestId: crypto.randomUUID(), holdTokens: [holds.body[0].holdToken], holderKey,
-        ticketTypeId: ticketType.id, cashDrawerId: drawer.body.id, cashCents, cashReceivedCents: cashCents, cardCents: 0,
+        ticketTypeId: ticketType.id, cashCents: 0, cardCents: 0,
         giftCardCents, giftCardCode: issued.body.code,
       }).expect(201);
 
@@ -9757,7 +9754,7 @@ describe("Milestone 9 box office and workforce", () => {
     const refundRequestIds = [crypto.randomUUID(), crypto.randomUUID()];
     const refundAttempts = await Promise.all(refundRequestIds.map((requestId) =>
       request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
-        .set("Authorization", `Bearer ${accessToken}`).send({ requestId, reason: "E2E gift card refund", cashDrawerId: drawer.body.id }),
+        .set("Authorization", `Bearer ${accessToken}`).send({ requestId, reason: "E2E gift card refund" }),
     ));
     expect(refundAttempts.map((attempt) => attempt.status).sort()).toEqual([201, 409]);
     const winningIndex = refundAttempts.findIndex((attempt) => attempt.status === 201);
@@ -9769,7 +9766,11 @@ describe("Milestone 9 box office and workforce", () => {
     expect(restored.transactions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: "REFUND", amountCents: giftCardCents, balanceAfterCents: 100_000, reference: `refund:${sale.body.id}:${refundRequestId}` }),
     ]));
-    expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(2);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${accessToken}`).send({ requestId: refundRequestId, reason: "E2E gift card refund" }).expect(201);
+    await request(app.getHttpServer()).post(`/api/v1/box-office/orders/${sale.body.id}/refund`)
+      .set("Authorization", `Bearer ${accessToken}`).send({ requestId: refundRequestId, reason: "Changed refund reason" }).expect(409);
+    expect(await prisma.cashTransaction.count({ where: { ticketOrderId: sale.body.id } })).toBe(0);
   });
 
   it("defers the gift-card portion of a split box-office refund until its card tender settles", async () => {
