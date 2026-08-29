@@ -107,12 +107,27 @@ export class DonationCheckoutService {
   }
 
   private async sendReceipt(checkout: CheckoutWithCampaign) {
-    if (checkout.receiptSentAt) return;
+    const now = new Date();
+    const claim = await prisma.donationCheckout.updateMany({
+      where: {
+        id: checkout.id,
+        receiptSentAt: null,
+        OR: [{ receiptClaimedAt: null }, { receiptClaimedAt: { lt: new Date(now.getTime() - 60_000) } }],
+      },
+      data: { receiptClaimedAt: now },
+    });
+    if (claim.count === 0) return;
     try {
       const sent = await this.email.sendDonationReceipt({ to: checkout.donorEmail, donorName: checkout.donorName, organizationName: checkout.location.organization.name, campaignName: checkout.campaign?.name, amountCents: checkout.amountCents, currency: checkout.currency, donationId: checkout.donationId! });
-      await prisma.donationCheckout.update({ where: { id: checkout.id }, data: { receiptMessageId: sent.messageId, receiptSentAt: new Date(), receiptError: null } });
+      await prisma.donationCheckout.updateMany({
+        where: { id: checkout.id, receiptClaimedAt: now, receiptSentAt: null },
+        data: { receiptMessageId: sent.messageId, receiptSentAt: new Date(), receiptClaimedAt: null, receiptError: null },
+      });
     } catch (error) {
-      await prisma.donationCheckout.update({ where: { id: checkout.id }, data: { receiptError: error instanceof Error ? error.message : "Receipt delivery failed." } });
+      await prisma.donationCheckout.updateMany({
+        where: { id: checkout.id, receiptClaimedAt: now, receiptSentAt: null },
+        data: { receiptClaimedAt: null, receiptError: error instanceof Error ? error.message : "Receipt delivery failed." },
+      });
     }
   }
 

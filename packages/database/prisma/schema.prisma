@@ -1586,6 +1586,7 @@ model MembershipCheckout {
   status           MembershipCheckoutStatus @default(PENDING)
   receiptMessageId String?
   receiptSentAt    DateTime?
+  receiptClaimedAt DateTime?
   receiptError     String?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
@@ -1660,6 +1661,7 @@ model DonationCheckout {
   status           DonationCheckoutStatus @default(PENDING)
   receiptMessageId String?
   receiptSentAt    DateTime?
+  receiptClaimedAt DateTime?
   receiptError     String?
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt

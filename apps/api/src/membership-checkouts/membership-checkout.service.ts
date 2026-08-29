@@ -110,9 +110,17 @@ export class MembershipCheckoutService {
   }
 
   private async sendReceipt(checkout: Checkout) {
-    if (checkout.receiptSentAt || !checkout.membership) return;
-    try { const sent = await this.email.sendMembershipReceipt({ to: checkout.memberEmail, memberName: checkout.memberName, organizationName: checkout.location.organization.name, planName: checkout.planName, membershipNumber: checkout.membership.membershipNumber, expiresAt: checkout.membership.expiresAt, amountCents: checkout.amountCents, taxDeductibleAmountCents: checkout.taxDeductibleAmountCents, currency: checkout.currency }); await prisma.membershipCheckout.update({ where: { id: checkout.id }, data: { receiptMessageId: sent.messageId, receiptSentAt: new Date(), receiptError: null } }); }
-    catch (error) { await prisma.membershipCheckout.update({ where: { id: checkout.id }, data: { receiptError: error instanceof Error ? error.message : "Receipt delivery failed." } }); }
+    if (!checkout.membership) return;
+    const now = new Date();
+    const claim = await prisma.membershipCheckout.updateMany({ where: { id: checkout.id, receiptSentAt: null, OR: [{ receiptClaimedAt: null }, { receiptClaimedAt: { lt: new Date(now.getTime() - 60_000) } }] }, data: { receiptClaimedAt: now } });
+    if (claim.count === 0) return;
+    try {
+      const sent = await this.email.sendMembershipReceipt({ to: checkout.memberEmail, memberName: checkout.memberName, organizationName: checkout.location.organization.name, planName: checkout.planName, membershipNumber: checkout.membership.membershipNumber, expiresAt: checkout.membership.expiresAt, amountCents: checkout.amountCents, taxDeductibleAmountCents: checkout.taxDeductibleAmountCents, currency: checkout.currency });
+      await prisma.membershipCheckout.updateMany({ where: { id: checkout.id, receiptClaimedAt: now, receiptSentAt: null }, data: { receiptMessageId: sent.messageId, receiptSentAt: new Date(), receiptClaimedAt: null, receiptError: null } });
+    }
+    catch (error) {
+      await prisma.membershipCheckout.updateMany({ where: { id: checkout.id, receiptClaimedAt: now, receiptSentAt: null }, data: { receiptClaimedAt: null, receiptError: error instanceof Error ? error.message : "Receipt delivery failed." } });
+    }
   }
   private assertReplay(checkout: Checkout, input: Input) { if (checkout.locationId !== input.locationId || checkout.planId !== input.planId || checkout.memberName !== input.memberName || checkout.memberEmail !== input.memberEmail.toLowerCase()) throw AppError.conflict("The membership idempotency key was already used with different details."); }
   private present(checkout: Checkout, clientSecret?: string, providerStatus?: string) { return { checkoutId: checkout.id, status: checkout.status, planName: checkout.planName, amountCents: checkout.amountCents, currency: checkout.currency, memberName: checkout.memberName, memberEmail: checkout.memberEmail, payment: { status: providerStatus ?? checkout.payment.status, clientSecret } }; }
