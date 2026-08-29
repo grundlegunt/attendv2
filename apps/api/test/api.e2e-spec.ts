@@ -6601,6 +6601,102 @@ describe("Customer authentication", () => {
     }
   });
 
+  async function stageEmailChangeClaim(label: string) {
+    const { prisma } = await import("@cinema/database");
+    const account = await prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } });
+    const requestId = crypto.randomUUID();
+    await prisma.customerAuthAccount.update({
+      where: { customerId },
+      data: {
+        emailChangeRequestId: requestId,
+        emailChangeNewEmail: `email-claim-${label}-${crypto.randomUUID()}@example.test`,
+        emailChangeTokenVersion: account.refreshTokenVersion,
+        emailChangeEmailSentAt: null,
+        emailChangeEmailMessageId: null,
+        emailChangeEmailClaimedAt: null,
+        emailChangeEmailError: "retry email change",
+      },
+    });
+    return requestId;
+  }
+
+  it("does not let a stale email-change worker overwrite a newer successful delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { AuthService } = await import("../src/auth/auth.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const requestId = await stageEmailChangeClaim("success");
+    const auth = app.get(AuthService) as unknown as { deliverCustomerEmailChange(customerId: string, requestId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(emailProvider, "sendCustomerEmailChange").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { messageId: "stale-email-change" };
+      }
+      return { messageId: "current-email-change" };
+    });
+    try {
+      const staleWorker = auth.deliverCustomerEmailChange(customerId, requestId);
+      await firstStarted;
+      await prisma.customerAuthAccount.update({ where: { customerId }, data: { emailChangeEmailClaimedAt: null } });
+      await expect(auth.deliverCustomerEmailChange(customerId, requestId)).resolves.toBe("SENT");
+      releaseFirst();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } })).resolves.toMatchObject({
+        emailChangeEmailMessageId: "current-email-change",
+        emailChangeEmailSentAt: expect.any(Date),
+        emailChangeEmailClaimedAt: null,
+        emailChangeEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({ where: { action: "customer.email_change_requested", entityId: customerId, afterState: { path: ["requestId"], equals: requestId } } })).toBe(1);
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale failing email-change worker clear a newer delivery claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { AuthService } = await import("../src/auth/auth.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const requestId = await stageEmailChangeClaim("failure");
+    const auth = app.get(AuthService) as unknown as { deliverCustomerEmailChange(customerId: string, requestId: string): Promise<"SENT" | "FAILED" | "NOT_REQUESTED"> };
+    const emailProvider = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(emailProvider, "sendCustomerEmailChange").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale email change failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = auth.deliverCustomerEmailChange(customerId, requestId);
+      await sendStarted;
+      await prisma.customerAuthAccount.update({ where: { customerId }, data: { emailChangeEmailClaimedAt: newerClaim, emailChangeEmailError: null } });
+      releaseSend();
+      await expect(staleWorker).resolves.toBe("NOT_REQUESTED");
+      await expect(prisma.customerAuthAccount.findUniqueOrThrow({ where: { customerId } })).resolves.toMatchObject({
+        emailChangeEmailMessageId: null,
+        emailChangeEmailSentAt: null,
+        emailChangeEmailClaimedAt: newerClaim,
+        emailChangeEmailError: null,
+      });
+      expect(await prisma.auditEvent.count({ where: { action: "customer.email_change_delivery_failed", entityId: customerId, afterState: { path: ["requestId"], equals: requestId } } })).toBe(0);
+    } finally {
+      releaseSend();
+      send.mockRestore();
+    }
+  });
+
   it("changes a customer email only after the new address is verified", async () => {
     const { prisma } = await import("@cinema/database");
     const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
