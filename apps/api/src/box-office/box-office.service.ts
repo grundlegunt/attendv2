@@ -711,45 +711,49 @@ export class BoxOfficeService {
     if (cardPaid > 0) {
       if (!order.payment?.providerPaymentId) throw AppError.conflict("The card payment is missing its provider reference.");
       const requestedKey = `box-office-refund:${input.requestId}`;
-      const existingRefund = await prisma.refund.findFirst({
-        where: {
-          paymentId: order.payment.id,
-          status: { in: ["CREATED", "PROCESSING", "SUCCEEDED"] },
-        },
-        orderBy: { createdAt: "desc" },
-      });
-      if (existingRefund && existingRefund.idempotencyKey !== requestedKey) {
-        throw AppError.conflict("A refund for this ticket order is already pending or completed.");
-      }
-      refundRow = await prisma.refund.upsert({ where: { idempotencyKey: requestedKey }, update: {}, create: { paymentId: order.payment.id, amountCents: cardPaid, reason: input.reason, scope: "TICKET", idempotencyKey: requestedKey } });
-      if (refundRow.paymentId !== order.payment.id || refundRow.amountCents !== cardPaid || refundRow.reason !== input.reason || refundRow.scope !== "TICKET") {
-        throw AppError.conflict("The refund request id was already used with different details.");
-      }
-      const existingTenderPlan = await prisma.auditEvent.findFirst({
-        where: { action: "ticket_order.refund_tender_plan", entityType: "Refund", entityId: refundRow.id },
-        select: { id: true },
-      });
-      if (!existingTenderPlan) {
-        await prisma.auditEvent.create({
-          data: {
-            actorType: "EMPLOYEE",
-            actorId: input.employeeId,
-            locationId: input.locationId,
-            action: "ticket_order.refund_tender_plan",
-            entityType: "Refund",
-            entityId: refundRow.id,
-            afterState: {
-              ticketOrderId: order.id,
-              requestId: input.requestId,
-              cashDrawerId: input.cashDrawerId ?? null,
-              giftCardId: giftRedemption?.giftCardId ?? null,
-              cashCents: cashPaid,
-              giftCardCents: giftCardPaid,
-              reason: input.reason,
-            },
+      refundRow = await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "payments" WHERE "id" = ${order.payment!.id} FOR UPDATE`;
+        const existingRefund = await tx.refund.findFirst({
+          where: {
+            paymentId: order.payment!.id,
+            status: { in: ["CREATED", "PROCESSING", "SUCCEEDED"] },
           },
+          orderBy: { createdAt: "desc" },
         });
-      }
+        if (existingRefund && existingRefund.idempotencyKey !== requestedKey) {
+          throw AppError.conflict("A refund for this ticket order is already pending or completed.");
+        }
+        const claimedRefund = await tx.refund.upsert({ where: { idempotencyKey: requestedKey }, update: {}, create: { paymentId: order.payment!.id, amountCents: cardPaid, reason: input.reason, scope: "TICKET", idempotencyKey: requestedKey } });
+        if (claimedRefund.paymentId !== order.payment!.id || claimedRefund.amountCents !== cardPaid || claimedRefund.reason !== input.reason || claimedRefund.scope !== "TICKET") {
+          throw AppError.conflict("The refund request id was already used with different details.");
+        }
+        const existingTenderPlan = await tx.auditEvent.findFirst({
+          where: { action: "ticket_order.refund_tender_plan", entityType: "Refund", entityId: claimedRefund.id },
+          select: { id: true },
+        });
+        if (!existingTenderPlan) {
+          await tx.auditEvent.create({
+            data: {
+              actorType: "EMPLOYEE",
+              actorId: input.employeeId,
+              locationId: input.locationId,
+              action: "ticket_order.refund_tender_plan",
+              entityType: "Refund",
+              entityId: claimedRefund.id,
+              afterState: {
+                ticketOrderId: order.id,
+                requestId: input.requestId,
+                cashDrawerId: input.cashDrawerId ?? null,
+                giftCardId: giftRedemption?.giftCardId ?? null,
+                cashCents: cashPaid,
+                giftCardCents: giftCardPaid,
+                reason: input.reason,
+              },
+            },
+          });
+        }
+        return claimedRefund;
+      });
       providerRefund = refundRow.status === "PROCESSING" && refundRow.providerRefundId
         ? await this.paymentProvider.retrieveRefund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerRefundId: refundRow.providerRefundId })
         : await this.paymentProvider.refund({ connectedAccountId: order.location.organization.stripeConnectedAccountId ?? undefined, providerPaymentId: order.payment.providerPaymentId, amountCents: cardPaid, reason: "requested_by_customer", idempotencyKey: refundRow.idempotencyKey, metadata: { refundId: refundRow.id, ticketOrderId: order.id } });
