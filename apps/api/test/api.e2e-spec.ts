@@ -2950,6 +2950,47 @@ describe("Milestone 1 cinema configuration", () => {
     expect(email.sentGiftCards.filter((message) => message.to === "retry-recipient@example.test")).toHaveLength(1);
   });
 
+  it("does not let a stale gift card delivery overwrite a newer retry", async () => {
+    const { prisma } = await import("@cinema/database");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const idempotencyKey = `gift-card-delivery-claim-${crypto.randomUUID()}`;
+    const purchase = await request(app.getHttpServer()).post("/api/v1/gift-card-purchases")
+      .set("Idempotency-Key", idempotencyKey).send({
+        locationId: owner.locationId, amountCents: 4700, buyerEmail: "claim-buyer@example.test",
+        recipientName: "Claim Recipient", recipientEmail: "claim-recipient@example.test",
+      }).expect(201);
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    provider.setIntentStatus(purchase.body.payment.providerPaymentId, "SUCCEEDED");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    const originalSend = email.sendGiftCardDelivery.bind(email);
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+    const blocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    const send = jest.spyOn(email, "sendGiftCardDelivery")
+      .mockImplementationOnce(async (input) => { firstStarted(); await blocked; return originalSend(input); })
+      .mockImplementationOnce((input) => originalSend(input));
+
+    try {
+      const finalize = request(app.getHttpServer()).post(`/api/v1/gift-card-purchases/${purchase.body.purchaseId}/finalize`)
+        .set("Idempotency-Key", idempotencyKey).send({}).then((response) => response);
+      await started;
+      await prisma.giftCardPurchase.update({ where: { id: purchase.body.purchaseId }, data: { deliveryClaimedAt: new Date(Date.now() - 2 * 60_000) } });
+      const { GiftCardPurchaseService } = await import("../src/gift-card-purchases/gift-card-purchase.service");
+      const retry = await app.get(GiftCardPurchaseService).deliver(purchase.body.purchaseId);
+      expect(retry).toMatchObject({ status: "DELIVERED", messageId: expect.any(String) });
+      releaseFirst();
+      expect((await finalize).status).toBe(201);
+      const stored = await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.body.purchaseId } });
+      expect(stored).toMatchObject({ status: "DELIVERED", deliveryMessageId: retry.messageId, deliveryClaimedAt: null, deliveredAt: expect.any(Date), deliveryCodeEncrypted: null });
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
   it("reuses one online gift card purchase when identical requests arrive concurrently", async () => {
     const { prisma } = await import("@cinema/database");
     const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });

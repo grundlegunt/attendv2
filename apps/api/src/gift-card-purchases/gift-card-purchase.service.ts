@@ -164,12 +164,21 @@ export class GiftCardPurchaseService {
     try {
       const code = decryptMfaSecret(purchase.deliveryCodeEncrypted!, loadEnv().JWT_REFRESH_SECRET);
       const sent = await this.email.sendGiftCardDelivery({ to: purchase.recipientEmail, recipientName: purchase.recipientName, buyerEmail: purchase.buyerEmail, theaterName: purchase.organization.name, amountCents: purchase.amountCents, currency: purchase.currency, code, message: purchase.message });
-      await prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { status: "DELIVERED", deliveryMessageId: sent.messageId, deliveredAt: new Date(), deliveryCodeEncrypted: null, deliveryClaimedAt: null, deliveryError: null } });
-      return { status: "DELIVERED", messageId: sent.messageId };
+      const updated = await prisma.giftCardPurchase.updateMany({ where: { id: purchase.id, deliveryClaimedAt: now, deliveredAt: null }, data: { status: "DELIVERED", deliveryMessageId: sent.messageId, deliveredAt: new Date(), deliveryCodeEncrypted: null, deliveryClaimedAt: null, deliveryError: null } });
+      if (updated.count > 0) return { status: "DELIVERED", messageId: sent.messageId };
+      const current = await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.id }, select: { status: true, deliveredAt: true, deliveryMessageId: true } });
+      return { status: current.deliveredAt ? "DELIVERED" : current.status, messageId: current.deliveryMessageId ?? undefined };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown delivery error";
-      await prisma.$transaction([prisma.giftCardPurchase.update({ where: { id: purchase.id }, data: { status: "DELIVERY_FAILED", deliveryClaimedAt: null, deliveryError: message } }), prisma.auditEvent.create({ data: { actorType: "SYSTEM", locationId: purchase.locationId, action: "gift_card.delivery_failed", entityType: "GiftCardPurchase", entityId: purchase.id, afterState: { recipientEmail: purchase.recipientEmail, error: message } } })]);
-      return { status: "DELIVERY_FAILED" };
+      const failed = await prisma.$transaction(async (tx) => {
+        const updated = await tx.giftCardPurchase.updateMany({ where: { id: purchase.id, deliveryClaimedAt: now, deliveredAt: null }, data: { status: "DELIVERY_FAILED", deliveryClaimedAt: null, deliveryError: message } });
+        if (updated.count === 0) return false;
+        await tx.auditEvent.create({ data: { actorType: "SYSTEM", locationId: purchase.locationId, action: "gift_card.delivery_failed", entityType: "GiftCardPurchase", entityId: purchase.id, afterState: { recipientEmail: purchase.recipientEmail, error: message } } });
+        return true;
+      });
+      if (failed) return { status: "DELIVERY_FAILED" };
+      const current = await prisma.giftCardPurchase.findUniqueOrThrow({ where: { id: purchase.id }, select: { status: true } });
+      return { status: current.status };
     }
   }
 
