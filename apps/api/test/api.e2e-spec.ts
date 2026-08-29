@@ -10148,10 +10148,8 @@ describe("Milestone 9 box office and workforce", () => {
     await expect(boxOffice.closeDrawer({ ...input, closingBalanceCents: 19900 })).rejects.toMatchObject({ code: "CONFLICT" });
   });
 
-  it("claims a donation receipt before sending it so concurrent finalizers email once", async () => {
+  async function stageDonationReceiptCheckout(label: string) {
     const { prisma } = await import("@cinema/database");
-    const { DonationCheckoutService } = await import("../src/donation-checkouts/donation-checkout.service");
-    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
     const owner = await prisma.employee.findFirstOrThrow({
       where: { email: `owner@${SEED_SUFFIX}` },
       include: { location: true },
@@ -10162,7 +10160,7 @@ describe("Milestone 9 box office and workforce", () => {
         amountCents: 2500,
         currency: owner.location.currency,
         status: "SUCCEEDED",
-        idempotencyKey: `donation-receipt-race:${crypto.randomUUID()}`,
+        idempotencyKey: `donation-receipt-${label}:${crypto.randomUUID()}`,
         provider: "test",
       },
     });
@@ -10188,7 +10186,7 @@ describe("Milestone 9 box office and workforce", () => {
         donorEmail: donation.donorEmail!,
         amountCents: donation.amountCents,
         currency: owner.location.currency,
-        idempotencyKey: `donation-receipt-race:${crypto.randomUUID()}`,
+        idempotencyKey: `donation-receipt-${label}:${crypto.randomUUID()}`,
         status: "PAID",
       },
       include: {
@@ -10197,6 +10195,14 @@ describe("Milestone 9 box office and workforce", () => {
         campaign: true,
       },
     });
+    return checkout;
+  }
+
+  it("claims a donation receipt before sending it so concurrent finalizers email once", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { DonationCheckoutService } = await import("../src/donation-checkouts/donation-checkout.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const checkout = await stageDonationReceiptCheckout("race");
     const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
     let releaseDelivery!: () => void;
     const deliveryGate = new Promise<void>((resolve) => { releaseDelivery = resolve; });
@@ -10226,6 +10232,88 @@ describe("Milestone 9 box office and workforce", () => {
         receiptError: null,
       });
     send.mockRestore();
+  });
+
+  it("does not let a stale donation receipt worker overwrite a newer successful delivery", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { DonationCheckoutService } = await import("../src/donation-checkouts/donation-checkout.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const checkout = await stageDonationReceiptCheckout("stale-success");
+    const service = app.get(DonationCheckoutService) as unknown as {
+      sendReceipt(value: typeof checkout): Promise<void>;
+    };
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseFirst!: () => void;
+    let markFirstStarted!: () => void;
+    const firstStarted = new Promise<void>((resolve) => { markFirstStarted = resolve; });
+    const firstBlocked = new Promise<void>((resolve) => { releaseFirst = resolve; });
+    let calls = 0;
+    const send = jest.spyOn(email, "sendDonationReceipt").mockImplementation(async () => {
+      calls += 1;
+      if (calls === 1) {
+        markFirstStarted();
+        await firstBlocked;
+        return { messageId: "stale-donation-receipt" };
+      }
+      return { messageId: "current-donation-receipt" };
+    });
+    try {
+      const staleWorker = service.sendReceipt(checkout);
+      await firstStarted;
+      await prisma.donationCheckout.update({ where: { id: checkout.id }, data: { receiptClaimedAt: null } });
+      await service.sendReceipt(checkout);
+      releaseFirst();
+      await staleWorker;
+      await expect(prisma.donationCheckout.findUniqueOrThrow({ where: { id: checkout.id } })).resolves.toMatchObject({
+        receiptMessageId: "current-donation-receipt",
+        receiptSentAt: expect.any(Date),
+        receiptClaimedAt: null,
+        receiptError: null,
+      });
+    } finally {
+      releaseFirst();
+      send.mockRestore();
+    }
+  });
+
+  it("does not let a stale failing donation receipt worker clear a newer delivery claim", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { DonationCheckoutService } = await import("../src/donation-checkouts/donation-checkout.service");
+    const { EMAIL_PROVIDER } = await import("../src/notifications/notifications.module");
+    const checkout = await stageDonationReceiptCheckout("stale-failure");
+    const service = app.get(DonationCheckoutService) as unknown as {
+      sendReceipt(value: typeof checkout): Promise<void>;
+    };
+    const email = app.get(EMAIL_PROVIDER) as TestEmailProvider;
+    let releaseSend!: () => void;
+    let markSendStarted!: () => void;
+    const sendStarted = new Promise<void>((resolve) => { markSendStarted = resolve; });
+    const sendBlocked = new Promise<void>((resolve) => { releaseSend = resolve; });
+    const send = jest.spyOn(email, "sendDonationReceipt").mockImplementation(async () => {
+      markSendStarted();
+      await sendBlocked;
+      throw new Error("stale donation receipt failed");
+    });
+    const newerClaim = new Date(Date.now() + 1_000);
+    try {
+      const staleWorker = service.sendReceipt(checkout);
+      await sendStarted;
+      await prisma.donationCheckout.update({
+        where: { id: checkout.id },
+        data: { receiptClaimedAt: newerClaim, receiptError: null },
+      });
+      releaseSend();
+      await staleWorker;
+      await expect(prisma.donationCheckout.findUniqueOrThrow({ where: { id: checkout.id } })).resolves.toMatchObject({
+        receiptMessageId: null,
+        receiptSentAt: null,
+        receiptClaimedAt: newerClaim,
+        receiptError: null,
+      });
+    } finally {
+      releaseSend();
+      send.mockRestore();
+    }
   });
 
   it("claims a membership receipt before sending it so concurrent finalizers email once", async () => {
