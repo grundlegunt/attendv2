@@ -439,32 +439,49 @@ export class BoxOfficeService {
     };
     try {
       const delivery = await this.emailProvider.sendTicketReceipt(receipt);
-      await prisma.$transaction(async (tx) => {
+      const persisted = await prisma.$transaction(async (tx) => {
         const updated = await tx.ticketOrder.updateMany({
-          where: { id: order.id, receiptResendRequestId: order.receiptResendRequestId },
+          where: {
+            id: order.id,
+            receiptEmailSentAt: null,
+            receiptEmailClaimedAt: now,
+            receiptResendRequestId: order.receiptResendRequestId,
+          },
           data: { receiptEmailSentAt: new Date(), receiptEmailMessageId: delivery.messageId, receiptEmailClaimedAt: null, receiptEmailError: null },
         });
-        if (updated.count === 0 || !order.receiptResendRequestId || order.receiptResendActorType !== "EMPLOYEE") return;
+        if (updated.count === 0) return false;
+        if (!order.receiptResendRequestId || order.receiptResendActorType !== "EMPLOYEE") return true;
         await tx.auditEvent.create({ data: {
           actorType: "EMPLOYEE", actorId: order.receiptResendActorId, locationId: order.locationId,
           action: "ticket_order.receipt_resent", entityType: "TicketOrder", entityId: order.id,
           beforeState: { email: order.receiptResendPreviousEmail },
           afterState: { requestId: order.receiptResendRequestId, email: order.guestEmail, messageId: delivery.messageId },
         } });
+        return true;
       });
-      return { ...order, receiptDelivery: "SENT" as const };
+      return { ...order, receiptDelivery: persisted ? "SENT" as const : "NOT_REQUESTED" as const };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown email delivery error";
-      await prisma.$transaction(async (tx) => {
-        await tx.ticketOrder.updateMany({ where: { id: order.id, receiptResendRequestId: order.receiptResendRequestId }, data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) } });
-        if (!order.receiptResendRequestId || order.receiptResendActorType !== "EMPLOYEE") return;
+      const persisted = await prisma.$transaction(async (tx) => {
+        const updated = await tx.ticketOrder.updateMany({
+          where: {
+            id: order.id,
+            receiptEmailSentAt: null,
+            receiptEmailClaimedAt: now,
+            receiptResendRequestId: order.receiptResendRequestId,
+          },
+          data: { receiptEmailClaimedAt: null, receiptEmailError: message.slice(0, 1000) },
+        });
+        if (updated.count === 0) return false;
+        if (!order.receiptResendRequestId || order.receiptResendActorType !== "EMPLOYEE") return true;
         await tx.auditEvent.create({ data: {
           actorType: "EMPLOYEE", actorId: order.receiptResendActorId, locationId: order.locationId,
           action: "ticket_order.receipt_resend_failed", entityType: "TicketOrder", entityId: order.id,
           afterState: { requestId: order.receiptResendRequestId, email: order.guestEmail, error: message.slice(0, 1000) },
         } });
+        return true;
       });
-      return { ...order, receiptDelivery: "FAILED" as const };
+      return { ...order, receiptDelivery: persisted ? "FAILED" as const : "NOT_REQUESTED" as const };
     }
   }
 
