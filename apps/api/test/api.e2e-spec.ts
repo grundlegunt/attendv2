@@ -3753,7 +3753,7 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
     expect(giftCard.transactions).toEqual([expect.objectContaining({ amountCents: -checkout.body.totalCents, reference: checkout.body.orderId })]);
   });
 
-  it("finalizes tickets and order-ahead food as one prepaid seat-linked purchase", async () => {
+  it("finalizes tickets and order-ahead food with consistent sold-seat inventory across every surface", async () => {
     const { prisma } = await import("@cinema/database");
     const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
     const holderKey = `online-order-ahead-${crypto.randomUUID()}`;
@@ -3838,16 +3838,48 @@ describe("Milestone 3 ticket checkout and payment recovery", () => {
       ),
     ).toEqual(expect.objectContaining({ state: "SOLD" }));
 
+    // Staff POS reads the same public availability endpoint as customer checkout.
+    // Admin scheduling has a location-scoped endpoint, while dashboard and film
+    // reporting use the richer ticket map. All three must agree on the sale.
+    const ownerLogin = await request(app.getHttpServer())
+      .post("/api/v1/auth/staff/login")
+      .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD })
+      .expect(200);
+    const adminSeatMap = await request(app.getHttpServer())
+      .get(`/api/v1/cinema/admin/showtimes/${showtimeId}/seats`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .expect(200);
+    expect(
+      adminSeatMap.body.seats.find(
+        (candidate: { id: string }) => candidate.id === seat.id,
+      ),
+    ).toEqual(expect.objectContaining({ state: "SOLD" }));
+
+    const reportingSeatMap = await request(app.getHttpServer())
+      .get(`/api/v1/reports/showtimes/${showtimeId}/ticket-map`)
+      .set("Authorization", `Bearer ${ownerLogin.body.accessToken}`)
+      .expect(200);
+    expect(reportingSeatMap.body.counts.sold).toBeGreaterThanOrEqual(1);
+    expect(
+      reportingSeatMap.body.seats.find(
+        (candidate: { id: string }) => candidate.id === seat.id,
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        state: "SOLD",
+        ticket: expect.objectContaining({
+          id: finalized.body.tickets[0].id,
+          status: "ISSUED",
+        }),
+      }),
+    );
+
     const reportCreatedAt = new Date("2098-03-10T12:00:00.000Z");
     const paidOrder = await prisma.ticketOrder.update({
       where: { id: checkout.body.orderId },
       data: { createdAt: reportCreatedAt },
       include: { tickets: true },
     });
-    const ownerLogin = await request(app.getHttpServer())
-      .post("/api/v1/auth/staff/login")
-      .send({ email: `owner@${SEED_SUFFIX}`, password: SEED_PASSWORD })
-      .expect(200);
     const report = await request(app.getHttpServer())
       .get(
         "/api/v1/reports/revenue" +
