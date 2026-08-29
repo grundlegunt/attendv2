@@ -10144,6 +10144,54 @@ describe("Milestone 10 management reporting", () => {
     expect(finalReport.body.totals).toMatchObject({ grossRevenueCents: 1000, refundedCents: 1000, fnbRevenueCents: 0, fnbRefundedCents: 1000, combinedRevenueCents: 0, fnbOrders: 0 });
   });
 
+  it("rejects a different restaurant refund request while the first request is in progress", async () => {
+    const { prisma } = await import("@cinema/database");
+    const { PAYMENT_PROVIDER } = await import("../src/payments/payments.module");
+    const { ManagementRefundService } = await import("../src/management/management-refund.service");
+    const owner = await prisma.employee.findFirstOrThrow({ where: { email: `owner@${SEED_SUFFIX}` } });
+    const tab = await prisma.restaurantTab.create({
+      data: {
+        locationId: owner.locationId,
+        tabType: "WALK_IN",
+        label: "Concurrent refund fixture",
+        status: "CLOSED",
+        subtotalCents: 1200,
+        taxCents: 0,
+        serviceChargeCents: 0,
+        totalCents: 1200,
+        closedAt: new Date(),
+        payments: { create: { purpose: "RESTAURANT_TAB", amountCents: 1200, status: "SUCCEEDED", idempotencyKey: crypto.randomUUID(), provider: "test", providerPaymentId: `pi_concurrent_${crypto.randomUUID()}` } },
+      },
+    });
+    const provider = app.get(PAYMENT_PROVIDER) as TestPaymentProvider;
+    const originalRefund = provider.refund.bind(provider);
+    const refunds = app.get(ManagementRefundService);
+    let releaseProvider!: () => void;
+    const providerGate = new Promise<void>((resolve) => { releaseProvider = resolve; });
+    let providerStarted!: () => void;
+    const providerCall = new Promise<void>((resolve) => { providerStarted = resolve; });
+    provider.refund = async (args) => {
+      providerStarted();
+      await providerGate;
+      return originalRefund(args);
+    };
+    const firstRequestId = crypto.randomUUID();
+    try {
+      const first = refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: firstRequestId, reason: "First manager request" });
+      await providerCall;
+      await expect(refunds.refundRestaurant({ tabId: tab.id, locationId: owner.locationId, employeeId: owner.id, requestId: crypto.randomUUID(), reason: "Second manager request" })).rejects.toMatchObject({ code: "CONFLICT" });
+      releaseProvider();
+      const completed = await first;
+      expect(completed.status).toBe("REFUNDED");
+    } finally {
+      releaseProvider();
+      provider.refund = originalRefund;
+    }
+    const completedEvents = await prisma.auditEvent.findMany({ where: { entityType: "RestaurantTab", entityId: tab.id, action: "restaurant_tab.refunded" }, select: { afterState: true } });
+    expect(completedEvents).toHaveLength(1);
+    expect(completedEvents[0]?.afterState).toMatchObject({ requestId: firstRequestId, reason: "First manager request" });
+  });
+
   it("enforces the full role and cross-tenant isolation matrix", async () => {
     const { prisma } = await import("@cinema/database");
     const { DEFAULT_ROLE_PERMISSIONS, Permission, RoleKey, signTokenPair } = await import("@cinema/auth");
